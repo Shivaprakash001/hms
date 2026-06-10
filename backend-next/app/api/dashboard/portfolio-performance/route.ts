@@ -7,6 +7,8 @@ import { portfolioPerformanceService } from "@/lib/services/portfolio-performanc
 import { getCachedDashboard, setDashboardCache } from "@/lib/cache/dashboard-cache";
 import { redisKeys } from "@/lib/redis/keys";
 
+import { resolveOwnerOrAdminScopeForHostel } from "@/lib/security/scoped-query";
+
 /**
  * GET /api/dashboard/portfolio-performance
  * Portfolio-wide revenue trends and hostel rankings (owner scope).
@@ -18,16 +20,17 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const ownerId = await resolveOwnerOrAdminScopeForHostel(session);
     const { searchParams } = new URL(req.url);
     const parsed = parseInt(searchParams.get("months") || "6", 10);
     const months = Number.isNaN(parsed) ? 6 : parsed;
-    const cacheKey = redisKeys.portfolio.performance(session.sub, months);
+    const cacheKey = redisKeys.portfolio.performance(ownerId, months);
     const cached = await getCachedDashboard(cacheKey);
     if (cached) return apiResponse(cached);
 
-    const data = await portfolioPerformanceService.getPortfolioPerformance(session.sub, months);
+    const data = await portfolioPerformanceService.getPortfolioPerformance(ownerId, months);
     await setDashboardCache(cacheKey, data, 120, [
-      redisKeys.tag.ownerDashboard(session.sub),
+      redisKeys.tag.ownerDashboard(ownerId),
     ]);
     return apiResponse(data);
   } catch (error: unknown) {

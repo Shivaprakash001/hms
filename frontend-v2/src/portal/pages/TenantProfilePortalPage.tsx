@@ -14,6 +14,8 @@ import {
   MessageSquare,
   ChevronDown,
   ChevronUp,
+  CheckCircle2,
+  Lock,
 } from 'lucide-react';
 import { tenantPortalApi } from '@features/tenant-portal/api';
 import { tenantService } from '@features/tenants/api';
@@ -69,6 +71,8 @@ function Field({
   );
 }
 
+const phoneDigits = (value: unknown) => String(value || '').replace(/\D/g, '').slice(-10);
+
 export function TenantProfilePortalPage() {
   const queryClient = useQueryClient();
   const { logout } = useAuth();
@@ -83,19 +87,113 @@ export function TenantProfilePortalPage() {
   const [newMessages, setNewMessages] = useState<Record<string, string>>({});
   const [expandedChats, setExpandedChats] = useState<Record<string, boolean>>({});
 
+  const [originalPhones, setOriginalPhones] = useState({ phone_1: '', phone_2: '', phone_3: '' });
+
+  // OTP Verification state for phone_1
+  const [otpSent1, setOtpSent1] = useState(false);
+  const [otpSending1, setOtpSending1] = useState(false);
+  const [otpCountdown1, setOtpCountdown1] = useState(0);
+  const [otp1, setOtp1] = useState('');
+  const [otpVerified1, setOtpVerified1] = useState(false);
+  const [verifiedPhone1, setVerifiedPhone1] = useState('');
+  const [otpVerifying1, setOtpVerifying1] = useState(false);
+
+  // OTP Verification state for phone_2
+  const [otpSent2, setOtpSent2] = useState(false);
+  const [otpSending2, setOtpSending2] = useState(false);
+  const [otpCountdown2, setOtpCountdown2] = useState(0);
+  const [otp2, setOtp2] = useState('');
+  const [otpVerified2, setOtpVerified2] = useState(false);
+  const [verifiedPhone2, setVerifiedPhone2] = useState('');
+  const [otpVerifying2, setOtpVerifying2] = useState(false);
+
+  // OTP Verification state for phone_3
+  const [otpSent3, setOtpSent3] = useState(false);
+  const [otpSending3, setOtpSending3] = useState(false);
+  const [otpCountdown3, setOtpCountdown3] = useState(0);
+  const [otp3, setOtp3] = useState('');
+  const [otpVerified3, setOtpVerified3] = useState(false);
+  const [verifiedPhone3, setVerifiedPhone3] = useState('');
+  const [otpVerifying3, setOtpVerifying3] = useState(false);
+
+  useEffect(() => {
+    if (otpCountdown1 <= 0) return;
+    const timer = window.setTimeout(() => setOtpCountdown1((c) => c - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [otpCountdown1]);
+
+  useEffect(() => {
+    if (otpCountdown2 <= 0) return;
+    const timer = window.setTimeout(() => setOtpCountdown2((c) => c - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [otpCountdown2]);
+
+  useEffect(() => {
+    if (otpCountdown3 <= 0) return;
+    const timer = window.setTimeout(() => setOtpCountdown3((c) => c - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [otpCountdown3]);
+
+  const handleSendOtp = async (phone: string, purpose: string, countdownSetter: any, sentSetter: any, sendingSetter: any) => {
+    if (!phoneDigits(phone)) {
+      toast.error('Please enter a valid mobile number first.');
+      return;
+    }
+    sendingSetter(true);
+    try {
+      await tenantService.sendPhoneOtp({ phone: phoneDigits(phone), purpose });
+      sentSetter(true);
+      countdownSetter(60);
+      toast.success('Verification code sent successfully');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error?.message || err?.message || 'Could not send verification code');
+    } finally {
+      sendingSetter(false);
+    }
+  };
+
+  const handleVerifyOtp = async (phone: string, otp: string, purpose: string, verifiedSetter: any, verifiedPhoneSetter: any, verifyingSetter: any) => {
+    if (!phoneDigits(phone)) {
+      toast.error('Please enter a valid mobile number.');
+      return;
+    }
+    if (otp.length < 6) {
+      toast.error('Please enter the 6-digit verification code.');
+      return;
+    }
+    verifyingSetter(true);
+    try {
+      await tenantService.verifyPhoneOtp({ phone: phoneDigits(phone), otp, purpose });
+      verifiedSetter(true);
+      verifiedPhoneSetter(phoneDigits(phone));
+      toast.success('Mobile number verified successfully');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error?.message || err?.message || 'Verification failed. Invalid or expired code.');
+    } finally {
+      verifyingSetter(false);
+    }
+  };
+
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['tenant', 'portal-profile'],
     queryFn: () => tenantPortalApi.getMyProfile(),
   });
 
   const saveMutation = useMutation({
-    mutationFn: () => tenantService.updateMyProfile(form),
+    mutationFn: () => tenantService.updateMyProfile({
+      ...form,
+      phone_1_otp: otp1,
+      phone_2_otp: otp2,
+      phone_3_otp: otp3,
+    }),
     onSuccess: () => {
       toast.success('Profile updated');
       setEditing(false);
       queryClient.invalidateQueries({ queryKey: ['tenant'] });
     },
-    onError: () => toast.error('Could not save profile'),
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error?.message || err?.message || 'Could not save profile');
+    },
   });
 
   const photoMutation = useMutation({
@@ -228,13 +326,38 @@ export function TenantProfilePortalPage() {
       setSelectedCourse('');
     }
 
+    const p1 = phoneDigits(contacts.tenant_phone?.value ?? t.phone_1 ?? '');
+    const p2 = phoneDigits(contacts.guardian_phone?.value ?? t.phone_2 ?? '');
+    const p3 = phoneDigits(contacts.emergency_phone?.value ?? t.phone_3 ?? '');
+
+    setOriginalPhones({ phone_1: p1, phone_2: p2, phone_3: p3 });
+
+    // Reset OTP states
+    setOtpSent1(false);
+    setOtp1('');
+    setOtpVerified1(false);
+    setVerifiedPhone1('');
+    setOtpCountdown1(0);
+
+    setOtpSent2(false);
+    setOtp2('');
+    setOtpVerified2(false);
+    setVerifiedPhone2('');
+    setOtpCountdown2(0);
+
+    setOtpSent3(false);
+    setOtp3('');
+    setOtpVerified3(false);
+    setVerifiedPhone3('');
+    setOtpCountdown3(0);
+
     setForm({
       name: String(p.name ?? ''),
       gender: String(t.gender ?? ''),
       date_of_birth: t.date_of_birth ? String(t.date_of_birth).slice(0, 10) : '',
-      phone_1: String(contacts.tenant_phone?.value ?? t.phone_1 ?? ''),
-      phone_2: String(contacts.guardian_phone?.value ?? t.phone_2 ?? ''),
-      phone_3: String(contacts.emergency_phone?.value ?? t.phone_3 ?? ''),
+      phone_1: p1,
+      phone_2: p2,
+      phone_3: p3,
       college_name: college,
       course: course,
       branch: String(t.branch ?? ''),
@@ -316,7 +439,40 @@ export function TenantProfilePortalPage() {
               <button
                 type="button"
                 disabled={saveMutation.isPending}
-                onClick={() => saveMutation.mutate()}
+                onClick={() => {
+                  const p1 = phoneDigits(form.phone_1);
+                  const p2 = phoneDigits(form.phone_2);
+                  const p3 = phoneDigits(form.phone_3);
+
+                  if (p1 !== originalPhones.phone_1 && (!otpVerified1 || p1 !== verifiedPhone1)) {
+                    toast.error('Please verify your primary mobile number first.');
+                    return;
+                  }
+                  if (p2 !== originalPhones.phone_2 && (!otpVerified2 || p2 !== verifiedPhone2)) {
+                    toast.error('Please verify the parent/guardian mobile number first.');
+                    return;
+                  }
+                  if (p3 !== originalPhones.phone_3 && (!otpVerified3 || p3 !== verifiedPhone3)) {
+                    toast.error('Please verify the emergency contact mobile number first.');
+                    return;
+                  }
+
+                  // Check duplicates among the three inputs
+                  if (p1 === p2) {
+                    toast.error('Primary and Guardian phone numbers cannot be the same.');
+                    return;
+                  }
+                  if (p1 === p3) {
+                    toast.error('Primary and Emergency phone numbers cannot be the same.');
+                    return;
+                  }
+                  if (p2 && p2 === p3) {
+                    toast.error('Guardian and Emergency phone numbers cannot be the same.');
+                    return;
+                  }
+
+                  saveMutation.mutate();
+                }}
                 className="text-sm font-semibold px-4 py-2 rounded-xl bg-accent text-accent-foreground active:scale-[0.98] transition-transform"
               >
                 {saveMutation.isPending ? 'Saving…' : 'Save'}
@@ -423,23 +579,187 @@ export function TenantProfilePortalPage() {
       {/* 2 — Contacts */}
       <ProfileSection title="Contact information" description="Tenant, guardian, and emergency numbers">
         {editing ? (
-          <>
-            <Field
-              label="Tenant phone"
-              value={form.phone_1}
-              onChange={(v) => setForm({ ...form, phone_1: v })}
-            />
-            <Field
-              label="Guardian phone"
-              value={form.phone_2}
-              onChange={(v) => setForm({ ...form, phone_2: v })}
-            />
-            <Field
-              label="Emergency contact"
-              value={form.phone_3}
-              onChange={(v) => setForm({ ...form, phone_3: v })}
-            />
-          </>
+          <div className="space-y-4">
+            {/* Primary Phone */}
+            <div className="block">
+              <span className="text-xs font-semibold text-muted-foreground flex items-center justify-between">
+                <span>Tenant phone (Primary) *</span>
+                {phoneDigits(form.phone_1) === originalPhones.phone_1 ? (
+                  <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                    <CheckCircle2 className="w-3 h-3" /> Current
+                  </span>
+                ) : (otpVerified1 && phoneDigits(form.phone_1) === verifiedPhone1) ? (
+                  <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                    <CheckCircle2 className="w-3 h-3" /> Verified
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-[11px] font-bold text-amber-600 bg-amber-500/10 px-1.5 py-0.5 rounded animate-pulse">
+                    Verification Required
+                  </span>
+                )}
+              </span>
+              <div className="flex gap-2 mt-1.5">
+                <input
+                  type="tel"
+                  value={form.phone_1}
+                  onChange={(e) => setForm({ ...form, phone_1: phoneDigits(e.target.value) })}
+                  placeholder="e.g. +91 98765 43210"
+                  className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm flex-1"
+                />
+                {phoneDigits(form.phone_1) !== originalPhones.phone_1 && !(otpVerified1 && phoneDigits(form.phone_1) === verifiedPhone1) && phoneDigits(form.phone_1).length === 10 && (
+                  <button
+                    type="button"
+                    disabled={otpSending1 || (otpCountdown1 > 0)}
+                    onClick={() => handleSendOtp(form.phone_1, 'ProfileUpdate', setOtpCountdown1, setOtpSent1, setOtpSending1)}
+                    className="px-4 py-2 text-xs font-bold bg-accent text-accent-foreground rounded-xl active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent/90 transition-all shadow-sm shrink-0 whitespace-nowrap"
+                  >
+                    {otpSending1 ? 'Sending...' : otpCountdown1 > 0 ? `Resend in ${otpCountdown1}s` : otpSent1 ? 'Resend code' : 'Send Code'}
+                  </button>
+                )}
+              </div>
+              {!otpVerified1 && phoneDigits(form.phone_1) !== originalPhones.phone_1 && otpSent1 && (
+                <div className="flex gap-2 mt-2 max-w-sm">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={otp1}
+                    onChange={(e) => setOtp1(phoneDigits(e.target.value))}
+                    placeholder="Enter 6-digit code"
+                    className="px-3 py-2 rounded-xl border border-border bg-background text-sm flex-1 tracking-widest text-center font-bold"
+                  />
+                  <button
+                    type="button"
+                    disabled={otpVerifying1 || otp1.length < 6}
+                    onClick={() => handleVerifyOtp(form.phone_1, otp1, 'ProfileUpdate', setOtpVerified1, setVerifiedPhone1, setOtpVerifying1)}
+                    className="px-4 py-2 text-xs font-bold bg-emerald-600 text-white rounded-xl active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-700 transition-all shadow-sm shrink-0 whitespace-nowrap"
+                  >
+                    {otpVerifying1 ? 'Verifying...' : 'Verify Code'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Guardian Phone */}
+            <div className="block">
+              <span className="text-xs font-semibold text-muted-foreground flex items-center justify-between">
+                <span>Guardian phone {isStudent && <span className="text-destructive">*</span>}</span>
+                {phoneDigits(form.phone_2) === originalPhones.phone_2 ? (
+                  <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                    <CheckCircle2 className="w-3 h-3" /> Current
+                  </span>
+                ) : (otpVerified2 && phoneDigits(form.phone_2) === verifiedPhone2) ? (
+                  <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                    <CheckCircle2 className="w-3 h-3" /> Verified
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-[11px] font-bold text-amber-600 bg-amber-500/10 px-1.5 py-0.5 rounded animate-pulse">
+                    Verification Required
+                  </span>
+                )}
+              </span>
+              <div className="flex gap-2 mt-1.5">
+                <input
+                  type="tel"
+                  value={form.phone_2}
+                  onChange={(e) => setForm({ ...form, phone_2: phoneDigits(e.target.value) })}
+                  placeholder="e.g. +91 98765 43210"
+                  className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm flex-1"
+                />
+                {phoneDigits(form.phone_2) !== originalPhones.phone_2 && !(otpVerified2 && phoneDigits(form.phone_2) === verifiedPhone2) && phoneDigits(form.phone_2).length === 10 && (
+                  <button
+                    type="button"
+                    disabled={otpSending2 || (otpCountdown2 > 0)}
+                    onClick={() => handleSendOtp(form.phone_2, 'ProfileUpdate', setOtpCountdown2, setOtpSent2, setOtpSending2)}
+                    className="px-4 py-2 text-xs font-bold bg-accent text-accent-foreground rounded-xl active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent/90 transition-all shadow-sm shrink-0 whitespace-nowrap"
+                  >
+                    {otpSending2 ? 'Sending...' : otpCountdown2 > 0 ? `Resend in ${otpCountdown2}s` : otpSent2 ? 'Resend code' : 'Send Code'}
+                  </button>
+                )}
+              </div>
+              {!otpVerified2 && phoneDigits(form.phone_2) !== originalPhones.phone_2 && otpSent2 && (
+                <div className="flex gap-2 mt-2 max-w-sm">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={otp2}
+                    onChange={(e) => setOtp2(phoneDigits(e.target.value))}
+                    placeholder="Enter 6-digit code"
+                    className="px-3 py-2 rounded-xl border border-border bg-background text-sm flex-1 tracking-widest text-center font-bold"
+                  />
+                  <button
+                    type="button"
+                    disabled={otpVerifying2 || otp2.length < 6}
+                    onClick={() => handleVerifyOtp(form.phone_2, otp2, 'ProfileUpdate', setOtpVerified2, setVerifiedPhone2, setOtpVerifying2)}
+                    className="px-4 py-2 text-xs font-bold bg-emerald-600 text-white rounded-xl active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-700 transition-all shadow-sm shrink-0 whitespace-nowrap"
+                  >
+                    {otpVerifying2 ? 'Verifying...' : 'Verify Code'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Emergency Phone */}
+            <div className="block">
+              <span className="text-xs font-semibold text-muted-foreground flex items-center justify-between">
+                <span>Emergency contact (Mobile) *</span>
+                {phoneDigits(form.phone_3) === originalPhones.phone_3 ? (
+                  <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                    <CheckCircle2 className="w-3 h-3" /> Current
+                  </span>
+                ) : (otpVerified3 && phoneDigits(form.phone_3) === verifiedPhone3) ? (
+                  <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                    <CheckCircle2 className="w-3 h-3" /> Verified
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-[11px] font-bold text-amber-600 bg-amber-500/10 px-1.5 py-0.5 rounded animate-pulse">
+                    Verification Required
+                  </span>
+                )}
+              </span>
+              <div className="flex gap-2 mt-1.5">
+                <input
+                  type="tel"
+                  value={form.phone_3}
+                  onChange={(e) => setForm({ ...form, phone_3: phoneDigits(e.target.value) })}
+                  placeholder="e.g. +91 98765 43210"
+                  className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm flex-1"
+                />
+                {phoneDigits(form.phone_3) !== originalPhones.phone_3 && !(otpVerified3 && phoneDigits(form.phone_3) === verifiedPhone3) && phoneDigits(form.phone_3).length === 10 && (
+                  <button
+                    type="button"
+                    disabled={otpSending3 || (otpCountdown3 > 0)}
+                    onClick={() => handleSendOtp(form.phone_3, 'ProfileUpdate', setOtpCountdown3, setOtpSent3, setOtpSending3)}
+                    className="px-4 py-2 text-xs font-bold bg-accent text-accent-foreground rounded-xl active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent/90 transition-all shadow-sm shrink-0 whitespace-nowrap"
+                  >
+                    {otpSending3 ? 'Sending...' : otpCountdown3 > 0 ? `Resend in ${otpCountdown3}s` : otpSent3 ? 'Resend code' : 'Send Code'}
+                  </button>
+                )}
+              </div>
+              {!otpVerified3 && phoneDigits(form.phone_3) !== originalPhones.phone_3 && otpSent3 && (
+                <div className="flex gap-2 mt-2 max-w-sm">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={otp3}
+                    onChange={(e) => setOtp3(phoneDigits(e.target.value))}
+                    placeholder="Enter 6-digit code"
+                    className="px-3 py-2 rounded-xl border border-border bg-background text-sm flex-1 tracking-widest text-center font-bold"
+                  />
+                  <button
+                    type="button"
+                    disabled={otpVerifying3 || otp3.length < 6}
+                    onClick={() => handleVerifyOtp(form.phone_3, otp3, 'ProfileUpdate', setOtpVerified3, setVerifiedPhone3, setOtpVerifying3)}
+                    className="px-4 py-2 text-xs font-bold bg-emerald-600 text-white rounded-xl active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-700 transition-all shadow-sm shrink-0 whitespace-nowrap"
+                  >
+                    {otpVerifying3 ? 'Verifying...' : 'Verify Code'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         ) : (
           <>
             <ProfileRow label="Tenant phone" value={contacts.tenant_phone?.value} />

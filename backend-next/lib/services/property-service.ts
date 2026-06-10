@@ -2,6 +2,8 @@ import { prisma } from "../db";
 import { financialService } from "@/src/services/payments/financial-service";
 import { roomCapacityService } from "./room-capacity-service";
 import crypto from "crypto";
+import { authOtpService } from "@/lib/services/auth/auth-otp-service";
+import { normalizeWhatsAppPhone } from "@/lib/services/notifications/providers/whatsapp";
 
 
 export class PropertyService {
@@ -72,7 +74,14 @@ export class PropertyService {
     state?: string | null;
     pincode?: string | null;
     emergency_contact?: string | null;
+    phone_otp?: string;
+    emergency_otp?: string;
   }) {
+    const current = await prisma.profile.findUnique({
+      where: { id: userId },
+    });
+    if (!current) throw new Error("NOT_FOUND: Owner profile not found");
+
     const updateData: any = {};
     if (data.name !== undefined) {
       const name = String(data.name).trim();
@@ -84,6 +93,40 @@ export class PropertyService {
       if (phone && !/^\+?[0-9]{10,15}$/.test(phone)) {
         throw new Error("VALIDATION: Phone must be 10 to 15 digits");
       }
+      
+      const oldPrimary = (current.phone || "").trim();
+      const newPrimary = phone;
+      if (newPrimary) {
+        let normOld = "";
+        try {
+          if (oldPrimary) normOld = normalizeWhatsAppPhone(oldPrimary);
+        } catch (e) {}
+
+        let normNew = "";
+        try {
+          normNew = normalizeWhatsAppPhone(newPrimary);
+        } catch (err: any) {
+          throw new Error(`VALIDATION: Invalid primary phone number: ${err.message}`);
+        }
+
+        if (normOld !== normNew) {
+          const otp = data.phone_otp;
+          if (!otp) {
+            throw new Error("VALIDATION: Verification code is required to update your phone number");
+          }
+          try {
+            await authOtpService.verifyPhoneOtp({
+              phone: normNew,
+              otp,
+              purpose: "ProfileUpdate",
+              requestIp: null,
+            });
+          } catch (err: any) {
+            throw new Error(`VALIDATION: Phone verification failed: ${err.message || "Invalid or expired code"}`);
+          }
+        }
+      }
+      
       updateData.phone = phone || null;
     }
     if (data.address !== undefined) updateData.address = cleanNullable(data.address);
@@ -101,6 +144,40 @@ export class PropertyService {
       if (emergencyContact && !/^\+?[0-9]{10,15}$/.test(emergencyContact)) {
         throw new Error("VALIDATION: Emergency contact must be 10 to 15 digits");
       }
+      
+      const oldEmergency = (current.emergency_contact || "").trim();
+      const newEmergency = emergencyContact || "";
+      if (newEmergency) {
+        let normOld = "";
+        try {
+          if (oldEmergency) normOld = normalizeWhatsAppPhone(oldEmergency);
+        } catch (e) {}
+
+        let normNew = "";
+        try {
+          normNew = normalizeWhatsAppPhone(newEmergency);
+        } catch (err: any) {
+          throw new Error(`VALIDATION: Invalid emergency contact number: ${err.message}`);
+        }
+
+        if (normOld !== normNew) {
+          const otp = data.emergency_otp;
+          if (!otp) {
+            throw new Error("VALIDATION: Verification code is required to update your emergency contact phone number");
+          }
+          try {
+            await authOtpService.verifyPhoneOtp({
+              phone: normNew,
+              otp,
+              purpose: "ProfileUpdate",
+              requestIp: null,
+            });
+          } catch (err: any) {
+            throw new Error(`VALIDATION: Emergency contact verification failed: ${err.message || "Invalid or expired code"}`);
+          }
+        }
+      }
+      
       updateData.emergency_contact = emergencyContact;
     }
 

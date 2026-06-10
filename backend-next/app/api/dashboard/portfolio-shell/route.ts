@@ -8,6 +8,8 @@ import { portfolioPerformanceService } from "@/lib/services/portfolio-performanc
 import { getCachedDashboard, setDashboardCache } from "@/lib/cache/dashboard-cache";
 import { redisKeys } from "@/lib/redis/keys";
 
+import { resolveOwnerOrAdminScopeForHostel } from "@/lib/security/scoped-query";
+
 type OverduePreviewRow = {
   obligation_id: string;
   tenant_id: string;
@@ -75,17 +77,18 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const ownerId = await resolveOwnerOrAdminScopeForHostel(session);
     const { searchParams } = new URL(req.url);
     const parsed = parseInt(searchParams.get("months") || "6", 10);
     const months = Number.isNaN(parsed) ? 6 : parsed;
-    const cacheKey = redisKeys.portfolio.shell(session.sub, months);
+    const cacheKey = redisKeys.portfolio.shell(ownerId, months);
     const cached = await getCachedDashboard(cacheKey);
     if (cached) return apiResponse(cached);
 
-    const performance = await portfolioPerformanceService.getPortfolioPerformance(session.sub, months);
+    const performance = await portfolioPerformanceService.getPortfolioPerformance(ownerId, months);
     const focusHostelId = performance.hostel_rankings?.[0]?.hostel_id ?? null;
     const overduePreview = focusHostelId
-      ? await getOverduePreview(session.sub, focusHostelId)
+      ? await getOverduePreview(ownerId, focusHostelId)
       : [];
 
     const response = {
@@ -94,7 +97,7 @@ export async function GET(req: NextRequest) {
       overdue_preview: overduePreview,
     };
     await setDashboardCache(cacheKey, response, 60, [
-      redisKeys.tag.ownerDashboard(session.sub),
+      redisKeys.tag.ownerDashboard(ownerId),
       ...(focusHostelId ? [redisKeys.tag.hostelDashboard(focusHostelId)] : []),
     ]);
     return apiResponse(response);

@@ -49,6 +49,7 @@ vi.mock("@/lib/redis/rate-limit", () => ({
     retryAfterSeconds: 60,
   }),
   setOneTimeLock: vi.fn().mockResolvedValue(true),
+  releaseOneTimeLock: vi.fn().mockResolvedValue(true),
 }));
 
 describe("OTP Verification Pipeline Security Tests", () => {

@@ -1,4 +1,5 @@
 import { FormEvent, InputHTMLAttributes, ReactNode, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -92,6 +93,23 @@ type ProfileDraft = {
   savedAt: number;
 };
 
+function normalizeActivationToken(value: string | null | undefined) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  let decoded = raw;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    decoded = raw;
+  }
+
+  return decoded
+    .replace(/^\/?(activate|invite)\//i, '')
+    .replace(/^(\{\{4\}\}|\{\{1\}\}|%7B%7B4%7D%7D|%7B%7B1%7D%7D|\{1\}|%7B1%7D)+/i, '')
+    .trim();
+}
+
 const currency = (value: unknown) =>
   Number(value || 0).toLocaleString('en-IN', {
     style: 'currency',
@@ -105,18 +123,18 @@ const fmtDate = (value: unknown) =>
 const phoneDigits = (value: unknown) => String(value || '').replace(/\D/g, '').slice(-10);
 
 const activationSteps: { id: ActivationStep; label: string; helper: string }[] = [
-  { id: 'ACCOUNT', label: 'Account', helper: 'Password and mobile' },
+  { id: 'ACCOUNT', label: 'Welcome', helper: 'Confirm stay & mobile' },
   { id: 'RULES', label: 'Rules', helper: 'Read and accept' },
   { id: 'AGREEMENT', label: 'Agreement', helper: 'Sign contract' },
-  { id: 'PROFILE', label: 'Profile', helper: 'Personal details' },
-  { id: 'ACTIVATE', label: 'Activate', helper: 'Enter portal' },
+  { id: 'PROFILE', label: 'Identity', helper: 'Verify details' },
+  { id: 'ACTIVATE', label: 'Activate', helper: 'Create password' },
 ];
 
 const visualSteps: { id: 'ACCOUNT' | 'AGREEMENT' | 'PROFILE' | 'ACTIVATE'; label: string; helper: string }[] = [
-  { id: 'ACCOUNT', label: 'Account', helper: 'Password and mobile' },
-  { id: 'AGREEMENT', label: 'Agreement', helper: 'Read & sign' },
-  { id: 'PROFILE', label: 'Profile', helper: 'Personal details' },
-  { id: 'ACTIVATE', label: 'Activate', helper: 'Enter portal' },
+  { id: 'ACCOUNT', label: 'Welcome', helper: 'Confirm stay & mobile' },
+  { id: 'AGREEMENT', label: 'Agreement', helper: 'Rules & contract' },
+  { id: 'PROFILE', label: 'Identity', helper: 'Verify details' },
+  { id: 'ACTIVATE', label: 'Activate', helper: 'Create password' },
 ];
 
 const guardianRelations = ['Father', 'Mother', 'Brother', 'Sister', 'Uncle', 'Aunt', 'Grandparent', 'Spouse', 'Other'];
@@ -328,9 +346,7 @@ function RuleIcon({ icon }: { icon?: string }) {
   if (icon === 'alert-triangle') return <AlertTriangle className={cls} />;
   if (icon === 'door-open') return <DoorOpen className={cls} />;
   return <ShieldCheck className={cls} />;
-}
-
-function Progress({
+}function Progress({
   ctx,
   activeStep,
   onStepClick,
@@ -339,10 +355,10 @@ function Progress({
   activeStep: ActivationStep;
   onStepClick: (step: ActivationStep) => void;
 }) {
-  const completed = new Set(ctx.completed_steps ?? ctx.activation_state.completed_steps ?? []);
-  const current = ctx.current_step ?? ctx.activation_state.current_step;
+  const completed = new Set(ctx?.completed_steps ?? ctx?.activation_state?.completed_steps ?? []);
+  const current = ctx?.current_step ?? ctx?.activation_state?.current_step ?? 'ACCOUNT';
   
-  const getVisualCurrentIndex = (stepId: ActivationStep) => {
+  const getStepVisualIndex = (stepId: ActivationStep) => {
     if (stepId === 'ACCOUNT') return 0;
     if (stepId === 'RULES' || stepId === 'AGREEMENT') return 1;
     if (stepId === 'PROFILE') return 2;
@@ -350,47 +366,50 @@ function Progress({
     return 0;
   };
 
-  const currentIndex = getVisualCurrentIndex(current);
+  const currentIndex = getStepVisualIndex(current);
+  const activeIndex = getStepVisualIndex(activeStep);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div className="flex items-center justify-between gap-3 text-xs">
-        <span className="font-bold text-accent">Step {Math.max(1, currentIndex + 1)} of {visualSteps.length}</span>
-        <span className="text-muted-foreground">Complete setup in under 3 minutes</span>
+        <span className="font-bold text-accent">Step {Math.max(1, activeIndex + 1)} of {visualSteps.length}</span>
+        <span className="text-muted-foreground">{visualSteps.length - Math.max(1, activeIndex + 1)} steps remaining</span>
       </div>
       <div className="flex items-center gap-0">
         {visualSteps.map((step, i) => {
           const done = step.id === 'AGREEMENT' 
             ? completed.has('AGREEMENT') 
             : completed.has(step.id);
-            
+             
           const active = step.id === 'AGREEMENT'
             ? (activeStep === 'RULES' || activeStep === 'AGREEMENT')
             : activeStep === step.id;
 
+          const stepIndex = getStepVisualIndex(step.id);
+
           return (
             <div key={step.id} className="flex-1 flex items-center">
               <div className={`h-1.5 rounded-full flex-1 transition-colors duration-300 ${
-                done || active ? 'bg-accent' : 'bg-muted'
+                done || active || (stepIndex <= activeIndex) ? 'bg-accent' : 'bg-muted'
               }`} />
               {i < visualSteps.length - 1 && <div className="w-1" />}
             </div>
           );
         })}
       </div>
-      <div className="grid grid-cols-4">
+      
+      {/* Pill navigation buttons */}
+      <div className="flex items-center gap-1.5 overflow-x-auto py-1 no-scrollbar scroll-smooth">
         {visualSteps.map((step, i) => {
           const done = step.id === 'AGREEMENT' 
             ? completed.has('AGREEMENT') 
             : completed.has(step.id);
-
+             
           const active = step.id === 'AGREEMENT'
             ? (activeStep === 'RULES' || activeStep === 'AGREEMENT')
             : activeStep === step.id;
 
-          const clickable = step.id === 'AGREEMENT'
-            ? (completed.has('AGREEMENT') || current === 'RULES' || current === 'AGREEMENT' || completed.has('RULES'))
-            : (completed.has(step.id) || current === step.id);
+          const clickable = getStepVisualIndex(step.id) <= getStepVisualIndex(current);
 
           return (
             <button
@@ -408,18 +427,22 @@ function Progress({
                   onStepClick(step.id);
                 }
               }}
-              className="min-w-0 flex flex-col items-center gap-1 rounded-xl px-1 py-1 text-center disabled:cursor-not-allowed disabled:opacity-60"
+              className={`flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11px] font-bold transition-all shrink-0 border ${
+                active 
+                  ? 'bg-accent border-accent text-accent-foreground shadow-sm shadow-accent/20' 
+                  : done 
+                  ? 'bg-emerald-500/10 border-emerald-200 text-emerald-700 hover:bg-emerald-500/20' 
+                  : clickable
+                  ? 'bg-secondary border-border text-foreground hover:bg-secondary/80'
+                  : 'bg-muted/30 border-transparent text-muted-foreground opacity-40 cursor-not-allowed'
+              }`}
             >
-              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                done ? 'bg-success text-white' : active ? 'bg-accent text-white' : 'bg-muted text-muted-foreground'
+              <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-black ${
+                active ? 'bg-white text-accent' : done ? 'bg-emerald-500 text-white' : 'bg-muted-foreground/20 text-muted-foreground'
               }`}>
                 {done ? '✓' : i + 1}
-              </div>
-              <p className={`text-[10px] font-medium truncate ${
-                active ? 'text-accent' : done ? 'text-success' : 'text-muted-foreground'
-              }`}>
-                {step.label}
-              </p>
+              </span>
+              <span>{step.label}</span>
             </button>
           );
         })}
@@ -431,7 +454,7 @@ function Progress({
 export function ActivateAccountPage() {
   const { token: pathToken } = useParams();
   const [searchParams] = useSearchParams();
-  const token = pathToken || searchParams.get('token') || '';
+  const token = normalizeActivationToken(pathToken || searchParams.get('token'));
   const navigate = useNavigate();
   const { login } = useAuth();
 
@@ -466,6 +489,56 @@ export function ActivateAccountPage() {
   const [guardianVerifiedPhone, setGuardianVerifiedPhone] = useState('');
   const [guardianOtpVerifying, setGuardianOtpVerifying] = useState(false);
 
+  // Override / Unlock states to allow editing verified numbers
+  const [guardianOverrideUnlocked, setGuardianOverrideUnlocked] = useState(false);
+
+  // Success Pop-up Modal State
+  const [showSuccessModal, setShowSuccessModal] = useState<null | { title: string; message: string }>(null);
+
+  // Agreement Signature State
+  const [tenantSigBlob, setTenantSigBlob] = useState<Blob | null>(null);
+  const [tenantSigName, setTenantSigName] = useState('');
+  const [guardianSigBlob, setGuardianSigBlob] = useState<Blob | null>(null);
+  const [isGuardianLocked, setIsGuardianLocked] = useState(true);
+  const [activeSigType, setActiveSigType] = useState<'tenant' | 'guardian' | null>(null);
+
+  const [acks, setAcks] = useState<Record<string, boolean>>({});
+  const [showAgreementPreview, setShowAgreementPreview] = useState(false);
+
+  const [profile, setProfile] = useState<Record<string, string>>({
+    phone: '',
+    gender: '',
+    date_of_birth: '',
+    permanent_address: '',
+    temporary_address: '',
+    profile_type: 'STUDENT',
+    college_name: '',
+    course: '',
+    year_of_study: '',
+    branch: '',
+    roll_number: '',
+    office_name: '',
+    office_location: '',
+    job_role: '',
+    guardian_name: '',
+    guardian_phone: '',
+    guardian_relation: '',
+    emergency_phone: '',
+  });
+
+  const [selectedCollege, setSelectedCollege] = useState<string>('');
+  const [selectedCourse, setSelectedCourse] = useState<string>('');
+  const [profilePhotoFile, setProfilePhotoFile] = useState<File | null>(null);
+  const [profilePhotoPreview, setProfilePhotoPreview] = useState<string>('');
+
+  useEffect(() => {
+    if (otpCountdown <= 0) return;
+    const timer = window.setTimeout(() => {
+      setOtpCountdown((c) => c - 1);
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [otpCountdown]);
+
   useEffect(() => {
     if (guardianOtpCountdown <= 0) return;
     const timer = window.setTimeout(() => {
@@ -473,6 +546,17 @@ export function ActivateAccountPage() {
     }, 1000);
     return () => window.clearTimeout(timer);
   }, [guardianOtpCountdown]);
+
+
+
+  useEffect(() => {
+    if (showSuccessModal) {
+      const timer = setTimeout(() => {
+        setShowSuccessModal(null);
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [showSuccessModal]);
 
   const handleSendGuardianOtp = async () => {
     const phone = (profile.guardian_phone || '').trim();
@@ -504,7 +588,7 @@ export function ActivateAccountPage() {
     try {
       await tenantService.sendPhoneOtp({
         phone,
-        purpose: 'GuardianVerification',
+        purpose: 'ParentVerify',
       });
       setGuardianOtpSent(true);
       setGuardianOtpCountdown(60);
@@ -535,10 +619,15 @@ export function ActivateAccountPage() {
       await tenantService.verifyPhoneOtp({
         phone,
         otp: guardianOtp,
-        purpose: 'GuardianVerification',
+        purpose: 'ParentVerify',
       });
       setGuardianOtpVerified(true);
       setGuardianVerifiedPhone(phone);
+      setGuardianOverrideUnlocked(false);
+      setShowSuccessModal({
+        title: 'Guardian Phone Verified',
+        message: `OTP verification for your parent/guardian mobile number (+91 ${phone.slice(-10)}) was successful!`,
+      });
       setError('');
     } catch (err: any) {
       const message =
@@ -551,10 +640,17 @@ export function ActivateAccountPage() {
     }
   };
 
+
+
   const isGuardianPhoneVerified =
-    (ctx?.tenant?.guardian_phone && profile.guardian_phone === phoneDigits(ctx?.tenant?.guardian_phone)) ||
-    (ctx?.tenant?.phone_2 && profile.guardian_phone === phoneDigits(ctx?.tenant?.phone_2)) ||
-    (guardianOtpVerified && profile.guardian_phone === guardianVerifiedPhone);
+    !guardianOverrideUnlocked &&
+    Boolean(profile.guardian_phone) && (
+      (ctx?.tenant?.guardian_phone && profile.guardian_phone === phoneDigits(ctx?.tenant?.guardian_phone) && ctx?.verification_status?.guardian_verified) ||
+      (ctx?.tenant?.phone_2 && profile.guardian_phone === phoneDigits(ctx?.tenant?.phone_2) && ctx?.verification_status?.guardian_verified) ||
+      (guardianOtpVerified && profile.guardian_phone === guardianVerifiedPhone)
+    );
+
+
 
   const isStudent = String(profile.profile_type || ctx?.tenant?.profile_type || 'STUDENT').toUpperCase() === 'STUDENT';
 
@@ -585,17 +681,11 @@ export function ActivateAccountPage() {
   };
 
   // Agreement Signature State
-  const [tenantSigBlob, setTenantSigBlob] = useState<Blob | null>(null);
-  const [tenantSigName, setTenantSigName] = useState('');
-  const [guardianSigBlob, setGuardianSigBlob] = useState<Blob | null>(null);
-  const [isGuardianLocked, setIsGuardianLocked] = useState(true);
-
-  const [acks, setAcks] = useState<Record<string, boolean>>({});
-
+  
   useEffect(() => {
     if (ctx) {
-      const completed = new Set(ctx.completed_steps ?? ctx.activation_state.completed_steps ?? []);
-      if (completed.has('RULES') || ctx.activation_state.rules_accepted) {
+      const completed = new Set(ctx.completed_steps ?? ctx.activation_state?.completed_steps ?? []);
+      if (completed.has('RULES') || ctx.activation_state?.rules_accepted) {
         setAcks({
           fee_refund_rules: true,
           discipline_policies: true,
@@ -606,32 +696,6 @@ export function ActivateAccountPage() {
       }
     }
   }, [ctx]);
-
-  const [profile, setProfile] = useState<Record<string, string>>({
-    phone: '',
-    gender: '',
-    date_of_birth: '',
-    permanent_address: '',
-    temporary_address: '',
-    profile_type: 'STUDENT',
-    college_name: '',
-    course: '',
-    year_of_study: '',
-    branch: '',
-    roll_number: '',
-    office_name: '',
-    office_location: '',
-    job_role: '',
-    guardian_name: '',
-    guardian_phone: '',
-    guardian_relation: '',
-    emergency_phone: '',
-  });
-
-  const [selectedCollege, setSelectedCollege] = useState<string>('');
-  const [selectedCourse, setSelectedCourse] = useState<string>('');
-  const [profilePhotoFile, setProfilePhotoFile] = useState<File | null>(null);
-  const [profilePhotoPreview, setProfilePhotoPreview] = useState<string>('');
 
   const loadContext = async () => {
     if (!token) {
@@ -748,8 +812,8 @@ export function ActivateAccountPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  const currentStep = ctx?.current_step ?? ctx?.activation_state.current_step;
-  const completed = new Set(ctx?.completed_steps ?? ctx?.activation_state.completed_steps ?? []);
+  const currentStep = ctx?.current_step ?? ctx?.activation_state?.current_step;
+  const completed = new Set(ctx?.completed_steps ?? ctx?.activation_state?.completed_steps ?? []);
   const activeStep = visibleStep || currentStep;
   const ruleCategories = ctx?.agreement?.content_snapshot?.hostel_rules?.categories ?? ctx?.rules?.content?.categories ?? [];
   const requiredAcks = ctx?.rules?.required_acknowledgements ?? [];
@@ -760,7 +824,7 @@ export function ActivateAccountPage() {
 
   useEffect(() => {
     setVisibleStep(null);
-  }, [ctx?.current_step, ctx?.activation_state.current_step]);
+  }, [ctx?.current_step, ctx?.activation_state?.current_step]);
 
   useEffect(() => {
     if (!(submitting && activeStep === 'ACTIVATE')) {
@@ -785,7 +849,7 @@ export function ActivateAccountPage() {
   }, [activeStep, submitting]);
 
   useEffect(() => {
-    if (!token || !ctx || !profileDraftReady || ctx.activation_state.profile_completed) return;
+    if (!token || !ctx || !profileDraftReady || ctx.activation_state?.profile_completed) return;
     if (activeStep !== 'PROFILE') return;
 
     setProfileDraftStatus('saving');
@@ -816,10 +880,11 @@ export function ActivateAccountPage() {
   ]);
 
   const goToStep = (step: ActivationStep) => {
-    const completed = new Set(ctx?.completed_steps ?? ctx?.activation_state.completed_steps ?? []);
-    if (step === currentStep || completed.has(step)) {
+    const completed = new Set(ctx?.completed_steps ?? ctx?.activation_state?.completed_steps ?? []);
+    const targetStep = step === 'RULES' ? 'AGREEMENT' : step;
+    if (targetStep === currentStep || completed.has(targetStep)) {
       setError('');
-      setVisibleStep(step);
+      setVisibleStep(targetStep);
       setShowWelcome(false);
     }
   };
@@ -829,11 +894,15 @@ export function ActivateAccountPage() {
     setError('');
     try {
       const result = await tenantService.updateActivationWorkflow({ token, step, data });
-      if (step === 'ACCOUNT' && typeof data.password === 'string') setLastPassword(data.password);
+      if (step === 'ACTIVATE' && typeof data.password === 'string') {
+        setLastPassword(data.password);
+      }
       if (step === 'ACTIVATE') {
-        if (lastPassword && ctx?.profile?.email) {
+        const submittedPassword = String(data?.password || lastPassword || "");
+        const email = ctx?.profile?.email || (ctx?.profile?.phone ? `${ctx.profile.phone}@hms.temp` : (ctx?.tenant?.phone_1 ? `${ctx.tenant.phone_1}@hms.temp` : ''));
+        if (submittedPassword && email) {
           try {
-            await login(ctx.profile.email, lastPassword);
+            await login(email, submittedPassword);
             navigate('/tenant/dashboard', { replace: true });
             return true;
           } catch {
@@ -1014,12 +1083,20 @@ export function ActivateAccountPage() {
       return;
     }
 
-    if (profile.guardian_phone) {
-      if (!isGuardianPhoneVerified) {
-        setError('Please verify the parent/guardian phone number first.');
-        return;
-      }
+    if (isStudent && !isGuardianPhoneVerified) {
+      setError('Please verify the parent/guardian phone number first.');
+      return;
     }
+    if (profile.guardian_phone && !isGuardianPhoneVerified) {
+      setError('Please verify the parent/guardian phone number first.');
+      return;
+    }
+
+    if (!profile.emergency_phone) {
+      setError('Emergency contact mobile number is required.');
+      return;
+    }
+
 
     if (!profilePhotoFile && !profilePhotoPreview) {
       setError('Profile photo is required');
@@ -1037,7 +1114,11 @@ export function ActivateAccountPage() {
           photoUrl = uploadRes.photo_url;
         }
       }
-      const saved = await submitStep('PROFILE', { ...profile, photo_url: photoUrl, guardian_otp: guardianOtp });
+      const saved = await submitStep('PROFILE', {
+        ...profile,
+        photo_url: photoUrl,
+        guardian_otp: guardianOtp,
+      });
       if (saved) {
         clearProfileDraft(token);
         setProfileDraftStatus('idle');
@@ -1052,7 +1133,7 @@ export function ActivateAccountPage() {
     }
   };
 
-  const documentPending = ctx && !ctx.activation_state.documents_uploaded;
+  const documentPending = ctx && !ctx.activation_state?.documents_uploaded;
 
   if (checking) {
     return (
@@ -1154,175 +1235,62 @@ export function ActivateAccountPage() {
           </div>
 
           <div className="bg-card p-5">
-            <Progress ctx={ctx} activeStep={activeStep || ctx.activation_state.current_step} onStepClick={goToStep} />
+            <Progress ctx={ctx} activeStep={activeStep || ctx.activation_state?.current_step} onStepClick={goToStep} />
 
-          <div className="mt-5 rounded-2xl border border-border bg-secondary/40 p-4 text-sm">
-            <p className="font-bold text-foreground">Stay summary</p>
-            <dl className="mt-3 space-y-2 text-muted-foreground">
-              <div className="flex justify-between gap-3">
-                <dt>Room</dt>
-                <dd className="font-medium text-foreground">{String(ctx.room_summary.room_number || 'Assigned')}</dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt>Occupancy</dt>
-                <dd className="font-medium text-foreground">
-                  {ctx.room_summary.current_occupancy || '—'} / {ctx.room_summary.capacity || '—'}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt>Rent</dt>
-                <dd className="font-medium text-foreground">{currency(ctx.room_summary.monthly_rent)}</dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt>Billing starts</dt>
-                <dd className="font-medium text-foreground">{fmtDate(ctx.room_summary.billing_start_date)}</dd>
-              </div>
-            </dl>
+          <div className="mt-4 rounded-xl border border-border bg-secondary/40 px-4 py-2.5 text-sm flex items-center justify-between gap-3 flex-wrap">
+            <span className="font-bold text-foreground">{String(ctx.room_summary.room_number || 'Room')} • {currency(ctx.room_summary.monthly_rent)}/month</span>
+            <span className="text-xs text-muted-foreground">Starts {fmtDate(ctx.room_summary.billing_start_date)}</span>
           </div>
           </div>
         </aside>
 
-        <section className="rounded-2xl border border-border bg-card p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:p-6 shadow-sm">
-          {showWelcome && activeStep === 'ACCOUNT' && !ctx.activation_state.account_setup_completed ? (
-            <div className="space-y-5">
+        <section className="rounded-2xl border border-border bg-card p-5 pb-24 sm:p-6 sm:pb-6 shadow-sm">
+          {activeStep === 'ACCOUNT' && !ctx.activation_state?.account_setup_completed && (
+            <div className="space-y-6">
               <div>
-                <p className="text-sm font-semibold text-accent">Step 1 of {visualSteps.length}</p>
-                <h2 className="mt-1 text-2xl font-bold text-foreground">
-                  {ctx.activation_state.completed_steps.length > 0 ? 'Resume setup' : `Welcome to ${ctx.hostel.name}`}
+                <p className="text-xs font-semibold text-accent uppercase tracking-wider">Step 1 of {visualSteps.length}</p>
+                <h2 className="mt-1 text-2xl font-black text-foreground tracking-tight">
+                  Welcome to {ctx.hostel.name}
                 </h2>
-                <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-                  Complete setup in under 3 minutes. Your room is already reserved, and only four simple steps are left before you enter the tenant portal.
+                <p className="mt-1.5 text-sm text-muted-foreground">
+                  Confirm your stay details and verify your mobile number to begin.
                 </p>
               </div>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <Metric icon={<CheckCircle2 className="w-4 h-4" />} label="Setup time" value="Under 3 min" />
-                <Metric icon={<ClipboardCheck className="w-4 h-4" />} label="Simple steps" value="4 steps" />
-                <Metric icon={<DoorOpen className="w-4 h-4" />} label="Room status" value="Reserved" />
-              </div>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <Metric icon={<DoorOpen className="w-4 h-4" />} label="Room" value={String(ctx.room_summary.room_number || 'Assigned')} />
-                <Metric icon={<BadgeIndianRupee className="w-4 h-4" />} label="Monthly rent" value={currency(ctx.room_summary.monthly_rent)} />
-                <Metric icon={<Users className="w-4 h-4" />} label="Roommates" value={String(ctx.room_summary.roommates_count ?? 0)} />
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowWelcome(false)}
-                className="inline-flex items-center gap-2 rounded-2xl bg-accent px-5 py-3.5 text-sm font-semibold text-accent-foreground active:scale-[0.98] transition-transform shadow-sm"
-              >
-                Start setup
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          ) : null}
 
-          {activeStep === 'ACCOUNT' && ctx.activation_state.account_setup_completed && (
-            <div className="space-y-5">
-              <SectionHeading
-                icon={<UserRound className="w-5 h-5" />}
-                title="Account setup saved"
-                text="Your password is securely saved and hidden. Your phone number is restored from the saved account details."
-              />
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
-                <div className="flex items-start gap-3">
-                  <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
-                  <div>
-                    <p className="font-bold">Password saved securely</p>
-                    <p className="mt-1 text-emerald-800">
-                      We do not show saved passwords again. If you reload or return to this step, only your saved phone number is shown.
-                    </p>
+              {/* Allocation Stay Summary */}
+              <div className="rounded-2xl border border-border bg-secondary/20 p-4 space-y-3.5 shadow-sm">
+                <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Room Allocation Details</span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                    Reserved
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-xl bg-card border border-border/60 p-2.5">
+                    <span className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Room</span>
+                    <span className="text-base font-extrabold text-foreground">{ctx.room_summary.room_number || 'Assigned'}</span>
+                  </div>
+                  <div className="rounded-xl bg-card border border-border/60 p-2.5">
+                    <span className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Monthly Rent</span>
+                    <span className="text-base font-extrabold text-foreground">{currency(ctx.room_summary.monthly_rent)}</span>
+                  </div>
+                  <div className="rounded-xl bg-card border border-border/60 p-2.5">
+                    <span className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Joining Date</span>
+                    <span className="text-xs font-extrabold text-foreground block mt-1">{fmtDate(ctx.room_summary.joining_date)}</span>
                   </div>
                 </div>
               </div>
-              <Field
-                label="Primary mobile"
-                required
-                value={account.phone}
-                onChange={(v) => setAccount({ ...account, phone: phoneDigits(v) })}
-                inputMode="tel"
-                helperText="Saved with your account setup."
-              />
-              <button
-                type="button"
-                onClick={() => setVisibleStep(null)}
-                className="inline-flex items-center gap-2 rounded-2xl bg-accent px-5 py-3.5 text-sm font-semibold text-accent-foreground active:scale-[0.98] transition-transform shadow-sm"
-              >
-                Continue setup
-                <ArrowRight className="h-4 w-4" />
-              </button>
-            </div>
-          )}
 
-          {activeStep === 'ACCOUNT' && !ctx.activation_state.account_setup_completed && !showWelcome && (
-            <form onSubmit={accountSubmit} className="space-y-5">
-              <SectionHeading icon={<UserRound className="w-5 h-5" />} title="Set up your account" text="Choose your password and verify your primary mobile number using the verification code sent to your WhatsApp." />
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="block sm:col-span-2">
-                  <span className="text-xs font-semibold text-muted-foreground">Personal Email *</span>
-                  <input
-                    type="email"
-                    required
-                    value={account.email}
-                    onChange={(e) => setAccount({ ...account, email: e.target.value })}
-                    placeholder="e.g. tenant@example.com"
-                    className={`${fieldClass} mt-1.5`}
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="text-xs font-semibold text-muted-foreground">Password *</span>
-                  <div className="relative mt-1.5">
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={account.password}
-                      onChange={(e) => setAccount({ ...account, password: e.target.value })}
-                      className={`${fieldClass} mt-0 pr-11`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((value) => !value)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-                    <div className={`h-full ${strength.color} transition-all`} style={{ width: strength.width }} />
-                  </div>
-                  <p className={`mt-1 text-xs font-semibold ${strength.textColor}`}>Password strength: {strength.label}</p>
-                  {strength.suggestions.length > 0 && (
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      Try: {strength.suggestions.slice(0, 2).join(', ')}.
-                    </p>
-                  )}
-                </label>
-                <label className="block">
-                  <span className="text-xs font-semibold text-muted-foreground">Confirm password *</span>
-                  <div className="relative mt-1.5">
-                    <input
-                      type={showConfirmPassword ? 'text' : 'password'}
-                      value={account.confirm_password}
-                      onChange={(e) => setAccount({ ...account, confirm_password: e.target.value })}
-                      className={`${fieldClass} mt-0 pr-11`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPassword((value) => !value)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                      aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
-                    >
-                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                </label>
+              {/* Mobile Verification Form */}
+              <form onSubmit={accountSubmit} className="space-y-4 pt-2">
                 <div className="block">
-                  <span className="text-xs font-semibold text-muted-foreground">Primary mobile *</span>
+                  <span className="text-xs font-semibold text-muted-foreground">Primary Mobile Number *</span>
                   <div className="flex gap-2 mt-1.5">
                     <input
                       type="tel"
                       value={account.phone}
                       onChange={(e) => setAccount({ ...account, phone: phoneDigits(e.target.value) })}
-                      placeholder="e.g. +91 98765 43210"
+                      placeholder="e.g. 9876543210"
                       className={`${fieldClass} mt-0 flex-1`}
                       disabled={otpSent && otpCountdown > 0}
                     />
@@ -1338,7 +1306,7 @@ export function ActivateAccountPage() {
                 </div>
 
                 {otpSent && (
-                  <div className="block sm:col-span-2 max-w-sm">
+                  <div className="block max-w-sm">
                     <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
                       <Lock className="w-3.5 h-3.5 text-accent" />
                       Verification Code *
@@ -1354,15 +1322,49 @@ export function ActivateAccountPage() {
                       autoFocus
                     />
                     <p className="mt-1.5 text-xs text-muted-foreground">
-                      We sent a verification code to your WhatsApp.
+                      We sent a verification code to your mobile number.
                     </p>
                   </div>
                 )}
+
+                <PrimaryButton loading={submitting} disabled={!otpSent || account.otp.length < 6}>
+                  Verify & Continue
+                </PrimaryButton>
+              </form>
+            </div>
+          )}
+
+          {activeStep === 'ACCOUNT' && ctx.activation_state?.account_setup_completed && (
+            <div className="space-y-6">
+              <div>
+                <p className="text-xs font-semibold text-accent uppercase tracking-wider">Step 1 of {visualSteps.length}</p>
+                <h2 className="mt-1 text-2xl font-black text-foreground tracking-tight">Welcome</h2>
+                <p className="mt-1.5 text-sm text-muted-foreground">
+                  Your mobile number has been successfully verified. Let's move to the next step.
+                </p>
               </div>
-              <PrimaryButton loading={submitting} disabled={!otpSent || account.otp.length < 6 || !account.email}>
-                Verify & Save account setup
-              </PrimaryButton>
-            </form>
+
+              <div className="flex items-center justify-between p-4 bg-emerald-500/10 rounded-2xl border border-emerald-500/20">
+                <div className="flex items-center gap-2.5 text-emerald-600 dark:text-emerald-400 font-bold text-sm">
+                  <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  <span>Mobile Verified</span>
+                </div>
+                <div className="text-sm font-semibold text-muted-foreground">
+                  +91 {account.phone || ctx.profile?.phone || ctx.tenant?.phone_1}
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setVisibleStep(null)}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-accent px-5 py-3.5 text-sm font-semibold text-accent-foreground active:scale-[0.98] transition-all shadow-sm cursor-pointer hover:bg-accent/90"
+                >
+                  Continue Setup
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
           )}
 
           {activeStep === 'RULES' && (
@@ -1447,12 +1449,20 @@ export function ActivateAccountPage() {
                   </label>
                 ))}
               </div>
-              <div className="sticky bottom-3 z-20 rounded-2xl border border-border bg-card/95 p-3 shadow-xl backdrop-blur">
+              <div className="sticky bottom-3 z-20 rounded-2xl border border-border bg-card/95 p-3 shadow-xl backdrop-blur flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => goToStep('ACCOUNT')}
+                  className="rounded-2xl border border-border bg-background px-4 text-muted-foreground hover:bg-secondary/40 active:scale-[0.98] transition-transform shadow-sm flex items-center justify-center cursor-pointer"
+                  title="Back to Account"
+                >
+                  <ArrowRight className="w-4 h-4 rotate-180" />
+                </button>
                 {completed.has('RULES') ? (
                   <button
                     type="button"
                     onClick={() => goToStep('AGREEMENT')}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-accent px-5 py-3.5 text-sm font-semibold text-accent-foreground active:scale-[0.98] transition-transform shadow-sm cursor-pointer"
+                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl bg-accent px-5 py-3.5 text-sm font-semibold text-accent-foreground active:scale-[0.98] transition-transform shadow-sm cursor-pointer"
                   >
                     Proceed to Agreement
                     <ArrowRight className="w-4 h-4" />
@@ -1462,7 +1472,7 @@ export function ActivateAccountPage() {
                     type="button"
                     disabled={!allAcksChecked || submitting}
                     onClick={() => submitStep('RULES', { acknowledgements: acks, typed_signature_name: ctx.profile.name })}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-accent px-5 py-3.5 text-sm font-semibold text-accent-foreground disabled:opacity-50 active:scale-[0.98] transition-transform shadow-sm"
+                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl bg-accent px-5 py-3.5 text-sm font-semibold text-accent-foreground disabled:opacity-50 active:scale-[0.98] transition-transform shadow-sm"
                   >
                     {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                     Accept rules
@@ -1480,17 +1490,10 @@ export function ActivateAccountPage() {
                   title="Review & Sign Agreement"
                   text="Please review the terms of your hostel stay and sign electronically below to proceed."
                 />
-                <button
-                  type="button"
-                  onClick={() => goToStep('RULES')}
-                  className="self-start sm:self-center shrink-0 text-xs font-semibold text-accent hover:underline flex items-center gap-1 px-3 py-1.5 rounded-xl border border-border bg-background hover:bg-secondary/40 transition cursor-pointer"
-                >
-                  ← Read Rules Again
-                </button>
               </div>
 
               {/* Immutable Lease Snapshot Box */}
-              <div className="rounded-xl border border-border bg-background p-5 shadow-sm space-y-4 max-h-[350px] overflow-y-auto text-sm leading-relaxed text-foreground select-none">
+              <div className="rounded-2xl border border-border bg-background p-6 md:p-8 shadow-sm space-y-5 text-sm leading-relaxed text-foreground select-none">
                 <div className="text-center border-b pb-4 mb-4">
                   <h3 className="font-extrabold text-base tracking-tight text-slate-800">
                     HOSTEL RESIDENCY AGREEMENT
@@ -1594,149 +1597,145 @@ export function ActivateAccountPage() {
                 </p>
               </div>
 
-              {/* Signature Section */}
-              <div className="grid gap-6">
-                {/* Tenant Signature */}
-                <div className="rounded-xl border border-border bg-background p-4 space-y-3">
-                  <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
-                    <span className="flex h-5 w-5 items-center justify-center rounded bg-accent/10 text-accent text-xs font-semibold">1</span>
-                    Tenant Signature
-                  </h3>
-                  <div className="grid gap-3">
-                    <div>
-                      <label className="block text-xs font-semibold text-muted-foreground mb-1">
-                        Full Name (Type to sign) <span className="text-destructive">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={tenantSigName}
-                        onChange={(e) => setTenantSigName(e.target.value)}
-                        placeholder="Type your official full name"
-                        className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-muted-foreground mb-1">
-                        Draw Signature <span className="text-destructive">*</span>
-                      </label>
-                      <SignaturePad
-                        onSave={setTenantSigBlob}
-                        placeholder="Draw tenant signature here"
-                        existingSignatureUrl={ctx.agreement?.tenant_signature_url}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Guardian Signature (conditional for STUDENT profiles) */}
-                {String(ctx.tenant.profile_type || 'STUDENT').toUpperCase() === 'STUDENT' && (
-                  <div className="rounded-xl border border-border bg-background p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
-                        <span className="flex h-5 w-5 items-center justify-center rounded bg-accent/10 text-accent text-xs font-semibold">2</span>
-                        Parent/Guardian Co-Signature
-                      </h3>
-                    </div>
-
-                    {profile.guardian_name && profile.guardian_relation && (
-                      <div className="flex items-center justify-between rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
-                        <span className="flex items-center gap-1.5 font-medium">
-                          {isGuardianLocked ? (
-                            <>
-                              <Lock className="w-3.5 h-3.5 text-amber-600" />
-                              Guardian details are synced and locked.
-                            </>
-                          ) : (
-                            <>
-                              <Unlock className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
-                              Editing details updates all stages.
-                            </>
-                          )}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setIsGuardianLocked(!isGuardianLocked)}
-                          className="font-bold underline hover:text-amber-900 transition-colors"
-                        >
-                          {isGuardianLocked ? 'Modify' : 'Lock'}
-                        </button>
-                      </div>
-                    )}
-
-                    <div className="grid gap-3">
-                      <div>
-                        <label className="block text-xs font-semibold text-muted-foreground mb-1">
-                          Relationship to Tenant <span className="text-destructive">*</span>
-                        </label>
-                        <select
-                          required
-                          disabled={isGuardianLocked && !!profile.guardian_relation}
-                          value={profile.guardian_relation || ''}
-                          onChange={(e) => setProfile(prev => ({ ...prev, guardian_relation: e.target.value }))}
-                          className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none bg-white disabled:bg-slate-50 disabled:text-slate-500"
-                        >
-                          <option value="">Select relationship</option>
-                          <option value="Father">Father</option>
-                          <option value="Mother">Mother</option>
-                          <option value="Guardian">Guardian</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-muted-foreground mb-1">
-                          Parent/Guardian Full Name <span className="text-destructive">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          disabled={isGuardianLocked && !!profile.guardian_name}
-                          value={profile.guardian_name || ''}
-                          onChange={(e) => setProfile(prev => ({ ...prev, guardian_name: e.target.value }))}
-                          placeholder="Type parent/guardian full name"
-                          className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none disabled:bg-slate-50 disabled:text-slate-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-muted-foreground mb-1">
-                          Draw Signature <span className="text-destructive">*</span>
-                        </label>
-                        <SignaturePad
-                          onSave={setGuardianSigBlob}
-                          placeholder="Draw parent/guardian signature here"
-                          existingSignatureUrl={ctx.agreement?.guardian_signature_url}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Submit Button Bar */}
-              <div className="sticky bottom-3 z-20 rounded-2xl border border-border bg-card/95 p-3 shadow-xl backdrop-blur">
+              {/* Signature Section - Side-by-Side Action Buttons */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
+                {/* Tenant Signature Button */}
                 <button
-                  type="submit"
-                  disabled={submitting}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-accent px-5 py-3.5 text-sm font-semibold text-accent-foreground disabled:opacity-50 active:scale-[0.98] transition-transform shadow-sm cursor-pointer"
+                  type="button"
+                  onClick={() => setActiveSigType('tenant')}
+                  className={`flex flex-col items-center justify-center p-5 rounded-2xl border text-center transition-all hover:shadow-md cursor-pointer active:scale-[0.98] ${
+                    !isStudent ? 'sm:col-span-2' : ''
+                  } ${
+                    tenantSigBlob || ctx.agreement?.tenant_signature_url
+                      ? 'border-emerald-500 bg-emerald-500/5 hover:bg-emerald-500/10'
+                      : 'border-dashed border-border bg-card hover:bg-secondary/40'
+                  }`}
                 >
-                  {submitting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Uploading & signing agreement...
-                    </>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent/15 text-accent text-xs font-bold">1</span>
+                    <span className="text-sm font-bold text-foreground">Sign as Tenant</span>
+                  </div>
+                  {tenantSigBlob || ctx.agreement?.tenant_signature_url ? (
+                    <div className="flex items-center gap-1.5 text-xs text-emerald-600 font-semibold mt-1">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span>Tenant Signed: {tenantSigName || ctx.agreement?.tenant_signature_name}</span>
+                    </div>
                   ) : (
-                    <>
-                      <CheckCircle2 className="w-4 h-4" />
-                      Submit & sign contract
-                    </>
+                    <span className="text-xs text-muted-foreground mt-1">Click to sign and enter name</span>
                   )}
                 </button>
+
+                {/* Guardian Signature Button */}
+                {isStudent ? (
+                  <button
+                    type="button"
+                    onClick={() => setActiveSigType('guardian')}
+                    className={`flex flex-col items-center justify-center p-5 rounded-2xl border text-center transition-all hover:shadow-md cursor-pointer active:scale-[0.98] ${
+                      guardianSigBlob || ctx.agreement?.guardian_signature_url
+                        ? 'border-emerald-500 bg-emerald-500/5 hover:bg-emerald-500/10'
+                        : 'border-dashed border-border bg-card hover:bg-secondary/40'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent/15 text-accent text-xs font-bold">2</span>
+                      <span className="text-sm font-bold text-foreground">Sign as Parent/Guardian</span>
+                    </div>
+                    {guardianSigBlob || ctx.agreement?.guardian_signature_url ? (
+                      <div className="flex items-center gap-1.5 text-xs text-emerald-600 font-semibold mt-1">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        <span>Guardian Signed: {profile.guardian_name || ctx.agreement?.guardian_signature_name}</span>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground mt-1">Click to sign and enter name</span>
+                    )}
+                  </button>
+                ) : null}
+              </div>
+
+              {/* Fullscreen Modal Portal for Signatures */}
+              {activeSigType && typeof document !== "undefined" && createPortal(
+                <div className="fixed inset-0 z-[100] bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-0 sm:p-4">
+                  {activeSigType === 'tenant' && (
+                    <TenantSignatureModal
+                      tenantSigName={tenantSigName}
+                      tenantSigBlob={tenantSigBlob}
+                      existingTenantSigUrl={ctx.agreement?.tenant_signature_url}
+                      onConfirm={(name, blob) => {
+                        setTenantSigName(name);
+                        setTenantSigBlob(blob);
+                        setActiveSigType(null);
+                      }}
+                      onClose={() => setActiveSigType(null)}
+                    />
+                  )}
+                  {activeSigType === 'guardian' && (
+                    <GuardianSignatureModal
+                      guardianName={profile.guardian_name || ''}
+                      guardianRelation={profile.guardian_relation || ''}
+                      guardianSigBlob={guardianSigBlob}
+                      existingGuardianSigUrl={ctx.agreement?.guardian_signature_url}
+                      onConfirm={(name, relation, blob) => {
+                        setProfile(prev => ({
+                          ...prev,
+                          guardian_name: name,
+                          guardian_relation: relation,
+                        }));
+                        setGuardianSigBlob(blob);
+                        setActiveSigType(null);
+                      }}
+                      onClose={() => setActiveSigType(null)}
+                    />
+                  )}
+                </div>,
+                document.body
+              )}
+
+              {/* Submit Button Bar */}
+              <div className="sticky bottom-3 z-20 rounded-2xl border border-border bg-card/95 p-3 shadow-xl backdrop-blur flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => goToStep('ACCOUNT')}
+                  className="rounded-2xl border border-border bg-background px-4 text-muted-foreground hover:bg-secondary/40 active:scale-[0.98] transition-transform shadow-sm flex items-center justify-center cursor-pointer"
+                  title="Back to Welcome"
+                >
+                  <ArrowRight className="w-4 h-4 rotate-180" />
+                </button>
+                {completed.has('AGREEMENT') ? (
+                  <button
+                    type="button"
+                    onClick={() => goToStep('PROFILE')}
+                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl bg-accent px-5 py-3.5 text-sm font-semibold text-accent-foreground active:scale-[0.98] transition-transform shadow-sm cursor-pointer"
+                  >
+                    Proceed to Identity
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl bg-accent px-5 py-3.5 text-sm font-semibold text-accent-foreground disabled:opacity-50 active:scale-[0.98] transition-transform shadow-sm cursor-pointer"
+                  >
+                    {submitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Uploading & signing agreement...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-4 h-4" />
+                        Submit & sign contract
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             </form>
           )}
 
           {activeStep === 'PROFILE' && (
-            <form onSubmit={profileSubmit} className="space-y-5">
-              <SectionHeading icon={<ShieldCheck className="w-5 h-5" />} title="Complete required profile details" text="Start with personal and guardian contacts, then add address, academic or work details, and profile photo." />
+            <>
+            <form data-profile-form onSubmit={profileSubmit} className="space-y-5">
+              <SectionHeading icon={<ShieldCheck className="w-5 h-5" />} title="Verify your identity" text="Just a few quick fields — we'll collect address and academic details after activation." />
               <div className="flex items-center gap-2 rounded-2xl border border-border bg-secondary/40 px-4 py-3 text-xs font-semibold text-muted-foreground">
                 {profileDraftStatus === 'saving' ? (
                   <>
@@ -1762,15 +1761,14 @@ export function ActivateAccountPage() {
               </div>
 
               <FormGroup title="Personal details">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field
-                  label="Primary mobile"
-                  required
-                  value={profile.phone}
-                  onChange={(v) => setProfile({ ...profile, phone: phoneDigits(v) })}
-                  inputMode="tel"
-                  helperText="Enter a valid 10-digit Indian mobile number."
-                />
+              <div className="grid gap-4">
+                <label className="block">
+                  <span className="text-xs font-semibold text-muted-foreground">Profile type *</span>
+                  <select value={profile.profile_type} onChange={(e) => setProfile({ ...profile, profile_type: e.target.value })} className={fieldClass}>
+                    <option value="STUDENT">Student</option>
+                    <option value="WORKING_PROFESSIONAL">Working professional</option>
+                  </select>
+                </label>
                 <Field label="Date of birth" required type="date" value={profile.date_of_birth} onChange={(v) => setProfile({ ...profile, date_of_birth: v })} />
                 <label className="block">
                   <span className="text-xs font-semibold text-muted-foreground">Gender *</span>
@@ -1786,239 +1784,166 @@ export function ActivateAccountPage() {
               </FormGroup>
               
               <FormGroup title="Guardian details">
-              <div className="grid gap-4 sm:grid-cols-2">
-                {profile.guardian_name && profile.guardian_relation && (
-                  <div className="col-span-2 flex items-center justify-between rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
-                    <span className="flex items-center gap-1.5 font-medium">
-                      {isGuardianLocked ? (
-                        <>
-                          <Lock className="w-3.5 h-3.5 text-amber-600" />
-                          Guardian details are synced and locked.
-                        </>
-                      ) : (
-                        <>
-                          <Unlock className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
-                          Editing details updates all stages.
-                        </>
-                      )}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setIsGuardianLocked(!isGuardianLocked)}
-                      className="font-bold underline hover:text-amber-900 transition-colors"
-                    >
-                      {isGuardianLocked ? 'Modify' : 'Lock'}
-                    </button>
-                  </div>
-                )}
-                <Field
-                  label="Guardian name"
-                  disabled={isGuardianLocked && !!profile.guardian_name}
-                  value={profile.guardian_name || ''}
-                  onChange={(v) => setProfile({ ...profile, guardian_name: v })}
-                />
-                <div className="block">
-                  <span className="text-xs font-semibold text-muted-foreground flex items-center justify-between">
-                    <span>Guardian phone {isStudent && <span className="text-destructive">*</span>}</span>
-                    {isGuardianPhoneVerified && (
-                      <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded">
-                        <CheckCircle2 className="w-3 h-3" /> Verified
-                      </span>
-                    )}
-                  </span>
-                  <div className="flex gap-2 mt-1.5">
-                    <input
-                      type="tel"
-                      disabled={isGuardianLocked && !!profile.guardian_phone}
-                      value={profile.guardian_phone || ''}
-                      onChange={(e) => setProfile({ ...profile, guardian_phone: phoneDigits(e.target.value) })}
-                      placeholder="e.g. +91 98765 43210"
-                      className={`${fieldClass} mt-0 flex-1`}
-                    />
-                    {!isGuardianPhoneVerified && profile.guardian_phone && profile.guardian_phone.length === 10 && (
+                <div className="rounded-2xl border border-border bg-secondary/10 p-4.5 space-y-4 shadow-sm">
+                  {isGuardianLocked && profile.guardian_name && profile.guardian_relation ? (
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card rounded-xl p-3 border border-border/60">
+                      <div className="space-y-1">
+                        <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground font-sans">Guardian Details</span>
+                        <h4 className="text-sm font-bold text-slate-800 flex items-center gap-1.5 font-sans">
+                          {profile.guardian_name}
+                          <span className="text-xs font-normal text-muted-foreground">({profile.guardian_relation})</span>
+                        </h4>
+                        <p className="text-[11px] text-muted-foreground font-sans">Synced and locked from agreement signing.</p>
+                      </div>
                       <button
                         type="button"
-                        disabled={guardianOtpSending || (guardianOtpCountdown > 0)}
-                        onClick={handleSendGuardianOtp}
-                        className="px-4 py-2 text-xs font-bold bg-accent text-accent-foreground rounded-xl active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent/90 transition-all shadow-sm shrink-0 whitespace-nowrap"
+                        onClick={() => setIsGuardianLocked(false)}
+                        className="shrink-0 text-xs font-semibold text-accent hover:underline flex items-center gap-1 px-3 py-1.5 rounded-xl border border-border bg-background hover:bg-secondary/40 transition cursor-pointer font-sans"
                       >
-                        {guardianOtpSending ? 'Sending...' : guardianOtpCountdown > 0 ? `Resend in ${guardianOtpCountdown}s` : guardianOtpSent ? 'Resend code' : 'Send Code'}
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-muted-foreground mt-1">
-                    {isStudent ? 'Mandatory mobile number for parent/guardian.' : 'Use a valid 10-digit mobile number if provided.'}
-                  </p>
-                </div>
-
-                {!isGuardianPhoneVerified && guardianOtpSent && (
-                  <div className="block max-w-sm mt-3">
-                    <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                      <Lock className="w-3.5 h-3.5 text-accent" />
-                      Guardian Verification Code *
-                    </span>
-                    <div className="flex gap-2 mt-1.5">
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        maxLength={6}
-                        value={guardianOtp}
-                        onChange={(e) => setGuardianOtp(phoneDigits(e.target.value))}
-                        placeholder="Enter 6-digit code"
-                        className={`${fieldClass} mt-0 flex-1 tracking-widest text-center font-bold text-lg`}
-                      />
-                      <button
-                        type="button"
-                        disabled={guardianOtpVerifying || guardianOtp.length < 6}
-                        onClick={handleVerifyGuardianOtp}
-                        className="px-4 py-2 text-xs font-bold bg-emerald-600 text-white rounded-xl active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-700 transition-all shadow-sm shrink-0 whitespace-nowrap"
-                      >
-                        {guardianOtpVerifying ? 'Verifying...' : 'Verify Code'}
+                        Modify details
                       </button>
                     </div>
-                    <p className="mt-1.5 text-xs text-muted-foreground">
-                      We sent a verification code to the guardian's mobile number.
+                  ) : (
+                    <div className="space-y-3.5">
+                      {!isGuardianLocked && profile.guardian_name && profile.guardian_relation && (
+                        <div className="flex items-center justify-between rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+                          <span className="flex items-center gap-1.5 font-medium font-sans">
+                            <Unlock className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
+                            Editing details updates all stages.
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setIsGuardianLocked(true)}
+                            className="font-bold underline hover:text-amber-900 transition-colors font-sans"
+                          >
+                            Lock
+                          </button>
+                        </div>
+                      )}
+                      
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Field
+                          label="Guardian name"
+                          value={profile.guardian_name || ''}
+                          onChange={(v) => setProfile({ ...profile, guardian_name: v })}
+                        />
+                        <label className="block">
+                          <span className="text-xs font-semibold text-muted-foreground font-sans">Guardian relation</span>
+                          <select
+                            value={profile.guardian_relation || ''}
+                            onChange={(e) => setProfile({ ...profile, guardian_relation: e.target.value })}
+                            className={fieldClass}
+                          >
+                            <option value="">Select relation</option>
+                            {guardianRelations.map((relation) => (
+                              <option key={relation} value={relation}>{relation}</option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="border-t border-border/60 pt-3.5 space-y-3">
+                    <div className="block font-sans">
+                      <span className="text-xs font-semibold text-muted-foreground flex items-center justify-between font-sans">
+                        <span>Guardian phone {isStudent && <span className="text-destructive">*</span>}</span>
+                        {isGuardianPhoneVerified && (
+                          <span className="flex items-center gap-2 font-sans">
+                            <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded font-sans">
+                              <CheckCircle2 className="w-3 h-3" /> Verified
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setGuardianOverrideUnlocked(true)}
+                              className="text-[11px] text-accent hover:underline font-semibold font-sans cursor-pointer"
+                            >
+                              Edit
+                            </button>
+                          </span>
+                        )}
+                      </span>
+                      <div className="flex gap-2 mt-1.5">
+                        <input
+                          type="tel"
+                          disabled={isGuardianPhoneVerified}
+                          value={profile.guardian_phone || ''}
+                          onChange={(e) => setProfile({ ...profile, guardian_phone: phoneDigits(e.target.value) })}
+                          placeholder="e.g. 98765 43210"
+                          className={`${fieldClass} mt-0 flex-1`}
+                        />
+                      </div>
+                      {!isGuardianPhoneVerified && profile.guardian_phone && profile.guardian_phone.length === 10 && (
+                        <button
+                          type="button"
+                          disabled={guardianOtpSending || (guardianOtpCountdown > 0)}
+                          onClick={handleSendGuardianOtp}
+                          className="w-full mt-2 px-4 py-3 text-sm font-bold bg-accent text-accent-foreground rounded-xl active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent/90 transition-all shadow-sm font-sans"
+                        >
+                          {guardianOtpSending ? 'Sending...' : guardianOtpCountdown > 0 ? `Resend in ${guardianOtpCountdown}s` : guardianOtpSent ? 'Resend code' : 'Send Verification Code'}
+                        </button>
+                      )}
+                      <p className="text-[11px] text-muted-foreground mt-1 font-sans">
+                        {isStudent ? 'Mandatory mobile number for parent/guardian.' : 'Use a valid 10-digit mobile number if provided.'}
+                      </p>
+                    </div>
+
+                    {!isGuardianPhoneVerified && guardianOtpSent && (
+                      <div className="block mt-3 font-sans bg-card border border-border/80 rounded-xl p-3.5 shadow-inner">
+                        <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5 font-sans">
+                          <Lock className="w-3.5 h-3.5 text-accent font-sans" />
+                          Guardian Verification Code *
+                        </span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={6}
+                          value={guardianOtp}
+                          onChange={(e) => setGuardianOtp(phoneDigits(e.target.value))}
+                          placeholder="Enter 6-digit code"
+                          className={`${fieldClass} mt-1.5 tracking-widest text-center font-bold text-lg`}
+                        />
+                        <button
+                          type="button"
+                          disabled={guardianOtpVerifying || guardianOtp.length < 6}
+                          onClick={handleVerifyGuardianOtp}
+                          className="w-full mt-2 px-4 py-3 text-sm font-bold bg-emerald-600 text-white rounded-xl active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-700 transition-all shadow-sm"
+                        >
+                          {guardianOtpVerifying ? 'Verifying...' : 'Verify Code'}
+                        </button>
+                        <p className="mt-1.5 text-[11px] text-muted-foreground font-sans">
+                          We sent a verification code to the guardian's mobile number.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </FormGroup>
+
+              <FormGroup title="Emergency contact details">
+                <div className="rounded-2xl border border-border bg-secondary/10 p-4.5 shadow-sm space-y-3 font-sans">
+                  <div className="block font-sans">
+                    <span className="text-xs font-semibold text-muted-foreground font-sans">
+                      <span>Emergency contact (Mobile) <span className="text-destructive">*</span></span>
+                    </span>
+                    <input
+                      type="tel"
+                      value={profile.emergency_phone || ''}
+                      onChange={(e) => setProfile({ ...profile, emergency_phone: phoneDigits(e.target.value) })}
+                      placeholder="e.g. +91 98765 43210"
+                      className={`${fieldClass} mt-1.5`}
+                    />
+                    <p className="text-[11px] text-muted-foreground mt-1 font-sans">
+                      Must be valid and different from primary and guardian numbers.
                     </p>
                   </div>
-                )}
-                <Field
-                  label="Emergency contact (Mobile)"
-                  required
-                  value={profile.emergency_phone || ''}
-                  onChange={(v) => setProfile({ ...profile, emergency_phone: phoneDigits(v) })}
-                  inputMode="tel"
-                  helperText="Must be valid and different from primary and guardian numbers."
-                />
-                <label className="block">
-                  <span className="text-xs font-semibold text-muted-foreground">Guardian relation</span>
-                  <select
-                    disabled={isGuardianLocked && !!profile.guardian_relation}
-                    value={profile.guardian_relation || ''}
-                    onChange={(e) => setProfile({ ...profile, guardian_relation: e.target.value })}
-                    className={`${fieldClass} disabled:bg-muted/40 disabled:text-muted-foreground`}
-                  >
-                    <option value="">Select relation</option>
-                    {guardianRelations.map((relation) => (
-                      <option key={relation} value={relation}>{relation}</option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              </FormGroup>
-              <FormGroup title="Address">
-              <div className="grid gap-4">
-                <TextArea label="Permanent address (Address, City, State, Pincode) *" required value={profile.permanent_address} onChange={(v) => setProfile({ ...profile, permanent_address: v })} />
-              </div>
-              </FormGroup>
-
-              <FormGroup title={profile.profile_type === 'STUDENT' ? 'Academic details' : 'Work details'}>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="block">
-                  <span className="text-xs font-semibold text-muted-foreground">Profile type</span>
-                  <select value={profile.profile_type} onChange={(e) => setProfile({ ...profile, profile_type: e.target.value })} className={fieldClass}>
-                    <option value="STUDENT">Student</option>
-                    <option value="WORKING_PROFESSIONAL">Working professional</option>
-                  </select>
-                </label>
-              </div>
-
-              {profile.profile_type === 'STUDENT' ? (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="text-xs font-semibold text-muted-foreground">College</span>
-                    <select
-                      value={selectedCollege}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setSelectedCollege(val);
-                        if (val !== 'Other') {
-                          setProfile((prev) => ({ ...prev, college_name: val }));
-                        } else {
-                          setProfile((prev) => ({ ...prev, college_name: '' }));
-                        }
-                      }}
-                      className={fieldClass}
-                    >
-                      <option value="">Select College</option>
-                      <option value="Sreenidhi Institute of Science and Technology">Sreenidhi Institute of Science and Technology</option>
-                      <option value="Sreenidhi University">Sreenidhi University</option>
-                      <option value="Other">Other</option>
-                    </select>
-                  </label>
-
-                  {selectedCollege === 'Other' && (
-                    <Field
-                      label="Custom College Name"
-                      value={profile.college_name}
-                      onChange={(v) => setProfile({ ...profile, college_name: v })}
-                    />
-                  )}
-
-                  <label className="block">
-                    <span className="text-xs font-semibold text-muted-foreground">Course</span>
-                    <select
-                      value={selectedCourse}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setSelectedCourse(val);
-                        if (val !== 'Other') {
-                          setProfile((prev) => ({ ...prev, course: val }));
-                        } else {
-                          setProfile((prev) => ({ ...prev, course: '' }));
-                        }
-                      }}
-                      className={fieldClass}
-                    >
-                      <option value="">Select Course</option>
-                      <option value="B.Tech">B.Tech</option>
-                      <option value="Other">Other</option>
-                    </select>
-                  </label>
-
-                  {selectedCourse === 'Other' && (
-                    <Field
-                      label="Custom Course Name"
-                      value={profile.course}
-                      onChange={(v) => setProfile({ ...profile, course: v })}
-                    />
-                  )}
-
-                  <Field label="Branch" value={profile.branch} onChange={(v) => setProfile({ ...profile, branch: v })} />
-                  <label className="block">
-                    <span className="text-xs font-semibold text-muted-foreground">Year of study</span>
-                    <select
-                      value={profile.year_of_study}
-                      onChange={(e) => setProfile({ ...profile, year_of_study: e.target.value })}
-                      className={fieldClass}
-                    >
-                      <option value="">Select Year of study</option>
-                      <option value="1">1st Year</option>
-                      <option value="2">2nd Year</option>
-                      <option value="3">3rd Year</option>
-                      <option value="4">4th Year</option>
-                    </select>
-                  </label>
-
-                  <Field
-                    label="Roll number"
-                    value={profile.roll_number}
-                    onChange={(v) => setProfile({ ...profile, roll_number: v.trimStart().toUpperCase() })}
-                    helperText="Use your unique college roll number. Duplicate roll numbers cannot be used."
-                  />
                 </div>
-              ) : (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Office" value={profile.office_name} onChange={(v) => setProfile({ ...profile, office_name: v })} />
-                  <Field label="Office location" value={profile.office_location} onChange={(v) => setProfile({ ...profile, office_location: v })} />
-                  <Field label="Job role" value={profile.job_role} onChange={(v) => setProfile({ ...profile, job_role: v })} />
-                </div>
-              )}
               </FormGroup>
 
-              <FormGroup title="Profile photo">
-              <label className="flex items-center gap-4 rounded-2xl border-2 border-dashed border-accent/30 bg-accent/5 p-4 cursor-pointer hover:border-accent hover:bg-accent/8 transition-colors">
-                <div className={`w-16 h-16 rounded-full overflow-hidden bg-secondary flex items-center justify-center shrink-0 ${
-                  profilePhotoPreview ? 'ring-2 ring-accent ring-offset-2' : 'ring-1 ring-border'
+              <FormGroup title="Photo verification">
+              <label className="flex items-center gap-3 rounded-xl border border-border bg-secondary/30 p-3 cursor-pointer hover:bg-secondary/50 transition-colors">
+                <div className={`w-11 h-11 rounded-full overflow-hidden bg-secondary flex items-center justify-center shrink-0 ${
+                  profilePhotoPreview ? 'ring-2 ring-accent ring-offset-1' : 'ring-1 ring-border'
                 }`}>
                   {profilePhotoPreview ? (
                     <img
@@ -2027,19 +1952,18 @@ export function ActivateAccountPage() {
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <Camera className="w-6 h-6 text-accent" />
+                    <Camera className="w-4 h-4 text-accent" />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-bold text-foreground text-sm">Profile photo *</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {photoUploading ? 'Uploading photo now...' : 'JPG, PNG, or WEBP under 2MB'}
-                  </p>
-                  {profilePhotoFile && (
-                    <p className="text-xs text-accent font-medium mt-1 truncate">{profilePhotoFile.name}</p>
-                  )}
-                  {!profilePhotoFile && /^https?:\/\//.test(profilePhotoPreview) && (
-                    <p className="text-xs text-emerald-700 font-medium mt-1">Photo uploaded and saved</p>
+                  {photoUploading ? (
+                    <p className="text-xs font-medium text-accent">Uploading...</p>
+                  ) : profilePhotoFile ? (
+                    <p className="text-xs text-accent font-medium truncate">{profilePhotoFile.name}</p>
+                  ) : !profilePhotoFile && /^https?:\/\//.test(profilePhotoPreview) ? (
+                    <p className="text-xs text-emerald-700 font-medium">✓ Photo uploaded</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Upload photo *</p>
                   )}
                 </div>
                 <input
@@ -2048,103 +1972,215 @@ export function ActivateAccountPage() {
                   className="hidden"
                   onChange={(e) => handlePhotoChange(e.target.files?.[0])}
                 />
-                <span className="text-sm font-semibold text-accent shrink-0">Choose</span>
+                <span className="text-xs font-semibold text-accent shrink-0">{profilePhotoPreview ? 'Change' : 'Choose'}</span>
               </label>
               </FormGroup>
-              <PrimaryButton loading={submitting || photoUploading}>
-                {photoUploading ? 'Uploading photo...' : 'Save profile'}
-              </PrimaryButton>
+
+              <div className="rounded-xl border border-blue-200 bg-blue-50 p-2.5 text-xs text-blue-800 flex items-start gap-2">
+                <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0 text-blue-500" />
+                <p>Address, academic, and work details can be completed later from your tenant portal.</p>
+              </div>
+
+              <div className="hidden sm:flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => goToStep('AGREEMENT')}
+                  className="rounded-2xl border border-border bg-background px-4 text-muted-foreground hover:bg-secondary/40 active:scale-[0.98] transition-transform shadow-sm flex items-center justify-center cursor-pointer"
+                  title="Back to Agreement"
+                >
+                  <ArrowRight className="w-4 h-4 rotate-180" />
+                </button>
+                {completed.has('PROFILE') ? (
+                  <button
+                    type="button"
+                    onClick={() => goToStep('ACTIVATE')}
+                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl bg-accent px-5 py-3.5 text-sm font-semibold text-accent-foreground active:scale-[0.98] transition-transform shadow-sm cursor-pointer"
+                  >
+                    Proceed to Activation
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <PrimaryButton loading={submitting || photoUploading}>
+                    {photoUploading ? 'Uploading photo...' : 'Verify identity'}
+                  </PrimaryButton>
+                )}
+              </div>
             </form>
+            <div className="fixed bottom-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-md border-t border-border px-5 py-3 sm:hidden flex gap-2" style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}>
+              <button
+                type="button"
+                onClick={() => goToStep('AGREEMENT')}
+                className="rounded-2xl border border-border bg-background px-4 text-muted-foreground hover:bg-secondary/40 active:scale-[0.98] transition-transform shadow-sm flex items-center justify-center cursor-pointer"
+                title="Back to Agreement"
+              >
+                <ArrowRight className="w-4 h-4 rotate-180" />
+              </button>
+              {completed.has('PROFILE') ? (
+                <button
+                  type="button"
+                  onClick={() => goToStep('ACTIVATE')}
+                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl bg-accent px-5 py-3.5 text-sm font-semibold text-accent-foreground active:scale-[0.98] transition-transform shadow-sm cursor-pointer"
+                >
+                  Proceed to Activation
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={submitting || photoUploading}
+                  onClick={() => {
+                    const form = document.querySelector('form[data-profile-form]') as HTMLFormElement | null;
+                    if (form) form.requestSubmit();
+                  }}
+                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl bg-accent px-5 py-3.5 text-sm font-semibold text-accent-foreground disabled:opacity-50 active:scale-[0.98] transition-transform shadow-sm"
+                >
+                  {(submitting || photoUploading) ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+                  {photoUploading ? 'Uploading photo...' : 'Verify identity'}
+                </button>
+              )}
+            </div>
+          </>
           )}
 
           {activeStep === 'ACTIVATE' && (
-            <div className="space-y-5">
-              <SectionHeading icon={<CheckCircle2 className="w-5 h-5" />} title="Ready to activate" text="Your required setup is complete. Documents can be uploaded after you enter the tenant portal." />
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-                  <div>
-                    <p className="font-bold">After activation, please login again</p>
-                    <p className="mt-1 leading-6">
-                      Your setup session will end after activation. Use the email/mobile and password you just created to login to the tenant portal.
-                    </p>
+            <div className="space-y-6">
+              <SectionHeading icon={<CheckCircle2 className="w-5 h-5 text-emerald-500" />} title="Activate Your Account" text="Secure your account and complete activation to log in to the tenant portal." />
+
+              {/* 4-Point Verification Checklist */}
+              <div className="rounded-2xl border border-border bg-secondary/15 p-4.5 space-y-3 shadow-sm">
+                <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Onboarding Verification Checklist</h3>
+                <div className="space-y-2.5">
+                  <div className="flex items-start gap-2.5 text-sm">
+                    <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-500" />
+                    <div>
+                      <span className="font-semibold text-foreground block">1. Stay & Allocation Confirmed</span>
+                      <span className="text-xs text-muted-foreground">Room {ctx.room_summary.room_number || 'Assigned'} • {currency(ctx.room_summary.monthly_rent)}/month</span>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2.5 text-sm">
+                    <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-500" />
+                    <div>
+                      <span className="font-semibold text-foreground block">2. Primary Mobile Verified</span>
+                      <span className="text-xs text-muted-foreground">+91 {account.phone || ctx.profile?.phone || ctx.tenant?.phone_1}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2.5 text-sm">
+                    <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-500" />
+                    <div>
+                      <span className="font-semibold text-foreground block">3. Hostel Agreement Signed</span>
+                      <span className="text-xs text-muted-foreground">Signed as "{ctx.agreement?.tenant_signature_name || ctx.profile?.name}"</span>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2.5 text-sm">
+                    <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-500" />
+                    <div>
+                      <span className="font-semibold text-foreground block">4. Identity Profile Verified</span>
+                      <span className="text-xs text-muted-foreground">Gender, Date of Birth & Guardian details confirmed</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-              {submitting && (
-                <div className="rounded-2xl border border-accent/30 bg-accent/5 p-4">
-                  <div className="flex items-center gap-3">
-                    <Loader2 className="h-5 w-5 animate-spin text-accent" />
-                    <p className="text-sm font-bold text-foreground">{activationMessages[activationStageIndex]}</p>
-                  </div>
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className="h-full rounded-full bg-accent transition-[width] duration-500 ease-out"
-                      style={{ width: activationProgressWidth }}
-                    />
-                  </div>
-                </div>
-              )}
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Metric icon={<ShieldCheck className="w-4 h-4" />} label="Rules" value="Accepted" />
-                <Metric icon={<UserRound className="w-4 h-4" />} label="Profile" value="Required details complete" />
-                <Metric icon={<FileText className="w-4 h-4" />} label="Documents" value={documentPending ? 'Pending after activation' : 'Uploaded'} />
-                <Metric icon={<Receipt className="w-4 h-4" />} label="Next rent cycle" value={fmtDate(ctx.room_summary.next_rent_generation_date)} />
               </div>
 
-              {/* Signed Agreement Summary */}
-              {ctx.agreement && (
-                <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2 flex-wrap gap-2">
-                    <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
-                      <FileText className="w-4 h-4 text-accent" />
-                      <span>Signed Agreement Details</span>
-                    </h3>
-                    {ctx.agreement.pdf_url && (
-                      <a
-                        href={ctx.agreement.pdf_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-accent hover:bg-accent/90 rounded-lg shadow-sm transition-all"
+              {/* Signed Agreement Preview & Download Card */}
+              {ctx?.agreement && (
+                <div className="rounded-2xl border border-border bg-card p-5 space-y-4 shadow-sm">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center text-accent shrink-0">
+                        <FileText className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-foreground">Signed Rental Agreement</h4>
+                        <p className="text-xs text-muted-foreground">
+                          {ctx.agreement.tenant_signature_name ? `Signed by ${ctx.agreement.tenant_signature_name}` : 'Digitally Signed'}
+                          {ctx.agreement.tenant_signed_at && ` on ${new Date(ctx.agreement.tenant_signed_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowAgreementPreview(true)}
+                        className="px-3.5 py-2 rounded-xl border border-border bg-background hover:bg-secondary text-xs font-semibold text-foreground transition-colors flex items-center gap-1.5 cursor-pointer active:scale-95"
                       >
-                        <Download className="w-3.5 h-3.5" />
-                        <span>Download PDF</span>
-                      </a>
-                    )}
-                  </div>
-                  
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {/* Tenant Signature Preview */}
-                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
-                      <p className="text-xs font-semibold text-muted-foreground">Tenant Signature</p>
-                      <p className="text-sm font-medium text-slate-800">{ctx.agreement.tenant_signature_name}</p>
-                      {ctx.agreement.tenant_signature_url ? (
-                        <div className="h-20 bg-white rounded-lg border border-slate-200 p-2 flex items-center justify-center">
-                          <img src={ctx.agreement.tenant_signature_url} alt="Tenant Signature" className="h-full object-contain" />
-                        </div>
+                        <Eye className="w-3.5 h-3.5" />
+                        View
+                      </button>
+                      {ctx.agreement.pdf_url ? (
+                        <a
+                          href={ctx.agreement.pdf_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3.5 py-2 rounded-xl bg-accent hover:bg-accent/95 text-xs font-semibold text-accent-foreground transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm shadow-accent/15"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          Download PDF
+                        </a>
                       ) : (
-                        <p className="text-xs text-amber-600 italic">No drawing saved</p>
+                        <span className="text-xs text-muted-foreground italic">Generating PDF...</span>
                       )}
                     </div>
-
-                    {/* Guardian Signature Preview (if student) */}
-                    {String(ctx.tenant?.profile_type || 'STUDENT').toUpperCase() === 'STUDENT' && (
-                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
-                        <p className="text-xs font-semibold text-muted-foreground">Guardian Signature ({ctx.agreement.guardian_relation || 'Parent'})</p>
-                        <p className="text-sm font-medium text-slate-800">{ctx.agreement.guardian_signature_name}</p>
-                        {ctx.agreement.guardian_signature_url ? (
-                          <div className="h-20 bg-white rounded-lg border border-slate-200 p-2 flex items-center justify-center">
-                            <img src={ctx.agreement.guardian_signature_url} alt="Guardian Signature" className="h-full object-contain" />
-                          </div>
-                        ) : (
-                          <p className="text-xs text-amber-600 italic">No drawing saved</p>
-                        )}
-                      </div>
-                    )}
                   </div>
                 </div>
               )}
 
+              {/* Secure Password Creation */}
+              <div className="rounded-2xl border border-border bg-card p-5 space-y-4 shadow-sm">
+                <div>
+                  <h3 className="text-sm font-bold text-foreground">Set Account Password</h3>
+                  <p className="text-xs text-muted-foreground">Choose a strong password to access your dashboard in the future.</p>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="text-xs font-semibold text-muted-foreground">New Password *</span>
+                    <div className="relative mt-1.5">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={account.password}
+                        onChange={(e) => setAccount({ ...account, password: e.target.value })}
+                        className={`${fieldClass} mt-0 pr-11`}
+                        placeholder="Min 8 characters"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((value) => !value)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div className={`h-full ${strength.color} transition-all`} style={{ width: strength.width }} />
+                    </div>
+                    <p className={`mt-1 text-[10px] font-bold ${strength.textColor}`}>Password strength: {strength.label}</p>
+                  </label>
+
+                  <label className="block">
+                    <span className="text-xs font-semibold text-muted-foreground">Confirm Password *</span>
+                    <div className="relative mt-1.5">
+                      <input
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        value={account.confirm_password}
+                        onChange={(e) => setAccount({ ...account, confirm_password: e.target.value })}
+                        className={`${fieldClass} mt-0 pr-11`}
+                        placeholder="Re-enter password"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword((value) => !value)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                        aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                      >
+                        {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Billing Cycle */}
               <div className="rounded-2xl border border-border bg-card p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="w-7 h-7 rounded-xl bg-accent/10 flex items-center justify-center text-accent shrink-0">
@@ -2166,19 +2202,107 @@ export function ActivateAccountPage() {
                   Confirm your preferred billing frequency. Changing it later will require submitting a change request to the hostel owner.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => submitStep('ACTIVATE', { payment_frequency: paymentFrequency })}
-                disabled={submitting}
-                className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3.5 text-sm font-semibold text-primary-foreground disabled:opacity-50 active:scale-[0.98] transition-transform shadow-sm"
-              >
-                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                Activate account
-              </button>
+
+              {submitting && (
+                <div className="rounded-2xl border border-accent/30 bg-accent/5 p-4">
+                  <div className="flex items-center gap-3">
+                    <Loader2 className="h-5 w-5 animate-spin text-accent" />
+                    <p className="text-sm font-bold text-foreground">{activationMessages[activationStageIndex]}</p>
+                  </div>
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-accent transition-[width] duration-500 ease-out"
+                      style={{ width: activationProgressWidth }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => goToStep('PROFILE')}
+                  className="rounded-2xl border border-border bg-background px-4 text-muted-foreground hover:bg-secondary/40 active:scale-[0.98] transition-transform shadow-sm flex items-center justify-center cursor-pointer"
+                  title="Back to Identity"
+                >
+                  <ArrowRight className="w-4 h-4 rotate-180" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => submitStep('ACTIVATE', {
+                    password: account.password,
+                    confirm_password: account.confirm_password,
+                    payment_frequency: paymentFrequency
+                  })}
+                  disabled={submitting || account.password.length < 8 || account.password !== account.confirm_password}
+                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3.5 text-sm font-semibold text-primary-foreground disabled:opacity-50 active:scale-[0.98] transition-transform shadow-sm cursor-pointer"
+                >
+                  {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                  Activate Account
+                </button>
+              </div>
             </div>
           )}
         </section>
       </main>
+
+      {showAgreementPreview && ctx?.agreement && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[100] bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
+          <AgreementPreviewModal
+            agreement={ctx.agreement}
+            onClose={() => setShowAgreementPreview(false)}
+          />
+        </div>,
+        document.body
+      )}
+
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in font-sans">
+          <style>{`
+            @keyframes fadeIn {
+              from { opacity: 0; }
+              to { opacity: 1; }
+            }
+            @keyframes slideUp {
+              from { transform: translateY(100%); }
+              to { transform: translateY(0); }
+            }
+            @keyframes scaleUp {
+              from { transform: scale(0.95); opacity: 0; }
+              to { transform: scale(1); opacity: 1; }
+            }
+            .animate-fade-in {
+              animation: fadeIn 0.2s ease-out forwards;
+            }
+            .animate-slide-up {
+              animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            }
+            @media (min-width: 640px) {
+              .animate-slide-up {
+                animation: scaleUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+              }
+            }
+          `}</style>
+          <div className="w-full max-w-sm bg-white rounded-t-3xl sm:rounded-2xl p-6 shadow-2xl border border-slate-100 transform transition-all duration-300 translate-y-0 sm:scale-100 flex flex-col items-center text-center animate-slide-up">
+            <div className="w-16 h-16 rounded-full bg-emerald-500/10 border-2 border-emerald-500/20 text-emerald-600 flex items-center justify-center mb-4 shadow-sm animate-bounce">
+              <CheckCircle2 className="w-8 h-8" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-800 font-sans mb-2">
+              {showSuccessModal.title}
+            </h3>
+            <p className="text-sm text-slate-500 leading-relaxed font-sans mb-6">
+              {showSuccessModal.message}
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowSuccessModal(null)}
+              className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl active:scale-[0.98] transition-all shadow-md shadow-emerald-600/20 font-sans text-sm cursor-pointer"
+            >
+              Continue
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2233,5 +2357,400 @@ function PrimaryButton({ loading, children }: { loading: boolean; children: Reac
       {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
       {children}
     </button>
+  );
+}
+
+interface AgreementPreviewModalProps {
+  agreement: any;
+  onClose: () => void;
+}
+
+function AgreementPreviewModal({ agreement, onClose }: AgreementPreviewModalProps) {
+  const ruleCategories = agreement?.content_snapshot?.hostel_rules?.categories || [];
+
+  return (
+    <div className="w-full h-full sm:h-[85vh] sm:max-w-4xl bg-card rounded-none sm:rounded-3xl border-0 sm:border border-border/80 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+      {/* Header */}
+      <div className="px-4 sm:px-6 py-4 border-b border-border bg-muted/30 flex justify-between items-center">
+        <div>
+          <h3 className="font-extrabold text-foreground text-lg tracking-tight">Rental Agreement Preview</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">Hostel: {agreement.content_snapshot.hostel_name}</p>
+        </div>
+        <div className="flex items-center gap-2.5">
+          {agreement.pdf_url && (
+            <a
+              href={agreement.pdf_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-accent px-4 py-2.5 text-xs font-semibold text-accent-foreground transition-all active:scale-[0.98] shadow-sm shadow-accent/20 cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Download PDF
+            </a>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 rounded-xl hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="p-4 sm:p-6 space-y-6 flex-1 overflow-y-auto select-none bg-secondary/5">
+        <div className="rounded-2xl border border-border bg-background p-6 md:p-8 space-y-5 text-sm leading-relaxed text-foreground shadow-sm">
+          <div className="text-center border-b pb-4 mb-4">
+            <h3 className="font-extrabold text-base tracking-tight text-slate-800 uppercase">
+              HOSTEL RESIDENCY AGREEMENT
+            </h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Hostel: {agreement.content_snapshot.hostel_name}
+            </p>
+          </div>
+
+          <p>
+            This agreement is made and entered into by and between the Hostel Management of <strong>{agreement.content_snapshot.hostel_name}</strong> (represented by <strong>{agreement.content_snapshot.owner_name}</strong>) and the Tenant <strong>{agreement.content_snapshot.tenant_name}</strong>.
+          </p>
+
+          <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 mt-3 mb-1">
+            1. Room & Financial Summary
+          </h4>
+          <div className="bg-muted/40 rounded-lg p-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs border border-border/50">
+            <div>
+              <span className="text-muted-foreground">Assigned Room:</span>{" "}
+              <strong className="text-foreground">{agreement.content_snapshot.room_number}</strong>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Joining Date:</span>{" "}
+              <strong className="text-foreground">{agreement.content_snapshot.joining_date}</strong>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Monthly Rent:</span>{" "}
+              <strong className="text-foreground">{currency(agreement.content_snapshot.monthly_rent)}</strong>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Security Deposit:</span>{" "}
+              <strong className="text-foreground">{currency(agreement.content_snapshot.advance_deposit)}</strong>
+            </div>
+            {agreement.content_snapshot.maintenance_charge > 0 && (
+              <div className="col-span-2">
+                <span className="text-muted-foreground">Maintenance Charge:</span>{" "}
+                <strong className="text-foreground">
+                  {currency(agreement.content_snapshot.maintenance_charge)} ({agreement.content_snapshot.maintenance_type})
+                </strong>
+              </div>
+            )}
+            <div>
+              <span className="text-muted-foreground">Payment Cycle:</span>{" "}
+              <strong className="text-foreground">{agreement.content_snapshot.payment_frequency}</strong>
+            </div>
+          </div>
+
+          <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 mt-4 mb-1">
+            2. Terms of Residency & Rules Compliance
+          </h4>
+          <ul className="list-disc pl-5 space-y-2 text-xs text-muted-foreground">
+            <li>The Tenant shall use the allocated room solely for residential purposes. Sub-letting or transferring the room to any other person is strictly prohibited.</li>
+            <li>The Tenant agrees to pay the monthly rent of {currency(agreement.content_snapshot.monthly_rent)} on or before the due date as defined by the hostel policy. Late payments may attract fees or lead to suspension of access.</li>
+            <li>A refundable security deposit of {currency(agreement.content_snapshot.advance_deposit)} is deposited with the management, which will be settled/refunded upon successful move-out compliance checks, subject to clearance of all pending dues and room inspection for damages.</li>
+            <li>Either party must provide at least 30 days written notice prior to terminating this residency agreement.</li>
+            <li className="text-foreground font-medium bg-secondary/20 p-2.5 rounded border border-border/50 list-none mt-1">
+              <strong>Hostel Rules Binding Clause:</strong> The Tenant explicitly agrees to follow, comply with, and be legally bound by each and every rule, policy, and regulation of the hostel. This includes all guidelines concerning fee refunds, hostel discipline, guest policies, late fee obligations, and property damage liabilities. Any breach of these rules constitutes a violation of this residency agreement and may result in immediate termination of stay.
+            </li>
+          </ul>
+
+          {ruleCategories.length > 0 && (
+            <>
+              <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 mt-4 mb-1">
+                3. Hostel Rules & Regulations
+              </h4>
+              <div className="space-y-4 pl-2 text-xs text-muted-foreground border-l-2 border-slate-100 ml-1">
+                {ruleCategories.map((category: any) => (
+                  <div key={category.id} className="space-y-1.5">
+                    <h5 className="font-bold text-slate-800">{category.title}</h5>
+                    <ul className="list-disc pl-5 space-y-1">
+                      {(category.highlights || []).map((hl: string, idx: number) => (
+                        <li key={`hl-${idx}`} className="italic text-foreground font-medium">
+                          {hl}
+                        </li>
+                      ))}
+                      {(category.rules || []).map((rule: string, idx: number) => (
+                        <li key={`rule-${idx}`}>
+                          {rule}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {agreement.content_snapshot.custom_rules && (
+            <>
+              <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 mt-4 mb-1">
+                4. Additional Custom Rules
+              </h4>
+              <p className="text-xs whitespace-pre-line text-muted-foreground bg-amber-50/20 border border-amber-500/10 rounded-lg p-3 italic">
+                {agreement.content_snapshot.custom_rules}
+              </p>
+            </>
+          )}
+
+          {/* Signatures preview inside the preview modal */}
+          {(agreement.tenant_signature_name || agreement.guardian_signature_name) && (
+            <div className="border-t border-dashed pt-4 mt-4 space-y-3">
+              <h4 className="font-bold text-xs uppercase tracking-wider text-slate-700 mb-1">
+                Digital Signatures & Verification Details
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                {agreement.tenant_signature_name && (
+                  <div className="p-3 rounded-xl border bg-muted/20 space-y-1">
+                    <span className="font-bold block text-foreground">Lessee (Tenant) Signature</span>
+                    <span className="text-muted-foreground block">Name: {agreement.tenant_signature_name}</span>
+                    {agreement.tenant_signed_at && (
+                      <span className="block text-[10px] text-muted-foreground/80">
+                        Date: {new Date(agreement.tenant_signed_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {agreement.guardian_signature_name && (
+                  <div className="p-3 rounded-xl border bg-muted/20 space-y-1">
+                    <span className="font-bold block text-foreground">Parent/Guardian Signature</span>
+                    <span className="text-muted-foreground block">Name: {agreement.guardian_signature_name} ({agreement.guardian_relation || 'Parent'})</span>
+                    {agreement.guardian_signed_at && (
+                      <span className="block text-[10px] text-muted-foreground/80">
+                        Date: {new Date(agreement.guardian_signed_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <p className="text-[10px] text-muted-foreground mt-4 pt-4 border-t border-dashed">
+            This electronic document is valid under the Information Technology Act. Digital signatures and IP details collected during onboarding are legally binding.
+          </p>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="px-4 sm:px-6 py-4 border-t border-border bg-muted/30 flex justify-end">
+        <button
+          type="button"
+          onClick={onClose}
+          className="px-5 py-2.5 rounded-xl border border-border text-sm font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground active:scale-95 transition-all cursor-pointer"
+        >
+          Close Preview
+        </button>
+      </div>
+    </div>
+  );
+}
+
+interface TenantSignatureModalProps {
+  tenantSigName: string;
+  tenantSigBlob: Blob | null;
+  existingTenantSigUrl?: string | null;
+  onConfirm: (name: string, blob: Blob | null) => void;
+  onClose: () => void;
+}
+
+function TenantSignatureModal({
+  tenantSigName,
+  tenantSigBlob,
+  existingTenantSigUrl,
+  onConfirm,
+  onClose,
+}: TenantSignatureModalProps) {
+  const [name, setName] = useState(tenantSigName);
+  const [blob, setBlob] = useState<Blob | null>(tenantSigBlob);
+
+  const isValid = name.trim().length > 0 && (blob !== null || !!existingTenantSigUrl);
+
+  return (
+    <div className="w-full h-full sm:h-auto sm:max-w-lg bg-card rounded-none sm:rounded-3xl border-0 sm:border border-border/80 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+      {/* Header */}
+      <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-border bg-muted/30 flex justify-between items-center">
+        <div>
+          <h3 className="font-extrabold text-foreground text-lg tracking-tight">Tenant Signature</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">Please write your name and draw your signature below</p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="p-2 rounded-xl hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* Body */}
+      <div className="p-4 sm:p-6 space-y-5 flex-1 overflow-y-auto flex flex-col">
+        <div>
+          <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+            Full Name (Type to sign) <span className="text-destructive">*</span>
+          </label>
+          <input
+            type="text"
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Type your official full name"
+            className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-accent focus:outline-none bg-background text-foreground"
+          />
+        </div>
+
+        <div className="flex-1 flex flex-col min-h-[200px]">
+          <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+            Draw Signature <span className="text-destructive">*</span>
+          </label>
+          <div className="rounded-xl overflow-hidden border border-border relative bg-background [&_button.absolute]:hidden flex-1 flex flex-col">
+            <SignaturePad
+              onSave={(b) => setBlob(b)}
+              placeholder="Draw tenant signature here"
+              existingSignatureUrl={existingTenantSigUrl}
+              className="flex-1 flex flex-col space-y-2"
+              canvasHeightClass="flex-1 min-h-[160px]"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-border bg-muted/30 flex justify-between items-center gap-3">
+        <button
+          type="button"
+          onClick={onClose}
+          className="px-4 py-2.5 rounded-xl border border-border text-sm font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground active:scale-95 transition-all cursor-pointer"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={!isValid}
+          onClick={() => onConfirm(name, blob)}
+          className="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground disabled:opacity-50 active:scale-[0.98] transition-all cursor-pointer shadow-sm shadow-accent/20"
+        >
+          Apply Signature
+        </button>
+      </div>
+    </div>
+  );
+}
+
+interface GuardianSignatureModalProps {
+  guardianName: string;
+  guardianRelation: string;
+  guardianSigBlob: Blob | null;
+  existingGuardianSigUrl?: string | null;
+  onConfirm: (name: string, relation: string, blob: Blob | null) => void;
+  onClose: () => void;
+}
+
+function GuardianSignatureModal({
+  guardianName,
+  guardianRelation,
+  guardianSigBlob,
+  existingGuardianSigUrl,
+  onConfirm,
+  onClose,
+}: GuardianSignatureModalProps) {
+  const [name, setName] = useState(guardianName);
+  const [relation, setRelation] = useState(guardianRelation);
+  const [blob, setBlob] = useState<Blob | null>(guardianSigBlob);
+
+  const isValid = name.trim().length > 0 && relation.length > 0 && (blob !== null || !!existingGuardianSigUrl);
+
+  return (
+    <div className="w-full h-full sm:h-auto sm:max-w-lg bg-card rounded-none sm:rounded-3xl border-0 sm:border border-border/80 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+      {/* Header */}
+      <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-border bg-muted/30 flex justify-between items-center">
+        <div>
+          <h3 className="font-extrabold text-foreground text-lg tracking-tight">Parent/Guardian Co-Signature</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">Please provide guardian details and signature below</p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="p-2 rounded-xl hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* Body */}
+      <div className="p-4 sm:p-6 space-y-5 flex-1 overflow-y-auto flex flex-col">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+              Relationship <span className="text-destructive">*</span>
+            </label>
+            <select
+              required
+              value={relation}
+              onChange={(e) => setRelation(e.target.value)}
+              className="w-full rounded-xl border border-border px-3.5 py-3 text-sm focus:border-accent focus:outline-none bg-background text-foreground"
+            >
+              <option value="">Select</option>
+              <option value="Father">Father</option>
+              <option value="Mother">Mother</option>
+              <option value="Guardian">Guardian</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+              Guardian Full Name <span className="text-destructive">*</span>
+            </label>
+            <input
+              type="text"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Guardian name"
+              className="w-full rounded-xl border border-border px-3.5 py-3 text-sm focus:border-accent focus:outline-none bg-background text-foreground"
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 flex flex-col min-h-[200px]">
+          <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+            Draw Signature <span className="text-destructive">*</span>
+          </label>
+          <div className="rounded-xl overflow-hidden border border-border relative bg-background [&_button.absolute]:hidden flex-1 flex flex-col">
+            <SignaturePad
+              onSave={(b) => setBlob(b)}
+              placeholder="Draw parent/guardian signature here"
+              existingSignatureUrl={existingGuardianSigUrl}
+              className="flex-1 flex flex-col space-y-2"
+              canvasHeightClass="flex-1 min-h-[160px]"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-border bg-muted/30 flex justify-between items-center gap-3">
+        <button
+          type="button"
+          onClick={onClose}
+          className="px-4 py-2.5 rounded-xl border border-border text-sm font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground active:scale-95 transition-all cursor-pointer"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={!isValid}
+          onClick={() => onConfirm(name, relation, blob)}
+          className="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground disabled:opacity-50 active:scale-[0.98] transition-all cursor-pointer shadow-sm shadow-accent/20"
+        >
+          Apply Signature
+        </button>
+      </div>
+    </div>
   );
 }

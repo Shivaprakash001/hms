@@ -162,8 +162,8 @@ export class TenantInvitationLifecycleService {
     const maintenanceCharge = maintenanceType === "NONE"
       ? 0
       : moneyNumber(data.maintenance_amount, Number(resolved.maintenance_charge));
-    if (!Number.isFinite(monthlyRent) || monthlyRent <= 0) {
-      throw new Error("VALIDATION_ERROR: Monthly rent must be greater than zero");
+    if (!Number.isFinite(monthlyRent) || monthlyRent < 0) {
+      throw new Error("VALIDATION_ERROR: Monthly rent cannot be negative");
     }
     if (advanceDeposit < 0) throw new Error("VALIDATION_ERROR: Deposit cannot be negative");
     if (maintenanceCharge < 0) throw new Error("VALIDATION_ERROR: Maintenance charge cannot be negative");
@@ -476,15 +476,14 @@ export class TenantInvitationLifecycleService {
     const confirmPassword = String(data?.confirm_password || data?.confirmPassword || "");
     const primaryPhone = normalizeIndianPhone(data?.phone || data?.primary_phone || tenant.phone_1 || invitation.phone);
     if (!primaryPhone) throw new Error("VALIDATION_ERROR: Valid primary phone is required");
-    if (!password && !resolved.profile?.password_hash) throw new Error("VALIDATION_ERROR: Password is required");
     if (password || confirmPassword) {
       if (password.length < 8) throw new Error("VALIDATION_ERROR: Password must be at least 8 characters");
       if (password !== confirmPassword) throw new Error("VALIDATION_ERROR: Passwords do not match");
     }
 
-    const rawEmail = String(data?.email || invitation.email || "").trim().toLowerCase();
+    let rawEmail = String(data?.email || invitation.email || "").trim().toLowerCase();
     if (!rawEmail) {
-      throw new Error("VALIDATION_ERROR: Personal email address is required");
+      rawEmail = `${primaryPhone}@hms.temp`;
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(rawEmail)) {
@@ -514,6 +513,8 @@ export class TenantInvitationLifecycleService {
             role: "TENANT",
             is_active: false,
             owner_id: invitation.owner_id,
+            mobile_verified: true,
+            phone_verified: true,
             ...(passwordHash ? { password_hash: passwordHash } : {}),
           },
         });
@@ -523,6 +524,8 @@ export class TenantInvitationLifecycleService {
           data: {
             email: normalizedEmail,
             phone: primaryPhone,
+            mobile_verified: true,
+            phone_verified: true,
             ...(passwordHash ? { password_hash: passwordHash } : {}),
           },
         });
@@ -534,6 +537,7 @@ export class TenantInvitationLifecycleService {
           profile_id: profileRecord.id,
           phone_1: primaryPhone,
           personal_email: normalizedEmail,
+          mobile_verified: true,
           activation_started_at: tenant.activation_started_at || now,
           onboarding_last_activity_at: now,
           ...(data?.photo_url ? { photo_url: String(data.photo_url) } : {}),
@@ -559,7 +563,7 @@ export class TenantInvitationLifecycleService {
     return profile;
   }
 
-  async completeActivation(invitation: any, tenant: any, profile: any, paymentFrequency?: string) {
+  async completeActivation(invitation: any, tenant: any, profile: any, paymentFrequency?: string, password?: string) {
     const completedAt = new Date();
     await prisma.$transaction(async (tx: any) => {
       const reservation = await tx.tenant_invitation_reservations.findFirst({
@@ -599,6 +603,7 @@ export class TenantInvitationLifecycleService {
         where: { id: invitation.id },
         data: { status: "ACTIVATED", activated_at: completedAt, updated_at: completedAt },
       });
+      const passwordHash = password ? await hashPassword(password) : undefined;
       await tx.profile.update({
         where: { id: profile.id },
         data: {
@@ -606,6 +611,7 @@ export class TenantInvitationLifecycleService {
           is_profile_completed: true,
           invitation_token: null,
           invitation_expires_at: null,
+          ...(passwordHash ? { password_hash: passwordHash } : {}),
         },
       });
       await tx.tenants.update({

@@ -74,18 +74,37 @@ export class AuthService {
     }
   }
 
-  async login(email: string, password: string, meta: AuthSessionMeta = {}) {
-    const normalizedEmail = email.trim().toLowerCase();
+  async login(emailOrPhone: string, password: string, meta: AuthSessionMeta = {}) {
+    const cleanIdentifier = emailOrPhone.trim();
+    let profile;
+    if (cleanIdentifier.includes("@")) {
+      profile = await prisma.profile.findUnique({
+        where: { email: cleanIdentifier.toLowerCase() },
+      });
+    } else {
+      const cleanPhone = cleanIdentifier.replace(/[^\d+]/g, "");
+      const searchPhones = [cleanPhone];
+      if (cleanPhone.startsWith("+91")) {
+        searchPhones.push(cleanPhone.substring(1), cleanPhone.substring(3));
+      } else if (cleanPhone.startsWith("91") && cleanPhone.length === 12) {
+        searchPhones.push("+" + cleanPhone, cleanPhone.substring(2));
+      } else if (cleanPhone.length === 10) {
+        searchPhones.push("+91" + cleanPhone, "91" + cleanPhone);
+      }
+      profile = await prisma.profile.findFirst({
+        where: {
+          phone: {
+            in: searchPhones
+          }
+        }
+      });
+    }
 
-    const profile = await prisma.profile.findUnique({
-      where: { email: normalizedEmail },
-    });
-
-    if (!profile) throw new Error("UNAUTHORIZED: Invalid email or password");
+    if (!profile) throw new Error("UNAUTHORIZED: Invalid email, phone, or password");
     if (!profile.is_active) throw new Error("FORBIDDEN: Account is disabled");
 
     const isValid = await this.verifyOrMigrateLegacyPassword(profile, password);
-    if (!isValid) throw new Error("UNAUTHORIZED: Invalid email or password");
+    if (!isValid) throw new Error("UNAUTHORIZED: Invalid email, phone, or password");
 
     if (profile.password_reset_required) {
       throw new Error("PASSWORD_RESET_REQUIRED: You must reset your password on first login");

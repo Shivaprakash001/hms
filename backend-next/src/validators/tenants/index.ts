@@ -8,6 +8,9 @@ export const TenantProfileUpdateSchema = z.object({
   phone_1: z.string().optional(),
   phone_2: z.string().optional(),
   phone_3: z.string().optional(),
+  phone_1_otp: z.string().optional(),
+  phone_2_otp: z.string().optional(),
+  phone_3_otp: z.string().optional(),
   // aadhaar_number removed - now stored in identification_documents table
   personal_email: z.string().trim().email().optional().nullable(),
   college_name: z.string().optional(),
@@ -40,7 +43,7 @@ export const InvitationSchema = z.object({
   name: z.string().min(2),
   phone: z.string().min(1),
   room_id: z.string().uuid(),
-  monthly_rent: z.number().positive().optional(),
+  monthly_rent: z.number().nonnegative().optional(),
   advance_amount: z.number().min(0).optional(),
   maintenance_amount: z.number().min(0).optional(),
   joining_date: z.string().optional(),            // ISO date string, defaults to today
@@ -53,7 +56,7 @@ export const InvitationUpdateSchema = z.object({
   name: z.string().min(2),
   phone: z.string().min(1),
   room_id: z.string().uuid(),
-  monthly_rent: z.coerce.number().positive(),
+  monthly_rent: z.coerce.number().nonnegative(),
   joining_date: z.string().optional(),
   payment_frequency: z.enum(["MONTHLY", "QUARTERLY", "HALF_YEARLY", "ACADEMIC_YEARLY", "CUSTOM_INSTALLMENTS"]).optional(),
 });

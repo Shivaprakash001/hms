@@ -26,6 +26,7 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
   const [phone, setPhone]             = useState('');
   const [email, setEmail]             = useState('');
   const [roomId, setRoomId]           = useState(preselectedRoomId ?? '');
+  const [loadedRoomId, setLoadedRoomId] = useState<string | null>(null);
   const [joiningDate, setJoiningDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [paymentFrequency, setPaymentFrequency] = useState('MONTHLY');
   const [monthlyRent, setMonthlyRent] = useState('');
@@ -77,7 +78,14 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
   }, [hostelId]);
 
   useEffect(() => {
-    if (preselectedRoomId) setRoomId(preselectedRoomId);
+    if (preselectedRoomId) {
+      setRoomId(preselectedRoomId);
+      setMonthlyRent('');
+      setAdvanceDeposit('');
+      setMaintenanceCharge('');
+      setMaintenanceType('MONTHLY');
+      setLoadedRoomId(null);
+    }
   }, [preselectedRoomId]);
 
   // ── Available rooms (ACTIVE + has free beds) ─────────────────────────────
@@ -102,7 +110,9 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
     staleTime: 2 * 60 * 1000,
   });
 
-  const rv: any = defaultsRaw?.data?.resolved_values ?? defaultsRaw?.resolved_values ?? null;
+  const responseRoomId = defaultsRaw?.data?.room?.id ?? defaultsRaw?.room?.id;
+  const isCurrentRoom = responseRoomId === roomId;
+  const rv: any = isCurrentRoom ? (defaultsRaw?.data?.resolved_values ?? defaultsRaw?.resolved_values ?? null) : null;
   const defaults = rv ? {
     monthly_rent:       Number(rv.monthly_rent ?? 0),
     advance_deposit:    Number(rv.advance_deposit ?? 0),
@@ -110,20 +120,22 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
     maintenance_type:   (rv.maintenance_type ?? 'MONTHLY') as MtType,
   } : null;
 
-  // Auto-fill when defaults change
+  // Auto-fill defaults once when loadedRoomId does not match the current roomId
   useEffect(() => {
-    if (defaults) {
-      setMonthlyRent(String(defaults.monthly_rent));
-      setAdvanceDeposit(String(defaults.advance_deposit));
-      setMaintenanceCharge(String(defaults.maintenance_charge));
-      setMaintenanceType(defaults.maintenance_type);
-    } else {
+    if (!roomId) {
       setMonthlyRent('');
       setAdvanceDeposit('');
       setMaintenanceCharge('');
       setMaintenanceType('MONTHLY');
+      setLoadedRoomId(null);
+    } else if (defaults && roomId !== loadedRoomId) {
+      setMonthlyRent(String(defaults.monthly_rent));
+      setAdvanceDeposit(String(defaults.advance_deposit));
+      setMaintenanceCharge(String(defaults.maintenance_charge));
+      setMaintenanceType(defaults.maintenance_type);
+      setLoadedRoomId(roomId);
     }
-  }, [defaultsRaw, roomId]);
+  }, [defaults, roomId, loadedRoomId]);
 
   const rentVal = Number(monthlyRent || 0);
   const depVal = Number(advanceDeposit || 0);
@@ -387,6 +399,11 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
                   onChange={(e) => {
                     setSelectedHostelId(e.target.value);
                     setRoomId('');
+                    setMonthlyRent('');
+                    setAdvanceDeposit('');
+                    setMaintenanceCharge('');
+                    setMaintenanceType('MONTHLY');
+                    setLoadedRoomId(null);
                   }}
                   required
                   className={inp}
@@ -402,7 +419,21 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
               </div>
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">Room *</label>
-                <select value={roomId} onChange={(e) => setRoomId(e.target.value)} required disabled={!selectedHostelId} className={inp}>
+                <select
+                  value={roomId}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setRoomId(val);
+                    setMonthlyRent('');
+                    setAdvanceDeposit('');
+                    setMaintenanceCharge('');
+                    setMaintenanceType('MONTHLY');
+                    setLoadedRoomId(null);
+                  }}
+                  required
+                  disabled={!selectedHostelId}
+                  className={inp}
+                >
                   <option value="">{selectedHostelId ? 'Select a room…' : 'Select a hostel first…'}</option>
                   {availableRooms.map((r) => {
                     const occ   = Number(r.occupied_count ?? 0);

@@ -5,7 +5,7 @@ import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 import { activityService } from "@/lib/services/activity-service";
-import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
+import { requireHostelBelongsToOwner, resolveOwnerOrAdminScopeForHostel } from "@/lib/security/scoped-query";
 
 
 /**
@@ -24,14 +24,13 @@ export async function GET(req: NextRequest) {
     return apiError("hostelId query parameter is required", "BAD_REQUEST", 400);
   }
 
+  let ownerId: string;
   try {
-    const scope = resolveOwnerScope(session);
-    await requireHostelBelongsToOwner(scope.owner_id, hostelId);
+    ownerId = await resolveOwnerOrAdminScopeForHostel(session, hostelId);
   } catch (error: any) {
     return apiError(error.message, error.code || "FORBIDDEN", 403);
   }
 
-  const scope = resolveOwnerScope(session);
   const search = searchParams.get("search") || undefined;
   const type = searchParams.get("type") || undefined;
   const tenantId = searchParams.get("tenantId") || undefined;
@@ -40,7 +39,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const activity = await activityService.getOwnerActivity({
-      userId: scope.owner_id,
+      userId: ownerId,
       hostelId,
       tenantId,
       search,

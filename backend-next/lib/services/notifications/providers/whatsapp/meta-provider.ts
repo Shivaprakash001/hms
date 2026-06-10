@@ -117,7 +117,6 @@ function invitationTemplateName(): string {
 function invitationTemplateLanguage(templateName: string): string {
   const configured = String(process.env.WHATSAPP_INVITATION_LANGUAGE || "").trim();
   if (configured) return configured;
-  if (templateName === "tenant_account_activation_v2") return "en";
   return "en_IN";
 }
 
@@ -317,11 +316,18 @@ export class MetaWhatsAppProvider {
             components: [
               {
                 type: "body",
-                parameters: [
-                  { type: "text", text: String(input.tenantName) },
-                  { type: "text", text: String(input.roomNumber) },
-                  { type: "text", text: String(input.roomRent) }
-                ],
+                parameters: templateName === "tenant_account_activation_v1"
+                  ? [
+                      { type: "text", text: String(input.tenantName) },
+                      { type: "text", text: String(input.roomNumber) },
+                      { type: "text", text: String(input.roomRent) }
+                    ]
+                  : [
+                      { type: "text", text: String(input.tenantName) },
+                      { type: "text", text: String(input.ownerName || "Srinivasa Rao") },
+                      { type: "text", text: String(input.roomNumber) },
+                      { type: "text", text: String(input.roomRent) }
+                    ],
               },
               {
                 type: "button",

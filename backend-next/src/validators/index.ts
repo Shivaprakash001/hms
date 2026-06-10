@@ -155,7 +155,7 @@ export const InvitationSchema = z.object({
   name: z.string().min(2).max(SHORT_TEXT).trim(),
   phone: z.string().min(1).max(20),
   room_id: z.string().uuid(),
-  monthly_rent: z.number().positive().max(MAX_AMOUNT_INR).optional(),
+  monthly_rent: z.number().nonnegative().max(MAX_AMOUNT_INR).optional(),
   advance_amount: z.number().min(0).max(MAX_AMOUNT_INR).optional(),
   maintenance_amount: z.number().min(0).max(MAX_AMOUNT_INR).optional(),
   joining_date: z.string().max(30).optional(),
@@ -167,7 +167,7 @@ export const InvitationUpdateSchema = z.object({
   name: z.string().min(2).max(SHORT_TEXT).trim(),
   phone: z.string().min(1).max(20),
   room_id: z.string().uuid(),
-  monthly_rent: z.coerce.number().positive().max(MAX_AMOUNT_INR),
+  monthly_rent: z.coerce.number().nonnegative().max(MAX_AMOUNT_INR),
   joining_date: z.string().max(30).optional(),
 });
 

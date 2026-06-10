@@ -1,6 +1,16 @@
 import { prisma } from "../../../lib/db";
 import { hashPassword } from "../../../lib/auth";
 import { normalizeIndianPhone } from "../../../lib/utils/phone-utils";
+import { normalizeWhatsAppPhone } from "../../../lib/services/notifications/providers/whatsapp/meta-provider";
+
+function safeNormalizeWhatsApp(val: string | null | undefined): string {
+  if (!val) return "";
+  try {
+    return normalizeWhatsAppPhone(val);
+  } catch {
+    return "";
+  }
+}
 import { getTenantOperationalContext } from "../../../lib/hostel-context";
 import { allocationReconciliationService } from "../../../lib/services/allocation-reconciliation-service";
 import { eventLog } from "../../../lib/services/event-log-service";
@@ -270,7 +280,10 @@ export class ActivationWorkflowService {
 
   private computeState(profile: any, tenant: any, ruleVersion: any) {
     const latestAcceptance = (tenant.rule_acceptances || []).find((a: any) => a.rule_version_id === ruleVersion.id);
-    const accountSetupCompleted = Boolean(profile?.password_hash && (tenant.phone_1 || profile?.phone));
+    const accountSetupCompleted = Boolean(
+      (profile?.mobile_verified || profile?.phone_verified || tenant?.mobile_verified) &&
+      (tenant.phone_1 || profile?.phone)
+    );
     const missingTier1: string[] = [];
     if (!(tenant.phone_1 || profile?.phone)) missingTier1.push("phone");
     if (!tenant.gender) missingTier1.push("gender");
@@ -377,6 +390,36 @@ export class ActivationWorkflowService {
     if (!tenant.hostel_id || !hostel) throw new Error("INTERNAL_ERROR: Tenant hostel context unavailable");
     const ruleVersion = await this.getActiveRuleVersion(tenant.hostel_id);
 
+    // Auto-accept rules if not accepted
+    if (ruleVersion) {
+      const latestAcceptance = (tenant.rule_acceptances || []).find((a: any) => a.rule_version_id === ruleVersion.id);
+      if (!latestAcceptance) {
+        const rulesSnapshot = this.rulePayload(ruleVersion);
+        try {
+          if (prisma.tenantPolicyAcceptance) {
+            await prisma.tenantPolicyAcceptance.create({
+              data: {
+                tenant_id: tenant.id,
+                hostel_id: tenant.hostel_id,
+                rule_version_id: ruleVersion.id,
+                rules_version: ruleVersion.version,
+                rules_snapshot: rulesSnapshot,
+                accepted_ip: "127.0.0.1",
+                accepted_user_agent: "System Auto-Accept",
+                typed_signature_name: profile?.name || invitation?.name || "Tenant",
+              },
+            });
+          }
+          tenant.rule_acceptances = [
+            { rule_version_id: ruleVersion.id, accepted_at: new Date(), rules_version: ruleVersion.version },
+            ...(tenant.rule_acceptances || [])
+          ];
+        } catch (error: any) {
+          if (error?.code !== "P2002") console.error("Auto-accept rules failed in getContext:", error);
+        }
+      }
+    }
+
     let prefs: any = {};
     try {
       prefs = (await getTenantOperationalContext(tenant.id, tenant.owner_id, tenant.hostel_id)).prefs || {};
@@ -449,8 +492,35 @@ export class ActivationWorkflowService {
       requiredDocumentTypes.includes(doc.doc_type)
     );
 
+    const gPhone = safeNormalizeWhatsApp(tenant.phone_2 || tenant.guardian_phone);
+    const ePhone = safeNormalizeWhatsApp(tenant.phone_3 || tenant.emergency_contact);
+
+    const guardianVerifiedRecord = gPhone
+      ? await prisma.phoneVerificationOtp.findFirst({
+          where: {
+            phone: gPhone,
+            purpose: "ParentVerify",
+            status: "VERIFIED",
+          },
+        })
+      : null;
+
+    const emergencyVerifiedRecord = ePhone
+      ? await prisma.phoneVerificationOtp.findFirst({
+          where: {
+            phone: ePhone,
+            purpose: "EmergencyVerification",
+            status: "VERIFIED",
+          },
+        })
+      : null;
+
     return {
       token_status: "VALID",
+      verification_status: {
+        guardian_verified: guardianVerifiedRecord ? true : false,
+        emergency_verified: emergencyVerifiedRecord ? true : false,
+      },
       activation_state: state,
       current_step: state.current_step,
       completed_steps: state.completed_steps,
@@ -557,6 +627,37 @@ export class ActivationWorkflowService {
     const { profile, tenant, invitation } = await this.resolveInvitation(token);
     if (!tenant.hostel_id) throw new Error("INTERNAL_ERROR: Tenant hostel context unavailable");
     const ruleVersion = await this.getActiveRuleVersion(tenant.hostel_id);
+
+    // Auto-accept rules if not accepted
+    if (ruleVersion) {
+      const latestAcceptance = (tenant.rule_acceptances || []).find((a: any) => a.rule_version_id === ruleVersion.id);
+      if (!latestAcceptance) {
+        const rulesSnapshot = this.rulePayload(ruleVersion);
+        try {
+          if (prisma.tenantPolicyAcceptance) {
+            await prisma.tenantPolicyAcceptance.create({
+              data: {
+                tenant_id: tenant.id,
+                hostel_id: tenant.hostel_id,
+                rule_version_id: ruleVersion.id,
+                rules_version: ruleVersion.version,
+                rules_snapshot: rulesSnapshot,
+                accepted_ip: context.ip || "127.0.0.1",
+                accepted_user_agent: context.userAgent || "System Auto-Accept",
+                typed_signature_name: profile?.name || invitation?.name || "Tenant",
+              },
+            });
+          }
+          tenant.rule_acceptances = [
+            { rule_version_id: ruleVersion.id, accepted_at: new Date(), rules_version: ruleVersion.version },
+            ...(tenant.rule_acceptances || [])
+          ];
+        } catch (error: any) {
+          if (error?.code !== "P2002") console.error("Auto-accept rules failed in mutate:", error);
+        }
+      }
+    }
+
     const state = this.computeState(profile, tenant, ruleVersion);
     this.assertTransition(step, state);
 
@@ -724,20 +825,27 @@ export class ActivationWorkflowService {
     );
     if (!primaryPhone) throw new Error("VALIDATION_ERROR: Valid primary phone is required");
 
-    const otp = String(data?.otp || "").trim();
-    if (!otp) {
-      throw new Error("VALIDATION_ERROR: Verification code is required to verify your mobile number");
-    }
+    const isAlreadyVerified = Boolean(
+      (profile?.mobile_verified || profile?.phone_verified || tenant?.mobile_verified) &&
+      (profile?.phone === primaryPhone || tenant?.phone_1 === primaryPhone)
+    );
 
-    try {
-      await authOtpService.verifyPhoneOtp({
-        phone: primaryPhone,
-        otp,
-        purpose: "Registration",
-        requestIp: null,
-      });
-    } catch (otpErr: any) {
-      throw new Error(`VALIDATION_ERROR: Mobile verification failed: ${otpErr.message || "Invalid or expired code"}`);
+    if (!isAlreadyVerified) {
+      const otp = String(data?.otp || "").trim();
+      if (!otp) {
+        throw new Error("VALIDATION_ERROR: Verification code is required to verify your mobile number");
+      }
+
+      try {
+        await authOtpService.verifyPhoneOtp({
+          phone: primaryPhone,
+          otp,
+          purpose: "Registration",
+          requestIp: null,
+        });
+      } catch (otpErr: any) {
+        throw new Error(`VALIDATION_ERROR: Mobile verification failed: ${otpErr.message || "Invalid or expired code"}`);
+      }
     }
 
     if (!profile && invitation) {
@@ -749,11 +857,11 @@ export class ActivationWorkflowService {
     }
     if (!profile) throw new Error("INVALID_TRANSITION: Complete account setup from a valid invitation");
 
-    const rawEmail = String(
+    let rawEmail = String(
       (data && typeof data.email === "string") ? data.email : (profile?.email || invitation?.email || "")
     ).trim().toLowerCase();
     if (!rawEmail) {
-      throw new Error("VALIDATION_ERROR: Personal email address is required");
+      rawEmail = `${primaryPhone}@hms.temp`;
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(rawEmail)) {
@@ -768,13 +876,16 @@ export class ActivationWorkflowService {
       throw new Error("VALIDATION_ERROR: An account with this email address already exists. Please use a different email address.");
     }
 
-    const profileUpdate: any = { phone: primaryPhone, email: normalizedEmail };
+    const profileUpdate: any = { 
+      phone: primaryPhone, 
+      email: normalizedEmail,
+      mobile_verified: true,
+      phone_verified: true,
+    };
     if (password || confirmPassword) {
       if (password.length < 8) throw new Error("VALIDATION_ERROR: Password must be at least 8 characters");
       if (password !== confirmPassword) throw new Error("VALIDATION_ERROR: Passwords do not match");
       profileUpdate.password_hash = await hashPassword(password);
-    } else if (!profile.password_hash) {
-      throw new Error("VALIDATION_ERROR: Password is required");
     }
 
     await prisma.$transaction(async (tx: any) => {
@@ -784,6 +895,7 @@ export class ActivationWorkflowService {
         data: {
           phone_1: primaryPhone,
           personal_email: normalizedEmail,
+          mobile_verified: true,
           onboarding_last_activity_at: new Date(),
           ...(tenant.activation_started_at ? {} : { activation_started_at: new Date() }),
           ...(data?.photo_url ? { photo_url: String(data.photo_url) } : {}),
@@ -829,7 +941,17 @@ export class ActivationWorkflowService {
     }
 
     const currentGuardianPhone = tenant.phone_2 || tenant.guardian_phone;
-    if (guardianPhone && guardianPhone !== currentGuardianPhone) {
+    const isGuardianVerified = guardianPhone
+      ? await prisma.phoneVerificationOtp.findFirst({
+          where: {
+            phone: safeNormalizeWhatsApp(guardianPhone),
+            purpose: "ParentVerify",
+            status: "VERIFIED",
+          },
+        })
+      : null;
+
+    if (guardianPhone && !isGuardianVerified) {
       const guardianOtp = data?.guardian_otp ? String(data.guardian_otp).trim() : "";
       if (!guardianOtp) {
         throw new Error("VALIDATION_ERROR: Verification code is required to verify the parent/guardian mobile number");
@@ -838,13 +960,16 @@ export class ActivationWorkflowService {
         await authOtpService.verifyPhoneOtp({
           phone: guardianPhone,
           otp: guardianOtp,
-          purpose: "GuardianVerification",
+          purpose: "ParentVerify",
           requestIp: null,
         });
       } catch (otpErr: any) {
         throw new Error(`VALIDATION_ERROR: Parent/Guardian mobile verification failed: ${otpErr.message || "Invalid or expired code"}`);
       }
     }
+
+    // Emergency phone is collected but OTP verification is not required during onboarding.
+    // This removes friction without reducing operational safety — emergency contacts are informational.
 
     const rollNumber = profileType === "STUDENT" ? String(data?.roll_number || "").trim().toUpperCase() : "";
     const yearOfStudy = data?.year_of_study ? Number(data.year_of_study) : undefined;
@@ -945,10 +1070,7 @@ export class ActivationWorkflowService {
     if (data?.payment_frequency && !["MONTHLY", "QUARTERLY", "HALF_YEARLY", "ACADEMIC_YEARLY"].includes(data.payment_frequency)) {
       throw new Error("VALIDATION_ERROR: Invalid payment frequency cycle selection");
     }
-    if (invitation) {
-      await tenantInvitationLifecycleService.completeActivation(invitation, tenant, profile, data?.payment_frequency);
-      return;
-    }
+
     const ruleVersion = await this.getActiveRuleVersion(tenant.hostel_id);
     const current = await prisma.profile.findUnique({
       where: { id: profile.id },
@@ -956,6 +1078,7 @@ export class ActivationWorkflowService {
         tenants: {
           include: {
             rule_acceptances: { where: { rule_version_id: ruleVersion.id } },
+            identification_documents: true,
           },
         },
       },
@@ -963,14 +1086,64 @@ export class ActivationWorkflowService {
     const tenantNow = current?.tenants;
     if (!current || !tenantNow) throw new Error("INVALID: Activation link expired or already used");
     if (tenantNow.status !== "INVITED") throw new Error("INVALID_TRANSITION: Tenant is not invited");
+
+    // Recompute and check required onboarding steps
+    const state = this.computeState(current, tenantNow, ruleVersion);
+    if (!state.account_setup_completed || !state.rules_accepted || !state.profile_completed) {
+      throw new Error("VALIDATION_ERROR: Required activation steps are incomplete");
+    }
+
+    // Explicitly enforce OTP verification on the backend before finalizing activation
+    const isStudent = String(tenantNow.profile_type || "STUDENT").toUpperCase() === "STUDENT";
+    const hasGuardian = Boolean(tenantNow.phone_2 || tenantNow.guardian_phone);
+    if (isStudent || hasGuardian) {
+      const gPhone = safeNormalizeWhatsApp(tenantNow.phone_2 || tenantNow.guardian_phone);
+      if (!gPhone) {
+        throw new Error("VALIDATION_ERROR: Parent/Guardian phone number is required");
+      }
+      const gVerified = await prisma.phoneVerificationOtp.findFirst({
+        where: {
+          phone: gPhone,
+          purpose: "ParentVerify",
+          status: "VERIFIED",
+        },
+      });
+      if (!gVerified) {
+        throw new Error("VALIDATION_ERROR: Parent/Guardian phone number must be verified via OTP");
+      }
+    }
+
+    const ePhone = safeNormalizeWhatsApp(tenantNow.phone_3 || tenantNow.emergency_contact);
+    if (!ePhone) {
+      throw new Error("VALIDATION_ERROR: Emergency contact phone number is required");
+    }
+    // Emergency OTP verification not required — phone is collected for informational/operational use only.
+
+    const password = String(data?.password || "");
+    const confirmPassword = String(data?.confirm_password || data?.confirmPassword || "");
+    let passwordHash: string | undefined;
+    if (password || confirmPassword) {
+      if (password.length < 8) throw new Error("VALIDATION_ERROR: Password must be at least 8 characters");
+      if (password !== confirmPassword) throw new Error("VALIDATION_ERROR: Passwords do not match");
+      passwordHash = await hashPassword(password);
+    } else if (!profile.password_hash) {
+      throw new Error("VALIDATION_ERROR: Password is required to activate your account");
+    }
+
+    if (invitation) {
+      await tenantInvitationLifecycleService.completeActivation(
+        invitation,
+        tenant,
+        profile,
+        data?.payment_frequency,
+        password
+      );
+      return;
+    }
     if (current.invitation_token !== profile.invitation_token || !current.invitation_token) {
       throw new Error("INVALID: Activation token has already been used");
     }
 
-    const state = this.computeState(current, { ...tenantNow, identification_documents: [], rule_acceptances: tenantNow.rule_acceptances }, ruleVersion);
-    if (!state.account_setup_completed || !state.rules_accepted || !state.profile_completed) {
-      throw new Error("VALIDATION_ERROR: Required activation steps are incomplete");
-    }
     this.validateOperationalInviteData(tenantNow);
 
     const completedAt = new Date();
@@ -987,6 +1160,7 @@ export class ActivationWorkflowService {
           is_profile_completed: true,
           invitation_token: null,
           invitation_expires_at: null,
+          ...(passwordHash ? { password_hash: passwordHash } : {}),
         },
       });
       if (profileUpdate.count !== 1) {

@@ -94,8 +94,8 @@ export class InvitationService {
       ? 0
       : Number(data.maintenance_amount ?? resolved.maintenance_charge);
 
-    if (!Number.isFinite(monthlyRent) || monthlyRent <= 0) {
-      throw new Error("VALIDATION: Monthly rent must be greater than zero");
+    if (!Number.isFinite(monthlyRent) || monthlyRent < 0) {
+      throw new Error("VALIDATION: Monthly rent cannot be negative");
     }
     if (!Number.isFinite(advance_amount) || advance_amount < 0) {
       throw new Error("VALIDATION: Advance deposit must be zero or greater");

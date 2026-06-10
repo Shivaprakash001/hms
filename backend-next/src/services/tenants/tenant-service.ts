@@ -2,6 +2,8 @@ import { prisma } from "../../../lib/db";
 import { eventSystem } from "../../../lib/events";
 import { z } from "zod";
 import { getTenantOperationalContext } from "../../../lib/hostel-context";
+import { authOtpService } from "../../../lib/services/auth/auth-otp-service";
+import { normalizeWhatsAppPhone } from "../../../lib/services/notifications/providers/whatsapp/meta-provider";
 
 import { allocationReconciliationService } from "../../../lib/services/allocation-reconciliation-service";
 import { financialService } from "../../../src/services/payments/financial-service";
@@ -300,6 +302,102 @@ export class TenantService {
     for (const [key, value] of Object.entries(data)) {
       if (profileFields.includes(key)) profileUpdate[key] = value;
       else if (tenantFields.includes(key)) tenantUpdate[key] = value;
+    }
+
+    // Synchronize duplicates across profile and tenant tables
+    const syncedPhone = data.phone_1 || data.phone;
+    if (syncedPhone) {
+      profileUpdate.phone = syncedPhone;
+      tenantUpdate.phone_1 = syncedPhone;
+    }
+    const syncedEmergency = data.phone_3 || data.emergency_contact;
+    if (syncedEmergency) {
+      profileUpdate.emergency_contact = syncedEmergency;
+      tenantUpdate.phone_3 = syncedEmergency;
+    }
+    const syncedGuardian = data.phone_2 || data.guardian_phone;
+    if (syncedGuardian) {
+      tenantUpdate.phone_2 = syncedGuardian;
+      tenantUpdate.guardian_phone = syncedGuardian;
+    }
+
+    // Fetch current state to verify if phone numbers changed
+    const current = await tenantRepository.findUnique({
+      where: { id: tenantCheck.id },
+      include: { profiles: true },
+    });
+    if (!current) throw new Error("NOT_FOUND: Tenant record not found");
+
+    const oldPrimary = (current.profiles?.phone || current.phone_1 || "").trim();
+    const newPrimary = (syncedPhone || "").trim();
+    if (newPrimary && oldPrimary) {
+      try {
+        const normOld = normalizeWhatsAppPhone(oldPrimary);
+        const normNew = normalizeWhatsAppPhone(newPrimary);
+        if (normOld !== normNew) {
+          const otp = data.phone_1_otp || data.phone_otp;
+          if (!otp) {
+            throw new Error("VALIDATION_ERROR: Verification code is required to update your primary phone number");
+          }
+          await authOtpService.verifyPhoneOtp({
+            phone: normNew,
+            otp,
+            purpose: "ProfileUpdate",
+            requestIp: null,
+          });
+        }
+      } catch (err: any) {
+        if (err.message?.includes("VALIDATION_ERROR")) throw err;
+        throw new Error(`VALIDATION_ERROR: Primary phone verification failed: ${err.message || "Invalid or expired code"}`);
+      }
+    }
+
+    const oldPhone2 = (current.phone_2 || current.guardian_phone || "").trim();
+    const newPhone2 = (syncedGuardian || "").trim();
+    if (newPhone2) {
+      try {
+        const normOld = oldPhone2 ? normalizeWhatsAppPhone(oldPhone2) : "";
+        const normNew = normalizeWhatsAppPhone(newPhone2);
+        if (normOld !== normNew) {
+          const otp = data.phone_2_otp || data.guardian_otp;
+          if (!otp) {
+            throw new Error("VALIDATION_ERROR: Verification code is required to update the parent/guardian phone number");
+          }
+          await authOtpService.verifyPhoneOtp({
+            phone: normNew,
+            otp,
+            purpose: "ProfileUpdate",
+            requestIp: null,
+          });
+        }
+      } catch (err: any) {
+        if (err.message?.includes("VALIDATION_ERROR")) throw err;
+        throw new Error(`VALIDATION_ERROR: Parent/Guardian phone verification failed: ${err.message || "Invalid or expired code"}`);
+      }
+    }
+
+    const oldPhone3 = (current.phone_3 || current.profiles?.emergency_contact || "").trim();
+    const newPhone3 = (syncedEmergency || "").trim();
+    if (newPhone3) {
+      try {
+        const normOld = oldPhone3 ? normalizeWhatsAppPhone(oldPhone3) : "";
+        const normNew = normalizeWhatsAppPhone(newPhone3);
+        if (normOld !== normNew) {
+          const otp = data.phone_3_otp || data.emergency_otp;
+          if (!otp) {
+            throw new Error("VALIDATION_ERROR: Verification code is required to update the emergency contact phone number");
+          }
+          await authOtpService.verifyPhoneOtp({
+            phone: normNew,
+            otp,
+            purpose: "ProfileUpdate",
+            requestIp: null,
+          });
+        }
+      } catch (err: any) {
+        if (err.message?.includes("VALIDATION_ERROR")) throw err;
+        throw new Error(`VALIDATION_ERROR: Emergency contact phone verification failed: ${err.message || "Invalid or expired code"}`);
+      }
     }
 
     if (tenantUpdate.gender === "Prefer not to say") {

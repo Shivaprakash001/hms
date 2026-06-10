@@ -34,6 +34,8 @@ async function runTests() {
       phone: "+919876500123",
       role: "TENANT",
       is_active: true,
+      phone_verified: true,
+      mobile_verified: true,
       password_hash: "mocked_password_hash"
     }
   });
@@ -81,17 +83,27 @@ async function runTests() {
   });
   if (!ruleVersion) throw new Error("Rule version not found after getContext");
 
-  // 2. Create rule acceptance record to complete the RULES step
-  await prisma.tenantPolicyAcceptance.create({
-    data: {
-      tenant_id: tenantId,
-      hostel_id: room.hostel_id,
-      rule_version_id: ruleVersion.id,
-      rules_version: ruleVersion.version,
-      rules_snapshot: ruleVersion.content || {},
-      typed_signature_name: "Guardian OTP Test Tenant"
+  // 2. Ensure rule acceptance record exists to complete the RULES step
+  const existingAcceptance = await prisma.tenantPolicyAcceptance.findUnique({
+    where: {
+      tenant_id_rule_version_id: {
+        tenant_id: tenantId,
+        rule_version_id: ruleVersion.id
+      }
     }
   });
+  if (!existingAcceptance) {
+    await prisma.tenantPolicyAcceptance.create({
+      data: {
+        tenant_id: tenantId,
+        hostel_id: room.hostel_id,
+        rule_version_id: ruleVersion.id,
+        rules_version: ruleVersion.version,
+        rules_snapshot: ruleVersion.content || {},
+        typed_signature_name: "Guardian OTP Test Tenant"
+      }
+    });
+  }
 
   // 3. Update the agreement status to SIGNED to complete the AGREEMENT step
   await prisma.agreement.updateMany({
@@ -123,7 +135,7 @@ async function runTests() {
     
     await authOtpService.sendPhoneOtp({
       phone,
-      purpose: "GuardianVerification",
+      purpose: "ParentVerify",
       requestIp: "127.0.0.1"
     });
 

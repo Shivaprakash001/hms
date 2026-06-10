@@ -6,7 +6,7 @@ import { incrementOtpMetric } from "@/lib/metrics";
 import { maskWhatsAppPhone, normalizeWhatsAppPhone } from "@/lib/services/notifications/providers/whatsapp";
 import { notificationService } from "@/lib/services/notification-service";
 import { redisKeys } from "@/lib/redis/keys";
-import { checkFixedWindowLimit, setOneTimeLock } from "@/lib/redis/rate-limit";
+import { checkFixedWindowLimit, setOneTimeLock, releaseOneTimeLock } from "@/lib/redis/rate-limit";
 
 const logger = getLogger("auth.otp-service");
 
@@ -154,100 +154,105 @@ export class AuthOtpService {
     await this.enforceVerifyRateLimits(requestIp, now);
 
     incrementOtpMetric("verifications_total");
-    const lockAcquired = await setOneTimeLock(redisKeys.otpVerifyLock(phone, input.purpose), 30);
+    const lockKey = redisKeys.otpVerifyLock(phone, input.purpose);
+    const lockAcquired = await setOneTimeLock(lockKey, 30);
     if (!lockAcquired) {
       incrementOtpMetric("verification_failures");
       throw new OtpServiceError("OTP verification already in progress", "OTP_REPLAY_BLOCKED", 409);
     }
 
-    const record = await (prisma as any).phoneVerificationOtp.findFirst({
-      where: {
-        phone,
-        purpose: input.purpose,
-        status: "PENDING",
-      },
-      orderBy: { created_at: "desc" },
-    });
-
-    if (!record) {
-      incrementOtpMetric("verification_failures");
-      throw new OtpServiceError("Invalid or expired OTP", "OTP_INVALID", 400);
-    }
-
-    if (record.expires_at <= now) {
-      incrementOtpMetric("expired_total");
-      incrementOtpMetric("verification_failures");
-      await (prisma as any).phoneVerificationOtp.update({
-        where: { id: record.id },
-        data: { status: "EXPIRED", failure_reason: "expired before verification" },
-      });
-      throw new OtpServiceError("OTP expired", "OTP_EXPIRED", 400);
-    }
-
-    if (record.attempts >= record.max_attempts) {
-      incrementOtpMetric("verification_failures");
-      await (prisma as any).phoneVerificationOtp.update({
-        where: { id: record.id },
-        data: { status: "FAILED", failure_reason: "maximum attempts exceeded" },
-      });
-      throw new OtpServiceError("OTP attempts exceeded", "OTP_ATTEMPTS_EXCEEDED", 429);
-    }
-
-    const matches = await bcrypt.compare(input.otp, record.otp_hash);
-    if (!matches) {
-      incrementOtpMetric("verification_failures");
-      const nextAttempts = record.attempts + 1;
-      await (prisma as any).phoneVerificationOtp.update({
-        where: { id: record.id },
-        data: {
-          attempts: nextAttempts,
-          ...(nextAttempts >= record.max_attempts
-            ? { status: "FAILED", failure_reason: "maximum attempts exceeded" }
-            : {}),
+    try {
+      const record = await (prisma as any).phoneVerificationOtp.findFirst({
+        where: {
+          phone,
+          purpose: input.purpose,
+          status: "PENDING",
         },
-      });
-      throw new OtpServiceError("Invalid OTP", "OTP_INVALID", 400);
-    }
-
-    const profilePhones = profilePhoneCandidates(phone);
-    const result = await prisma.$transaction(async (tx: any) => {
-      const verified = await (tx as any).phoneVerificationOtp.updateMany({
-        where: { id: record.id, status: "PENDING" },
-        data: {
-          status: "VERIFIED",
-          verified_at: now,
-          provider_status: "VERIFIED",
-        },
+        orderBy: { created_at: "desc" },
       });
 
-      if (verified.count !== 1) {
-        throw new OtpServiceError("OTP already used", "OTP_ALREADY_USED", 409);
+      if (!record) {
+        incrementOtpMetric("verification_failures");
+        throw new OtpServiceError("Invalid or expired OTP", "OTP_INVALID", 400);
       }
 
-      const profileUpdate = await (tx.profile as any).updateMany({
-        where: { phone: { in: profilePhones } },
-        data: {
-          phone_verified: true,
-          mobile_verified: true,
-          updated_at: now,
-        },
+      if (record.expires_at <= now) {
+        incrementOtpMetric("expired_total");
+        incrementOtpMetric("verification_failures");
+        await (prisma as any).phoneVerificationOtp.update({
+          where: { id: record.id },
+          data: { status: "EXPIRED", failure_reason: "expired before verification" },
+        });
+        throw new OtpServiceError("OTP expired", "OTP_EXPIRED", 400);
+      }
+
+      if (record.attempts >= record.max_attempts) {
+        incrementOtpMetric("verification_failures");
+        await (prisma as any).phoneVerificationOtp.update({
+          where: { id: record.id },
+          data: { status: "FAILED", failure_reason: "maximum attempts exceeded" },
+        });
+        throw new OtpServiceError("OTP attempts exceeded", "OTP_ATTEMPTS_EXCEEDED", 429);
+      }
+
+      const matches = await bcrypt.compare(input.otp, record.otp_hash);
+      if (!matches) {
+        incrementOtpMetric("verification_failures");
+        const nextAttempts = record.attempts + 1;
+        await (prisma as any).phoneVerificationOtp.update({
+          where: { id: record.id },
+          data: {
+            attempts: nextAttempts,
+            ...(nextAttempts >= record.max_attempts
+              ? { status: "FAILED", failure_reason: "maximum attempts exceeded" }
+              : {}),
+          },
+        });
+        throw new OtpServiceError("Invalid OTP", "OTP_INVALID", 400);
+      }
+
+      const profilePhones = profilePhoneCandidates(phone);
+      const result = await prisma.$transaction(async (tx: any) => {
+        const verified = await (tx as any).phoneVerificationOtp.updateMany({
+          where: { id: record.id, status: "PENDING" },
+          data: {
+            status: "VERIFIED",
+            verified_at: now,
+            provider_status: "VERIFIED",
+          },
+        });
+
+        if (verified.count !== 1) {
+          throw new OtpServiceError("OTP already used", "OTP_ALREADY_USED", 409);
+        }
+
+        const profileUpdate = await (tx.profile as any).updateMany({
+          where: { phone: { in: profilePhones } },
+          data: {
+            phone_verified: true,
+            mobile_verified: true,
+            updated_at: now,
+          },
+        });
+
+        return { profileUpdated: profileUpdate.count };
       });
 
-      return { profileUpdated: profileUpdate.count };
-    });
+      logger.metrics("otp.verification.success", {
+        phone: maskWhatsAppPhone(phone),
+        purpose: input.purpose,
+        otp_id: record.id,
+        profile_updated: result.profileUpdated,
+      });
 
-    logger.metrics("otp.verification.success", {
-      phone: maskWhatsAppPhone(phone),
-      purpose: input.purpose,
-      otp_id: record.id,
-      profile_updated: result.profileUpdated,
-    });
-
-    return {
-      success: true,
-      phone_verified: true,
-      profile_updated: result.profileUpdated,
-    };
+      return {
+        success: true,
+        phone_verified: true,
+        profile_updated: result.profileUpdated,
+      };
+    } finally {
+      await releaseOneTimeLock(lockKey);
+    }
   }
 
   private async enforceSendRateLimits(phone: string, requestIp: string | null, now: Date) {
@@ -266,7 +271,15 @@ export class AuthOtpService {
           phone: maskWhatsAppPhone(phone),
           source: "redis",
         });
-        throw new OtpServiceError("Too many OTP requests for this phone", "OTP_RATE_LIMITED", 429);
+        const retryAfter = redisPhoneLimit.retryAfterSeconds;
+        const timeMessage = retryAfter > 60
+          ? `${Math.ceil(retryAfter / 60)} minutes`
+          : `${retryAfter} seconds`;
+        throw new OtpServiceError(
+          `Too many OTP requests. Please try again after ${timeMessage}.`,
+          "OTP_RATE_LIMITED",
+          429
+        );
       }
 
       if (requestIp) {
@@ -283,7 +296,15 @@ export class AuthOtpService {
             request_ip: requestIp,
             source: "redis",
           });
-          throw new OtpServiceError("Too many OTP requests", "OTP_RATE_LIMITED", 429);
+          const retryAfter = redisIpLimit.retryAfterSeconds;
+          const timeMessage = retryAfter > 60
+            ? `${Math.ceil(retryAfter / 60)} minutes`
+            : `${retryAfter} seconds`;
+          throw new OtpServiceError(
+            `Too many OTP requests from this IP. Please try again after ${timeMessage}.`,
+            "OTP_RATE_LIMITED",
+            429
+          );
         }
         if (redisIpLimit.available) return;
       } else {
@@ -307,7 +328,26 @@ export class AuthOtpService {
         scope: "phone",
         phone: maskWhatsAppPhone(phone),
       });
-      throw new OtpServiceError("Too many OTP requests for this phone", "OTP_RATE_LIMITED", 429);
+
+      const oldestOtp = await (prisma as any).phoneVerificationOtp.findFirst({
+        where: { phone, created_at: { gte: phoneWindow } },
+        orderBy: { created_at: "asc" },
+      });
+      let timeMessage = "15 minutes";
+      if (oldestOtp) {
+        const msPassed = now.getTime() - oldestOtp.created_at.getTime();
+        const msRemaining = PHONE_SEND_WINDOW_MS - msPassed;
+        const secondsRemaining = Math.max(1, Math.ceil(msRemaining / 1000));
+        timeMessage = secondsRemaining > 60
+          ? `${Math.ceil(secondsRemaining / 60)} minutes`
+          : `${secondsRemaining} seconds`;
+      }
+
+      throw new OtpServiceError(
+        `Too many OTP requests. Please try again after ${timeMessage}.`,
+        "OTP_RATE_LIMITED",
+        429
+      );
     }
 
     if (requestIp) {
@@ -322,7 +362,26 @@ export class AuthOtpService {
           scope: "ip",
           request_ip: requestIp,
         });
-        throw new OtpServiceError("Too many OTP requests", "OTP_RATE_LIMITED", 429);
+
+        const oldestOtp = await (prisma as any).phoneVerificationOtp.findFirst({
+          where: { request_ip: requestIp, created_at: { gte: ipWindow } },
+          orderBy: { created_at: "asc" },
+        });
+        let timeMessage = "1 hour";
+        if (oldestOtp) {
+          const msPassed = now.getTime() - oldestOtp.created_at.getTime();
+          const msRemaining = IP_SEND_WINDOW_MS - msPassed;
+          const secondsRemaining = Math.max(1, Math.ceil(msRemaining / 1000));
+          timeMessage = secondsRemaining > 60
+            ? `${Math.ceil(secondsRemaining / 60)} minutes`
+            : `${secondsRemaining} seconds`;
+        }
+
+        throw new OtpServiceError(
+          `Too many OTP requests from this IP. Please try again after ${timeMessage}.`,
+          "OTP_RATE_LIMITED",
+          429
+        );
       }
     }
   }

@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
       return ApiResponse.error(ApiError.forbidden("Unauthorized"));
     }
 
-    const scope = resolveOwnerScope(session);
+    let ownerId: string;
     const { searchParams } = new URL(req.url);
     const { limit, offset } = safePagination(searchParams.get("limit"), searchParams.get("offset"));
     const tenantId = searchParams.get("tenant_id") || undefined;
@@ -29,8 +29,22 @@ export async function GET(req: NextRequest) {
     const hostelId = searchParams.get("hostelId") || undefined;
     if (!hostelId) return ApiResponse.error(ApiError.badRequest("hostelId is required"));
 
+    if (session.role === "ADMIN") {
+      const hostel = await prisma.hostels.findUnique({
+        where: { id: hostelId },
+        select: { owner_id: true }
+      });
+      if (!hostel) {
+        return ApiResponse.error(ApiError.notFound("Hostel not found"));
+      }
+      ownerId = hostel.owner_id;
+    } else {
+      const scope = resolveOwnerScope(session);
+      ownerId = scope.owner_id;
+    }
+
     const result = await paymentService.getAllPayments(
-      scope.owner_id,
+      ownerId,
       hostelId,
       limit,
       offset,
@@ -58,14 +72,28 @@ export async function POST(req: NextRequest) {
     const sizeError = assertBodySize(req);
     if (sizeError) return sizeError;
 
-    const scope = resolveOwnerScope(session);
     const data = await req.json().catch(() => ({}));
 
     const hostelId: string | undefined = data.hostelId || data.hostel_id;
     if (!hostelId) {
       return ApiResponse.error(ApiError.badRequest("hostelId is required"));
     }
-    await requireHostelBelongsToOwner(scope.owner_id, hostelId);
+
+    let ownerId: string;
+    if (session.role === "ADMIN") {
+      const hostel = await prisma.hostels.findUnique({
+        where: { id: hostelId },
+        select: { owner_id: true }
+      });
+      if (!hostel) {
+        return ApiResponse.error(ApiError.notFound("Hostel not found"));
+      }
+      ownerId = hostel.owner_id;
+    } else {
+      const scope = resolveOwnerScope(session);
+      ownerId = scope.owner_id;
+      await requireHostelBelongsToOwner(ownerId, hostelId);
+    }
 
     // ── Zod validation ─────────────────────────────────────────────────────
     const validated = RecordPaymentSchema.safeParse(data);
@@ -81,7 +109,7 @@ export async function POST(req: NextRequest) {
     if (!obligation) {
       return ApiResponse.error(ApiError.notFound("Obligation not found"));
     }
-    if (obligation.owner_id !== scope.owner_id) {
+    if (obligation.owner_id !== ownerId) {
       return ApiResponse.error(ApiError.forbidden("Obligation does not belong to this owner"));
     }
     if (obligation.hostel_id !== hostelId) {
@@ -99,7 +127,7 @@ export async function POST(req: NextRequest) {
       referenceNumber: validated.data.reference_number ?? undefined,
       paymentDate: validated.data.payment_date ? new Date(validated.data.payment_date) : undefined,
       userId: session.sub,
-      ownerId: scope.owner_id,
+      ownerId: ownerId,
     });
 
     return ApiResponse.success(result);

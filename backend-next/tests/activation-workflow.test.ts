@@ -16,6 +16,7 @@ vi.mock("@/lib/db", () => {
     },
     tenant_invitations: {
       findUnique: vi.fn(),
+      update: vi.fn(),
     },
     ruleVersion: {
       findFirst: vi.fn(),
@@ -153,5 +154,48 @@ describe("ActivationWorkflowService OTP Hardening", () => {
       purpose: "Registration",
       requestIp: null,
     });
+  });
+
+  it("should succeed on ACCOUNT step even if no password is provided", async () => {
+    const mockTenant = {
+      id: "tenant-1",
+      status: "INVITED",
+      phone_1: "918008046952",
+      hostel_id: "hostel-1",
+      hostels: { name: "Hostel 1", rent_cycle: "MONTHLY", auto_rent_day: 1, preferences: {} },
+      rule_acceptances: [],
+      agreements: [],
+      room_allocations: [],
+    };
+    const mockProfile = { id: "profile-1", phone: "918008046952" };
+    const mockInvitation = { id: "invite-1", email: "tenant@example.com", phone: "918008046952", reservations: [] };
+
+    vi.mocked(tenantInvitationLifecycleService.resolveByToken).mockResolvedValue({
+      source: "tenant_invitations",
+      invitation: mockInvitation,
+      profile: mockProfile,
+      tenant: mockTenant,
+      token: "test-token",
+    } as any);
+
+    vi.mocked(prisma.roomAllocation.count).mockResolvedValue(0);
+    vi.mocked(prisma.ruleVersion.findFirst).mockResolvedValue({ id: "rule-1", title: "Rules", content: {} } as any);
+    vi.mocked(prisma.agreementTemplate.findFirst).mockResolvedValue({
+      id: "template-1",
+      title: "Agreement",
+      custom_rules: [],
+      owner_name: "Owner",
+      owner_signature_url: "http://sig.com",
+    } as any);
+    vi.mocked(prisma.agreement.create).mockResolvedValue({
+      id: "agreement-1",
+      status: "DRAFT",
+      content_snapshot: {},
+    } as any);
+
+    vi.mocked(authOtpService.verifyPhoneOtp).mockResolvedValue(true as any);
+
+    const res = await activationService.mutate("test-token", "ACCOUNT", { otp: "123456" }, { ip: "127.0.0.1", userAgent: "test" });
+    expect(res).toBeDefined();
   });
 });

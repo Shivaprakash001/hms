@@ -50,3 +50,10 @@ export async function setOneTimeLock(key: string, ttlSeconds: number) {
     return result === "OK";
   }, true);
 }
+
+export async function releaseOneTimeLock(key: string) {
+  return safeRedis("rateLimit.releaseOneTimeLock", async (redis) => {
+    await redis.del(key);
+    return true;
+  }, true);
+}

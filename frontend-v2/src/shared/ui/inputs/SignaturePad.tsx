@@ -6,11 +6,21 @@ interface SignaturePadProps {
   onSave: (blob: Blob | null) => void;
   placeholder?: string;
   existingSignatureUrl?: string | null;
+  className?: string;
+  canvasHeightClass?: string;
 }
 
-export function SignaturePad({ onSave, placeholder = "Draw your signature here", existingSignatureUrl }: SignaturePadProps) {
+export function SignaturePad({
+  onSave,
+  placeholder = "Draw your signature here",
+  existingSignatureUrl,
+  className = "space-y-2",
+  canvasHeightClass = "h-40",
+}: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const largeCanvasRef = useRef<HTMLCanvasElement>(null);
+  const rotationCountRef = useRef(0);
+  const largeRotationCountRef = useRef(0);
   
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasDrawn, setHasDrawn] = useState(false);
@@ -29,6 +39,7 @@ export function SignaturePad({ onSave, placeholder = "Draw your signature here",
 
   // Clear signature and canvas
   const handleClear = () => {
+    rotationCountRef.current = 0;
     setShowExisting(false);
     // Notify parent that signature has been cleared (set blob to null)
     // If the parent needs to know that it is cleared/null so it doesn't try to send old signature url
@@ -60,25 +71,29 @@ export function SignaturePad({ onSave, placeholder = "Draw your signature here",
   useEffect(() => {
     if (showExisting) return;
     
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const timer = setTimeout(() => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
 
-    // Set canvas dimensions based on CSS display size (retina resolution)
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * 2;
-    canvas.height = rect.height * 2;
-    ctx.scale(2, 2);
+      // Set canvas dimensions based on CSS display size (retina resolution)
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * 2;
+      canvas.height = rect.height * 2;
+      ctx.scale(2, 2);
 
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = "#1e293b"; // Slate-800
-    ctx.lineWidth = 2.5;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.strokeStyle = "#1e293b"; // Slate-800
+      ctx.lineWidth = 2.5;
 
-    // Fill white background by default
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, rect.width, rect.height);
+      // Fill white background by default
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, rect.width, rect.height);
+    }, 100);
+
+    return () => clearTimeout(timer);
   }, [showExisting]);
 
   // Initialize large full-screen canvas when modal opens
@@ -104,7 +119,7 @@ export function SignaturePad({ onSave, placeholder = "Draw your signature here",
       // Fill white background by default
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, rect.width, rect.height);
-      setLargeHasDrawn(false);
+      largeRotationCountRef.current = 0;
     }, 100);
 
     return () => clearTimeout(timer);
@@ -131,6 +146,7 @@ export function SignaturePad({ onSave, placeholder = "Draw your signature here",
 
   // Inline Canvas drawing handlers
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    rotationCountRef.current = 0;
     if (e.cancelable) {
       e.preventDefault();
     }
@@ -170,6 +186,7 @@ export function SignaturePad({ onSave, placeholder = "Draw your signature here",
 
   // Full Screen Canvas drawing handlers
   const startDrawingLarge = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    largeRotationCountRef.current = 0;
     if (e.cancelable) {
       e.preventDefault();
     }
@@ -221,6 +238,9 @@ export function SignaturePad({ onSave, placeholder = "Draw your signature here",
     if (!tempCtx) return;
     tempCtx.drawImage(canvas, 0, 0);
 
+    const isOddRotation = (rotationCountRef.current % 2) === 0;
+    rotationCountRef.current += 1;
+
     // Clear and fill white
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -231,7 +251,8 @@ export function SignaturePad({ onSave, placeholder = "Draw your signature here",
     // Rotate and scale
     ctx.translate(canvas.width / 2, canvas.height / 2);
     ctx.rotate((90 * Math.PI) / 180);
-    const scale = Math.min(canvas.width / tempCanvas.height, canvas.height / tempCanvas.width);
+    const scaleFactor = Math.min(canvas.width / tempCanvas.height, canvas.height / tempCanvas.width);
+    const scale = isOddRotation ? scaleFactor : (1 / scaleFactor);
     ctx.scale(scale, scale);
     ctx.drawImage(tempCanvas, -tempCanvas.width / 2, -tempCanvas.height / 2);
     ctx.restore();
@@ -255,6 +276,9 @@ export function SignaturePad({ onSave, placeholder = "Draw your signature here",
     if (!tempCtx) return;
     tempCtx.drawImage(canvas, 0, 0);
 
+    const isOddRotation = (largeRotationCountRef.current % 2) === 0;
+    largeRotationCountRef.current += 1;
+
     // Clear and fill white
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -265,13 +289,15 @@ export function SignaturePad({ onSave, placeholder = "Draw your signature here",
     // Rotate and scale
     ctx.translate(canvas.width / 2, canvas.height / 2);
     ctx.rotate((90 * Math.PI) / 180);
-    const scale = Math.min(canvas.width / tempCanvas.height, canvas.height / tempCanvas.width);
+    const scaleFactor = Math.min(canvas.width / tempCanvas.height, canvas.height / tempCanvas.width);
+    const scale = isOddRotation ? scaleFactor : (1 / scaleFactor);
     ctx.scale(scale, scale);
     ctx.drawImage(tempCanvas, -tempCanvas.width / 2, -tempCanvas.height / 2);
     ctx.restore();
   };
 
   const handleClearLarge = () => {
+    largeRotationCountRef.current = 0;
     const canvas = largeCanvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -288,6 +314,7 @@ export function SignaturePad({ onSave, placeholder = "Draw your signature here",
     if (largeCanvas && smallCanvas) {
       const smallCtx = smallCanvas.getContext("2d");
       if (smallCtx) {
+        rotationCountRef.current = 0;
         smallCtx.save();
         // Reset scale to 1:1 for copying pixels directly
         smallCtx.setTransform(1, 0, 0, 1, 0, 0);
@@ -319,67 +346,71 @@ export function SignaturePad({ onSave, placeholder = "Draw your signature here",
   };
 
   return (
-    <div className="space-y-2">
-      <div className="relative rounded-xl border border-border overflow-hidden bg-white shadow-inner group">
-        {showExisting && existingSignatureUrl ? (
-          <div className="w-full h-40 bg-white flex items-center justify-center p-2">
-            <img src={existingSignatureUrl} alt="Existing Signature" className="max-h-full object-contain select-none" />
-          </div>
-        ) : (
-          <canvas
-            ref={canvasRef}
-            onMouseDown={startDrawing}
-            onMouseMove={draw}
-            onMouseUp={stopDrawing}
-            onMouseLeave={stopDrawing}
-            onTouchStart={startDrawing}
-            onTouchMove={draw}
-            onTouchEnd={stopDrawing}
-            className="w-full h-40 bg-white block touch-none cursor-crosshair"
-          />
-        )}
-        {!hasDrawn && !showExisting && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-muted-foreground text-xs select-none">
-            {placeholder}
-          </div>
-        )}
-        {/* Fullscreen Expand Button - only show if not showing existing preview */}
-        {!showExisting && (
-          <button
-            type="button"
-            onClick={() => setIsExpanded(true)}
-            className="absolute top-2 right-2 px-2.5 py-1.5 rounded-lg bg-slate-900/10 hover:bg-slate-900/20 text-slate-700 active:scale-95 transition-all flex items-center gap-1 font-semibold text-[11px] shadow-sm backdrop-blur-sm"
-            title="Sign in Full Screen"
-          >
-            <Maximize2 className="w-3.5 h-3.5" />
-            <span>Fullscreen</span>
-          </button>
-        )}
-      </div>
-      <div className="flex justify-between items-center">
-        <span className="text-[10px] text-muted-foreground">
-          {showExisting ? "Showing saved signature" : "Sign inside the box or expand to fullscreen"}
-        </span>
-        <div className="flex items-center gap-3">
-          {hasDrawn && !showExisting && (
+    <div className={className}>
+      <div className={`relative rounded-xl border border-border overflow-hidden bg-white shadow-inner group flex flex-col ${canvasHeightClass}`}>
+        <div className="flex-1 relative">
+          {showExisting && existingSignatureUrl ? (
+            <div className="absolute inset-0 bg-white flex items-center justify-center p-2">
+              <img src={existingSignatureUrl} alt="Existing Signature" className="max-h-full object-contain select-none" />
+            </div>
+          ) : (
+            <canvas
+              ref={canvasRef}
+              onMouseDown={startDrawing}
+              onMouseMove={draw}
+              onMouseUp={stopDrawing}
+              onMouseLeave={stopDrawing}
+              onTouchStart={startDrawing}
+              onTouchMove={draw}
+              onTouchEnd={stopDrawing}
+              className="absolute inset-0 w-full h-full bg-white block touch-none cursor-crosshair"
+            />
+          )}
+          {!hasDrawn && !showExisting && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-muted-foreground text-xs select-none">
+              {placeholder}
+            </div>
+          )}
+          {/* Fullscreen Expand Button - only show if not showing existing preview */}
+          {!showExisting && (
             <button
               type="button"
-              onClick={handleRotate}
-              className="text-xs font-semibold text-accent hover:underline active:scale-95 transition-transform flex items-center gap-1"
+              onClick={() => setIsExpanded(true)}
+              className="absolute top-2 right-2 px-2.5 py-1.5 rounded-lg bg-slate-900/10 hover:bg-slate-900/20 text-slate-700 active:scale-95 transition-all flex items-center gap-1 font-semibold text-[11px] shadow-sm backdrop-blur-sm"
+              title="Sign in Full Screen"
             >
-              <RotateCw className="w-3.5 h-3.5" />
-              <span>Rotate 90°</span>
+              <Maximize2 className="w-3.5 h-3.5" />
+              <span>Fullscreen</span>
             </button>
           )}
-          {(hasDrawn || showExisting) && (
-            <button
-              type="button"
-              onClick={handleClear}
-              className="text-xs font-semibold text-destructive hover:underline active:scale-95 transition-transform"
-            >
-              {showExisting ? "Redraw signature" : "Clear signature"}
-            </button>
-          )}
+        </div>
+
+        {/* Action Controls Bar inside the canvas card */}
+        <div className="px-3 py-2 bg-slate-50 border-t border-slate-100 flex justify-between items-center shrink-0">
+          <span className="text-[10px] text-muted-foreground truncate mr-2">
+            {showExisting ? "Showing saved signature" : "Sign inside the box or expand to fullscreen"}
+          </span>
+          <div className="flex items-center gap-3 shrink-0">
+            {hasDrawn && !showExisting && (
+              <button
+                type="button"
+                onClick={handleRotate}
+                className="text-xs font-semibold text-accent hover:underline active:scale-95 transition-transform flex items-center gap-1"
+              >
+                <RotateCw className="w-3.5 h-3.5" />
+                <span>Rotate</span>
+              </button>
+            )}
+            {(hasDrawn || showExisting) && (
+              <button
+                type="button"
+                onClick={handleClear}
+                className="text-xs font-semibold text-destructive hover:underline active:scale-95 transition-transform"
+              >
+                {showExisting ? "Redraw" : "Clear"}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

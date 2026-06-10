@@ -2,7 +2,14 @@ import { z } from "zod";
 
 // --- Auth Schemas ---
 export const LoginSchema = z.object({
-  email: z.string().email(),
+  email: z.string().trim().min(3, "Email or phone number is required").refine(
+    (val) => {
+      const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
+      const isPhone = /^\+?[0-9\s-]{10,20}$/.test(val);
+      return isEmail || isPhone;
+    },
+    { message: "Must be a valid email or phone number" }
+  ),
   password: z.string().min(6),
 });
 

@@ -159,4 +159,26 @@ describe('Tenant Onboarding Integration Flow', () => {
     });
     expect(dbInvite?.email).toBe('rahul-fallback@test.com');
   });
+
+  it('should invite a tenant with zero monthly rent', async () => {
+    sendInvitationSpy.mockResolvedValueOnce({
+      providerMessageId: 'wamid.test_invite_zero',
+      attempts: 1,
+    });
+
+    const result = await tenantInvitationLifecycleService.createInvitation({
+      name: 'Zero Rent Tenant',
+      phone: '9876543211',
+      room_id: room.id,
+      monthly_rent: 0,
+    }, owner.id);
+
+    expect(result.action).toBe('INVITED');
+    expect(result.whatsapp_sent).toBe(true);
+
+    const dbTenant = await prisma.tenants.findUnique({
+      where: { id: result.tenant_id },
+    });
+    expect(Number(dbTenant?.monthly_rent)).toBe(0);
+  });
 });

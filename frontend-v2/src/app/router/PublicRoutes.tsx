@@ -70,6 +70,7 @@ export function PublicRoutes() {
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/activate" element={<ActivateAccountPage />} />
         <Route path="/activate/:token" element={<ActivateAccountPage />} />
+        <Route path="/invite/:token" element={<ActivateAccountPage />} />
         <Route path="/complete-profile" element={<CompleteProfilePage />} />
       </Route>
     </>

@@ -1,6 +1,8 @@
 import { prisma } from "../db";
 import { eventLog } from "../services/event-log-service";
 
+import type { AuthPayload } from "../auth-edge";
+
 export type OperationalScope = {
   owner_id: string;
   hostel_id?: string | null;
@@ -68,6 +70,61 @@ export async function requireHostelBelongsToOwner(ownerId: string, hostelId?: st
     throw err;
   }
   return assertHostelBelongsToOwner(ownerId, hostelId);
+}
+
+export async function resolveOwnerOrAdminScopeForHostel(session: AuthPayload | null, hostelId?: string | null): Promise<string> {
+  if (!session) {
+    const err: any = new Error("UNAUTHORIZED: Authentication required");
+    err.code = "UNAUTHORIZED";
+    throw err;
+  }
+
+  if (session.role === "ADMIN") {
+    if (hostelId) {
+      const hostel = await prisma.hostels.findUnique({
+        where: { id: hostelId },
+        select: { owner_id: true }
+      });
+      if (!hostel) {
+        const err: any = new Error("HOSTEL_NOT_FOUND: Hostel not found");
+        err.code = "HOSTEL_NOT_FOUND";
+        throw err;
+      }
+      if (session.owner_id && hostel.owner_id !== session.owner_id) {
+        const err: any = new Error("FORBIDDEN: Admin does not have access to this hostel");
+        err.code = "FORBIDDEN";
+        throw err;
+      }
+      return hostel.owner_id;
+    }
+    if (session.owner_id) {
+      return session.owner_id;
+    }
+    const err: any = new Error("HOSTEL_CONTEXT_REQUIRED: hostelId is required");
+    err.code = "HOSTEL_CONTEXT_REQUIRED";
+    throw err;
+  }
+
+  if (session.role === "OWNER") {
+    if (!session.owner_id) {
+      const err: any = new Error("UNAUTHORIZED: OWNER token missing owner_id");
+      err.code = "UNAUTHORIZED";
+      throw err;
+    }
+    if (session.owner_id !== session.sub) {
+      const err: any = new Error("UNAUTHORIZED: OWNER token owner_id mismatch");
+      err.code = "UNAUTHORIZED";
+      throw err;
+    }
+    if (hostelId) {
+      await requireHostelBelongsToOwner(session.owner_id, hostelId);
+    }
+    return session.owner_id;
+  }
+
+  const err: any = new Error("FORBIDDEN: Owner or Admin access required");
+  err.code = "FORBIDDEN";
+  throw err;
 }
 
 export async function assertTenantBelongsToOwner(tenantId: string, ownerId: string) {

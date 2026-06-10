@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 import { activityService } from "@/lib/services/activity-service";
-import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
+import { requireHostelBelongsToOwner, resolveOwnerOrAdminScopeForHostel } from "@/lib/security/scoped-query";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,8 +27,7 @@ export async function GET(req: NextRequest) {
       return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
     }
 
-    const scope = resolveOwnerScope(session);
-    await requireHostelBelongsToOwner(scope.owner_id, hostelId);
+    const ownerId = await resolveOwnerOrAdminScopeForHostel(session, hostelId);
 
     const search     = searchParams.get("search")     || undefined;
     const type       = searchParams.get("event_type") || undefined;
@@ -39,7 +38,7 @@ export async function GET(req: NextRequest) {
     const offset     = Math.max(0, parseInt(searchParams.get("offset") || "0"));
 
     const activity = await activityService.getOwnerActivity({
-      userId: scope.owner_id,
+      userId: ownerId,
       hostelId,
       tenantId,
       search,

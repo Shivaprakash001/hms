@@ -18,11 +18,11 @@ const readSessionExpiryNotice = (): { message?: string } | null => {
 };
 
 const getErrorDetails = (error: string) => {
-  if (error.includes('Incorrect email') || error.includes('incorrect') || error.includes('password')) {
+  if (error.includes('Incorrect email') || error.includes('incorrect') || error.includes('password') || error.includes('phone')) {
     return {
       title: 'Incorrect credentials',
-      message: 'The email or password you entered does not match our records.',
-      action: 'Double-check your email and try a different password.',
+      message: 'The email/phone or password you entered does not match our records.',
+      action: 'Double-check your email/phone and try a different password.',
     };
   }
   if (error.includes('Too many') || error.includes('rate') || error.includes('429')) {
@@ -35,8 +35,8 @@ const getErrorDetails = (error: string) => {
   if (error.includes('not found') || error.includes('404')) {
     return {
       title: 'Account not found',
-      message: 'No account exists with this email address.',
-      action: 'Check the email or contact your hostel manager.',
+      message: 'No account exists with this email or phone number.',
+      action: 'Check the email/phone or contact your hostel manager.',
     };
   }
   if (error.includes('connect') || error.includes('internet') || error.includes('network')) {
@@ -244,23 +244,23 @@ export function LoginPage() {
               );
             })()}
 
-            {/* Email */}
+            {/* Email or Mobile */}
             <div className="space-y-1.5">
               <label
                 className="text-sm font-semibold"
                 style={{ color: '#1B2D5B' }}
                 htmlFor="email"
               >
-                Email address
+                Email address or Mobile number
               </label>
               <input
                 id="email"
-                type="email"
+                type="text"
                 autoComplete="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
+                placeholder="you@example.com or mobile number"
                 className="w-full px-4 py-3 rounded-xl text-sm transition-all outline-none"
                 style={{
                   backgroundColor: '#fff',

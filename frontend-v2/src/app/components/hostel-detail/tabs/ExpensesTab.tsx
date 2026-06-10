@@ -244,6 +244,7 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
             setDraftExpense(expense);
             setShowAddExpense(true);
           }}
+          onDelete={(id) => deleteMutation.mutate(id)}
         />
       </section>
 
@@ -594,6 +595,7 @@ const RecentExpensesSection = memo(function RecentExpensesSection({
   onSelectExpense,
   onEditExpense,
   onDuplicateExpense,
+  onDelete,
 }: {
   expenses: Record<string, any>[];
   total: number;
@@ -604,6 +606,7 @@ const RecentExpensesSection = memo(function RecentExpensesSection({
   onSelectExpense: (expense: Record<string, any>) => void;
   onEditExpense: (expense: Record<string, any>) => void;
   onDuplicateExpense: (expense: Record<string, any>) => void;
+  onDelete: (id: string) => void;
 }) {
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search);
@@ -672,7 +675,7 @@ const RecentExpensesSection = memo(function RecentExpensesSection({
               onView={() => onSelectExpense(expense)}
               onEdit={() => onEditExpense(expense)}
               onDuplicate={() => onDuplicateExpense(expense)}
-              onDelete={() => deleteMutation.mutate(String(expense.id))}
+              onDelete={() => onDelete(String(expense.id))}
             />
           ))}
         </div>
