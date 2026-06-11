@@ -1,6 +1,6 @@
 import { fallbackLandingContent, type LandingMarketingContent } from './landingContent';
 
-const projectId = String(import.meta.env.VITE_SANITY_PROJECT_ID || '').trim();
+const projectId = String(import.meta.env.VITE_SANITY_PROJECT_ID || '8hc770qr').trim();
 const dataset = String(import.meta.env.VITE_SANITY_DATASET || 'production').trim();
 const apiVersion = String(import.meta.env.VITE_SANITY_API_VERSION || '2026-06-01').trim();
 
