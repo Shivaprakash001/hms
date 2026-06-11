@@ -33,7 +33,7 @@ export class RoomCapacityService {
       throw new Error("FORBIDDEN: Room belongs to a different owner");
     }
 
-    const [occupied, reserved] = await Promise.all([
+    const [occupied, reservedReservations, activeInvitations] = await Promise.all([
       db.roomAllocation.count({
         where: {
           room_id: roomId,
@@ -49,8 +49,16 @@ export class RoomCapacityService {
           expires_at: { gt: new Date() },
         },
       }),
+      db.tenant_invitations.count({
+        where: {
+          room_id: roomId,
+          status: { in: ["PENDING", "SENT"] },
+          expires_at: { gt: new Date() },
+        },
+      }),
     ]);
 
+    const reserved = Math.max(reservedReservations, activeInvitations);
     return this.toSnapshot(room, occupied, reserved);
   }
 
@@ -82,6 +90,12 @@ export class RoomCapacityService {
                 expires_at: { gt: new Date() },
               },
             },
+            tenant_invitations: {
+              where: {
+                status: { in: ["PENDING", "SENT"] },
+                expires_at: { gt: new Date() },
+              },
+            },
           },
         },
       },
@@ -93,7 +107,10 @@ export class RoomCapacityService {
         this.toSnapshot(
           room,
           Number(room._count?.room_allocations || 0),
-          Number(room._count?.tenant_invitation_reservations || 0),
+          Math.max(
+            Number(room._count?.tenant_invitation_reservations || 0),
+            Number(room._count?.tenant_invitations || 0)
+          ),
         ),
       ]),
     );

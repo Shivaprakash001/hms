@@ -368,4 +368,33 @@ describe("WhatsApp Tenant Onboarding - Invite Flow", () => {
     const state = await getSelectionState(ownerPhone);
     expect(state).toBeNull();
   });
-});
+
+  it("Scenario 9: Room capacity collision check with active/pending invitations", async () => {
+    const ownerPhone = "919999999999";
+    const { ownerId, rooms } = await seedOwnerAndProperties(ownerPhone, 1);
+
+    // Update room capacity to 1 (making it a single occupancy room)
+    await prisma.rooms.update({
+      where: { id: rooms[0].id },
+      data: { capacity: 1 },
+    });
+
+    // Create an active invitation to room 101 for tenant A
+    await tenantInvitationLifecycleService.createInvitation({
+      name: "Tenant A",
+      phone: "9876543215",
+      room_id: rooms[0].id,
+      monthly_rent: rooms[0].base_rent,
+    }, ownerId);
+
+    // Now try to invite Jane B to the same room 101.
+    // Command: invite Jane B 9876543216 101
+    const payload1 = makeWebhookPayload(ownerPhone, "invite Jane B 9876543216 101");
+    await whatsappWebhookEventService.processWebhookEvent(payload1.eventId, payload1.payload);
+
+    // Since room 101 is already reserved (capacity 1, 1 active invitation),
+    // there are no vacant beds available in the hostel, so the flow should cancel.
+    const state = await getSelectionState(ownerPhone);
+    expect(state).toBeNull(); // Selection state deleted due to no vacancy
+  });
+}, 30000);
