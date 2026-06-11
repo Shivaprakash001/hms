@@ -717,6 +717,50 @@ export class OwnerWhatsAppAssistantService {
       });
     }
 
+    const cleanDigits = phone.replace(/[^0-9]/g, "");
+    const last10 = cleanDigits.slice(-10);
+    if (last10.length === 10) {
+      const tenantProfile = await prisma.profile.findFirst({
+        where: {
+          phone: { contains: last10 },
+          role: "TENANT",
+        },
+      });
+
+      if (tenantProfile) {
+        return this.respondAndLog({
+          ownerId: identity.owner_id,
+          phone,
+          message,
+          command,
+          response: "Access denied: Tenants cannot connect to the Owner WhatsApp Assistant.",
+          success: false,
+        });
+      }
+
+      const tenantRecord = await prisma.tenants.findFirst({
+        where: {
+          OR: [
+            { phone_1: { contains: last10 } },
+            { phone_2: { contains: last10 } },
+            { phone_3: { contains: last10 } },
+            { guardian_phone: { contains: last10 } },
+          ],
+        },
+      });
+
+      if (tenantRecord) {
+        return this.respondAndLog({
+          ownerId: identity.owner_id,
+          phone,
+          message,
+          command,
+          response: "Access denied: Tenants and guardians cannot connect to the Owner WhatsApp Assistant.",
+          success: false,
+        });
+      }
+    }
+
     const existingPhoneOwner = await this.getVerifiedIdentity(phone);
     if (existingPhoneOwner && existingPhoneOwner.owner_id !== identity.owner_id) {
       return this.respondAndLog({

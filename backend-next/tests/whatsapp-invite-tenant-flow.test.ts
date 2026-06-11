@@ -6,6 +6,7 @@ import { getSelectionState, deleteSelectionState } from "@/lib/services/notifica
 import { rateLimitService } from "@/lib/services/rate-limit-service";
 import crypto from "crypto";
 import { tenantInvitationLifecycleService } from "@/src/services/tenants/tenant-invitation-lifecycle-service";
+import { ownerWhatsAppAssistantService } from "@/lib/services/notifications/owner-whatsapp-assistant";
 
 vi.spyOn(MetaWhatsAppProvider.prototype, "sendTemplate").mockResolvedValue({
   providerMessageId: "mock-template-id-12345",
@@ -396,5 +397,57 @@ describe("WhatsApp Tenant Onboarding - Invite Flow", () => {
     // there are no vacant beds available in the hostel, so the flow should cancel.
     const state = await getSelectionState(ownerPhone);
     expect(state).toBeNull(); // Selection state deleted due to no vacancy
+  });
+
+  it("Scenario 10: Tenants and Guardians cannot connect/link to the Owner WhatsApp Assistant", async () => {
+    const ownerPhone = "919999999999";
+    const { ownerId, hostels } = await seedOwnerAndProperties(ownerPhone, 1);
+
+    // 1. Generate a link code for the owner
+    const linkRes = await ownerWhatsAppAssistantService.createLinkCode(ownerId);
+    const code = linkRes.link_code;
+
+    // 2. Seed a tenant profile and a tenant record with matching phone number "919876543210"
+    const tenantId = crypto.randomUUID();
+    const tenantPhone = "919876543210";
+    await prisma.$executeRaw`
+      INSERT INTO "test"."profiles" (id, email, name, role, phone)
+      VALUES (${tenantId}::uuid, 'tenant@test.com', 'Jane Tenant', 'TENANT', ${tenantPhone})
+    `;
+    await prisma.$executeRaw`
+      INSERT INTO "test"."tenants" (id, profile_id, hostel_id, phone_1, status)
+      VALUES (${crypto.randomUUID()}::uuid, ${tenantId}::uuid, ${hostels[0].id}::uuid, ${tenantPhone}, 'ACTIVE')
+    `;
+
+    // 3. Try to link using the tenant's phone number
+    const payloadTenant = makeWebhookPayload(tenantPhone, `LINK ${code}`);
+    await whatsappWebhookEventService.processWebhookEvent(payloadTenant.eventId, payloadTenant.payload);
+
+    // The identity should NOT be verified for the tenant's phone
+    const tenantIdentity = await prisma.owner_whatsapp_identities.findFirst({
+      where: { phone_number: tenantPhone },
+    });
+    expect(tenantIdentity).toBeNull();
+
+    // 4. Seed a guardian phone "919876543211" under a tenant
+    const anotherTenantId = crypto.randomUUID();
+    await prisma.$executeRaw`
+      INSERT INTO "test"."profiles" (id, email, name, role)
+      VALUES (${anotherTenantId}::uuid, 'tenant2@test.com', 'Sam Tenant', 'TENANT')
+    `;
+    await prisma.$executeRaw`
+      INSERT INTO "test"."tenants" (id, profile_id, hostel_id, guardian_phone, status)
+      VALUES (${crypto.randomUUID()}::uuid, ${anotherTenantId}::uuid, ${hostels[0].id}::uuid, '9876543211', 'ACTIVE')
+    `;
+
+    // Try to link using the guardian's phone number
+    const payloadGuardian = makeWebhookPayload("919876543211", `LINK ${code}`);
+    await whatsappWebhookEventService.processWebhookEvent(payloadGuardian.eventId, payloadGuardian.payload);
+
+    // The identity should NOT be verified for the guardian's phone
+    const guardianIdentity = await prisma.owner_whatsapp_identities.findFirst({
+      where: { phone_number: "919876543211" },
+    });
+    expect(guardianIdentity).toBeNull();
   });
 }, 30000);
