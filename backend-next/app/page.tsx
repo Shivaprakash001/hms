@@ -261,6 +261,8 @@ export default async function HomePage() {
 
   const latency = Date.now() - startTime;
   console.log(`[CMS Debug] Fetch completed in ${latency}ms`);
+  console.log(`[CMS Debug Query Result] hostel:`, hostel);
+  console.log(`[CMS Debug Env] dataset:`, process.env.NEXT_PUBLIC_SANITY_DATASET, `projectId:`, process.env.NEXT_PUBLIC_SANITY_PROJECT_ID);
   console.log(`[CMS Debug] siteSettings: ${siteSettings ? 'LOADED' : 'MISSING'}`);
   console.log(`[CMS Debug] landingHostel (singleton): ${hostel ? `LOADED (ID: ${hostel._id || 'landingHostel'})` : 'MISSING'}`);
   console.log(`[CMS Debug] testimonials count: ${testimonials?.length || 0}`);
