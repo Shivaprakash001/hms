@@ -187,6 +187,7 @@ describe("sendTenantOnboardingNotification", () => {
         tenantId: "t1",
         hostelId: "h1",
         bodyParameters: expect.arrayContaining(["Rahul Kumar", "Sri Adithya Hostel", "G1"]),
+        languageCode: "en_IN",
       })
     );
 

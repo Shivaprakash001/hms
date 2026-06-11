@@ -111,6 +111,7 @@ export async function sendTenantOnboardingNotification(tenantId: string): Promis
       tenantId,
       hostelId: hostel.id,
       ownerId: tenant.owner_id || undefined,
+      languageCode: "en_IN",
     });
 
     if (result.skipped) {

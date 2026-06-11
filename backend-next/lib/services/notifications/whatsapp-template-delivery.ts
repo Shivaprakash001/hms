@@ -19,6 +19,7 @@ export type WhatsAppTemplateDeliveryInput = {
   hostelId?: string;
   ownerId?: string;
   obligationId?: string;
+  languageCode?: string;
 };
 
 export type WhatsAppTemplateDeliveryResult = {
@@ -73,6 +74,7 @@ export class WhatsAppTemplateDeliveryService {
         to: normalizedPhone,
         templateName: input.templateName,
         bodyParameters: input.bodyParameters,
+        language: input.languageCode ? { code: input.languageCode } : undefined,
       });
 
       // 3. Mark success
