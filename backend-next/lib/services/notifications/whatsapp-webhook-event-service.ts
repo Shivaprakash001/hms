@@ -245,12 +245,15 @@ export class WhatsAppWebhookEventService {
       return { event: existing[0], duplicate: true, eventHash, payload };
     }
 
+    const webhookEventId = crypto.randomUUID();
+
     const inserted = await prisma.$queryRaw<Array<{
       id: string;
       processing_status: string;
       processing_result: unknown;
     }>>`
       INSERT INTO whatsapp_webhook_events (
+        id,
         provider,
         event_hash,
         event_type,
@@ -263,6 +266,7 @@ export class WhatsAppWebhookEventService {
         processing_status
       )
       VALUES (
+        ${webhookEventId}::uuid,
         ${PROVIDER},
         ${eventHash},
         ${eventType},
