@@ -11,11 +11,36 @@
 | Document review | Document is approved or rejected | In-app or WhatsApp |
 | Move-out update | Exit workflow changes | In-app or WhatsApp |
 | Test reminder | Owner tests notification config | Email or WhatsApp |
+| Owner assistant command | Verified owner sends a Phase 1A WhatsApp command | WhatsApp |
 
 **How this works:**
 1. Business services create or request messages.
 2. Notification services select provider behavior.
 3. Logs store message attempts and webhook events.
+
+## WhatsApp Owner Assistant Phase 1A
+
+Phase 1A is a read-only WhatsApp operational interface for verified hostel owners.
+It is not an AI chatbot and does not perform write operations.
+
+| Command | Purpose | Data source |
+|---|---|---|
+| `LINK HMS-XXXX` | Connects an owner account to one WhatsApp number. Owners may connect multiple verified numbers. | `owner_whatsapp_identities` |
+| `HELP` | Shows supported commands. | Static response |
+| `SUMMARY` | Shows revenue, pending dues, occupancy, and expenses for the owner's active hostel scope. | Existing dashboard service |
+| `DUES` | Shows up to 10 tenants with the highest pending dues and total pending amount. | Existing payment dues service |
+
+**How this works:**
+1. The owner generates a temporary code from HMS with `/api/owner/whatsapp/link-code`.
+2. The owner sends `LINK HMS-XXXX` from WhatsApp.
+3. The WhatsApp webhook validates the code, stores the verified phone mapping, and sends a WhatsApp confirmation message.
+4. Future owner commands resolve the owner only from that verified phone mapping.
+5. `SUMMARY` and `DUES` reuse existing HMS services instead of duplicating calculations.
+6. Every handled owner command is logged in `owner_assistant_messages`.
+7. The owner dashboard lists verified WhatsApp numbers through `/api/owner/whatsapp/connections` and can disconnect a number through `/api/owner/whatsapp/connections/:connectionId`.
+
+Unsupported owner commands return `HELP`.
+Unlinked numbers are only handled by the owner assistant when they send `LINK`; other messages continue through existing WhatsApp routing.
 
 ## Cron jobs
 
@@ -73,6 +98,8 @@
 | `message_logs` | General message tracking. |
 | `whatsapp_logs` | WhatsApp delivery events. |
 | `whatsapp_webhook_events` | Raw WhatsApp webhook events. |
+| `owner_whatsapp_identities` | Verified owner phone mappings and temporary link codes. |
+| `owner_assistant_messages` | Owner assistant command audit records. |
 
 **How this works:**
 1. Logs preserve delivery evidence.

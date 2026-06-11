@@ -74,6 +74,18 @@ export const ownerService = {
         const response = await api.post('/notifications/test-reminder', { type, hostel_id: hostelId });
         return response.data;
     },
+    generateWhatsAppLinkCode: async () => {
+        const response = await api.post('/owner/whatsapp/link-code');
+        return response.data?.data ?? response.data;
+    },
+    getWhatsAppConnections: async () => {
+        const response = await api.get('/owner/whatsapp/connections');
+        return response.data?.data ?? response.data;
+    },
+    disconnectWhatsAppConnection: async (connectionId) => {
+        const response = await api.delete(`/owner/whatsapp/connections/${connectionId}`);
+        return response.data?.data ?? response.data;
+    },
     updateSectionConfig: async (hostelId, section, data) => {
         const response = await api.patch(`/hostels/${hostelId}/${section}`, data);
         return response.data;

@@ -402,6 +402,37 @@ model owner_dashboard_snapshots {
   @@index([stats_computed_at])
 }
 
+model owner_whatsapp_identities {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  owner_id             String    @db.Uuid
+  phone_number         String?
+  link_code            String?
+  link_code_expires_at DateTime? @db.Timestamptz(6)
+  is_verified          Boolean   @default(false)
+  verified_at          DateTime? @db.Timestamptz(6)
+  created_at           DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime? @db.Timestamptz(6)
+
+  @@unique([link_code])
+  @@index([owner_id])
+  @@index([phone_number])
+  @@index([is_verified, phone_number])
+}
+
+model owner_assistant_messages {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  owner_id     String?  @db.Uuid
+  phone_number String
+  message      String
+  command      String?
+  success      Boolean  @default(false)
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([owner_id, created_at])
+  @@index([phone_number, created_at])
+  @@index([command, created_at])
+}
+
 model payment_attempt_obligations {
   id                 String           @id @db.Uuid
   payment_attempt_id String           @db.Uuid
@@ -1846,4 +1877,3 @@ model Agreement {
   @@index([hostel_id])
   @@index([status])
 }
-

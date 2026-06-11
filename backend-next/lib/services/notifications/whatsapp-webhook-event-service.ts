@@ -6,6 +6,7 @@ import { formatDate, formatShortMonth } from "@/lib/format";
 import { financialService } from "@/src/services/payments/financial-service";
 import { rateLimitService } from "@/lib/services/rate-limit-service";
 import { MetaWhatsAppProvider } from "./providers/whatsapp/meta-provider";
+import { ownerWhatsAppAssistantService } from "./owner-whatsapp-assistant";
 import {
   getSelectionState,
   setSelectionState,
@@ -294,6 +295,16 @@ export class WhatsAppWebhookEventService {
       const commandResults: any[] = [];
 
       for (const msg of messages) {
+        const ownerResult = await ownerWhatsAppAssistantService.processInboundMessage(msg.from, msg.body);
+        if (ownerResult?.handled) {
+          commandResults.push({
+            channel: "OWNER_ASSISTANT",
+            ...ownerResult,
+          });
+          processedCommands++;
+          continue;
+        }
+
         const cleanBody = msg.body.trim().toUpperCase();
         const handler = WhatsAppWebhookEventService.COMMAND_HANDLERS[cleanBody];
         if (handler) {
