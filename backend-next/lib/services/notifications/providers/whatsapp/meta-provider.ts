@@ -179,6 +179,49 @@ export class MetaWhatsAppProvider {
     });
   }
 
+  async sendTextMessage(to: string, bodyText: string): Promise<WhatsAppSendResult> {
+    const phone = normalizeWhatsAppPhone(to);
+    const url = `${this.config.baseUrl}/${this.config.phoneNumberId}/messages`;
+    const body = {
+      messaging_product: "whatsapp",
+      to: phone,
+      type: "text",
+      text: {
+        body: bodyText,
+      },
+    };
+
+    let lastError: WhatsAppProviderError | null = null;
+    for (let attempt = 1; attempt <= this.config.maxRetries + 1; attempt += 1) {
+      try {
+        const result = await this.post(url, body, attempt);
+        const providerMessageId = Array.isArray((result as any)?.messages)
+          ? String((result as any).messages[0]?.id || "")
+          : "";
+        return {
+          providerMessageId: providerMessageId || null,
+          raw: result,
+          attempts: attempt,
+        };
+      } catch (error: any) {
+        if (error instanceof WhatsAppProviderError) {
+          lastError = error;
+          if (!error.retryable || attempt > this.config.maxRetries) throw error;
+          await sleep(Math.min(1000 * 2 ** (attempt - 1), 5000));
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    throw lastError || new WhatsAppProviderError({
+      message: "WhatsApp send failed",
+      code: "WHATSAPP_SEND_FAILED",
+      retryable: false,
+      attempts: this.config.maxRetries + 1,
+    });
+  }
+
   async sendOtp(input: { to: string; otp: string; purpose: string }): Promise<WhatsAppSendResult> {
     const phone = normalizeWhatsAppPhone(input.to);
     const templateName = process.env.WHATSAPP_OTP_TEMPLATE;
