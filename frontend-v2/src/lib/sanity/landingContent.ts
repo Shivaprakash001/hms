@@ -152,9 +152,9 @@ export const fallbackLandingContent: LandingMarketingContent = {
     canonicalUrl: 'https://sriadithyahostels.in/',
   },
   hero: {
-    title: 'Feel at Home, Every Day',
-    subtitle: 'Boys hostel, just 5 mins walk from SNIST',
-    supportingCopy: 'Join 78+ SNIST students, everything included.',
+    title: 'Feel at Home, Every Day (Fallback)',
+    subtitle: 'Boys hostel, just 5 mins walk from SNIST (Fallback)',
+    supportingCopy: 'Join senior SNIST students (Fallback)',
     trustBadge: 'Trusted by SNIST students since 2019',
     highlights: ['Meals Included', 'CCTV + Warden', '400m from SNIST'],
     primaryCta: { label: 'Book a Room Visit', href: '#contact' },

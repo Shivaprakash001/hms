@@ -4,122 +4,92 @@ const projectId = String(import.meta.env.VITE_SANITY_PROJECT_ID || '').trim();
 const dataset = String(import.meta.env.VITE_SANITY_DATASET || 'production').trim();
 const apiVersion = String(import.meta.env.VITE_SANITY_API_VERSION || '2026-06-01').trim();
 
-const imageProjection = `{
-  "url": coalesce(image.asset->url, externalUrl),
-  alt,
-  caption
-}`;
-
-const landingQuery = `*[_type == "landingPage" && pageKey == "home"] | order(_updatedAt desc)[0]{
-  "hostelProfile": hostelProfile->{
+const landingQuery = `{
+  "landingHostel": *[_type == "landingHostel"][0]{
     name,
-    phone,
-    whatsappNumber,
-    email,
-    shortLocation,
-    addressLines,
+    heroTitle,
+    heroSubtitle,
+    heroSupportingCopy,
+    heroHighlights,
+    gallery[] {
+      "url": image.asset->url,
+      caption,
+      alt
+    },
+    mapEmbedUrl,
+    totalBuildings,
+    sharingTypes,
+    amenitiesCount,
+    roomTypeTitle,
+    "roomImage": roomImage { "url": asset->url, alt },
     locationTitle,
     locationDescription,
     distanceTitle,
     distanceDescription,
-    googleMapsUrl,
-    googleMapsEmbedUrl,
-    ownerName,
-    ownerMessage,
-    "ownerPhoto": ownerPhoto${imageProjection}
-  },
-  "seo": seo->{
-    title,
-    description,
-    canonicalUrl,
-    "ogImage": ogImage${imageProjection}
-  },
-  "hero": hero->{
-    title,
-    subtitle,
-    supportingCopy,
-    trustBadge,
-    highlights,
-    primaryCta,
-    secondaryCta,
-    "ownerImage": ownerImage${imageProjection},
-    "carouselImages": carouselImages[]${imageProjection},
-    "tourVideos": tourVideos[]{
-      "id": id.current,
-      label,
-      "url": coalesce(videoFile.asset->url, externalUrl),
-      icon
+    shortLocation,
+    features[] {
+      title,
+      description,
+      icon,
+      "image": image { "url": asset->url, alt },
+      highlights
+    },
+    facilities[] {
+      title,
+      icon,
+      description
+    },
+    admissionSteps[] {
+      stepNumber,
+      title,
+      description
+    },
+    roomTypesImages[] {
+      roomType,
+      "image": image { "url": asset->url, alt }
     }
   },
-  "announcements": *[_type == "announcement" && _id in ^.announcements[]._ref && isActive != false] | order(priority desc){
-    title,
-    description,
-    cta,
-    startDate,
-    endDate,
-    priority
+  "siteSettings": *[_type == "siteSettings"][0]{
+    phoneNumber,
+    whatsappNumber,
+    email,
+    ownerName,
+    ownerQuote,
+    "ownerPhoto": ownerPhoto { "url": asset->url, alt },
+    announcements[] {
+      title,
+      description,
+      cta,
+      startDate,
+      endDate,
+      priority,
+      isActive
+    },
+    ogTitle,
+    ogDescription,
+    googleMapsUrl,
+    whatsappEnquiryTemplate,
+    whatsappFABTemplate
   },
-  "features": *[_type == "feature" && _id in ^.features[]._ref && isActive != false] | order(displayOrder asc){
-    title,
-    description,
-    icon,
-    "image": image${imageProjection},
-    displayOrder
-  },
-  "facilities": *[_type == "facility" && _id in ^.facilities[]._ref && isActive != false] | order(displayOrder asc){
-    "title": coalesce(title, label),
-    icon,
-    description,
-    displayOrder
-  },
-  "testimonials": *[_type == "testimonial" && _id in ^.testimonials[]._ref && isActive != false] | order(displayOrder asc){
+  "testimonials": *[_type == "testimonial" && isActive != false] | order(order asc) {
     name,
-    "role": coalesce(role, details, duration),
-    "review": coalesce(review, quote),
+    "role": coalesce(role, type),
+    "review": coalesce(quote, review),
     rating,
-    "image": select(
-      defined(image.image) => image${imageProjection},
-      defined(photo.image) => photo${imageProjection},
-      null
-    ),
-    displayOrder
+    "image": coalesce(image { "url": asset->url, alt }, photo { "url": asset->url, alt })
   },
-  "faqs": *[_type == "faq" && _id in ^.faqs[]._ref && isActive != false] | order(displayOrder asc){
+  "faqs": *[_type == "faq" && isActive != false] | order(order asc) {
     question,
-    answer,
-    displayOrder
-  },
-  "gallery": *[_type == "galleryImage" && _id in ^.gallery[]._ref && isActive != false] | order(displayOrder asc){
-    title,
-    category,
-    "url": coalesce(asset.image.asset->url, asset.externalUrl),
-    "alt": asset.alt,
-    "caption": coalesce(asset.caption, title),
-    displayOrder
-  },
-  "admissionSteps": *[_type == "admissionStep" && _id in ^.admissionSteps[]._ref && isActive != false] | order(coalesce(stepNumber, number) asc){
-    "stepNumber": coalesce(stepNumber, number),
-    title,
-    description
-  },
-  "footer": footer->{
-    title,
-    description,
-    quickLinks,
-    copyright
+    answer
   }
 }`;
 
 function hasImage(image: any) {
-  return Boolean(image?.url && image?.alt);
+  return Boolean(image?.url);
 }
 
 function hasText(value: unknown) {
   return typeof value === 'string' && value.trim().length > 0;
-}
-
-function compactImages(images: any[] | undefined) {
-  return Array.isArray(images) ? images.filter(hasImage) : [];
 }
 
 function compactFeatures(features: any[] | undefined) {
@@ -161,44 +131,60 @@ function activeAnnouncements(announcements: any[] | undefined) {
   return (Array.isArray(announcements) ? announcements : []).filter((item) => {
     const startsOk = !item?.startDate || new Date(item.startDate).getTime() <= now;
     const endsOk = !item?.endDate || new Date(item.endDate).getTime() >= now;
-    return item?.title && startsOk && endsOk;
+    return item?.title && startsOk && endsOk && item.isActive !== false;
   });
 }
 
-function mergeLandingContent(content: any): LandingMarketingContent {
+function mergeLandingContent(result: any): LandingMarketingContent {
+  const h = result?.landingHostel;
+  const s = result?.siteSettings;
+  const t = result?.testimonials || [];
+  const f = result?.faqs || [];
+
   return {
-    ...fallbackLandingContent,
     hostelProfile: {
-      ...fallbackLandingContent.hostelProfile,
-      ...(content?.hostelProfile || {}),
-      ownerPhoto: hasImage(content?.hostelProfile?.ownerPhoto) ? content.hostelProfile.ownerPhoto : fallbackLandingContent.hostelProfile.ownerPhoto,
+      name: h?.name || fallbackLandingContent.hostelProfile.name,
+      phone: s?.phoneNumber || fallbackLandingContent.hostelProfile.phone,
+      whatsappNumber: s?.whatsappNumber || fallbackLandingContent.hostelProfile.whatsappNumber,
+      email: s?.email || fallbackLandingContent.hostelProfile.email,
+      shortLocation: h?.shortLocation || fallbackLandingContent.hostelProfile.shortLocation,
+      addressLines: h?.shortLocation ? [h.name, h.shortLocation] : fallbackLandingContent.hostelProfile.addressLines,
+      locationTitle: h?.locationTitle || fallbackLandingContent.hostelProfile.locationTitle,
+      locationDescription: h?.locationDescription || fallbackLandingContent.hostelProfile.locationDescription,
+      distanceTitle: h?.distanceTitle || fallbackLandingContent.hostelProfile.distanceTitle,
+      distanceDescription: h?.distanceDescription || fallbackLandingContent.hostelProfile.distanceDescription,
+      googleMapsUrl: s?.googleMapsUrl || fallbackLandingContent.hostelProfile.googleMapsUrl,
+      googleMapsEmbedUrl: h?.mapEmbedUrl || fallbackLandingContent.hostelProfile.googleMapsEmbedUrl,
+      ownerName: s?.ownerName || fallbackLandingContent.hostelProfile.ownerName,
+      ownerMessage: s?.ownerQuote || fallbackLandingContent.hostelProfile.ownerMessage,
+      ownerPhoto: hasImage(s?.ownerPhoto) ? s.ownerPhoto : fallbackLandingContent.hostelProfile.ownerPhoto,
     },
     seo: {
-      ...fallbackLandingContent.seo,
-      ...(content?.seo || {}),
-      ogImage: hasImage(content?.seo?.ogImage) ? content.seo.ogImage : fallbackLandingContent.seo.ogImage,
+      title: s?.ogTitle || fallbackLandingContent.seo.title,
+      description: s?.ogDescription || fallbackLandingContent.seo.description,
+      canonicalUrl: fallbackLandingContent.seo.canonicalUrl,
     },
     hero: {
-      ...fallbackLandingContent.hero,
-      ...(content?.hero || {}),
-      ownerImage: hasImage(content?.hero?.ownerImage) ? content.hero.ownerImage : fallbackLandingContent.hero.ownerImage,
-      carouselImages: Array.isArray(content?.hero?.carouselImages) ? compactImages(content.hero.carouselImages) : [],
-      highlights: Array.isArray(content?.hero?.highlights) ? content.hero.highlights.filter(Boolean) : [],
-      tourVideos: Array.isArray(content?.hero?.tourVideos) && content.hero.tourVideos.length > 0
-        ? content.hero.tourVideos.filter((v: any) => v && v.id && v.label && v.url)
-        : fallbackLandingContent.hero.tourVideos,
+      title: h?.heroTitle || (import.meta.env.DEV ? '[CMS Hero Title missing]' : fallbackLandingContent.hero.title),
+      subtitle: h?.heroSubtitle || (import.meta.env.DEV ? '[CMS Hero Subtitle missing]' : fallbackLandingContent.hero.subtitle),
+      supportingCopy: h?.heroSupportingCopy || fallbackLandingContent.hero.supportingCopy,
+      trustBadge: fallbackLandingContent.hero.trustBadge,
+      highlights: h?.heroHighlights || fallbackLandingContent.hero.highlights,
+      carouselImages: h?.gallery && h.gallery.length > 0 ? h.gallery : fallbackLandingContent.hero.carouselImages,
+      tourVideos: fallbackLandingContent.hero.tourVideos,
     },
-    announcements: activeAnnouncements(content?.announcements),
-    features: compactFeatures(content?.features),
-    facilities: compactFacilities(content?.facilities),
-    testimonials: compactTestimonials(content?.testimonials),
-    faqs: compactFaqs(content?.faqs),
-    gallery: Array.isArray(content?.gallery) ? compactImages(content.gallery) : [],
-    admissionSteps: compactAdmissionSteps(content?.admissionSteps),
+    announcements: activeAnnouncements(s?.announcements),
+    features: compactFeatures(h?.features || fallbackLandingContent.features),
+    facilities: compactFacilities(h?.facilities || fallbackLandingContent.facilities),
+    testimonials: compactTestimonials(t.length ? t : fallbackLandingContent.testimonials),
+    faqs: compactFaqs(f.length ? f : fallbackLandingContent.faqs),
+    gallery: h?.gallery && h.gallery.length > 0 ? h.gallery : fallbackLandingContent.gallery,
+    admissionSteps: compactAdmissionSteps(h?.admissionSteps || fallbackLandingContent.admissionSteps),
     footer: {
-      ...fallbackLandingContent.footer,
-      ...(content?.footer || {}),
-      quickLinks: Array.isArray(content?.footer?.quickLinks) && content.footer.quickLinks.length ? content.footer.quickLinks : fallbackLandingContent.footer.quickLinks,
+      title: h?.name || fallbackLandingContent.footer.title,
+      description: fallbackLandingContent.footer.description,
+      quickLinks: fallbackLandingContent.footer.quickLinks,
+      copyright: `© ${new Date().getFullYear()} ${h?.name || fallbackLandingContent.footer.title}. All rights reserved.`,
     },
   };
 }

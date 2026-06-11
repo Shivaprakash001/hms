@@ -50,10 +50,10 @@ export function Hero({
 
   const startingPriceText = rupee(price);
   
-  let supportingCopy = availability?.hasLiveAvailability 
+  let supportingCopy = hostel?.heroSupportingCopy || (availability?.hasLiveAvailability 
     ? `Join ${availability?.occupiedBeds ?? 0} SNIST students`
-    : 'Join senior SNIST students at Sri Adithya';
-  if (startingPriceText) {
+    : 'Join senior SNIST students at Sri Adithya');
+  if (startingPriceText && !hostel?.heroSupportingCopy) {
     supportingCopy = `${supportingCopy} — ${startingPriceText}/month, everything included.`;
   }
 
@@ -124,10 +124,10 @@ export function Hero({
                 className="text-[28px] sm:text-4xl md:text-5xl lg:text-6xl font-bold text-[#1B2D5B] leading-tight mb-6"
                 style={{ fontFamily: 'var(--font-display)' }}
               >
-                {hostel?.heroTitle || '400m from SNIST. Home Food. Everything Included.'}
+                {hostel?.heroTitle || (process.env.NODE_ENV === 'development' ? '[CMS Hero Title missing]' : '')}
               </h1>
               <p className="text-lg md:text-2xl text-[#2C2C2A] leading-relaxed">
-                {hostel?.heroSubtitle || 'Comfortable boys hostel rooms designed for focus and peace of mind'}
+                {hostel?.heroSubtitle || (process.env.NODE_ENV === 'development' ? '[CMS Hero Subtitle missing]' : '')}
               </p>
             </motion.div>
 

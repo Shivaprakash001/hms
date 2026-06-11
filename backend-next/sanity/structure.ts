@@ -11,11 +11,18 @@ export const structure = (S: StructureBuilder) =>
             .schemaType('siteSettings')
             .documentId('siteSettings')
         ),
+      S.listItem()
+        .title('📝 Marketing Page Copy')
+        .child(
+          S.document()
+            .schemaType('landingHostel')
+            .documentId('landingHostel')
+        ),
       S.divider(),
       S.listItem()
-        .title('🏠 Hostels')
+        .title('🏠 Hostels (Operational)')
         .child(
-          S.documentTypeList('hostel').title('Hostels')
+          S.documentTypeList('hostel').title('Hostels (Operational)')
         ),
       S.listItem()
         .title('⭐ Testimonials')

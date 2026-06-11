@@ -38,6 +38,53 @@ export const SITE_SETTINGS_QUERY = `
   }
 `
 
+export const LANDING_HOSTEL_QUERY = `
+  *[_type == "landingHostel"][0] {
+    name,
+    heroTitle,
+    heroSubtitle,
+    heroSupportingCopy,
+    heroHighlights,
+    gallery[] {
+      image,
+      caption,
+      alt
+    },
+    mapEmbedUrl,
+    totalBuildings,
+    sharingTypes,
+    amenitiesCount,
+    roomTypeTitle,
+    roomImage,
+    locationTitle,
+    locationDescription,
+    distanceTitle,
+    distanceDescription,
+    shortLocation,
+    features[] {
+      title,
+      description,
+      icon,
+      image,
+      highlights
+    },
+    facilities[] {
+      title,
+      icon,
+      description
+    },
+    admissionSteps[] {
+      stepNumber,
+      title,
+      description
+    },
+    roomTypesImages[] {
+      roomType,
+      image
+    }
+  }
+`
+
 export const ACTIVE_HOSTEL_QUERY = `
   *[_type == "hostel" && slug.current == $slug][0] {
     name,

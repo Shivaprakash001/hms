@@ -10,6 +10,7 @@ import {
   categoryRating,
   food,
   parentTrust,
+  landingHostel,
 } from './sanity/schemaTypes'
 
 export default defineConfig({
@@ -23,6 +24,6 @@ export default defineConfig({
     visionTool(),
   ],
   schema: {
-    types: [siteSettings, hostel, testimonial, faq, categoryRating, food, parentTrust],
+    types: [siteSettings, hostel, testimonial, faq, categoryRating, food, parentTrust, landingHostel],
   },
 })

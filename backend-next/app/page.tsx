@@ -23,6 +23,7 @@ import type { LandingAvailability } from "@/components/landing/landingTypes";
 import { client } from "@/sanity/lib/client";
 import {
   SITE_SETTINGS_QUERY,
+  LANDING_HOSTEL_QUERY,
   ACTIVE_HOSTEL_QUERY,
   TESTIMONIALS_QUERY,
   FAQS_QUERY,
@@ -229,25 +230,42 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function HomePage() {
-  const [
-    siteSettings,
-    hostel,
-    testimonials,
-    faqs,
-    categoryRating,
-    food,
-    parentTrust,
-    availability,
-  ] = await Promise.all([
-    client.fetch(SITE_SETTINGS_QUERY, {}, { next: { tags: ["siteSettings"] } }),
-    client.fetch(ACTIVE_HOSTEL_QUERY, { slug: "hostel-1" }, { next: { tags: ["hostel"] } }),
-    client.fetch(TESTIMONIALS_QUERY, {}, { next: { tags: ["testimonial"] } }),
-    client.fetch(FAQS_QUERY, {}, { next: { tags: ["faq"] } }),
-    client.fetch(CATEGORY_RATINGS_QUERY, {}, { next: { tags: ["categoryRating"] } }),
-    client.fetch(FOOD_QUERY, {}, { next: { tags: ["food"] } }),
-    client.fetch(PARENT_TRUST_QUERY, {}, { next: { tags: ["parentTrust"] } }),
-    getAvailability(PRIMARY_VISIT_SLUG),
-  ]);
+  const startTime = Date.now();
+  
+  let siteSettings, hostel, testimonials, faqs, categoryRating, food, parentTrust, availability;
+  
+  try {
+    [
+      siteSettings,
+      hostel,
+      testimonials,
+      faqs,
+      categoryRating,
+      food,
+      parentTrust,
+      availability,
+    ] = await Promise.all([
+      client.fetch(SITE_SETTINGS_QUERY, {}, { next: { tags: ["siteSettings"] } }),
+      client.fetch(LANDING_HOSTEL_QUERY, {}, { next: { tags: ["landingHostel"] } }),
+      client.fetch(TESTIMONIALS_QUERY, {}, { next: { tags: ["testimonial"] } }),
+      client.fetch(FAQS_QUERY, {}, { next: { tags: ["faq"] } }),
+      client.fetch(CATEGORY_RATINGS_QUERY, {}, { next: { tags: ["categoryRating"] } }),
+      client.fetch(FOOD_QUERY, {}, { next: { tags: ["food"] } }),
+      client.fetch(PARENT_TRUST_QUERY, {}, { next: { tags: ["parentTrust"] } }),
+      getAvailability(PRIMARY_VISIT_SLUG),
+    ]);
+  } catch (err: any) {
+    console.error(`[CMS Debug Error] Promise.all fetch failed:`, err);
+    throw err;
+  }
+
+  const latency = Date.now() - startTime;
+  console.log(`[CMS Debug] Fetch completed in ${latency}ms`);
+  console.log(`[CMS Debug] siteSettings: ${siteSettings ? 'LOADED' : 'MISSING'}`);
+  console.log(`[CMS Debug] landingHostel (singleton): ${hostel ? `LOADED (ID: ${hostel._id || 'landingHostel'})` : 'MISSING'}`);
+  console.log(`[CMS Debug] testimonials count: ${testimonials?.length || 0}`);
+  console.log(`[CMS Debug] faqs count: ${faqs?.length || 0}`);
+  console.log(`[CMS Debug] availability: bedsAvailable=${availability?.bedsAvailable}, startingPrice=${availability?.startingPrice}, hasLiveAvailability=${availability?.hasLiveAvailability}`);
 
   // Strict CMS Contract Validation
   if (!siteSettings) {
@@ -269,10 +287,11 @@ export default async function HomePage() {
     throw new Error("Missing googleReviewCount in CMS");
   }
   if (!hostel) {
-    throw new Error("Missing hostel in CMS");
+    console.error("[CMS Debug Critical] landingHostel document was not found in Sanity. Reverting to fallback or throwing error.");
+    throw new Error("Missing landingHostel in CMS");
   }
   if (!hostel.name) {
-    throw new Error("Missing hostelName in CMS");
+    throw new Error("Missing landingHostel.name in CMS");
   }
 
   const testimonialsFormatted = testimonials?.map((t: any) => ({
@@ -387,6 +406,20 @@ export default async function HomePage() {
         hostelName={hostel.name} 
         whatsappFABTemplate={siteSettings.whatsappFABTemplate} 
       />
+      {process.env.NODE_ENV === 'development' && (
+        <div id="dev-debug-panel" className="fixed bottom-4 left-4 z-50 bg-slate-900/90 text-white p-3 rounded-lg border border-slate-700 shadow-2xl text-xs font-mono max-w-sm backdrop-blur-sm">
+          <div className="flex items-center justify-between mb-1.5 border-b border-slate-700 pb-1">
+            <span className="font-semibold text-[#F07B1D]">CMS Debug Status</span>
+            <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+          </div>
+          <p><strong>Connection:</strong> Connected (Sanity Production)</p>
+          <p><strong>Latency:</strong> {latency}ms</p>
+          <p><strong>Document ID:</strong> {hostel?._id || 'landingHostel'}</p>
+          <p><strong>Name:</strong> {hostel?.name || 'fallback'}</p>
+          <p><strong>Beds:</strong> {availability?.bedsAvailable ?? 'N/A'} (Dynamic API)</p>
+          <p><strong>Starting Price:</strong> {availability?.startingPrice ?? 'N/A'} (Dynamic API)</p>
+        </div>
+      )}
     </div>
   );
 }
