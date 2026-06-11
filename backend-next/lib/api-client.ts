@@ -41,8 +41,12 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401) {
       if (typeof window !== "undefined") {
         localStorage.removeItem("hms_auth_token");
-        // Use full reload to clear all state contexts
-        window.location.href = "/login?expired=true";
+        const publicPages = ["/login", "/register", "/"];
+        const isStudio = window.location.pathname.startsWith("/studio");
+        if (!publicPages.includes(window.location.pathname) && !isStudio) {
+          // Use full reload to clear all state contexts
+          window.location.href = "/login?expired=true";
+        }
       }
     }
     

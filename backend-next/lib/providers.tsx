@@ -50,13 +50,21 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    console.log("AuthGuard trace:", { pathname, loading, user: !!user });
     if (loading) return;
+    if (pathname && pathname.startsWith("/studio")) {
+      console.log("AuthGuard: bypassing redirect for studio path", pathname);
+      return;
+    }
+
     const publicPages = ["/login", "/register", "/"];
     const isPublic = publicPages.includes(pathname);
 
     if (!user && !isPublic) {
+      console.log("AuthGuard: redirecting to /login from", pathname);
       router.push("/login");
     } else if (user && isPublic) {
+      console.log("AuthGuard: redirecting to dashboard for logged in user");
       router.push(user.role === "TENANT" ? "/tenant/dashboard" : "/owner/dashboard");
     }
   }, [user, loading, pathname, router]);
