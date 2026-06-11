@@ -335,16 +335,29 @@ export class TenantService {
         const normOld = normalizeWhatsAppPhone(oldPrimary);
         const normNew = normalizeWhatsAppPhone(newPrimary);
         if (normOld !== normNew) {
-          const otp = data.phone_1_otp || data.phone_otp;
-          if (!otp) {
-            throw new Error("VALIDATION_ERROR: Verification code is required to update your primary phone number");
-          }
-          await authOtpService.verifyPhoneOtp({
-            phone: normNew,
-            otp,
-            purpose: "ProfileUpdate",
-            requestIp: null,
+          // Check if OTP was already verified by the frontend (status: VERIFIED)
+          const alreadyVerified = await prisma.phoneVerificationOtp.findFirst({
+            where: {
+              phone: normNew,
+              purpose: "ProfileUpdate",
+              status: "VERIFIED",
+              verified_at: { gte: new Date(Date.now() - 15 * 60 * 1000) },
+            },
+            orderBy: { verified_at: "desc" },
           });
+
+          if (!alreadyVerified) {
+            const otp = data.phone_1_otp || data.phone_otp;
+            if (!otp) {
+              throw new Error("VALIDATION_ERROR: Verification code is required to update your primary phone number");
+            }
+            await authOtpService.verifyPhoneOtp({
+              phone: normNew,
+              otp,
+              purpose: "ProfileUpdate",
+              requestIp: null,
+            });
+          }
         }
       } catch (err: any) {
         if (err.message?.includes("VALIDATION_ERROR")) throw err;
@@ -359,16 +372,30 @@ export class TenantService {
         const normOld = oldPhone2 ? normalizeWhatsAppPhone(oldPhone2) : "";
         const normNew = normalizeWhatsAppPhone(newPhone2);
         if (normOld !== normNew) {
-          const otp = data.phone_2_otp || data.guardian_otp;
-          if (!otp) {
-            throw new Error("VALIDATION_ERROR: Verification code is required to update the parent/guardian phone number");
-          }
-          await authOtpService.verifyPhoneOtp({
-            phone: normNew,
-            otp,
-            purpose: "ProfileUpdate",
-            requestIp: null,
+          // Check if OTP was already verified by the frontend (status: VERIFIED)
+          const alreadyVerified = await prisma.phoneVerificationOtp.findFirst({
+            where: {
+              phone: normNew,
+              purpose: "ProfileUpdate",
+              status: "VERIFIED",
+              verified_at: { gte: new Date(Date.now() - 15 * 60 * 1000) },
+            },
+            orderBy: { verified_at: "desc" },
           });
+
+          if (!alreadyVerified) {
+            // Fallback: try to verify OTP inline (e.g. if frontend didn't pre-verify)
+            const otp = data.phone_2_otp || data.guardian_otp;
+            if (!otp) {
+              throw new Error("VALIDATION_ERROR: Verification code is required to update the parent/guardian phone number");
+            }
+            await authOtpService.verifyPhoneOtp({
+              phone: normNew,
+              otp,
+              purpose: "ProfileUpdate",
+              requestIp: null,
+            });
+          }
         }
       } catch (err: any) {
         if (err.message?.includes("VALIDATION_ERROR")) throw err;
@@ -383,16 +410,29 @@ export class TenantService {
         const normOld = oldPhone3 ? normalizeWhatsAppPhone(oldPhone3) : "";
         const normNew = normalizeWhatsAppPhone(newPhone3);
         if (normOld !== normNew) {
-          const otp = data.phone_3_otp || data.emergency_otp;
-          if (!otp) {
-            throw new Error("VALIDATION_ERROR: Verification code is required to update the emergency contact phone number");
-          }
-          await authOtpService.verifyPhoneOtp({
-            phone: normNew,
-            otp,
-            purpose: "ProfileUpdate",
-            requestIp: null,
+          // Check if OTP was already verified by the frontend (status: VERIFIED)
+          const alreadyVerified = await prisma.phoneVerificationOtp.findFirst({
+            where: {
+              phone: normNew,
+              purpose: "ProfileUpdate",
+              status: "VERIFIED",
+              verified_at: { gte: new Date(Date.now() - 15 * 60 * 1000) },
+            },
+            orderBy: { verified_at: "desc" },
           });
+
+          if (!alreadyVerified) {
+            const otp = data.phone_3_otp || data.emergency_otp;
+            if (!otp) {
+              throw new Error("VALIDATION_ERROR: Verification code is required to update the emergency contact phone number");
+            }
+            await authOtpService.verifyPhoneOtp({
+              phone: normNew,
+              otp,
+              purpose: "ProfileUpdate",
+              requestIp: null,
+            });
+          }
         }
       } catch (err: any) {
         if (err.message?.includes("VALIDATION_ERROR")) throw err;
@@ -513,13 +553,32 @@ export class TenantService {
 
   private checkProfileCompletion(tenant: any) {
     const p = tenant.profile ?? tenant.profiles;
+    const isWorkingProf = String(tenant.profile_type || "").trim().toUpperCase() === "WORKING_PROFESSIONAL";
+
     const required = [
-      p.name, p.email, p.phone || tenant.phone_1,
-      p.emergency_contact, tenant.college_name,
-      tenant.roll_number, tenant.year_of_study, tenant.branch,
+      p.name,
+      p.email,
+      p.phone || tenant.phone_1,
+      p.emergency_contact,
       tenant.permanent_address,
     ];
-    return required.every(field => field !== null && field !== undefined && field !== "");
+
+    if (isWorkingProf) {
+      required.push(
+        tenant.office_name,
+        tenant.job_role,
+        tenant.office_location
+      );
+    } else {
+      required.push(
+        tenant.college_name,
+        tenant.roll_number,
+        tenant.year_of_study,
+        tenant.branch
+      );
+    }
+
+    return required.every(field => field !== null && field !== undefined && String(field).trim() !== "");
   }
 
   async requestReactivation(profileId: string, requestedBy: string) {

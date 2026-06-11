@@ -1226,6 +1226,66 @@ export function TenantProfilePortalPage() {
         <LogOut className="w-4 h-4" />
         Sign out
       </button>
+
+      {/* Floating Save/Cancel Bar */}
+      {editing && (
+        <div className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-lg bg-card/95 backdrop-blur-lg border border-border shadow-2xl rounded-2xl p-4 flex items-center justify-between gap-4 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="flex flex-col">
+            <span className="text-sm font-bold text-foreground">Unsaved changes</span>
+            <span className="text-[10px] text-muted-foreground">Modify details & save</span>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              className="text-xs font-semibold px-3 py-2 rounded-xl border border-border bg-background hover:bg-muted/30 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={saveMutation.isPending}
+              onClick={() => {
+                const p1 = phoneDigits(form.phone_1);
+                const p2 = phoneDigits(form.phone_2);
+                const p3 = phoneDigits(form.phone_3);
+
+                if (p1 !== originalPhones.phone_1 && (!otpVerified1 || p1 !== verifiedPhone1)) {
+                  toast.error('Please verify your primary mobile number first.');
+                  return;
+                }
+                if (p2 !== originalPhones.phone_2 && (!otpVerified2 || p2 !== verifiedPhone2)) {
+                  toast.error('Please verify the parent/guardian mobile number first.');
+                  return;
+                }
+                if (p3 !== originalPhones.phone_3 && (!otpVerified3 || p3 !== verifiedPhone3)) {
+                  toast.error('Please verify the emergency contact mobile number first.');
+                  return;
+                }
+
+                // Check duplicates among the three inputs
+                if (p1 === p2) {
+                  toast.error('Primary and Guardian phone numbers cannot be the same.');
+                  return;
+                }
+                if (p1 === p3) {
+                  toast.error('Primary and Emergency phone numbers cannot be the same.');
+                  return;
+                }
+                if (p2 && p2 === p3) {
+                  toast.error('Guardian and Emergency phone numbers cannot be the same.');
+                  return;
+                }
+
+                saveMutation.mutate();
+              }}
+              className="text-xs font-semibold px-4 py-2 rounded-xl bg-accent text-accent-foreground active:scale-[0.98] transition-transform disabled:opacity-50"
+            >
+              {saveMutation.isPending ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
