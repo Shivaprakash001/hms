@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
-import { moveOutService } from "@/lib/services/move-out-service";
+import { moveOutActorFromSession, moveOutService } from "@/lib/services/move-out-service";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
 import { MoveOutReason } from "@prisma/client";
@@ -102,6 +102,7 @@ export async function POST(req: NextRequest) {
       ownerId: resolvedOwnerId!,
       initiatedBy: session.sub,
       initiatedByRole,
+      actor: moveOutActorFromSession(session),
       reason: reason as MoveOutReason,
       reasonText,
       plannedExitDate,
