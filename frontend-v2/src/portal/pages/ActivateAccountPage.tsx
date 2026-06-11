@@ -721,7 +721,7 @@ export function ActivateAccountPage() {
       setAccount((prev) => ({
         ...prev,
         phone: prev.phone || phoneDigits(data.tenant?.phone_1 || data.profile?.phone),
-        email: prev.email || data.profile?.email || data.tenant?.personal_email || '',
+        email: prev.email || '',
       }));
 
       const college = String(data.tenant?.college_name || '');
@@ -933,6 +933,17 @@ export function ActivateAccountPage() {
 
   const accountSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    const emailVal = (account.email || '').trim().toLowerCase();
+    if (!emailVal) {
+      setError('Gmail ID is required');
+      return;
+    }
+    const gmailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
+    if (!gmailRegex.test(emailVal)) {
+      setError('Please enter a valid Gmail ID (e.g. name@gmail.com)');
+      return;
+    }
+
     const success = await submitStep('ACCOUNT', account);
     if (success) {
       setShowSuccessModal({
@@ -1339,12 +1350,12 @@ export function ActivateAccountPage() {
 
                 {/* Email Collection */}
                 <div className="block">
-                  <span className="text-xs font-semibold text-muted-foreground">Email Address</span>
+                  <span className="text-xs font-semibold text-muted-foreground">Gmail ID <span className="text-destructive">*</span></span>
                   <input
                     type="email"
                     value={account.email}
                     onChange={(e) => setAccount({ ...account, email: e.target.value.trim() })}
-                    placeholder="e.g. yourname@example.com"
+                    placeholder="e.g. yourname@gmail.com"
                     className={`${fieldClass} mt-1.5`}
                   />
                   <p className="mt-1 text-[11px] text-muted-foreground">

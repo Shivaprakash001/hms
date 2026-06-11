@@ -858,15 +858,13 @@ export class ActivationWorkflowService {
     }
     if (!profile) throw new Error("INVALID_TRANSITION: Complete account setup from a valid invitation");
 
-    let rawEmail = String(
-      (data && typeof data.email === "string") ? data.email : (profile?.email || invitation?.email || "")
-    ).trim().toLowerCase();
+    const rawEmail = String(data?.email || "").trim().toLowerCase();
     if (!rawEmail) {
-      rawEmail = `${primaryPhone}@hms.temp`;
+      throw new Error("VALIDATION_ERROR: Gmail ID is required");
     }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(rawEmail)) {
-      throw new Error("VALIDATION_ERROR: Enter a valid email address");
+    const gmailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
+    if (!gmailRegex.test(rawEmail)) {
+      throw new Error("VALIDATION_ERROR: Please enter a valid Gmail ID (e.g. name@gmail.com)");
     }
     const normalizedEmail = rawEmail;
 

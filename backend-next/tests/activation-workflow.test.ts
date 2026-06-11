@@ -146,7 +146,7 @@ describe("ActivationWorkflowService OTP Hardening", () => {
     vi.mocked(authOtpService.verifyPhoneOtp).mockResolvedValue(true as any);
 
     // Run mutate and check that it doesn't throw
-    const res = await activationService.mutate("test-token", "ACCOUNT", { password: "Password123!", confirm_password: "Password123!", otp: "123456" }, { ip: "127.0.0.1", userAgent: "test" });
+    const res = await activationService.mutate("test-token", "ACCOUNT", { password: "Password123!", confirm_password: "Password123!", otp: "123456", email: "tenant@gmail.com" }, { ip: "127.0.0.1", userAgent: "test" });
     expect(res).toBeDefined();
     expect(authOtpService.verifyPhoneOtp).toHaveBeenCalledWith({
       phone: "+918008046952",
@@ -195,7 +195,7 @@ describe("ActivationWorkflowService OTP Hardening", () => {
 
     vi.mocked(authOtpService.verifyPhoneOtp).mockResolvedValue(true as any);
 
-    const res = await activationService.mutate("test-token", "ACCOUNT", { otp: "123456" }, { ip: "127.0.0.1", userAgent: "test" });
+    const res = await activationService.mutate("test-token", "ACCOUNT", { otp: "123456", email: "tenant@gmail.com" }, { ip: "127.0.0.1", userAgent: "test" });
     expect(res).toBeDefined();
   });
 });
