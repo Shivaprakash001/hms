@@ -11,7 +11,26 @@ export interface BalanceSelectionState {
   expiresAt: string;
 }
 
-const memoryState = new Map<string, { state: BalanceSelectionState; expiresAt: number }>();
+export interface InviteTenantSessionState {
+  phone: string;
+  action: "INVITE_TENANT";
+  step: "AWAITING_NAME" | "AWAITING_PHONE" | "AWAITING_HOSTEL" | "AWAITING_ROOM" | "AWAITING_CONFIRMATION";
+  data: {
+    name?: string;
+    phone?: string;
+    hostelId?: string;
+    roomId?: string;
+    roomNo?: string;
+    monthlyRent?: number;
+    advanceDeposit?: number;
+  };
+  createdAt: string;
+  expiresAt: string;
+}
+
+export type WhatsAppSessionState = BalanceSelectionState | InviteTenantSessionState;
+
+const memoryState = new Map<string, { state: WhatsAppSessionState; expiresAt: number }>();
 
 function getRedisKey(phone: string): string {
   // Use prefix/version conventions consistent with keys.ts
@@ -19,13 +38,13 @@ function getRedisKey(phone: string): string {
   return `${prefix}:v1:whatsapp:selection:${phone}`;
 }
 
-export async function getSelectionState(phone: string): Promise<BalanceSelectionState | null> {
+export async function getSelectionState(phone: string): Promise<WhatsAppSessionState | null> {
   const redisKey = getRedisKey(phone);
   const redis = getRedisClient();
 
   if (redis) {
     try {
-      const val = await redis.get<BalanceSelectionState>(redisKey);
+      const val = await redis.get<WhatsAppSessionState>(redisKey);
       if (val) {
         return val;
       }
@@ -45,17 +64,17 @@ export async function getSelectionState(phone: string): Promise<BalanceSelection
 
 export async function setSelectionState(
   phone: string,
-  state: Omit<BalanceSelectionState, "createdAt" | "expiresAt">,
+  state: Omit<BalanceSelectionState, "createdAt" | "expiresAt"> | Omit<InviteTenantSessionState, "createdAt" | "expiresAt">,
   ttlSeconds = 600
 ): Promise<void> {
   const now = new Date();
   const expires = new Date(now.getTime() + ttlSeconds * 1000);
 
-  const fullState: BalanceSelectionState = {
+  const fullState: WhatsAppSessionState = {
     ...state,
     createdAt: now.toISOString(),
     expiresAt: expires.toISOString(),
-  };
+  } as WhatsAppSessionState;
 
   const redisKey = getRedisKey(phone);
   const redis = getRedisClient();
@@ -95,3 +114,4 @@ export async function deleteSelectionState(phone: string): Promise<void> {
 
   memoryState.delete(phone);
 }
+

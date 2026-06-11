@@ -314,7 +314,7 @@ export class WhatsAppWebhookEventService {
         } else {
           // Check if there is an active selection state for this sender
           const selectionState = await getSelectionState(msg.from);
-          if (selectionState) {
+          if (selectionState && selectionState.action === "BALANCE_SELECTION") {
             const res = await this.handleSelectionReply(msg, selectionState);
             commandResults.push(res);
             processedCommands++;

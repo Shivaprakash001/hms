@@ -5,8 +5,25 @@ import { dashboardService } from "@/lib/services/dashboard-service";
 import { paymentService } from "@/src/services/payments/payment-service";
 import { reminderService } from "@/src/services/payments/reminder-service";
 import { MetaWhatsAppProvider, normalizeWhatsAppPhone } from "./providers/whatsapp/meta-provider";
+import {
+  getSelectionState,
+  setSelectionState,
+  deleteSelectionState,
+  InviteTenantSessionState,
+} from "./whatsapp-selection-state";
+import { normalizeIndianPhone } from "@/lib/utils/phone-utils";
+import { tenantInvitationLifecycleService } from "@/src/services/tenants/tenant-invitation-lifecycle-service";
+import { roomCapacityService } from "@/lib/services/room-capacity-service";
+import { hostelBillingPreferencesService } from "@/lib/services/hostel-billing-preferences-service";
 
 const logger = getLogger("owner.whatsapp-assistant");
+
+interface ParsedInvite {
+  raw: string;
+  name?: string;
+  phone?: string;
+  tokens: string[];
+}
 
 type OwnerIdentity = {
   id: string;
@@ -63,6 +80,7 @@ const HELP_TEXT = [
   "SUMMARY",
   "DUES",
   "SEND REMINDERS",
+  "INVITE",
   "HELP",
   "",
   "Reply YES or NO when confirming an action.",
@@ -78,6 +96,7 @@ const LINK_SUCCESS_TEXT = [
   "SUMMARY",
   "DUES",
   "SEND REMINDERS",
+  "INVITE",
   "HELP",
 ].join("\n");
 
@@ -89,6 +108,7 @@ const ALREADY_CONNECTED_TEXT = [
   "SUMMARY",
   "DUES",
   "SEND REMINDERS",
+  "INVITE",
   "HELP",
 ].join("\n");
 
@@ -270,6 +290,16 @@ export class OwnerWhatsAppAssistantService {
     const ownerId = verifiedIdentity?.owner_id;
     if (!ownerId) return null;
 
+    const cleanMsgLower = message.trim().toLowerCase();
+    if (cleanMsgLower.startsWith("invite")) {
+      return this.handleStructuredInviteCommand(ownerId, normalizedPhone, message);
+    }
+
+    const selectionState = await getSelectionState(normalizedPhone);
+    if (selectionState && selectionState.action === "INVITE_TENANT") {
+      return this.handleInviteTenantStateFlow(ownerId, normalizedPhone, message, selectionState);
+    }
+
     const cleanMsg = message.trim();
     const isQuickAction = cleanMsg.includes("⚡ Quick Action") || cleanMsg.toUpperCase() === "⚡ QUICK ACTION";
     const isViewDues = cleanMsg.includes("⚠️ View Dues") || cleanMsg.toUpperCase() === "⚠️ VIEW DUES";
@@ -389,6 +419,8 @@ export class OwnerWhatsAppAssistantService {
             "👥 Pending Onboarding",
             "",
             inviteLines.join("\n\n"),
+            "",
+            "👉 Next Best Action: Reply INVITE to invite a new tenant.",
           ].join("\n");
 
           return this.respondAndLog({
@@ -434,6 +466,8 @@ export class OwnerWhatsAppAssistantService {
             "",
             "Occupancy",
             `${overallOccupancy}%`,
+            "",
+            "👉 Next Best Action: Reply INVITE to assign a room and send an invitation.",
           ].join("\n");
 
           return this.respondAndLog({
@@ -1256,6 +1290,840 @@ export class OwnerWhatsAppAssistantService {
         error: error?.message || String(error),
       });
     }
+  }
+
+  private async startInviteTenantFlow(ownerId: string, phone: string): Promise<InboundOwnerResult> {
+    await setSelectionState(phone, {
+      phone,
+      action: "INVITE_TENANT",
+      step: "AWAITING_NAME",
+      data: {},
+    });
+
+    const response = [
+      "Let's invite a new tenant.",
+      "",
+      "What is the tenant's full name?",
+      "",
+      "(Reply CANCEL at any time to abort)",
+    ].join("\n");
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message: "INVITE",
+      command: "INVITE_TENANT_INIT",
+      response,
+      success: true,
+    });
+  }
+
+  private async handleInviteTenantStateFlow(
+    ownerId: string,
+    phone: string,
+    message: string,
+    state: InviteTenantSessionState
+  ): Promise<InboundOwnerResult> {
+    const input = message.trim();
+    const inputUpper = input.toUpperCase();
+
+    if (inputUpper === "CANCEL" || inputUpper === "CANCEL ") {
+      await deleteSelectionState(phone);
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "INVITE_TENANT_CANCEL",
+        response: "❌ Invitation cancelled.",
+        success: true,
+      });
+    }
+
+    switch (state.step) {
+      case "AWAITING_NAME": {
+        const name = input;
+        if (!name || name.length < 2) {
+          return this.respondAndLog({
+            ownerId,
+            phone,
+            message,
+            command: "INVITE_TENANT_NAME_INVALID",
+            response: "Name must be at least 2 characters. Please reply with the tenant's full name:",
+            success: false,
+          });
+        }
+
+        await setSelectionState(phone, {
+          phone,
+          action: "INVITE_TENANT",
+          step: "AWAITING_PHONE",
+          data: {
+            ...state.data,
+            name,
+          },
+        });
+
+        return this.respondAndLog({
+          ownerId,
+          phone,
+          message,
+          command: "INVITE_TENANT_NAME_SET",
+          response: `Got it. Name: ${name}\n\nWhat is the tenant's phone number? (e.g. 9876543210)`,
+          success: true,
+        });
+      }
+
+      case "AWAITING_PHONE": {
+        const normalized = normalizeIndianPhone(input);
+        if (!normalized) {
+          return this.respondAndLog({
+            ownerId,
+            phone,
+            message,
+            command: "INVITE_TENANT_PHONE_INVALID",
+            response: "Invalid phone number. Please enter a valid 10-digit Indian mobile number:",
+            success: false,
+          });
+        }
+
+        // Check if there is an active invitation with this phone number
+        const activeExisting = await prisma.tenant_invitations.findFirst({
+          where: {
+            owner_id: ownerId,
+            status: { in: ["SENT", "PENDING", "ACCEPTED"] },
+            phone: normalized,
+          },
+        });
+
+        if (activeExisting) {
+          await deleteSelectionState(phone);
+          return this.respondAndLog({
+            ownerId,
+            phone,
+            message,
+            command: "INVITE_TENANT_PHONE_DUPLICATE",
+            response: `An active invitation already exists for +91 ${normalized.slice(-10)}. Discarding current flow.`,
+            success: false,
+          });
+        }
+
+        const hostels = await prisma.hostels.findMany({
+          where: { owner_id: ownerId, is_active: true },
+          orderBy: { name: "asc" },
+        });
+
+        if (hostels.length === 0) {
+          await deleteSelectionState(phone);
+          return this.respondAndLog({
+            ownerId,
+            phone,
+            message,
+            command: "INVITE_TENANT_NO_HOSTELS",
+            response: "No active hostels found. Register a hostel first.",
+            success: false,
+          });
+        }
+
+        if (hostels.length === 1) {
+          const hostel = hostels[0];
+          const rooms = await prisma.rooms.findMany({
+            where: { hostel_id: hostel.id, is_active: true },
+            orderBy: { room_no: "asc" },
+          });
+
+          const availableRooms: any[] = [];
+          for (const r of rooms) {
+            const cap = await roomCapacityService.getRoomCapacitySnapshot(r.id, { ownerId });
+            if (cap.available > 0) {
+              availableRooms.push({ room: r, available: cap.available });
+            }
+          }
+
+          if (availableRooms.length === 0) {
+            await deleteSelectionState(phone);
+            return this.respondAndLog({
+              ownerId,
+              phone,
+              message,
+              command: "INVITE_TENANT_NO_VACANCY",
+              response: `No vacant beds available in ${hostel.name}. Flow cancelled.`,
+              success: false,
+            });
+          }
+
+          await setSelectionState(phone, {
+            phone,
+            action: "INVITE_TENANT",
+            step: "AWAITING_ROOM",
+            data: {
+              ...state.data,
+              phone: normalized,
+              hostelId: hostel.id,
+            },
+          });
+
+          const roomLines = availableRooms.map((ar, idx) => `${idx + 1}. Room ${ar.room.room_no} (${ar.available} vacant)`);
+          const response = [
+            `Selected Hostel: ${hostel.name}`,
+            "",
+            "Available Rooms:",
+            ...roomLines,
+            "",
+            "Reply with the room number (e.g. 101) or list index:",
+          ].join("\n");
+
+          return this.respondAndLog({
+            ownerId,
+            phone,
+            message,
+            command: "INVITE_TENANT_HOSTEL_AUTOSELECTED",
+            response,
+            success: true,
+          });
+        }
+
+        // Multiple hostels
+        await setSelectionState(phone, {
+          phone,
+          action: "INVITE_TENANT",
+          step: "AWAITING_HOSTEL",
+          data: {
+            ...state.data,
+            phone: normalized,
+          },
+        });
+
+        const hostelLines = hostels.map((h, idx) => `${idx + 1}. ${h.name}`);
+        const response = [
+          "Select a Hostel:",
+          ...hostelLines,
+          "",
+          "Reply with the hostel number (e.g. 1 or 2):",
+        ].join("\n");
+
+        return this.respondAndLog({
+          ownerId,
+          phone,
+          message,
+          command: "INVITE_TENANT_AWAITING_HOSTEL",
+          response,
+          success: true,
+        });
+      }
+
+      case "AWAITING_HOSTEL": {
+        const hostels = await prisma.hostels.findMany({
+          where: { owner_id: ownerId, is_active: true },
+          orderBy: { name: "asc" },
+        });
+
+        let selectedHostel = null;
+        const parsedIdx = parseInt(input, 10);
+        if (!isNaN(parsedIdx) && parsedIdx >= 1 && parsedIdx <= hostels.length) {
+          selectedHostel = hostels[parsedIdx - 1];
+        } else {
+          selectedHostel = hostels.find((h) => h.name.toLowerCase() === input.toLowerCase());
+        }
+
+        if (!selectedHostel) {
+          const hostelLines = hostels.map((h, idx) => `${idx + 1}. ${h.name}`);
+          return this.respondAndLog({
+            ownerId,
+            phone,
+            message,
+            command: "INVITE_TENANT_HOSTEL_INVALID",
+            response: `Invalid selection. Please choose from the list:\n\n${hostelLines.join("\n")}`,
+            success: false,
+          });
+        }
+
+        const rooms = await prisma.rooms.findMany({
+          where: { hostel_id: selectedHostel.id, is_active: true },
+          orderBy: { room_no: "asc" },
+        });
+
+        const availableRooms: any[] = [];
+        for (const r of rooms) {
+          const cap = await roomCapacityService.getRoomCapacitySnapshot(r.id, { ownerId });
+          if (cap.available > 0) {
+            availableRooms.push({ room: r, available: cap.available });
+          }
+        }
+
+        if (availableRooms.length === 0) {
+          await deleteSelectionState(phone);
+          return this.respondAndLog({
+            ownerId,
+            phone,
+            message,
+            command: "INVITE_TENANT_NO_VACANCY",
+            response: `No vacant beds available in ${selectedHostel.name}. Flow cancelled.`,
+            success: false,
+          });
+        }
+
+        await setSelectionState(phone, {
+          phone,
+          action: "INVITE_TENANT",
+          step: "AWAITING_ROOM",
+          data: {
+            ...state.data,
+            hostelId: selectedHostel.id,
+          },
+        });
+
+        const roomLines = availableRooms.map((ar, idx) => `${idx + 1}. Room ${ar.room.room_no} (${ar.available} vacant)`);
+        const response = [
+          `Selected Hostel: ${selectedHostel.name}`,
+          "",
+          "Available Rooms:",
+          ...roomLines,
+          "",
+          "Reply with the room number (e.g. 101) or list index:",
+        ].join("\n");
+
+        return this.respondAndLog({
+          ownerId,
+          phone,
+          message,
+          command: "INVITE_TENANT_HOSTEL_SET",
+          response,
+          success: true,
+        });
+      }
+
+      case "AWAITING_ROOM": {
+        const hostelId = state.data.hostelId!;
+        const rooms = await prisma.rooms.findMany({
+          where: { hostel_id: hostelId, is_active: true },
+          orderBy: { room_no: "asc" },
+        });
+
+        const availableRooms: any[] = [];
+        for (const r of rooms) {
+          const cap = await roomCapacityService.getRoomCapacitySnapshot(r.id, { ownerId });
+          if (cap.available > 0) {
+            availableRooms.push({ room: r, available: cap.available });
+          }
+        }
+
+        let selectedRoom = null;
+        const parsedIdx = parseInt(input, 10);
+        if (!isNaN(parsedIdx) && parsedIdx >= 1 && parsedIdx <= availableRooms.length) {
+          selectedRoom = availableRooms[parsedIdx - 1].room;
+        } else {
+          const cleanInput = input.toLowerCase().replace(/^room\s+/, "").trim();
+          selectedRoom = availableRooms.find((ar) => ar.room.room_no.toLowerCase().trim() === cleanInput)?.room;
+        }
+
+        if (!selectedRoom) {
+          const roomLines = availableRooms.map((ar, idx) => `${idx + 1}. Room ${ar.room.room_no} (${ar.available} vacant)`);
+          return this.respondAndLog({
+            ownerId,
+            phone,
+            message,
+            command: "INVITE_TENANT_ROOM_INVALID",
+            response: `Invalid selection. Please choose from the available rooms:\n\n${roomLines.join("\n")}`,
+            success: false,
+          });
+        }
+
+        const defaults = await hostelBillingPreferencesService.resolveTenantInviteDefaults(selectedRoom.id, ownerId);
+        const resolved = defaults.resolved_values;
+
+        const hostel = await prisma.hostels.findUnique({
+          where: { id: hostelId },
+          select: { name: true },
+        });
+
+        await setSelectionState(phone, {
+          phone,
+          action: "INVITE_TENANT",
+          step: "AWAITING_CONFIRMATION",
+          data: {
+            ...state.data,
+            roomId: selectedRoom.id,
+            roomNo: selectedRoom.room_no,
+            monthlyRent: resolved.monthly_rent,
+            advanceDeposit: resolved.advance_deposit,
+          },
+        });
+
+        const response = [
+          "Please confirm invitation details:",
+          "",
+          `Tenant: ${state.data.name}`,
+          `Phone: +91 ${state.data.phone?.slice(-10)}`,
+          `Hostel: ${hostel?.name || "N/A"}`,
+          `Room: Room ${selectedRoom.room_no}`,
+          `Monthly Rent: ₹${resolved.monthly_rent.toLocaleString("en-IN")}`,
+          `Security Deposit: ₹${resolved.advance_deposit.toLocaleString("en-IN")}`,
+          "",
+          "Send invitation? Reply YES or NO.",
+        ].join("\n");
+
+        return this.respondAndLog({
+          ownerId,
+          phone,
+          message,
+          command: "INVITE_TENANT_ROOM_SET",
+          response,
+          success: true,
+        });
+      }
+
+      case "AWAITING_CONFIRMATION": {
+        if (inputUpper === "YES" || inputUpper === "Y") {
+          try {
+            // Re-verify room capacity right before writing
+            const cap = await roomCapacityService.getRoomCapacitySnapshot(state.data.roomId!, { ownerId });
+            if (cap.available <= 0) {
+              await deleteSelectionState(phone);
+              return this.respondAndLog({
+                ownerId,
+                phone,
+                message,
+                command: "INVITE_TENANT_ERROR",
+                response: "❌ Selected room is no longer vacant. Flow cancelled.",
+                success: false,
+              });
+            }
+
+            const invitePayload = {
+              name: state.data.name,
+              phone: state.data.phone,
+              room_id: state.data.roomId,
+              monthly_rent: state.data.monthlyRent,
+              advance_deposit: state.data.advanceDeposit,
+            };
+
+            await tenantInvitationLifecycleService.createInvitation(invitePayload, ownerId);
+            await deleteSelectionState(phone);
+
+            return this.respondAndLog({
+              ownerId,
+              phone,
+              message,
+              command: "INVITE_TENANT_SUCCESS",
+              response: `✅ Invitation sent successfully to ${state.data.name} via WhatsApp!`,
+              success: true,
+            });
+          } catch (err: any) {
+            await deleteSelectionState(phone);
+            return this.respondAndLog({
+              ownerId,
+              phone,
+              message,
+              command: "INVITE_TENANT_ERROR",
+              response: `❌ Failed to create invitation: ${err.message || String(err)}`,
+              success: false,
+            });
+          }
+        } else if (inputUpper === "NO" || inputUpper === "N") {
+          await deleteSelectionState(phone);
+          return this.respondAndLog({
+            ownerId,
+            phone,
+            message,
+            command: "INVITE_TENANT_CANCELLED",
+            response: "❌ Invitation cancelled.",
+            success: true,
+          });
+        } else {
+          return this.respondAndLog({
+            ownerId,
+            phone,
+            message,
+            command: "INVITE_TENANT_CONFIRMATION_INVALID",
+            response: "Please reply YES to send the invitation, or NO to cancel.",
+            success: false,
+          });
+        }
+      }
+    }
+  }
+
+  private parseInviteMessage(message: string): ParsedInvite {
+    const clean = message.trim();
+    const lower = clean.toLowerCase();
+
+    let remainder = "";
+    if (lower.startsWith("invite tenant")) {
+      remainder = clean.substring(13).trim();
+    } else if (lower.startsWith("invite")) {
+      remainder = clean.substring(6).trim();
+    } else {
+      return { raw: clean, tokens: [] };
+    }
+
+    if (!remainder) {
+      return { raw: clean, tokens: [] };
+    }
+
+    let rawTokens: string[] = [];
+    if (remainder.includes(",") || remainder.includes("|") || remainder.includes("/")) {
+      const delimiter = remainder.includes(",") ? "," : remainder.includes("|") ? "|" : "/";
+      rawTokens = remainder.split(delimiter).map((t) => t.trim()).filter(Boolean);
+    } else {
+      rawTokens = remainder.split(/\s+/).map((t) => t.trim()).filter(Boolean);
+    }
+
+    let phoneToken: string | undefined;
+    let phoneIdx = -1;
+    for (let i = 0; i < rawTokens.length; i++) {
+      const tok = rawTokens[i];
+      const stripped = tok.replace(/[^0-9+]/g, "");
+      if (/^\+?\d{10,13}$/.test(stripped)) {
+        phoneToken = tok;
+        phoneIdx = i;
+        break;
+      }
+    }
+
+    let name: string | undefined;
+    let remainingTokens: string[] = [];
+
+    if (phoneIdx !== -1) {
+      const nameTokens = rawTokens.slice(0, phoneIdx);
+      if (nameTokens.length > 0) {
+        name = nameTokens.join(" ");
+      }
+      remainingTokens = rawTokens.slice(phoneIdx + 1);
+    } else {
+      name = rawTokens.join(" ");
+    }
+
+    return {
+      raw: clean,
+      name,
+      phone: phoneToken,
+      tokens: remainingTokens,
+    };
+  }
+
+  private async handleStructuredInviteCommand(
+    ownerId: string,
+    phone: string,
+    message: string
+  ): Promise<InboundOwnerResult> {
+    const parsed = this.parseInviteMessage(message);
+
+    if (!parsed.name && !parsed.phone && parsed.tokens.length === 0) {
+      return this.startInviteTenantFlow(ownerId, phone);
+    }
+
+    const data: any = {};
+
+    if (parsed.name && parsed.name.length >= 2) {
+      data.name = parsed.name;
+    }
+
+    if (parsed.phone) {
+      const normalized = normalizeIndianPhone(parsed.phone);
+      if (normalized) {
+        const activeExisting = await prisma.tenant_invitations.findFirst({
+          where: {
+            owner_id: ownerId,
+            status: { in: ["SENT", "PENDING", "ACCEPTED"] },
+            phone: normalized,
+          },
+        });
+
+        if (activeExisting) {
+          await deleteSelectionState(phone);
+          return this.respondAndLog({
+            ownerId,
+            phone,
+            message,
+            command: "INVITE_TENANT_PHONE_DUPLICATE",
+            response: `An active invitation already exists for +91 ${normalized.slice(-10)}. Discarding current flow.`,
+            success: false,
+          });
+        }
+        data.phone = normalized;
+      }
+    }
+
+    const hostels = await prisma.hostels.findMany({
+      where: { owner_id: ownerId, is_active: true },
+      orderBy: { name: "asc" },
+    });
+
+    if (hostels.length === 0) {
+      await deleteSelectionState(phone);
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "INVITE_TENANT_NO_HOSTELS",
+        response: "No active hostels found. Register a hostel first.",
+        success: false,
+      });
+    }
+
+    let resolvedHostelId: string | undefined;
+    let resolvedRoomId: string | undefined;
+    let resolvedRoomNo: string | undefined;
+
+    if (hostels.length === 1) {
+      resolvedHostelId = hostels[0].id;
+      if (parsed.tokens.length > 0) {
+        const roomToken = parsed.tokens[0];
+        const cleanRoomToken = roomToken.toLowerCase().replace(/^room\s+/, "").trim();
+
+        const rooms = await prisma.rooms.findMany({
+          where: { hostel_id: resolvedHostelId, is_active: true },
+          orderBy: { room_no: "asc" },
+        });
+
+        const availableRooms: any[] = [];
+        for (const r of rooms) {
+          const cap = await roomCapacityService.getRoomCapacitySnapshot(r.id, { ownerId });
+          if (cap.available > 0) {
+            availableRooms.push(r);
+          }
+        }
+
+        const selectedRoom = availableRooms.find(
+          (r) => r.room_no.toLowerCase().trim() === cleanRoomToken
+        );
+        if (selectedRoom) {
+          resolvedRoomId = selectedRoom.id;
+          resolvedRoomNo = selectedRoom.room_no;
+        }
+      }
+    } else if (hostels.length > 1) {
+      if (parsed.tokens.length >= 2) {
+        const roomToken = parsed.tokens[parsed.tokens.length - 1];
+        const cleanRoomToken = roomToken.toLowerCase().replace(/^room\s+/, "").trim();
+
+        const hostelToken = parsed.tokens.slice(0, parsed.tokens.length - 1).join(" ").toLowerCase();
+        const matchedHostel = hostels.find(
+          (h) =>
+            h.name.toLowerCase() === hostelToken ||
+            h.name.toLowerCase().includes(hostelToken) ||
+            hostelToken.includes(h.name.toLowerCase())
+        );
+        if (matchedHostel) {
+          resolvedHostelId = matchedHostel.id;
+
+          const rooms = await prisma.rooms.findMany({
+            where: { hostel_id: resolvedHostelId, is_active: true },
+            orderBy: { room_no: "asc" },
+          });
+
+          const availableRooms: any[] = [];
+          for (const r of rooms) {
+            const cap = await roomCapacityService.getRoomCapacitySnapshot(r.id, { ownerId });
+            if (cap.available > 0) {
+              availableRooms.push(r);
+            }
+          }
+
+          const selectedRoom = availableRooms.find(
+            (r) => r.room_no.toLowerCase().trim() === cleanRoomToken
+          );
+          if (selectedRoom) {
+            resolvedRoomId = selectedRoom.id;
+            resolvedRoomNo = selectedRoom.room_no;
+          }
+        }
+      } else if (parsed.tokens.length === 1) {
+        const token = parsed.tokens[0].toLowerCase();
+        const matchedHostel = hostels.find(
+          (h) =>
+            h.name.toLowerCase() === token ||
+            h.name.toLowerCase().includes(token) ||
+            token.includes(h.name.toLowerCase())
+        );
+        if (matchedHostel) {
+          resolvedHostelId = matchedHostel.id;
+        } else {
+          const cleanRoomToken = token.replace(/^room\s+/, "").trim();
+          const matchedRooms: { room: any; hostel: any }[] = [];
+
+          for (const hostel of hostels) {
+            const rooms = await prisma.rooms.findMany({
+              where: { hostel_id: hostel.id, is_active: true },
+            });
+            for (const r of rooms) {
+              if (r.room_no.toLowerCase().trim() === cleanRoomToken) {
+                const cap = await roomCapacityService.getRoomCapacitySnapshot(r.id, { ownerId });
+                if (cap.available > 0) {
+                  matchedRooms.push({ room: r, hostel });
+                }
+              }
+            }
+          }
+
+          if (matchedRooms.length === 1) {
+            resolvedHostelId = matchedRooms[0].hostel.id;
+            resolvedRoomId = matchedRooms[0].room.id;
+            resolvedRoomNo = matchedRooms[0].room.room_no;
+          }
+        }
+      }
+    }
+
+    if (resolvedHostelId) data.hostelId = resolvedHostelId;
+    if (resolvedRoomId) {
+      data.roomId = resolvedRoomId;
+      data.roomNo = resolvedRoomNo;
+    }
+
+    if (!data.name) {
+      await setSelectionState(phone, {
+        phone,
+        action: "INVITE_TENANT",
+        step: "AWAITING_NAME",
+        data,
+      });
+
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "INVITE_TENANT_INIT",
+        response: [
+          "Let's invite a new tenant.",
+          "",
+          "What is the tenant's full name?",
+          "",
+          "(Reply CANCEL at any time to abort)",
+        ].join("\n"),
+        success: true,
+      });
+    }
+
+    if (!data.phone) {
+      await setSelectionState(phone, {
+        phone,
+        action: "INVITE_TENANT",
+        step: "AWAITING_PHONE",
+        data,
+      });
+
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "INVITE_TENANT_NAME_SET",
+        response: `Got it. Name: ${data.name}\n\nWhat is the tenant's phone number? (e.g. 9876543210)`,
+        success: true,
+      });
+    }
+
+    if (!data.hostelId) {
+      await setSelectionState(phone, {
+        phone,
+        action: "INVITE_TENANT",
+        step: "AWAITING_HOSTEL",
+        data,
+      });
+
+      const hostelLines = hostels.map((h, idx) => `${idx + 1}. ${h.name}`);
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "INVITE_TENANT_AWAITING_HOSTEL",
+        response: [
+          "Select a Hostel:",
+          ...hostelLines,
+          "",
+          "Reply with the hostel number (e.g. 1 or 2):",
+        ].join("\n"),
+        success: true,
+      });
+    }
+
+    if (!data.roomId) {
+      await setSelectionState(phone, {
+        phone,
+        action: "INVITE_TENANT",
+        step: "AWAITING_ROOM",
+        data,
+      });
+
+      const hostel = hostels.find((h) => h.id === data.hostelId);
+      const rooms = await prisma.rooms.findMany({
+        where: { hostel_id: data.hostelId, is_active: true },
+        orderBy: { room_no: "asc" },
+      });
+
+      const availableRooms: any[] = [];
+      for (const r of rooms) {
+        const cap = await roomCapacityService.getRoomCapacitySnapshot(r.id, { ownerId });
+        if (cap.available > 0) {
+          availableRooms.push({ room: r, available: cap.available });
+        }
+      }
+
+      if (availableRooms.length === 0) {
+        await deleteSelectionState(phone);
+        return this.respondAndLog({
+          ownerId,
+          phone,
+          message,
+          command: "INVITE_TENANT_NO_VACANCY",
+          response: `No vacant beds available in ${hostel?.name || "selected hostel"}. Flow cancelled.`,
+          success: false,
+        });
+      }
+
+      const roomLines = availableRooms.map((ar, idx) => `${idx + 1}. Room ${ar.room.room_no} (${ar.available} vacant)`);
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "INVITE_TENANT_HOSTEL_SET",
+        response: [
+          `Selected Hostel: ${hostel?.name || "N/A"}`,
+          "",
+          "Available Rooms:",
+          ...roomLines,
+          "",
+          "Reply with the room number (e.g. 101) or list index:",
+        ].join("\n"),
+        success: true,
+      });
+    }
+
+    const defaults = await hostelBillingPreferencesService.resolveTenantInviteDefaults(data.roomId, ownerId);
+    const resolved = defaults.resolved_values;
+
+    const hostel = hostels.find((h) => h.id === data.hostelId);
+
+    await setSelectionState(phone, {
+      phone,
+      action: "INVITE_TENANT",
+      step: "AWAITING_CONFIRMATION",
+      data: {
+        ...data,
+        monthlyRent: resolved.monthly_rent,
+        advanceDeposit: resolved.advance_deposit,
+      },
+    });
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "INVITE_TENANT_ROOM_SET",
+      response: [
+        "Please confirm invitation details:",
+        "",
+        `Tenant: ${data.name}`,
+        `Phone: +91 ${data.phone.slice(-10)}`,
+        `Hostel: ${hostel?.name || "N/A"}`,
+        `Room: Room ${data.roomNo}`,
+        `Monthly Rent: ₹${resolved.monthly_rent.toLocaleString("en-IN")}`,
+        `Security Deposit: ₹${resolved.advance_deposit.toLocaleString("en-IN")}`,
+        "",
+        "Send invitation? Reply YES or NO.",
+      ].join("\n"),
+      success: true,
+    });
   }
 
   private getProvider() {
