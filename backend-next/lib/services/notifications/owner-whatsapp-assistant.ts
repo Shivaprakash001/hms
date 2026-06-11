@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getLogger } from "@/lib/logger";
 import { dashboardService } from "@/lib/services/dashboard-service";
 import { paymentService } from "@/src/services/payments/payment-service";
+import { reminderService } from "@/src/services/payments/reminder-service";
 import { MetaWhatsAppProvider, normalizeWhatsAppPhone } from "./providers/whatsapp/meta-provider";
 
 const logger = getLogger("owner.whatsapp-assistant");
@@ -25,6 +26,27 @@ type HostelRow = {
   name: string;
 };
 
+type PendingTenantDues = {
+  tenantId: string;
+  name: string;
+  room: string;
+  amount: number;
+};
+
+type PendingDuesResult = {
+  hostels: HostelRow[];
+  rows: PendingTenantDues[];
+  totalPending: number;
+};
+
+type SendRemindersPayload = {
+  action: "SEND_REMINDERS";
+  tenantIds: string[];
+  tenantCount: number;
+  totalPending: number;
+  createdAt: string;
+};
+
 type InboundOwnerResult = {
   handled: boolean;
   ownerId?: string | null;
@@ -32,14 +54,18 @@ type InboundOwnerResult = {
   success?: boolean;
 };
 
+const SEND_REMINDERS_ACTION = "SEND_REMINDERS";
+const CONFIRMATION_WINDOW_MS = 5 * 60 * 1000;
+
 const HELP_TEXT = [
   "Available Commands",
   "",
   "SUMMARY",
   "DUES",
+  "SEND REMINDERS",
   "HELP",
   "",
-  "More features coming soon.",
+  "Reply YES or NO when confirming an action.",
 ].join("\n");
 
 const LINK_SUCCESS_TEXT = [
@@ -51,6 +77,7 @@ const LINK_SUCCESS_TEXT = [
   "",
   "SUMMARY",
   "DUES",
+  "SEND REMINDERS",
   "HELP",
 ].join("\n");
 
@@ -61,15 +88,22 @@ const ALREADY_CONNECTED_TEXT = [
   "",
   "SUMMARY",
   "DUES",
+  "SEND REMINDERS",
   "HELP",
 ].join("\n");
 
 function money(value: unknown) {
   const amount = Number(value || 0);
-  if (!Number.isFinite(amount)) return "Rs. 0";
-  return `Rs. ${new Intl.NumberFormat("en-IN", {
+  if (!Number.isFinite(amount)) return "₹0";
+  return `₹${new Intl.NumberFormat("en-IN", {
     maximumFractionDigits: 0,
   }).format(Math.round(amount))}`;
+}
+
+function formatShortDate(date: Date) {
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const d = new Date(date);
+  return `${d.getDate()} ${months[d.getMonth()]}`;
 }
 
 function parseCommand(message: string) {
@@ -77,6 +111,25 @@ function parseCommand(message: string) {
   const upper = normalized.toUpperCase();
   const command = upper.split(" ")[0] || "";
   return { normalized, upper, command };
+}
+
+function isSendRemindersCommand(upper: string) {
+  return upper === "SEND REMINDERS" || upper === "SEND REMINDER";
+}
+
+function normalizeSendRemindersPayload(payload: any): SendRemindersPayload | null {
+  if (!payload || payload.action !== SEND_REMINDERS_ACTION) return null;
+  const tenantIds = Array.isArray(payload.tenantIds)
+    ? payload.tenantIds.filter((id: unknown): id is string => typeof id === "string" && id.length > 0)
+    : [];
+  if (tenantIds.length === 0) return null;
+  return {
+    action: SEND_REMINDERS_ACTION,
+    tenantIds,
+    tenantCount: Number(payload.tenantCount || tenantIds.length),
+    totalPending: Number(payload.totalPending || 0),
+    createdAt: String(payload.createdAt || new Date().toISOString()),
+  };
 }
 
 export class OwnerWhatsAppAssistantService {
@@ -217,6 +270,334 @@ export class OwnerWhatsAppAssistantService {
     const ownerId = verifiedIdentity?.owner_id;
     if (!ownerId) return null;
 
+    const cleanMsg = message.trim();
+    const isQuickAction = cleanMsg.includes("⚡ Quick Action") || cleanMsg.toUpperCase() === "⚡ QUICK ACTION";
+    const isViewDues = cleanMsg.includes("⚠️ View Dues") || cleanMsg.toUpperCase() === "⚠️ VIEW DUES";
+
+    if (isQuickAction || isViewDues) {
+      const latestBriefing = await prisma.owner_daily_briefings.findFirst({
+        where: { owner_id: ownerId },
+        orderBy: { created_at: "desc" },
+      });
+
+      if (!latestBriefing) {
+        return this.respondAndLog({
+          ownerId,
+          phone: normalizedPhone,
+          message,
+          command: isQuickAction ? "QUICK_ACTION" : "VIEW_DUES",
+          response: "Sri Adithya Hostels: No active context found. Use the menu commands below to view stats or send reminders.",
+          success: true,
+        });
+      }
+
+      if (isQuickAction) {
+        // Increment metrics
+        await prisma.owner_daily_briefings.update({
+          where: { id: latestBriefing.id },
+          data: {
+            quick_action_clicks: { increment: 1 },
+            updated_at: new Date(),
+          },
+        });
+
+        // Resolve priority_type
+        const priority = latestBriefing.priority_type;
+        if (priority === "COLLECTIONS") {
+          const pending = await this.getPendingDues(ownerId);
+          const topRows = pending.rows.slice(0, 10);
+          const tenantBlocks = topRows.map((row) => `${row.name}\n${money(row.amount)}`);
+          const response = topRows.length > 0
+            ? [
+                "⚠️ Collections Requiring Attention",
+                "",
+                tenantBlocks.join("\n\n"),
+                "",
+                "Total Pending",
+                money(pending.totalPending),
+                "",
+                "Reply:",
+                "SEND REMINDERS",
+              ].join("\n")
+            : [
+                "⚠️ Collections Requiring Attention",
+                "",
+                "No pending collections.",
+                "",
+                "Total Pending",
+                "₹0",
+              ].join("\n");
+
+          return this.respondAndLog({
+            ownerId,
+            phone: normalizedPhone,
+            message,
+            command: "QUICK_ACTION",
+            response,
+            success: true,
+          });
+        } else if (priority === "ONBOARDING") {
+          const invites = await prisma.tenants.findMany({
+            where: { owner_id: ownerId, status: "INVITED" },
+            include: {
+              profiles: { select: { name: true } },
+              room_allocations: {
+                where: { is_active: true },
+                include: { room: { select: { room_no: true } } }
+              },
+              rule_acceptances: { select: { id: true } },
+              agreements: { select: { status: true } }
+            },
+            orderBy: { created_at: "desc" }
+          });
+
+          if (invites.length === 0) {
+            return this.respondAndLog({
+              ownerId,
+              phone: normalizedPhone,
+              message,
+              command: "QUICK_ACTION",
+              response: [
+                "👥 Pending Onboarding",
+                "",
+                "No onboarding pending.",
+              ].join("\n"),
+              success: true,
+            });
+          }
+
+          const inviteLines = invites.map((invite) => {
+            const name = invite.profiles?.name || invite.guardian_name || "Resident";
+            const roomNo = invite.room_allocations?.[0]?.room?.room_no || "N/A";
+            let step = "";
+            if (roomNo === "N/A") {
+              step = "Room Allocation Pending";
+            } else if (!invite.document_verified) {
+              step = "ID Verification Pending";
+            } else {
+              const hasSignedAgreement = invite.agreements?.some((a) => a.status === "SIGNED");
+              if (!hasSignedAgreement) {
+                step = "Agreement Pending";
+              } else {
+                step = "Pending Activation";
+              }
+            }
+            return `${name}\n${step}`;
+          });
+
+          const response = [
+            "👥 Pending Onboarding",
+            "",
+            inviteLines.join("\n\n"),
+          ].join("\n");
+
+          return this.respondAndLog({
+            ownerId,
+            phone: normalizedPhone,
+            message,
+            command: "QUICK_ACTION",
+            response,
+            success: true,
+          });
+        } else if (priority === "OCCUPANCY") {
+          const hostels = await this.getActiveHostels(ownerId);
+          const lines: string[] = [];
+          let totalVacant = 0;
+          let totalOccupied = 0;
+          let totalCapacity = 0;
+
+          for (const hostel of hostels) {
+            try {
+              const stats = await dashboardService.getOwnerStatsShell(ownerId, hostel.id);
+              const vacant = stats.vacant_beds || 0;
+              const occupied = stats.occupied_beds || 0;
+              const capacity = stats.total_capacity || 0;
+              totalVacant += vacant;
+              totalOccupied += occupied;
+              totalCapacity += capacity;
+
+              lines.push(hostel.name);
+              lines.push(`${vacant} Vacant Bed${vacant === 1 ? "" : "s"}`);
+              lines.push("");
+            } catch {}
+          }
+
+          if (lines.length > 0 && lines[lines.length - 1] === "") {
+            lines.pop();
+          }
+
+          const overallOccupancy = totalCapacity > 0 ? Math.round((totalOccupied / totalCapacity) * 100) : 0;
+          const response = [
+            "🏠 Occupancy Alert",
+            "",
+            ...lines,
+            "",
+            "Occupancy",
+            `${overallOccupancy}%`,
+          ].join("\n");
+
+          return this.respondAndLog({
+            ownerId,
+            phone: normalizedPhone,
+            message,
+            command: "QUICK_ACTION",
+            response,
+            success: true,
+          });
+        } else if (priority === "PROFITABILITY") {
+          const hostels = await this.getActiveHostels(ownerId);
+          let totalRev = 0;
+          let totalExp = 0;
+          const categoryTotals = new Map<string, number>();
+
+          for (const hostel of hostels) {
+            try {
+              const stats = await dashboardService.getOwnerStatsShell(ownerId, hostel.id);
+              totalRev += stats.revenue || 0;
+              totalExp += stats.monthly_expenses || 0;
+
+              const categories = stats.intelligence?.expenses?.categories || [];
+              for (const cat of categories) {
+                const name = cat.category || "Other";
+                const amount = Number(cat.amount || 0);
+                categoryTotals.set(name, (categoryTotals.get(name) || 0) + amount);
+              }
+            } catch {}
+          }
+
+          const overallRatio = totalRev > 0 ? Math.round((totalExp / totalRev) * 100) : 0;
+
+          const sortedCategories = Array.from(categoryTotals.entries())
+            .map(([category, amount]) => ({ category, amount }))
+            .sort((a, b) => b.amount - a.amount);
+
+          const categoryLines: string[] = [];
+          for (const cat of sortedCategories.slice(0, 3)) {
+            categoryLines.push(cat.category);
+            categoryLines.push(money(cat.amount));
+            categoryLines.push("");
+          }
+          if (categoryLines.length > 0) {
+            categoryLines.pop();
+          }
+
+          const response = [
+            "💸 Expense Review",
+            "",
+            "Revenue",
+            money(totalRev),
+            "",
+            "Expenses",
+            money(totalExp),
+            "",
+            "Expense Ratio",
+            `${overallRatio}%`,
+            ...(categoryLines.length > 0 ? ["", "Top Categories", "", ...categoryLines] : [])
+          ].join("\n");
+
+          return this.respondAndLog({
+            ownerId,
+            phone: normalizedPhone,
+            message,
+            command: "QUICK_ACTION",
+            response,
+            success: true,
+          });
+        } else if (priority === "OPERATIONS") {
+          const moveOuts = await prisma.move_out_requests.findMany({
+            where: {
+              owner_id: ownerId,
+              status: { notIn: ["COMPLETED", "REJECTED"] }
+            },
+            include: {
+              tenant: {
+                include: {
+                  profiles: { select: { name: true } },
+                  room_allocations: {
+                    where: { is_active: true },
+                    include: { room: { select: { room_no: true } } }
+                  }
+                }
+              }
+            },
+            orderBy: { created_at: "desc" }
+          });
+
+          if (moveOuts.length === 0) {
+            return this.respondAndLog({
+              ownerId,
+              phone: normalizedPhone,
+              message,
+              command: "QUICK_ACTION",
+              response: [
+                "📦 Operations Alert",
+                "",
+                "No pending move-out requests.",
+              ].join("\n"),
+              success: true,
+            });
+          }
+
+          const lines: string[] = [];
+          for (const req of moveOuts) {
+            const name = req.tenant?.profiles?.name || "Resident";
+            const roomNo = req.tenant?.room_allocations?.[0]?.room?.room_no || "N/A";
+            const exitDateStr = req.planned_exit_date
+              ? formatShortDate(req.planned_exit_date)
+              : "N/A";
+            lines.push(name);
+            lines.push(`Room ${roomNo}`);
+            lines.push(`Exit Date: ${exitDateStr}`);
+            lines.push("");
+          }
+
+          if (lines.length > 0) {
+            lines.pop();
+          }
+
+          const response = [
+            "📦 Operations Alert",
+            "",
+            "Move-Out Requests",
+            "",
+            ...lines
+          ].join("\n");
+
+          return this.respondAndLog({
+            ownerId,
+            phone: normalizedPhone,
+            message,
+            command: "QUICK_ACTION",
+            response,
+            success: true,
+          });
+        } else {
+          return this.respondAndLog({
+            ownerId,
+            phone: normalizedPhone,
+            message,
+            command: "QUICK_ACTION",
+            response: "Everything is running smoothly. Your hostels are healthy with no urgent actions required.",
+            success: true,
+          });
+        }
+      } else {
+        // isViewDues
+        await prisma.owner_daily_briefings.update({
+          where: { id: latestBriefing.id },
+          data: {
+            view_dues_clicks: { increment: 1 },
+            updated_at: new Date(),
+          },
+        });
+        return this.handleDues(ownerId, normalizedPhone, message);
+      }
+    }
+
+    if (parsed.command === "YES" || parsed.command === "NO") {
+      return this.handleConfirmationResponse(ownerId, normalizedPhone, message, parsed.command as "YES" | "NO");
+    }
+
     if (parsed.command === "HELP") {
       return this.respondAndLog({
         ownerId,
@@ -234,6 +615,10 @@ export class OwnerWhatsAppAssistantService {
 
     if (parsed.command === "DUES") {
       return this.handleDues(ownerId, normalizedPhone, message);
+    }
+
+    if (isSendRemindersCommand(parsed.upper)) {
+      return this.handleSendRemindersRequest(ownerId, normalizedPhone, message);
     }
 
     return this.respondAndLog({
@@ -410,8 +795,8 @@ export class OwnerWhatsAppAssistantService {
 
   private async handleDues(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
     try {
-      const hostels = await this.getActiveHostels(ownerId);
-      if (hostels.length === 0) {
+      const pending = await this.getPendingDues(ownerId);
+      if (pending.hostels.length === 0) {
         return this.respondAndLog({
           ownerId,
           phone,
@@ -422,48 +807,27 @@ export class OwnerWhatsAppAssistantService {
         });
       }
 
-      const duesByHostel = await Promise.all(
-        hostels.map((hostel) => paymentService.getDuesReport(ownerId, hostel.id))
-      );
-      const dues = duesByHostel.flat();
-      const pendingByTenant = new Map<string, {
-        name: string;
-        room: string;
-        amount: number;
-      }>();
-
-      for (const due of dues) {
-        const outstanding = Number(due.outstanding || 0);
-        if (outstanding <= 0) continue;
-        const current = pendingByTenant.get(due.tenant_id) || {
-          name: due.tenant_name || "Tenant",
-          room: due.room_no || "N/A",
-          amount: 0,
-        };
-        current.amount += outstanding;
-        pendingByTenant.set(due.tenant_id, current);
-      }
-
-      const rows = Array.from(pendingByTenant.values()).sort((a, b) => b.amount - a.amount);
-      const topRows = rows.slice(0, 10);
-      const totalPending = rows.reduce((sum, row) => sum + row.amount, 0);
+      const topRows = pending.rows.slice(0, 10);
 
       const response = topRows.length > 0
         ? [
-            "Top pending tenants",
+            "⚠️ Top Pending Tenants",
             "",
             ...topRows.map((row, index) =>
               `${index + 1}. ${row.name} - ${money(row.amount)}${row.room && row.room !== "N/A" ? ` (Room ${row.room})` : ""}`
             ),
             "",
-            `Total Pending: ${money(totalPending)}`,
+            `Total Pending: ${money(pending.totalPending)}`,
+            "",
+            "Reply:",
+            "SEND REMINDERS",
           ].join("\n")
         : [
-            "Top pending tenants",
+            "⚠️ Top Pending Tenants",
             "",
             "No pending dues found.",
             "",
-            "Total Pending: Rs. 0",
+            "Total Pending: ₹0",
           ].join("\n");
 
       return this.respondAndLog({
@@ -485,6 +849,311 @@ export class OwnerWhatsAppAssistantService {
         success: false,
       });
     }
+  }
+
+  private async handleSendRemindersRequest(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
+    try {
+      const pending = await this.getPendingDues(ownerId);
+      if (pending.hostels.length === 0) {
+        return this.respondAndLog({
+          ownerId,
+          phone,
+          message,
+          command: SEND_REMINDERS_ACTION,
+          response: "No active hostel found for this owner account.",
+          success: false,
+        });
+      }
+
+      const selectedRows = pending.rows.slice(0, 10);
+      if (selectedRows.length === 0) {
+        return this.respondAndLog({
+          ownerId,
+          phone,
+          message,
+          command: SEND_REMINDERS_ACTION,
+          response: "No pending dues found. No reminders were queued.",
+          success: false,
+        });
+      }
+
+      const selectedTotal = selectedRows.reduce((sum, row) => sum + row.amount, 0);
+      const payload: SendRemindersPayload = {
+        action: SEND_REMINDERS_ACTION,
+        tenantIds: selectedRows.map((row) => row.tenantId),
+        tenantCount: selectedRows.length,
+        totalPending: selectedTotal,
+        createdAt: new Date().toISOString(),
+      };
+
+      await this.createPendingConfirmation(ownerId, phone, SEND_REMINDERS_ACTION, payload);
+
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: SEND_REMINDERS_ACTION,
+        response: [
+          `Found ${selectedRows.length} tenants with pending dues.`,
+          "",
+          "Send reminders now?",
+          "",
+          "YES",
+          "NO",
+        ].join("\n"),
+        success: true,
+      });
+    } catch (error: any) {
+      logger.error("send_reminders.request_failed", { owner_id: ownerId, error: error?.message || String(error) });
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: SEND_REMINDERS_ACTION,
+        response: "Could not prepare reminders right now. Please try again later.",
+        success: false,
+      });
+    }
+  }
+
+  private async handleConfirmationResponse(
+    ownerId: string,
+    phone: string,
+    message: string,
+    command: "YES" | "NO"
+  ): Promise<InboundOwnerResult> {
+    if (command === "NO") {
+      const cancelled = await this.cancelPendingConfirmation(ownerId, phone, SEND_REMINDERS_ACTION);
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command,
+        response: cancelled
+          ? "Cancelled. No reminders were sent."
+          : "No pending reminder action found. Send SEND REMINDERS after DUES.",
+        success: Boolean(cancelled),
+      });
+    }
+
+    const confirmation = await this.confirmPendingAction(ownerId, phone, SEND_REMINDERS_ACTION);
+    if (!confirmation) {
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command,
+        response: "No pending reminder action found, or it expired. Send SEND REMINDERS again.",
+        success: false,
+      });
+    }
+
+    const payload = normalizeSendRemindersPayload(confirmation.payload_json);
+    if (!payload) {
+      await this.updateConfirmationStatus(confirmation.id, "FAILED");
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command,
+        response: "Could not read the pending reminder action. Send SEND REMINDERS again.",
+        success: false,
+      });
+    }
+
+    let notified = 0;
+    let failed = 0;
+    for (const tenantId of payload.tenantIds) {
+      try {
+        const result = await reminderService.sendManualReminder(tenantId, ownerId);
+        if (result.sent > 0) notified += 1;
+        else failed += 1;
+      } catch (error: any) {
+        failed += 1;
+        logger.warn("send_reminders.tenant_failed", {
+          owner_id: ownerId,
+          tenant_id: tenantId,
+          error: error?.message || String(error),
+        });
+      }
+    }
+
+    await this.updateConfirmationStatus(confirmation.id, notified > 0 ? "COMPLETED" : "FAILED");
+
+    const response = notified > 0
+      ? [
+          "✅ Reminders Sent",
+          "",
+          `${notified} tenants notified.`,
+          failed > 0 ? `${failed} tenants could not be notified.` : "",
+          "",
+          "Total pending amount:",
+          money(payload.totalPending),
+          "",
+          "Done.",
+        ].filter(Boolean).join("\n")
+      : [
+          "Could not send reminders right now.",
+          "",
+          "No tenants were notified.",
+          "",
+          "Try SEND REMINDERS again later.",
+        ].join("\n");
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command,
+      response,
+      success: notified > 0,
+    });
+  }
+
+  private async getPendingDues(ownerId: string): Promise<PendingDuesResult> {
+    const hostels = await this.getActiveHostels(ownerId);
+    if (hostels.length === 0) {
+      return { hostels, rows: [], totalPending: 0 };
+    }
+
+    const duesByHostel = await Promise.all(
+      hostels.map((hostel) => paymentService.getDuesReport(ownerId, hostel.id))
+    );
+    const dues = duesByHostel.flat();
+    const pendingByTenant = new Map<string, PendingTenantDues>();
+
+    for (const due of dues) {
+      const outstanding = Number(due.outstanding || 0);
+      if (outstanding <= 0) continue;
+      const dueDate = due.due_date ? new Date(due.due_date) : null;
+      if (dueDate && dueDate.getTime() > Date.now()) continue;
+      const tenantId = String(due.tenant_id || "");
+      if (!tenantId) continue;
+      const current = pendingByTenant.get(tenantId) || {
+        tenantId,
+        name: due.tenant_name || "Tenant",
+        room: due.room_no || "N/A",
+        amount: 0,
+      };
+      current.amount += outstanding;
+      pendingByTenant.set(tenantId, current);
+    }
+
+    const rows = Array.from(pendingByTenant.values()).sort((a, b) => b.amount - a.amount);
+    const totalPending = rows.reduce((sum, row) => sum + row.amount, 0);
+    return { hostels, rows, totalPending };
+  }
+
+  private async createPendingConfirmation(
+    ownerId: string,
+    phone: string,
+    actionType: string,
+    payload: SendRemindersPayload
+  ) {
+    const expiresAt = new Date(Date.now() + CONFIRMATION_WINDOW_MS);
+    await this.expirePendingConfirmations(ownerId, phone);
+
+    await prisma.$executeRaw`
+      UPDATE owner_assistant_confirmations
+      SET status = 'CANCELLED',
+          updated_at = now()
+      WHERE owner_id = ${ownerId}::uuid
+        AND phone_number = ${phone}
+        AND status = 'PENDING'
+        AND expires_at > now()
+    `;
+
+    await prisma.$executeRaw`
+      INSERT INTO owner_assistant_confirmations (
+        owner_id,
+        phone_number,
+        action_type,
+        payload_json,
+        status,
+        expires_at,
+        updated_at
+      )
+      VALUES (
+        ${ownerId}::uuid,
+        ${phone},
+        ${actionType},
+        CAST(${JSON.stringify(payload)} AS JSONB),
+        'PENDING',
+        ${expiresAt},
+        now()
+      )
+    `;
+  }
+
+  private async confirmPendingAction(ownerId: string, phone: string, actionType: string): Promise<{
+    id: string;
+    payload_json: any;
+  } | null> {
+    await this.expirePendingConfirmations(ownerId, phone);
+    const rows = await prisma.$queryRaw<Array<{
+      id: string;
+      payload_json: any;
+    }>>`
+      UPDATE owner_assistant_confirmations
+      SET status = 'CONFIRMED',
+          updated_at = now()
+      WHERE id = (
+        SELECT id
+        FROM owner_assistant_confirmations
+        WHERE owner_id = ${ownerId}::uuid
+          AND phone_number = ${phone}
+          AND action_type = ${actionType}
+          AND status = 'PENDING'
+          AND expires_at > now()
+        ORDER BY created_at DESC
+        LIMIT 1
+      )
+      RETURNING id::text, payload_json
+    `;
+    return rows[0] || null;
+  }
+
+  private async cancelPendingConfirmation(ownerId: string, phone: string, actionType: string) {
+    await this.expirePendingConfirmations(ownerId, phone);
+    const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+      UPDATE owner_assistant_confirmations
+      SET status = 'CANCELLED',
+          updated_at = now()
+      WHERE id = (
+        SELECT id
+        FROM owner_assistant_confirmations
+        WHERE owner_id = ${ownerId}::uuid
+          AND phone_number = ${phone}
+          AND action_type = ${actionType}
+          AND status = 'PENDING'
+          AND expires_at > now()
+        ORDER BY created_at DESC
+        LIMIT 1
+      )
+      RETURNING id::text
+    `;
+    return rows[0] || null;
+  }
+
+  private async expirePendingConfirmations(ownerId: string, phone: string) {
+    await prisma.$executeRaw`
+      UPDATE owner_assistant_confirmations
+      SET status = 'EXPIRED',
+          updated_at = now()
+      WHERE owner_id = ${ownerId}::uuid
+        AND phone_number = ${phone}
+        AND status = 'PENDING'
+        AND expires_at <= now()
+    `;
+  }
+
+  private async updateConfirmationStatus(confirmationId: string, status: "COMPLETED" | "FAILED") {
+    await prisma.$executeRaw`
+      UPDATE owner_assistant_confirmations
+      SET status = ${status},
+          updated_at = now()
+      WHERE id = ${confirmationId}::uuid
+    `;
   }
 
   private async getVerifiedIdentity(phone: string): Promise<OwnerIdentity | null> {

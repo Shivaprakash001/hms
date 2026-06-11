@@ -29,6 +29,8 @@ It is not an AI chatbot and does not perform write operations.
 | `HELP` | Shows supported commands. | Static response |
 | `SUMMARY` | Shows revenue, pending dues, occupancy, and expenses for the owner's active hostel scope. | Existing dashboard service |
 | `DUES` | Shows up to 10 tenants with the highest pending dues and total pending amount. | Existing payment dues service |
+| `SEND REMINDERS` | Starts a confirmation flow to remind tenants from the current top pending dues list. | Existing reminder service |
+| `YES` / `NO` | Confirms or cancels a pending owner assistant action. | `owner_assistant_confirmations` |
 
 **How this works:**
 1. The owner generates a temporary code from HMS with `/api/owner/whatsapp/link-code`.
@@ -38,6 +40,8 @@ It is not an AI chatbot and does not perform write operations.
 5. `SUMMARY` and `DUES` reuse existing HMS services instead of duplicating calculations.
 6. Every handled owner command is logged in `owner_assistant_messages`.
 7. The owner dashboard lists verified WhatsApp numbers through `/api/owner/whatsapp/connections` and can disconnect a number through `/api/owner/whatsapp/connections/:connectionId`.
+8. `SEND REMINDERS` stores a 5-minute pending confirmation in `owner_assistant_confirmations`; only `YES` from the same verified owner phone executes it.
+9. Confirmed reminder actions call the existing reminder service instead of sending tenant reminders directly from the assistant.
 
 Unsupported owner commands return `HELP`.
 Unlinked numbers are only handled by the owner assistant when they send `LINK`; other messages continue through existing WhatsApp routing.
@@ -100,6 +104,7 @@ Unlinked numbers are only handled by the owner assistant when they send `LINK`; 
 | `whatsapp_webhook_events` | Raw WhatsApp webhook events. |
 | `owner_whatsapp_identities` | Verified owner phone mappings and temporary link codes. |
 | `owner_assistant_messages` | Owner assistant command audit records. |
+| `owner_assistant_confirmations` | Short-lived confirmation records for assistant-triggered actions. |
 
 **How this works:**
 1. Logs preserve delivery evidence.

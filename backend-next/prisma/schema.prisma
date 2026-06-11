@@ -433,6 +433,44 @@ model owner_assistant_messages {
   @@index([command, created_at])
 }
 
+model owner_assistant_confirmations {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  owner_id     String    @db.Uuid
+  phone_number String
+  action_type  String
+  payload_json Json
+  status       String    @default("PENDING")
+  expires_at   DateTime  @db.Timestamptz(6)
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime? @db.Timestamptz(6)
+
+  @@index([owner_id, phone_number, action_type, status, expires_at])
+  @@index([status, expires_at])
+}
+
+model owner_daily_briefings {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  owner_id            String    @db.Uuid
+  local_date          String    // Format: YYYY-MM-DD
+  timezone            String    // e.g. "Asia/Kolkata"
+  template_name       String    // e.g. "owner_daily_briefing_v1"
+  template_version    Int       // e.g. 1
+  generated_at        DateTime  @default(now()) @db.Timestamptz(6)
+  priority_type       String    // DUES | ONBOARDING | VACANCY | EXPENSE_RATIO | ALERTS | NONE
+  priority_payload    Json      // Historical context snapshot
+  template_variables  Json      // Variables sent in the template
+  sent_at             DateTime? @db.Timestamptz(6)
+  delivery_status     String?   // PENDING | DELIVERED | FAILED
+  opened_at           DateTime? @db.Timestamptz(6) // Optional for future funnel metrics
+  quick_action_clicks Int       @default(0)
+  view_dues_clicks    Int       @default(0)
+  created_at          DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime? @db.Timestamptz(6)
+
+  @@unique([owner_id, local_date])
+  @@index([owner_id, created_at])
+}
+
 model payment_attempt_obligations {
   id                 String           @id @db.Uuid
   payment_attempt_id String           @db.Uuid

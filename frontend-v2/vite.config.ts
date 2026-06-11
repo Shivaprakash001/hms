@@ -40,7 +40,7 @@ export default defineConfig({
     port: 5174,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: process.env.HMS_API_PROXY_TARGET || 'http://localhost:3000',
         changeOrigin: true,
       },
     },
