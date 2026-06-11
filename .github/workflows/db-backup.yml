@@ -3,13 +3,13 @@ name: Daily DB Backup
 on:
 
 
-  schedule:
-    # Run daily at 2:00 AM UTC (7:30 AM IST)
-    - cron: "0 2 * * *"
-    # Run monthly snapshot at 2:30 AM UTC on the 1st of each month
-    - cron: "30 2 1 * *"
-    # Run weekly verification at 3:00 AM UTC on Sundays
-    - cron: "0 3 * * 0"
+#   schedule:
+#     # Run daily at 2:00 AM UTC (7:30 AM IST)
+#     - cron: "0 2 * * *"
+#     # Run monthly snapshot at 2:30 AM UTC on the 1st of each month
+#     - cron: "30 2 1 * *"
+#     # Run weekly verification at 3:00 AM UTC on Sundays
+#     - cron: "0 3 * * 0"
   workflow_dispatch: # Allow manual trigger
 env:
   BACKUP_RETENTION_DAYS: 30
