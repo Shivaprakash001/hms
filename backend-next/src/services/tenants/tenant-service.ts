@@ -300,8 +300,15 @@ export class TenantService {
     const tenantUpdate: any = {};
 
     for (const [key, value] of Object.entries(data)) {
-      if (profileFields.includes(key)) profileUpdate[key] = value;
-      else if (tenantFields.includes(key)) tenantUpdate[key] = value;
+      if (profileFields.includes(key)) {
+        profileUpdate[key] = value;
+      } else if (tenantFields.includes(key)) {
+        if (key === "date_of_birth") {
+          tenantUpdate[key] = value ? new Date(value as string) : null;
+        } else {
+          tenantUpdate[key] = value;
+        }
+      }
     }
 
     // Synchronize duplicates across profile and tenant tables
