@@ -87,3 +87,45 @@ export function buildRentReminderBodyParameters(data: RentReminderTemplateVariab
 
   return params;
 }
+
+// ─── Tenant Onboarding Completed Template ────────────────────
+
+export const ONBOARDING_COMPLETED_TEMPLATE_NAME = "tenant_onboarding_completed_v1";
+
+export type TenantOnboardingTemplateInput = {
+  tenantName: string;
+  hostelName: string;
+  roomNumber: string;
+  joiningDate: Date | string;
+  monthlyRent: number;
+  rentDueDay: number;
+};
+
+/**
+ * Pure mapper — builds WhatsApp template body parameters from pre-loaded DB data.
+ * No database queries. Caller is responsible for loading tenant/room/hostel.
+ *
+ * Template variables:
+ *   {{1}} → Tenant Name
+ *   {{2}} → Hostel Name
+ *   {{3}} → Room Number
+ *   {{4}} → Joining Date
+ *   {{5}} → Monthly Rent
+ *   {{6}} → Rent Due Day
+ */
+export function buildTenantOnboardingTemplatePayload(input: TenantOnboardingTemplateInput): string[] {
+  const joiningDate = input.joiningDate
+    ? formatDate(input.joiningDate)
+    : "N/A";
+
+  const params = [
+    input.tenantName || "Resident",
+    input.hostelName || "Your Hostel",
+    input.roomNumber || "N/A",
+    joiningDate,
+    formatTemplateAmount(input.monthlyRent),
+    String(Math.min(Math.max(Number(input.rentDueDay) || 1, 1), 28)),
+  ];
+
+  return params;
+}

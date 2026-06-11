@@ -14,6 +14,7 @@ function safeNormalizeWhatsApp(val: string | null | undefined): string {
 import { getTenantOperationalContext } from "../../../lib/hostel-context";
 import { allocationReconciliationService } from "../../../lib/services/allocation-reconciliation-service";
 import { eventLog } from "../../../lib/services/event-log-service";
+import { eventSystem } from "../../../lib/events";
 import { tenantInvitationLifecycleService } from "./tenant-invitation-lifecycle-service";
 import { AgreementGenerationService } from "./agreement-generation-service";
 import { authOtpService } from "../../../lib/services/auth/auth-otp-service";
@@ -1138,66 +1139,73 @@ export class ActivationWorkflowService {
         data?.payment_frequency,
         password
       );
-      return;
-    }
-    if (current.invitation_token !== profile.invitation_token || !current.invitation_token) {
-      throw new Error("INVALID: Activation token has already been used");
-    }
-
-    this.validateOperationalInviteData(tenantNow);
-
-    const completedAt = new Date();
-    await prisma.$transaction(async (tx: any) => {
-      const profileUpdate = await tx.profile.updateMany({
-        where: {
-          id: current.id,
-          invitation_token: current.invitation_token,
-          invitation_expires_at: { gte: completedAt },
-          role: "TENANT",
-        },
-        data: {
-          is_active: true,
-          is_profile_completed: true,
-          invitation_token: null,
-          invitation_expires_at: null,
-          ...(passwordHash ? { password_hash: passwordHash } : {}),
-        },
-      });
-      if (profileUpdate.count !== 1) {
+    } else {
+      // Legacy profile-token activation path
+      if (current.invitation_token !== profile.invitation_token || !current.invitation_token) {
         throw new Error("INVALID: Activation token has already been used");
       }
 
-      const tenantUpdate = await tx.tenants.updateMany({
-        where: {
-          id: tenantNow.id,
-          profile_id: current.id,
-          status: "INVITED",
-          activation_completed_at: null,
-        },
-        data: {
-          status: "ACTIVE",
-          profile_completed: true,
-          activation_completed_at: completedAt,
-          onboarding_last_activity_at: completedAt,
-          payment_frequency_effective_from: tenantNow.billing_start_date || tenantNow.joined_on || completedAt,
-          ...(data?.payment_frequency ? { payment_frequency: data.payment_frequency } : {}),
-        },
+      this.validateOperationalInviteData(tenantNow);
+
+      const completedAt = new Date();
+      await prisma.$transaction(async (tx: any) => {
+        const profileUpdate = await tx.profile.updateMany({
+          where: {
+            id: current.id,
+            invitation_token: current.invitation_token,
+            invitation_expires_at: { gte: completedAt },
+            role: "TENANT",
+          },
+          data: {
+            is_active: true,
+            is_profile_completed: true,
+            invitation_token: null,
+            invitation_expires_at: null,
+            ...(passwordHash ? { password_hash: passwordHash } : {}),
+          },
+        });
+        if (profileUpdate.count !== 1) {
+          throw new Error("INVALID: Activation token has already been used");
+        }
+
+        const tenantUpdate = await tx.tenants.updateMany({
+          where: {
+            id: tenantNow.id,
+            profile_id: current.id,
+            status: "INVITED",
+            activation_completed_at: null,
+          },
+          data: {
+            status: "ACTIVE",
+            profile_completed: true,
+            activation_completed_at: completedAt,
+            onboarding_last_activity_at: completedAt,
+            payment_frequency_effective_from: tenantNow.billing_start_date || tenantNow.joined_on || completedAt,
+            ...(data?.payment_frequency ? { payment_frequency: data.payment_frequency } : {}),
+          },
+        });
+        if (tenantUpdate.count !== 1) {
+          throw new Error("INVALID_TRANSITION: Tenant activation was already completed or cancelled");
+        }
       });
-      if (tenantUpdate.count !== 1) {
-        throw new Error("INVALID_TRANSITION: Tenant activation was already completed or cancelled");
-      }
-    });
 
-    await eventLog.log("activation_completed", tenantNow.owner_id || null, {
-      tenant_id: tenantNow.id,
-      hostel_id: tenantNow.hostel_id,
-      completed_at: completedAt.toISOString(),
-      duration_seconds: tenantNow.activation_started_at
-        ? Math.max(0, Math.round((completedAt.getTime() - new Date(tenantNow.activation_started_at).getTime()) / 1000))
-        : null,
-    }, tenantNow.id);
+      await eventLog.log("activation_completed", tenantNow.owner_id || null, {
+        tenant_id: tenantNow.id,
+        hostel_id: tenantNow.hostel_id,
+        completed_at: completedAt.toISOString(),
+        duration_seconds: tenantNow.activation_started_at
+          ? Math.max(0, Math.round((completedAt.getTime() - new Date(tenantNow.activation_started_at).getTime()) / 1000))
+          : null,
+      }, tenantNow.id);
 
-    await allocationReconciliationService.reconcileTenant(tenantNow.id).catch(() => undefined);
+      await allocationReconciliationService.reconcileTenant(tenantNow.id).catch(() => undefined);
+    }
+
+    // Single emission point for ALL activation paths through activate()
+    // Covers both invitation flow (Path A) and legacy profile flow (Path B)
+    await eventSystem.trigger("tenant_onboarding_completed", {
+      tenantId: tenantNow.id,
+    }).catch(() => undefined);
   }
 
   private validateOperationalInviteData(tenant: any) {

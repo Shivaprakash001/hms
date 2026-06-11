@@ -305,6 +305,12 @@ export class InvitationService {
         error: String(err?.message || err),
       });
     });
+
+    // Legacy activation path (Path C) — emit onboarding completed event
+    // Primary paths (A/B) emit from ActivationWorkflowService.activate()
+    await eventSystem.trigger("tenant_onboarding_completed", {
+      tenantId: tenant.id,
+    }).catch(() => {});
     
     logger.info(`Successfully activated account for email: ${profile.email}`);
 

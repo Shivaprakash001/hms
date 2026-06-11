@@ -244,4 +244,14 @@ eventSystem.on("agreement_template_updated", async (data) => {
   });
 });
 
-
+eventSystem.on("tenant_onboarding_completed", async (data) => {
+  try {
+    const { sendTenantOnboardingNotification } = await import(
+      "../services/notifications/whatsapp-onboarding-handler"
+    );
+    await sendTenantOnboardingNotification(data.tenantId);
+  } catch (error) {
+    // Rule 5: WhatsApp failure must never break onboarding
+    console.error("[Event] tenant_onboarding_completed notification failed:", error);
+  }
+});
