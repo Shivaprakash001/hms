@@ -226,14 +226,21 @@ function duplicatePhoneMessage(values: { primary?: string; emergency?: string; g
   return '';
 }
 
-function invalidPhoneMessage(values: { primary?: string; emergency?: string; guardian?: string }) {
-  const entries = [
-    ['Primary mobile', values.primary, true],
-    ['Emergency mobile', values.emergency, true],
-    ['Guardian mobile', values.guardian, false],
+function invalidPhoneMessage(
+  values: { primary?: string; emergency?: string; guardian?: string },
+  fields?: ('primary' | 'emergency' | 'guardian')[]
+) {
+  const allEntries = [
+    ['primary', 'Primary mobile', values.primary, true],
+    ['emergency', 'Emergency mobile', values.emergency, true],
+    ['guardian', 'Guardian mobile', values.guardian, false],
   ] as const;
 
-  for (const [label, value, required] of entries) {
+  const entries = fields
+    ? allEntries.filter(([k]) => fields.includes(k))
+    : allEntries;
+
+  for (const [, label, value, required] of entries) {
     const rawValue = String(value || '').trim();
     const digits = rawValue.replace(/\D/g, '');
     if (!rawValue && !required) continue;
@@ -565,17 +572,14 @@ export function ActivateAccountPage() {
       return;
     }
     const invalidMessage = invalidPhoneMessage({
-      primary: profile.phone,
-      emergency: profile.emergency_phone,
       guardian: phone,
-    });
+    }, ['guardian']);
     if (invalidMessage) {
       setError(invalidMessage);
       return;
     }
     const duplicateMessage = duplicatePhoneMessage({
       primary: profile.phone,
-      emergency: profile.emergency_phone,
       guardian: phone,
     });
     if (duplicateMessage) {
