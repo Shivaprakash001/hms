@@ -84,6 +84,69 @@ describe("MetaWhatsAppProvider OTP Send & HTTP Mocking", () => {
     process.env.WHATSAPP_OTP_TEMPLATE = "otp_phone";
   });
 
+  it("sends interactive reply buttons", async () => {
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      text: async () => JSON.stringify({ messages: [{ id: "wamid.button" }] }),
+      status: 200,
+    } as Response);
+
+    const provider = new MetaWhatsAppProvider({
+      accessToken: "mock_token",
+      phoneNumberId: "mock_phone_id",
+      baseUrl: "https://graph.facebook.com/v19.0",
+      timeoutMs: 1000,
+      maxRetries: 0,
+    });
+
+    const result = await provider.sendButtonMessage("7901070333", "Tenant card", [
+      { id: "TENANT_PAYMENTS:00000000-0000-0000-0000-000000000001", title: "Payments" },
+      { id: "TENANT_DUES:00000000-0000-0000-0000-000000000001", title: "Dues" },
+    ]);
+
+    expect(result.providerMessageId).toBe("wamid.button");
+    const [, init] = fetchSpy.mock.calls[0];
+    const body = JSON.parse(init?.body as string);
+    expect(body.type).toBe("interactive");
+    expect(body.interactive.type).toBe("button");
+    expect(body.interactive.action.buttons).toHaveLength(2);
+    expect(body.interactive.action.buttons[0].reply.id).toContain("TENANT_PAYMENTS");
+  });
+
+  it("sends interactive list rows", async () => {
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      text: async () => JSON.stringify({ messages: [{ id: "wamid.list" }] }),
+      status: 200,
+    } as Response);
+
+    const provider = new MetaWhatsAppProvider({
+      accessToken: "mock_token",
+      phoneNumberId: "mock_phone_id",
+      baseUrl: "https://graph.facebook.com/v19.0",
+      timeoutMs: 1000,
+      maxRetries: 0,
+    });
+
+    const result = await provider.sendListMessage("7901070333", "Found matches", [{
+      title: "Matches",
+      rows: [
+        {
+          id: "TENANT_CARD:00000000-0000-0000-0000-000000000001",
+          title: "Rahul Kumar",
+          description: "Active · Room G1",
+        },
+      ],
+    }]);
+
+    expect(result.providerMessageId).toBe("wamid.list");
+    const [, init] = fetchSpy.mock.calls[0];
+    const body = JSON.parse(init?.body as string);
+    expect(body.type).toBe("interactive");
+    expect(body.interactive.type).toBe("list");
+    expect(body.interactive.action.sections[0].rows[0].id).toContain("TENANT_CARD");
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });

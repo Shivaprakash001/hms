@@ -3,19 +3,25 @@ import { prisma } from "@/lib/db";
 import { getLogger } from "@/lib/logger";
 import { dashboardService } from "@/lib/services/dashboard-service";
 import { expenseService } from "@/lib/services/expense-service";
+import { moveOutService } from "@/lib/services/move-out-service";
+import { financialService } from "@/src/services/payments/financial-service";
 import { paymentService } from "@/src/services/payments/payment-service";
 import { reminderService } from "@/src/services/payments/reminder-service";
+import { tenantService } from "@/src/services/tenants/tenant-service";
 import { MetaWhatsAppProvider, normalizeWhatsAppPhone } from "./providers/whatsapp/meta-provider";
+import type { WhatsAppButton, WhatsAppListSection } from "./providers/whatsapp/types";
 import {
   getSelectionState,
   setSelectionState,
   deleteSelectionState,
   InviteTenantSessionState,
+  OwnerMoveOutDateState,
 } from "./whatsapp-selection-state";
 import { normalizeIndianPhone } from "@/lib/utils/phone-utils";
 import { tenantInvitationLifecycleService } from "@/src/services/tenants/tenant-invitation-lifecycle-service";
 import { roomCapacityService } from "@/lib/services/room-capacity-service";
 import { hostelBillingPreferencesService } from "@/lib/services/hostel-billing-preferences-service";
+import { MoveOutReason } from "@prisma/client";
 
 const logger = getLogger("owner.whatsapp-assistant");
 
@@ -99,6 +105,23 @@ type DisconnectWhatsAppPayload = {
   createdAt: string;
 };
 
+type StartMoveOutPayload = {
+  action: "START_MOVE_OUT";
+  tenant_id: string;
+  hostel_id: string;
+  planned_exit_date: string;
+  phone_number: string;
+  createdAt: string;
+};
+
+type EntitySearchResult = {
+  type: "TENANT" | "ROOM" | "LEAD" | "HOSTEL";
+  id: string;
+  label: string;
+  description: string;
+  priority: number;
+};
+
 type InboundOwnerResult = {
   handled: boolean;
   ownerId?: string | null;
@@ -110,11 +133,13 @@ const SEND_REMINDERS_ACTION = "SEND_REMINDERS";
 const CREATE_EXPENSE_ACTION = "CREATE_EXPENSE";
 const UNDO_EXPENSE_ACTION = "UNDO_EXPENSE";
 const DISCONNECT_WHATSAPP_ACTION = "DISCONNECT_WHATSAPP";
+const START_MOVE_OUT_ACTION = "START_MOVE_OUT";
 const CONFIRMATION_WINDOW_MS = 5 * 60 * 1000;
 const EXPENSE_UNDO_WINDOW_MS = 30 * 60 * 1000;
 const EXPENSE_REPORT_LIMIT = 5;
 const EXPENSE_DRAFT_RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
 const EXPENSE_DRAFT_RATE_LIMIT_MAX = 15;
+const ENTITY_SEARCH_LIMIT = 10;
 
 const HELP_TEXT = [
   "Available Commands",
@@ -321,6 +346,43 @@ function normalizeDisconnectWhatsAppPayload(payload: any): DisconnectWhatsAppPay
     phone_number: String(payload.phone_number),
     createdAt: String(payload.createdAt || new Date().toISOString()),
   };
+}
+
+function normalizeStartMoveOutPayload(payload: any): StartMoveOutPayload | null {
+  if (!payload || payload.action !== START_MOVE_OUT_ACTION) return null;
+  if (!payload.tenant_id || !payload.hostel_id || !payload.planned_exit_date || !payload.phone_number) return null;
+  return {
+    action: START_MOVE_OUT_ACTION,
+    tenant_id: String(payload.tenant_id),
+    hostel_id: String(payload.hostel_id),
+    planned_exit_date: String(payload.planned_exit_date),
+    phone_number: String(payload.phone_number),
+    createdAt: String(payload.createdAt || new Date().toISOString()),
+  };
+}
+
+function parseOwnerAssistantPayload(message: string): { action: string; id?: string } | null {
+  const normalized = String(message || "").trim();
+  const match = normalized.match(/^([A-Z_]+):([0-9a-fA-F-]{36}|MORE)$/);
+  if (!match) return null;
+  return { action: match[1], id: match[2] };
+}
+
+function parseIsoDateOnly(message: string): string | null {
+  const raw = String(message || "").trim();
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const date = new Date(`${raw}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  if (date.toISOString().slice(0, 10) !== raw) return null;
+  return raw;
+}
+
+function normalizeSearchText(message: string) {
+  return String(message || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[^\p{L}\p{N}\s+.-]/gu, "");
 }
 
 function titleCase(input: string) {
@@ -572,6 +634,15 @@ export class OwnerWhatsAppAssistantService {
     const selectionState = await getSelectionState(normalizedPhone);
     if (selectionState && selectionState.action === "INVITE_TENANT") {
       return this.handleInviteTenantStateFlow(ownerId, normalizedPhone, message, selectionState);
+    }
+
+    if (selectionState && selectionState.action === "OWNER_MOVE_OUT_DATE") {
+      return this.handleMoveOutDateResponse(ownerId, normalizedPhone, message, selectionState);
+    }
+
+    const assistantPayload = parseOwnerAssistantPayload(message);
+    if (assistantPayload) {
+      return this.handleOwnerAssistantPayload(ownerId, normalizedPhone, message, assistantPayload);
     }
 
     const cleanMsg = message.trim();
@@ -950,14 +1021,958 @@ export class OwnerWhatsAppAssistantService {
       return this.handleCreateExpenseRequest(ownerId, normalizedPhone, message, expenseDraft);
     }
 
+    return this.handleEntitySearch(ownerId, normalizedPhone, message);
+  }
+
+  private async handleOwnerAssistantPayload(
+    ownerId: string,
+    phone: string,
+    message: string,
+    payload: { action: string; id?: string }
+  ): Promise<InboundOwnerResult> {
+    const id = payload.id || "";
+    switch (payload.action) {
+      case "TENANT_CARD":
+        return this.sendTenantCard(ownerId, phone, message, id);
+      case "TENANT_PAYMENTS":
+        return this.sendTenantPayments(ownerId, phone, message, id);
+      case "TENANT_DUES":
+        return this.sendTenantDues(ownerId, phone, message, id);
+      case "TENANT_REMINDER":
+        return this.handleTenantReminderRequest(ownerId, phone, message, id);
+      case "TENANT_MOVE_OUT":
+        return this.handleTenantMoveOutRequest(ownerId, phone, message, id);
+      case "ROOM_CARD":
+        return this.sendRoomCard(ownerId, phone, message, id);
+      case "ROOM_TENANTS":
+        return this.sendRoomTenants(ownerId, phone, message, id);
+      case "ROOM_INVITE":
+        return this.handleRoomInvite(ownerId, phone, message, id);
+      case "ROOM_OCCUPANCY":
+        return this.sendRoomCard(ownerId, phone, message, id);
+      case "LEAD_CARD":
+        return this.sendLeadCard(ownerId, phone, message, id);
+      case "HOSTEL_CARD":
+        return this.sendHostelCard(ownerId, phone, message, id);
+      case "VIEW_MORE_SEARCH":
+        return this.respondAndLog({
+          ownerId,
+          phone,
+          message,
+          command: "ENTITY_SEARCH_MORE",
+          response: "Please type a few more letters, the full phone number, or the room number to narrow the result.",
+          success: true,
+        });
+      default:
+        return this.respondAndLog({
+          ownerId,
+          phone,
+          message,
+          command: "UNKNOWN_ACTION",
+          response: HELP_TEXT,
+          success: false,
+        });
+    }
+  }
+
+  private async handleEntitySearch(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
+    const query = normalizeSearchText(message);
+    if (query.length < 2) {
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "ENTITY_SEARCH",
+        response: HELP_TEXT,
+        success: true,
+      });
+    }
+
+    const results = await this.findEntityMatches(ownerId, query);
+    if (results.length === 0) {
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "ENTITY_SEARCH",
+        response: [
+          "No matching tenant, room, lead, or hostel found.",
+          "",
+          "Try a full name, mobile number, or room number.",
+          "",
+          "Send HELP to view commands.",
+        ].join("\n"),
+        success: true,
+      });
+    }
+
+    if (results.length === 1) {
+      return this.openEntityResult(ownerId, phone, message, results[0]);
+    }
+
+    await setSelectionState(phone, {
+      phone,
+      action: "OWNER_ENTITY_SEARCH",
+      ownerId,
+      query,
+      resultIds: results.map((result) => `${result.type}:${result.id}`),
+    });
+
+    const body = [
+      `Found ${results.length} matches`,
+      "",
+      "Choose one to open the card.",
+    ].join("\n");
+
+    if (results.length <= 3) {
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "ENTITY_SEARCH",
+        response: body,
+        success: true,
+        buttons: results.map((result) => ({
+          id: this.entityPayloadId(result),
+          title: this.shortButtonTitle(result.label),
+        })),
+      });
+    }
+
+    const rows = results.slice(0, 9).map((result) => ({
+      id: this.entityPayloadId(result),
+      title: result.label.slice(0, 24),
+      description: result.description.slice(0, 72),
+    }));
+    rows.push({
+      id: "VIEW_MORE_SEARCH:MORE",
+      title: "View More",
+      description: "Type more details to narrow search",
+    });
+
     return this.respondAndLog({
       ownerId,
-      phone: normalizedPhone,
+      phone,
       message,
-      command: parsed.command || "UNKNOWN",
-      response: HELP_TEXT,
+      command: "ENTITY_SEARCH",
+      response: body,
+      success: true,
+      list: {
+        buttonText: "Open result",
+        sections: [{
+          title: "Matches",
+          rows,
+        }],
+      },
+    });
+  }
+
+  private async openEntityResult(
+    ownerId: string,
+    phone: string,
+    message: string,
+    result: EntitySearchResult
+  ): Promise<InboundOwnerResult> {
+    if (result.type === "TENANT") return this.sendTenantCard(ownerId, phone, message, result.id);
+    if (result.type === "ROOM") return this.sendRoomCard(ownerId, phone, message, result.id);
+    if (result.type === "LEAD") return this.sendLeadCard(ownerId, phone, message, result.id);
+    return this.sendHostelCard(ownerId, phone, message, result.id);
+  }
+
+  private entityPayloadId(result: EntitySearchResult) {
+    if (result.type === "TENANT") return `TENANT_CARD:${result.id}`;
+    if (result.type === "ROOM") return `ROOM_CARD:${result.id}`;
+    if (result.type === "LEAD") return `LEAD_CARD:${result.id}`;
+    return `HOSTEL_CARD:${result.id}`;
+  }
+
+  private shortButtonTitle(label: string) {
+    return String(label || "Open").replace(/\s+/g, " ").slice(0, 20);
+  }
+
+  private async findEntityMatches(ownerId: string, query: string): Promise<EntitySearchResult[]> {
+    const like = `%${query}%`;
+    const digits = query.replace(/\D/g, "");
+    const phoneLike = digits.length >= 4 ? `%${digits}%` : null;
+    const results: EntitySearchResult[] = [];
+
+    const rooms = await prisma.$queryRaw<Array<{
+      id: string;
+      room_no: string;
+      hostel_name: string;
+      capacity: number;
+      occupied: number;
+    }>>`
+      SELECT
+        r.id::text,
+        r.room_no,
+        h.name AS hostel_name,
+        r.capacity,
+        COUNT(ra.id)::int AS occupied
+      FROM rooms r
+      JOIN hostels h ON h.id = r.hostel_id
+      LEFT JOIN room_allocations ra ON ra.room_id = r.id AND ra.is_active = true AND ra.end_date IS NULL
+      WHERE h.owner_id = ${ownerId}::uuid
+        AND r.is_active = true
+        AND lower(r.room_no) = lower(${query})
+      GROUP BY r.id, r.room_no, h.name, r.capacity
+      LIMIT 3
+    `;
+
+    for (const room of rooms) {
+      results.push({
+        type: "ROOM",
+        id: room.id,
+        label: `Room ${room.room_no}`,
+        description: `${room.hostel_name} · ${room.occupied}/${room.capacity} occupied`,
+        priority: 4,
+      });
+    }
+
+    const activeTenants = await this.searchTenants(ownerId, like, phoneLike, "ACTIVE", 10);
+    results.push(...activeTenants.map((tenant) => ({
+      type: "TENANT" as const,
+      id: tenant.id,
+      label: tenant.name,
+      description: `${tenant.status}${tenant.room_no ? ` · Room ${tenant.room_no}` : ""}`,
+      priority: phoneLike && tenant.phone_digits?.includes(digits) ? 5 : 10,
+    })));
+
+    const invitedTenants = await this.searchTenants(ownerId, like, phoneLike, "INVITED", 10);
+    results.push(...invitedTenants.map((tenant) => ({
+      type: "TENANT" as const,
+      id: tenant.id,
+      label: tenant.name,
+      description: `Invited${tenant.room_no ? ` · Room ${tenant.room_no}` : ""}`,
+      priority: phoneLike && tenant.phone_digits?.includes(digits) ? 15 : 20,
+    })));
+
+    const leads = await prisma.$queryRaw<Array<{
+      id: string;
+      student_name: string;
+      student_phone: string | null;
+      status: string;
+      hostel_name: string;
+      converted_tenant_id: string | null;
+    }>>`
+      SELECT
+        l.id::text,
+        l.student_name,
+        l.student_phone,
+        l.status,
+        h.name AS hostel_name,
+        l.converted_tenant_id::text
+      FROM visitor_leads l
+      JOIN hostels h ON h.id = l.hostel_id
+      WHERE l.owner_id = ${ownerId}::uuid
+        AND (
+          l.student_name ILIKE ${like}
+          OR l.parent_name ILIKE ${like}
+          OR (${phoneLike}::text IS NOT NULL AND regexp_replace(COALESCE(l.student_phone, l.parent_phone, ''), '\\D', '', 'g') LIKE ${phoneLike})
+        )
+      ORDER BY l.last_activity_at DESC
+      LIMIT 5
+    `;
+
+    for (const lead of leads) {
+      results.push({
+        type: lead.converted_tenant_id ? "TENANT" : "LEAD",
+        id: lead.converted_tenant_id || lead.id,
+        label: lead.student_name || "Lead",
+        description: `Lead · ${lead.status} · ${lead.hostel_name}`,
+        priority: 30,
+      });
+    }
+
+    if (rooms.length === 0) {
+      const roomContains = await prisma.$queryRaw<Array<{
+        id: string;
+        room_no: string;
+        hostel_name: string;
+        capacity: number;
+        occupied: number;
+      }>>`
+        SELECT
+          r.id::text,
+          r.room_no,
+          h.name AS hostel_name,
+          r.capacity,
+          COUNT(ra.id)::int AS occupied
+        FROM rooms r
+        JOIN hostels h ON h.id = r.hostel_id
+        LEFT JOIN room_allocations ra ON ra.room_id = r.id AND ra.is_active = true AND ra.end_date IS NULL
+        WHERE h.owner_id = ${ownerId}::uuid
+          AND r.is_active = true
+          AND r.room_no ILIKE ${like}
+        GROUP BY r.id, r.room_no, h.name, r.capacity
+        ORDER BY r.room_no ASC
+        LIMIT 5
+      `;
+
+      for (const room of roomContains) {
+        results.push({
+          type: "ROOM",
+          id: room.id,
+          label: `Room ${room.room_no}`,
+          description: `${room.hostel_name} · ${room.occupied}/${room.capacity} occupied`,
+          priority: 50,
+        });
+      }
+    }
+
+    const hostels = await prisma.hostels.findMany({
+      where: {
+        owner_id: ownerId,
+        is_active: true,
+        name: { contains: query, mode: "insensitive" },
+      },
+      select: { id: true, name: true },
+      take: 3,
+      orderBy: { name: "asc" },
+    });
+    results.push(...hostels.map((hostel) => ({
+      type: "HOSTEL" as const,
+      id: hostel.id,
+      label: hostel.name,
+      description: "Hostel",
+      priority: 60,
+    })));
+
+    const seen = new Set<string>();
+    return results
+      .sort((a, b) => a.priority - b.priority || a.label.localeCompare(b.label))
+      .filter((result) => {
+        const key = `${result.type}:${result.id}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, ENTITY_SEARCH_LIMIT);
+  }
+
+  private async searchTenants(
+    ownerId: string,
+    like: string,
+    phoneLike: string | null,
+    status: "ACTIVE" | "INVITED",
+    limit: number
+  ): Promise<Array<{ id: string; name: string; status: string; room_no: string | null; phone_digits: string | null }>> {
+    return prisma.$queryRaw<Array<{ id: string; name: string; status: string; room_no: string | null; phone_digits: string | null }>>`
+      SELECT
+        t.id::text,
+        COALESCE(p.name, ti.name, t.guardian_name, 'Tenant') AS name,
+        t.status::text AS status,
+        r.room_no,
+        regexp_replace(COALESCE(p.phone, t.phone_1, ti.phone, ''), '\\D', '', 'g') AS phone_digits
+      FROM tenants t
+      LEFT JOIN profile p ON p.id = t.profile_id
+      LEFT JOIN LATERAL (
+        SELECT name, phone
+        FROM tenant_invitations
+        WHERE tenant_id = t.id
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) ti ON true
+      LEFT JOIN room_allocations ra ON ra.tenant_id = t.id AND ra.is_active = true AND ra.end_date IS NULL
+      LEFT JOIN rooms r ON r.id = ra.room_id
+      WHERE t.owner_id = ${ownerId}::uuid
+        AND t.status::text = ${status}
+        AND (
+          COALESCE(p.name, '') ILIKE ${like}
+          OR COALESCE(t.guardian_name, '') ILIKE ${like}
+          OR COALESCE(ti.name, '') ILIKE ${like}
+          OR COALESCE(t.roll_number, '') ILIKE ${like}
+          OR (${phoneLike}::text IS NOT NULL AND regexp_replace(COALESCE(p.phone, t.phone_1, ti.phone, ''), '\\D', '', 'g') LIKE ${phoneLike})
+        )
+      ORDER BY t.updated_at DESC NULLS LAST, t.created_at DESC
+      LIMIT ${limit}
+    `;
+  }
+
+  private async sendTenantCard(ownerId: string, phone: string, message: string, tenantId: string): Promise<InboundOwnerResult> {
+    try {
+      const overview: any = await tenantService.getOwnerTenantOverview(tenantId, ownerId);
+      const lastPayment = overview.recent_payments?.[0] || null;
+      const body = [
+        `👤 ${overview.name || "Tenant"}`,
+        "",
+        overview.phone ? `📱 ${maskWhatsAppPhone(overview.phone)}` : "",
+        `🏠 Room ${overview.room_number || "N/A"}`,
+        overview.current_room?.floor != null ? `Floor ${overview.current_room.floor}` : "",
+        `⚠️ Due: ${money(overview.total_due || overview.outstanding || 0)}`,
+        "",
+        "💰 Last Payment:",
+        lastPayment ? `${money(lastPayment.amount)} on ${formatShortDate(new Date(lastPayment.date))}` : "No payments found",
+        "",
+        `Status: ${overview.status || "Unknown"}`,
+      ].filter(Boolean).join("\n");
+
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "TENANT_CARD",
+        response: body,
+        success: true,
+        buttons: [
+          { id: `TENANT_PAYMENTS:${tenantId}`, title: "Payments" },
+          { id: `TENANT_DUES:${tenantId}`, title: "Dues" },
+          { id: `TENANT_MOVE_OUT:${tenantId}`, title: "Move-Out" },
+        ],
+      });
+    } catch (error: any) {
+      logger.warn("entity.tenant_card_failed", { owner_id: ownerId, tenant_id: tenantId, error: error?.message || String(error) });
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "TENANT_CARD",
+        response: "Tenant not found or no longer belongs to this owner.",
+        success: false,
+      });
+    }
+  }
+
+  private async sendTenantPayments(ownerId: string, phone: string, message: string, tenantId: string): Promise<InboundOwnerResult> {
+    try {
+      const overview: any = await tenantService.getOwnerTenantOverview(tenantId, ownerId);
+      const history = await paymentService.getTenantPaymentHistory(tenantId);
+      const payments = (history.payments || []).slice(0, 5);
+      const lines = payments.length > 0
+        ? payments.flatMap((payment: any) => [
+            `${money(payment.amount_paid)}`,
+            `${formatShortDate(new Date(payment.payment_date))}${payment.payment_method ? ` · ${String(payment.payment_method).toUpperCase()}` : ""}`,
+            "",
+          ])
+        : ["No payments found."];
+      if (lines[lines.length - 1] === "") lines.pop();
+
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "TENANT_PAYMENTS",
+        response: [
+          "💰 Payment History",
+          "",
+          overview.name || "Tenant",
+          "",
+          ...lines,
+        ].join("\n"),
+        success: true,
+        buttons: [
+          { id: `TENANT_DUES:${tenantId}`, title: "Dues" },
+          { id: `TENANT_CARD:${tenantId}`, title: "Tenant Card" },
+        ],
+      });
+    } catch (error: any) {
+      logger.warn("entity.tenant_payments_failed", { owner_id: ownerId, tenant_id: tenantId, error: error?.message || String(error) });
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "TENANT_PAYMENTS",
+        response: "Could not load payment history for this tenant.",
+        success: false,
+      });
+    }
+  }
+
+  private async sendTenantDues(ownerId: string, phone: string, message: string, tenantId: string): Promise<InboundOwnerResult> {
+    try {
+      const overview: any = await tenantService.getOwnerTenantOverview(tenantId, ownerId);
+      if (!overview.current_room && !overview.room_number && !overview.current_room?.id && !overview.id) {
+        throw new Error("TENANT_OVERVIEW_INVALID");
+      }
+      const hostelId = await this.getTenantHostelId(ownerId, tenantId);
+      const dues = await financialService.getTenantDues(tenantId, ownerId, hostelId);
+      const lines = dues.items.slice(0, 5).flatMap((item: any) => [
+        this.formatDueItemLabel(item),
+        money(item.outstanding),
+        "",
+      ]);
+      if (lines[lines.length - 1] === "") lines.pop();
+
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "TENANT_DUES",
+        response: [
+          "⚠️ Outstanding Dues",
+          "",
+          overview.name || "Tenant",
+          "",
+          ...(lines.length > 0 ? lines : ["No outstanding dues."]),
+          "",
+          "Total",
+          money(dues.total_due),
+        ].join("\n"),
+        success: true,
+        buttons: [
+          { id: `TENANT_REMINDER:${tenantId}`, title: "Reminder" },
+          { id: `TENANT_PAYMENTS:${tenantId}`, title: "Payments" },
+          { id: `TENANT_CARD:${tenantId}`, title: "Tenant Card" },
+        ],
+      });
+    } catch (error: any) {
+      logger.warn("entity.tenant_dues_failed", { owner_id: ownerId, tenant_id: tenantId, error: error?.message || String(error) });
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "TENANT_DUES",
+        response: "Could not load dues for this tenant.",
+        success: false,
+      });
+    }
+  }
+
+  private formatDueItemLabel(item: any) {
+    const type = titleCase(String(item.type || "Due").replace(/_/g, " "));
+    const month = item.rent_month ? formatShortDate(new Date(item.rent_month)) : "";
+    return [month, type].filter(Boolean).join(" ");
+  }
+
+  private async handleTenantReminderRequest(ownerId: string, phone: string, message: string, tenantId: string): Promise<InboundOwnerResult> {
+    const overview: any = await tenantService.getOwnerTenantOverview(tenantId, ownerId);
+    const totalPending = Number(overview.total_due || overview.outstanding || 0);
+    const payload: SendRemindersPayload = {
+      action: SEND_REMINDERS_ACTION,
+      tenantIds: [tenantId],
+      tenantCount: 1,
+      totalPending,
+      createdAt: new Date().toISOString(),
+    };
+    await this.createPendingConfirmation(ownerId, phone, SEND_REMINDERS_ACTION, payload);
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "TENANT_REMINDER",
+      response: [
+        "Send reminder?",
+        "",
+        overview.name || "Tenant",
+        totalPending > 0 ? `Due: ${money(totalPending)}` : "No outstanding dues found.",
+        "",
+        "CONFIRM",
+        "CANCEL",
+      ].join("\n"),
+      success: true,
+      buttons: [
+        { id: "CONFIRM", title: "Confirm" },
+        { id: "CANCEL", title: "Cancel" },
+      ],
+    });
+  }
+
+  private async handleTenantMoveOutRequest(ownerId: string, phone: string, message: string, tenantId: string): Promise<InboundOwnerResult> {
+    const overview: any = await tenantService.getOwnerTenantOverview(tenantId, ownerId);
+    if (String(overview.status || "").toUpperCase() !== "ACTIVE") {
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "TENANT_MOVE_OUT",
+        response: `Move-out can only be started for ACTIVE tenants. Current status: ${overview.status || "Unknown"}.`,
+        success: false,
+      });
+    }
+
+    await setSelectionState(phone, {
+      phone,
+      action: "OWNER_MOVE_OUT_DATE",
+      ownerId,
+      tenantId,
+    });
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "TENANT_MOVE_OUT",
+      response: [
+        "🚪 Start move-out",
+        "",
+        overview.name || "Tenant",
+        `Room ${overview.room_number || "N/A"}`,
+        "",
+        "Send planned exit date as YYYY-MM-DD.",
+        "",
+        "Reply CANCEL to abort.",
+      ].join("\n"),
       success: true,
     });
+  }
+
+  private async handleMoveOutDateResponse(
+    ownerId: string,
+    phone: string,
+    message: string,
+    state: OwnerMoveOutDateState
+  ): Promise<InboundOwnerResult> {
+    if (message.trim().toUpperCase() === "CANCEL") {
+      await deleteSelectionState(phone);
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "MOVE_OUT_DATE_CANCEL",
+        response: "Move-out cancelled. No changes were made.",
+        success: true,
+      });
+    }
+
+    const plannedExitDate = parseIsoDateOnly(message);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (!plannedExitDate || new Date(`${plannedExitDate}T00:00:00`).getTime() < today.getTime()) {
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "MOVE_OUT_DATE_INVALID",
+        response: "Please send a valid future planned exit date as YYYY-MM-DD, or reply CANCEL.",
+        success: false,
+      });
+    }
+
+    const overview: any = await tenantService.getOwnerTenantOverview(state.tenantId, ownerId);
+    const hostelId = await this.getTenantHostelId(ownerId, state.tenantId);
+    const payload: StartMoveOutPayload = {
+      action: START_MOVE_OUT_ACTION,
+      tenant_id: state.tenantId,
+      hostel_id: hostelId,
+      planned_exit_date: plannedExitDate,
+      phone_number: phone,
+      createdAt: new Date().toISOString(),
+    };
+
+    await deleteSelectionState(phone);
+    await this.createPendingConfirmation(ownerId, phone, START_MOVE_OUT_ACTION, payload);
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: START_MOVE_OUT_ACTION,
+      response: [
+        "Start move-out process?",
+        "",
+        overview.name || "Tenant",
+        `Room ${overview.room_number || "N/A"}`,
+        `Planned Exit: ${formatShortDate(new Date(plannedExitDate))}`,
+        "",
+        "CONFIRM",
+        "CANCEL",
+      ].join("\n"),
+      success: true,
+      buttons: [
+        { id: "CONFIRM", title: "Confirm" },
+        { id: "CANCEL", title: "Cancel" },
+      ],
+    });
+  }
+
+  private async sendRoomCard(ownerId: string, phone: string, message: string, roomId: string): Promise<InboundOwnerResult> {
+    const room = await this.getOwnerRoom(ownerId, roomId);
+    if (!room) {
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "ROOM_CARD",
+        response: "Room not found or no longer belongs to this owner.",
+        success: false,
+      });
+    }
+
+    const body = [
+      `🏠 Room ${room.room_no}`,
+      "",
+      `🏢 ${room.hostel_name}`,
+      `Capacity: ${room.capacity}`,
+      `Occupied: ${room.occupied}`,
+      `Vacant: ${Math.max(0, room.capacity - room.occupied)}`,
+    ].join("\n");
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "ROOM_CARD",
+      response: body,
+      success: true,
+      buttons: [
+        { id: `ROOM_TENANTS:${roomId}`, title: "Tenants" },
+        { id: `ROOM_INVITE:${roomId}`, title: "Invite" },
+        { id: `ROOM_OCCUPANCY:${roomId}`, title: "Occupancy" },
+      ],
+    });
+  }
+
+  private async sendRoomTenants(ownerId: string, phone: string, message: string, roomId: string): Promise<InboundOwnerResult> {
+    const room = await this.getOwnerRoom(ownerId, roomId);
+    if (!room) {
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "ROOM_TENANTS",
+        response: "Room not found or no longer belongs to this owner.",
+        success: false,
+      });
+    }
+
+    const tenants = await prisma.$queryRaw<Array<{ id: string; name: string; status: string }>>`
+      SELECT t.id::text, COALESCE(p.name, t.guardian_name, 'Tenant') AS name, t.status::text AS status
+      FROM room_allocations ra
+      JOIN tenants t ON t.id = ra.tenant_id
+      LEFT JOIN profile p ON p.id = t.profile_id
+      WHERE ra.room_id = ${roomId}::uuid
+        AND ra.is_active = true
+        AND ra.end_date IS NULL
+        AND t.owner_id = ${ownerId}::uuid
+      ORDER BY p.name ASC NULLS LAST, t.created_at DESC
+      LIMIT 10
+    `;
+
+    if (tenants.length === 0) {
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "ROOM_TENANTS",
+        response: `Room ${room.room_no} has no active tenants.`,
+        success: true,
+        buttons: [
+          { id: `ROOM_INVITE:${roomId}`, title: "Invite" },
+          { id: `ROOM_CARD:${roomId}`, title: "Room Card" },
+        ],
+      });
+    }
+
+    if (tenants.length <= 3) {
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "ROOM_TENANTS",
+        response: [
+          `Room ${room.room_no} Tenants`,
+          "",
+          "Choose a tenant.",
+        ].join("\n"),
+        success: true,
+        buttons: tenants.map((tenant) => ({
+          id: `TENANT_CARD:${tenant.id}`,
+          title: this.shortButtonTitle(tenant.name),
+        })),
+      });
+    }
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "ROOM_TENANTS",
+      response: `Room ${room.room_no} Tenants`,
+      success: true,
+      list: {
+        buttonText: "Open tenant",
+        sections: [{
+          title: "Tenants",
+          rows: tenants.map((tenant) => ({
+            id: `TENANT_CARD:${tenant.id}`,
+            title: tenant.name.slice(0, 24),
+            description: tenant.status,
+          })),
+        }],
+      },
+    });
+  }
+
+  private async handleRoomInvite(ownerId: string, phone: string, message: string, roomId: string): Promise<InboundOwnerResult> {
+    const room = await this.getOwnerRoom(ownerId, roomId);
+    if (!room) {
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "ROOM_INVITE",
+        response: "Room not found or no longer belongs to this owner.",
+        success: false,
+      });
+    }
+    if (room.capacity - room.occupied <= 0) {
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "ROOM_INVITE",
+        response: `Room ${room.room_no} has no vacant beds.`,
+        success: false,
+      });
+    }
+
+    await setSelectionState(phone, {
+      phone,
+      action: "INVITE_TENANT",
+      step: "AWAITING_NAME",
+      data: {
+        hostelId: room.hostel_id,
+        roomId: room.id,
+        roomNo: room.room_no,
+      },
+    });
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "ROOM_INVITE",
+      response: [
+        `Invite tenant to Room ${room.room_no}`,
+        "",
+        "What is the tenant's full name?",
+        "",
+        "Reply CANCEL to abort.",
+      ].join("\n"),
+      success: true,
+    });
+  }
+
+  private async sendLeadCard(ownerId: string, phone: string, message: string, leadId: string): Promise<InboundOwnerResult> {
+    const leads = await prisma.$queryRaw<Array<{
+      id: string;
+      student_name: string;
+      student_phone: string | null;
+      status: string;
+      hostel_name: string;
+      converted_tenant_id: string | null;
+    }>>`
+      SELECT
+        l.id::text,
+        l.student_name,
+        l.student_phone,
+        l.status,
+        h.name AS hostel_name,
+        l.converted_tenant_id::text
+      FROM visitor_leads l
+      JOIN hostels h ON h.id = l.hostel_id
+      WHERE l.id = ${leadId}::uuid
+        AND l.owner_id = ${ownerId}::uuid
+      LIMIT 1
+    `;
+    const lead = leads[0];
+    if (!lead) {
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "LEAD_CARD",
+        response: "Lead not found or no longer belongs to this owner.",
+        success: false,
+      });
+    }
+    if (lead.converted_tenant_id) {
+      return this.sendTenantCard(ownerId, phone, message, lead.converted_tenant_id);
+    }
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "LEAD_CARD",
+      response: [
+        `👤 ${lead.student_name}`,
+        "",
+        lead.student_phone ? `📱 ${maskWhatsAppPhone(lead.student_phone)}` : "",
+        `🏢 ${lead.hostel_name}`,
+        `Status: Lead · ${lead.status}`,
+        "",
+        "Admissions actions are not enabled in WhatsApp yet.",
+      ].filter(Boolean).join("\n"),
+      success: true,
+    });
+  }
+
+  private async sendHostelCard(ownerId: string, phone: string, message: string, hostelId: string): Promise<InboundOwnerResult> {
+    const hostel = await prisma.hostels.findUnique({
+      where: { id: hostelId },
+      select: { id: true, name: true, owner_id: true, is_active: true },
+    });
+    if (!hostel || hostel.owner_id !== ownerId || !hostel.is_active) {
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "HOSTEL_CARD",
+        response: "Hostel not found or no longer belongs to this owner.",
+        success: false,
+      });
+    }
+    const stats = await dashboardService.getOwnerStatsShell(ownerId, hostel.id);
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "HOSTEL_CARD",
+      response: [
+        `🏢 ${hostel.name}`,
+        "",
+        `Occupancy: ${stats.occupied_beds || 0}/${stats.total_capacity || 0}`,
+        `Vacant: ${stats.vacant_beds || 0}`,
+        `Pending Dues: ${money(stats.pending_dues || 0)}`,
+      ].join("\n"),
+      success: true,
+    });
+  }
+
+  private async getTenantHostelId(ownerId: string, tenantId: string) {
+    const tenant = await prisma.tenants.findUnique({
+      where: { id: tenantId },
+      select: { hostel_id: true, owner_id: true },
+    });
+    if (!tenant?.hostel_id || tenant.owner_id !== ownerId) throw new Error("TENANT_NOT_FOUND");
+    return tenant.hostel_id;
+  }
+
+  private async getOwnerRoom(ownerId: string, roomId: string): Promise<{
+    id: string;
+    room_no: string;
+    hostel_id: string;
+    hostel_name: string;
+    capacity: number;
+    occupied: number;
+  } | null> {
+    const rows = await prisma.$queryRaw<Array<{
+      id: string;
+      room_no: string;
+      hostel_id: string;
+      hostel_name: string;
+      capacity: number;
+      occupied: number;
+    }>>`
+      SELECT
+        r.id::text,
+        r.room_no,
+        r.hostel_id::text,
+        h.name AS hostel_name,
+        r.capacity,
+        COUNT(ra.id)::int AS occupied
+      FROM rooms r
+      JOIN hostels h ON h.id = r.hostel_id
+      LEFT JOIN room_allocations ra ON ra.room_id = r.id AND ra.is_active = true AND ra.end_date IS NULL
+      WHERE r.id = ${roomId}::uuid
+        AND h.owner_id = ${ownerId}::uuid
+        AND r.is_active = true
+      GROUP BY r.id, r.room_no, r.hostel_id, h.name, r.capacity
+      LIMIT 1
+    `;
+    return rows[0] || null;
   }
 
   private async handleLink(phone: string, message: string, command: string): Promise<InboundOwnerResult> {
@@ -1140,9 +2155,9 @@ export class OwnerWhatsAppAssistantService {
       const occupancyRate = totals.capacity > 0
         ? Math.round((totals.occupiedBeds / totals.capacity) * 100)
         : 0;
-      const [onlyHostel] = hostels;
-      const hostelLabel = hostels.length === 1 && onlyHostel
-        ? onlyHostel.name
+      const singleHostel = hostels.length === 1 ? hostels.find(() => true) : null;
+      const hostelLabel = singleHostel
+        ? singleHostel.name
         : `All Hostels (${hostels.length})`;
       const response = [
         hostelLabel,
@@ -1669,6 +2684,10 @@ export class OwnerWhatsAppAssistantService {
       return this.confirmDisconnectWhatsApp(ownerId, phone, message, command, confirmation);
     }
 
+    if (confirmation.action_type === START_MOVE_OUT_ACTION) {
+      return this.confirmStartMoveOut(ownerId, phone, message, command, confirmation);
+    }
+
     const payload = normalizeSendRemindersPayload(confirmation.payload_json);
     if (!payload) {
       await this.updateConfirmationStatus(confirmation.id, "FAILED");
@@ -1922,6 +2941,79 @@ export class OwnerWhatsAppAssistantService {
     });
   }
 
+  private async confirmStartMoveOut(
+    ownerId: string,
+    phone: string,
+    message: string,
+    command: string,
+    confirmation: { id: string; payload_json: any }
+  ): Promise<InboundOwnerResult> {
+    const payload = normalizeStartMoveOutPayload(confirmation.payload_json);
+    if (!payload || payload.phone_number !== phone) {
+      await this.updateConfirmationStatus(confirmation.id, "FAILED");
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command,
+        response: "Could not read the pending move-out action. Search the tenant and start again.",
+        success: false,
+      });
+    }
+
+    try {
+      const overview: any = await tenantService.getOwnerTenantOverview(payload.tenant_id, ownerId);
+      const result = await moveOutService.createRequest({
+        tenantId: payload.tenant_id,
+        hostelId: payload.hostel_id,
+        ownerId,
+        initiatedBy: ownerId,
+        initiatedByRole: "OWNER",
+        actor: { id: ownerId, role: "OWNER", ownerId },
+        reason: MoveOutReason.OTHER,
+        reasonText: "Started from WhatsApp Owner Assistant",
+        plannedExitDate: payload.planned_exit_date,
+      });
+
+      await this.updateConfirmationStatus(confirmation.id, "COMPLETED");
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command,
+        response: [
+          "Move-out Started",
+          "",
+          overview.name || "Tenant",
+          `Planned Exit: ${formatShortDate(new Date(payload.planned_exit_date))}`,
+          result.notice_period_violation
+            ? `Notice period warning: ${result.notice_period_days} days required.`
+            : "",
+          "",
+          "The move-out workflow has been created in HMS.",
+        ].filter(Boolean).join("\n"),
+        success: true,
+      });
+    } catch (error: any) {
+      await this.updateConfirmationStatus(confirmation.id, "FAILED");
+      logger.warn("move_out.whatsapp_start_failed", {
+        owner_id: ownerId,
+        tenant_id: payload?.tenant_id,
+        error: error?.message || String(error),
+      });
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command,
+        response: String(error?.message || "").startsWith("VALIDATION:")
+          ? String(error.message).replace(/^VALIDATION:\s*/, "")
+          : "Could not start move-out for this tenant.",
+        success: false,
+      });
+    }
+  }
+
   private async getPendingDues(ownerId: string): Promise<PendingDuesResult> {
     const hostels = await this.getActiveHostels(ownerId);
     if (hostels.length === 0) {
@@ -1960,7 +3052,7 @@ export class OwnerWhatsAppAssistantService {
     ownerId: string,
     phone: string,
     actionType: string,
-    payload: SendRemindersPayload | CreateExpensePayload | UndoExpensePayload | DisconnectWhatsAppPayload
+    payload: SendRemindersPayload | CreateExpensePayload | UndoExpensePayload | DisconnectWhatsAppPayload | StartMoveOutPayload
   ) {
     const expiresAt = new Date(Date.now() + CONFIRMATION_WINDOW_MS);
     await this.expirePendingConfirmations(ownerId, phone);
@@ -2239,10 +3331,39 @@ export class OwnerWhatsAppAssistantService {
     command: string;
     response: string;
     success: boolean;
+    buttons?: WhatsAppButton[];
+    list?: {
+      buttonText?: string;
+      sections: WhatsAppListSection[];
+    };
   }): Promise<InboundOwnerResult> {
     let responseSent = false;
     try {
-      await this.getProvider().sendTextMessage(input.phone, input.response);
+      if (input.list) {
+        try {
+          await this.getProvider().sendListMessage(input.phone, input.response, input.list.sections, input.list.buttonText);
+        } catch (interactiveError: any) {
+          logger.warn("response.list_send_failed_fallback", {
+            owner_id: input.ownerId,
+            command: input.command,
+            error: interactiveError?.message || String(interactiveError),
+          });
+          await this.getProvider().sendTextMessage(input.phone, this.withTextFallbackOptions(input.response, input.list.sections));
+        }
+      } else if (input.buttons?.length) {
+        try {
+          await this.getProvider().sendButtonMessage(input.phone, input.response, input.buttons);
+        } catch (interactiveError: any) {
+          logger.warn("response.button_send_failed_fallback", {
+            owner_id: input.ownerId,
+            command: input.command,
+            error: interactiveError?.message || String(interactiveError),
+          });
+          await this.getProvider().sendTextMessage(input.phone, this.withButtonFallbackOptions(input.response, input.buttons));
+        }
+      } else {
+        await this.getProvider().sendTextMessage(input.phone, input.response);
+      }
       responseSent = true;
     } catch (error: any) {
       logger.error("response.send_failed", {
@@ -2267,6 +3388,19 @@ export class OwnerWhatsAppAssistantService {
       command: input.command,
       success,
     };
+  }
+
+  private withButtonFallbackOptions(response: string, buttons: WhatsAppButton[]) {
+    const lines = buttons.map((button) => `${button.title}: ${button.id}`);
+    return [response, "", "Options:", ...lines].join("\n");
+  }
+
+  private withTextFallbackOptions(response: string, sections: WhatsAppListSection[]) {
+    const lines = sections.flatMap((section) => [
+      section.title,
+      ...section.rows.map((row) => `${row.title}: ${row.id}`),
+    ]);
+    return [response, "", "Options:", ...lines].join("\n");
   }
 
   private async logMessage(input: {
@@ -2429,6 +3563,79 @@ export class OwnerWhatsAppAssistantService {
           }
         }
 
+        if (state.data.hostelId && state.data.roomId) {
+          const room = await this.getOwnerRoom(ownerId, state.data.roomId);
+          if (!room || room.hostel_id !== state.data.hostelId) {
+            await deleteSelectionState(phone);
+            return this.respondAndLog({
+              ownerId,
+              phone,
+              message,
+              command: "INVITE_TENANT_ROOM_INVALID",
+              response: "Selected room is no longer available. Flow cancelled.",
+              success: false,
+            });
+          }
+
+          const cap = await roomCapacityService.getRoomCapacitySnapshot(room.id, { ownerId });
+          if (cap.available <= 0) {
+            await deleteSelectionState(phone);
+            return this.respondAndLog({
+              ownerId,
+              phone,
+              message,
+              command: "INVITE_TENANT_NO_VACANCY",
+              response: `Room ${room.room_no} has no vacant beds. Flow cancelled.`,
+              success: false,
+            });
+          }
+
+          const defaults = await hostelBillingPreferencesService.resolveTenantInviteDefaults(room.id, ownerId);
+          const resolved = defaults.resolved_values;
+          const maintenanceType = resolved.maintenance_type || "NONE";
+          const maintenanceAmount = maintenanceType === "NONE" ? 0 : Number(resolved.maintenance_charge || 0);
+          const maintenanceText = maintenanceType !== "NONE" && maintenanceAmount > 0
+            ? `₹${maintenanceAmount.toLocaleString("en-IN")} (${maintenanceType.toLowerCase()})`
+            : "N/A";
+
+          await setSelectionState(phone, {
+            phone,
+            action: "INVITE_TENANT",
+            step: "AWAITING_CONFIRMATION",
+            data: {
+              ...state.data,
+              phone: normalized,
+              roomId: room.id,
+              roomNo: room.room_no,
+              monthlyRent: resolved.monthly_rent,
+              advanceDeposit: resolved.advance_deposit,
+              maintenanceType,
+              maintenanceAmount,
+            },
+          });
+
+          return this.respondAndLog({
+            ownerId,
+            phone,
+            message,
+            command: "INVITE_TENANT_ROOM_PRESELECTED",
+            response: [
+              "Please confirm invitation details:",
+              "",
+              `Tenant: ${state.data.name}`,
+              `Phone: +91 ${normalized.slice(-10)}`,
+              `Hostel: ${room.hostel_name}`,
+              `Room: Room ${room.room_no}`,
+              `Monthly Rent: ₹${resolved.monthly_rent.toLocaleString("en-IN")}`,
+              `Security Deposit: ₹${resolved.advance_deposit.toLocaleString("en-IN")}`,
+              `Maintenance Charge: ${maintenanceText}`,
+              "",
+              "Send invitation? Reply YES or NO.",
+            ].join("\n"),
+            success: true,
+          });
+        }
+
         const hostels = await prisma.hostels.findMany({
           where: { owner_id: ownerId, is_active: true },
           orderBy: { name: "asc" },
@@ -2446,9 +3653,9 @@ export class OwnerWhatsAppAssistantService {
           });
         }
 
-        const [onlyHostel] = hostels;
-        if (hostels.length === 1 && onlyHostel) {
-          const hostel = onlyHostel;
+        const singleHostel = hostels.length === 1 ? hostels.find(() => true) : null;
+        if (singleHostel) {
+          const hostel = singleHostel;
           const rooms = await prisma.rooms.findMany({
             where: { hostel_id: hostel.id, is_active: true },
             orderBy: { room_no: "asc" },
@@ -2912,9 +4119,9 @@ export class OwnerWhatsAppAssistantService {
     let resolvedRoomId: string | undefined;
     let resolvedRoomNo: string | undefined;
 
-    const [onlyHostel] = hostels;
-    if (hostels.length === 1 && onlyHostel) {
-      resolvedHostelId = onlyHostel.id;
+    const singleHostel = hostels.length === 1 ? hostels.find(() => true) : null;
+    if (singleHostel) {
+      resolvedHostelId = singleHostel.id;
       if (parsed.tokens.length > 0) {
         const roomToken = parsed.tokens[0];
         const cleanRoomToken = roomToken.toLowerCase().replace(/^room\s+/, "").trim();

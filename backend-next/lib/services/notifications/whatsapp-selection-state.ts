@@ -23,12 +23,37 @@ export interface InviteTenantSessionState {
     roomNo?: string;
     monthlyRent?: number;
     advanceDeposit?: number;
+    maintenanceType?: string;
+    maintenanceAmount?: number;
   };
   createdAt: string;
   expiresAt: string;
 }
 
-export type WhatsAppSessionState = BalanceSelectionState | InviteTenantSessionState;
+export interface OwnerEntitySearchState {
+  phone: string;
+  action: "OWNER_ENTITY_SEARCH";
+  ownerId: string;
+  query: string;
+  resultIds: string[];
+  createdAt: string;
+  expiresAt: string;
+}
+
+export interface OwnerMoveOutDateState {
+  phone: string;
+  action: "OWNER_MOVE_OUT_DATE";
+  ownerId: string;
+  tenantId: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export type WhatsAppSessionState =
+  | BalanceSelectionState
+  | InviteTenantSessionState
+  | OwnerEntitySearchState
+  | OwnerMoveOutDateState;
 
 const memoryState = new Map<string, { state: WhatsAppSessionState; expiresAt: number }>();
 
@@ -64,7 +89,11 @@ export async function getSelectionState(phone: string): Promise<WhatsAppSessionS
 
 export async function setSelectionState(
   phone: string,
-  state: Omit<BalanceSelectionState, "createdAt" | "expiresAt"> | Omit<InviteTenantSessionState, "createdAt" | "expiresAt">,
+  state:
+    | Omit<BalanceSelectionState, "createdAt" | "expiresAt">
+    | Omit<InviteTenantSessionState, "createdAt" | "expiresAt">
+    | Omit<OwnerEntitySearchState, "createdAt" | "expiresAt">
+    | Omit<OwnerMoveOutDateState, "createdAt" | "expiresAt">,
   ttlSeconds = 600
 ): Promise<void> {
   const now = new Date();
@@ -114,4 +143,3 @@ export async function deleteSelectionState(phone: string): Promise<void> {
 
   memoryState.delete(phone);
 }
-

@@ -9,6 +9,8 @@ import type {
   WhatsAppProviderConfig,
   WhatsAppSendResult,
   WhatsAppTemplateMessage,
+  WhatsAppButton,
+  WhatsAppListSection,
 } from "./types";
 
 const logger = getLogger("whatsapp.meta-provider");
@@ -220,6 +222,92 @@ export class MetaWhatsAppProvider {
       retryable: false,
       attempts: this.config.maxRetries + 1,
     });
+  }
+
+  async sendButtonMessage(
+    to: string,
+    bodyText: string,
+    buttons: WhatsAppButton[]
+  ): Promise<WhatsAppSendResult> {
+    const phone = normalizeWhatsAppPhone(to);
+    const cleanButtons = buttons
+      .filter((button) => button.id && button.title)
+      .slice(0, 3)
+      .map((button) => ({
+        type: "reply",
+        reply: {
+          id: String(button.id).slice(0, 256),
+          title: String(button.title).slice(0, 20),
+        },
+      }));
+
+    if (cleanButtons.length === 0) {
+      return this.sendTextMessage(to, bodyText);
+    }
+
+    const url = `${this.config.baseUrl}/${this.config.phoneNumberId}/messages`;
+    const body = {
+      messaging_product: "whatsapp",
+      to: phone,
+      type: "interactive",
+      interactive: {
+        type: "button",
+        body: {
+          text: bodyText,
+        },
+        action: {
+          buttons: cleanButtons,
+        },
+      },
+    };
+
+    return this.sendBody(url, body, "WhatsApp button send failed");
+  }
+
+  async sendListMessage(
+    to: string,
+    bodyText: string,
+    sections: WhatsAppListSection[],
+    buttonText = "View options"
+  ): Promise<WhatsAppSendResult> {
+    const phone = normalizeWhatsAppPhone(to);
+    const cleanSections = sections
+      .map((section) => ({
+        title: String(section.title || "Options").slice(0, 24),
+        rows: section.rows
+          .filter((row) => row.id && row.title)
+          .slice(0, 10)
+          .map((row) => ({
+            id: String(row.id).slice(0, 200),
+            title: String(row.title).slice(0, 24),
+            ...(row.description ? { description: String(row.description).slice(0, 72) } : {}),
+          })),
+      }))
+      .filter((section) => section.rows.length > 0)
+      .slice(0, 10);
+
+    if (cleanSections.length === 0) {
+      return this.sendTextMessage(to, bodyText);
+    }
+
+    const url = `${this.config.baseUrl}/${this.config.phoneNumberId}/messages`;
+    const body = {
+      messaging_product: "whatsapp",
+      to: phone,
+      type: "interactive",
+      interactive: {
+        type: "list",
+        body: {
+          text: bodyText,
+        },
+        action: {
+          button: String(buttonText || "View options").slice(0, 20),
+          sections: cleanSections,
+        },
+      },
+    };
+
+    return this.sendBody(url, body, "WhatsApp list send failed");
   }
 
   async sendOtp(input: { to: string; otp: string; purpose: string }): Promise<WhatsAppSendResult> {
@@ -490,6 +578,38 @@ export class MetaWhatsAppProvider {
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  private async sendBody(url: string, body: unknown, failureMessage: string): Promise<WhatsAppSendResult> {
+    let lastError: WhatsAppProviderError | null = null;
+    for (let attempt = 1; attempt <= this.config.maxRetries + 1; attempt += 1) {
+      try {
+        const result = await this.post(url, body, attempt);
+        const providerMessageId = Array.isArray((result as any)?.messages)
+          ? String((result as any).messages[0]?.id || "")
+          : "";
+        return {
+          providerMessageId: providerMessageId || null,
+          raw: result,
+          attempts: attempt,
+        };
+      } catch (error: any) {
+        if (error instanceof WhatsAppProviderError) {
+          lastError = error;
+          if (!error.retryable || attempt > this.config.maxRetries) throw error;
+          await sleep(Math.min(1000 * 2 ** (attempt - 1), 5000));
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    throw lastError || new WhatsAppProviderError({
+      message: failureMessage,
+      code: "WHATSAPP_SEND_FAILED",
+      retryable: false,
+      attempts: this.config.maxRetries + 1,
+    });
   }
 }
 

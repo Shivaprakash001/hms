@@ -19,6 +19,22 @@ export type WhatsAppTemplateMessage = {
   bodyParameters?: string[];
 };
 
+export type WhatsAppButton = {
+  id: string;
+  title: string;
+};
+
+export type WhatsAppListRow = {
+  id: string;
+  title: string;
+  description?: string;
+};
+
+export type WhatsAppListSection = {
+  title: string;
+  rows: WhatsAppListRow[];
+};
+
 export type WhatsAppSendResult = {
   providerMessageId: string | null;
   raw: unknown;

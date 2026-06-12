@@ -190,9 +190,11 @@ type ExtractedMessageEvent = {
   messageId: string;
   timestamp: string;
   body: string;
+  messageType: "text" | "interactive";
+  interactiveType?: "button_reply" | "list_reply";
 };
 
-function extractMessageEvents(payload: unknown): ExtractedMessageEvent[] {
+export function extractMessageEvents(payload: unknown): ExtractedMessageEvent[] {
   const webhook = payload as any;
   const events: ExtractedMessageEvent[] = [];
 
@@ -206,6 +208,31 @@ function extractMessageEvents(payload: unknown): ExtractedMessageEvent[] {
             messageId: item.id,
             timestamp: item.timestamp,
             body: item.text.body,
+            messageType: "text",
+          });
+          continue;
+        }
+
+        if (item.type === "interactive" && item.interactive?.button_reply?.id) {
+          events.push({
+            from: item.from,
+            messageId: item.id,
+            timestamp: item.timestamp,
+            body: item.interactive.button_reply.id,
+            messageType: "interactive",
+            interactiveType: "button_reply",
+          });
+          continue;
+        }
+
+        if (item.type === "interactive" && item.interactive?.list_reply?.id) {
+          events.push({
+            from: item.from,
+            messageId: item.id,
+            timestamp: item.timestamp,
+            body: item.interactive.list_reply.id,
+            messageType: "interactive",
+            interactiveType: "list_reply",
           });
         }
       }
