@@ -56,7 +56,6 @@ type OwnerWhatsAppSession = {
   id: string;
   owner_id: string;
   phone_number: string;
-  connected_hostel_id: string | null;
   current_screen: string | null;
   pending_action: any | null;
   pending_action_expires_at: Date | null;
@@ -87,6 +86,44 @@ type PendingDuesResult = {
   conversionRate?: number;
   messagesRemaining?: number;
   scopeLabel?: string;
+};
+
+type VacancyRoomRow = {
+  room_id: string;
+  room_no: string;
+  hostel_name: string;
+  capacity: number;
+  occupied: number;
+  base_rent: number | null;
+};
+
+type VacancySummary = {
+  rows: VacancyRoomRow[];
+  totalVacant: number;
+  lostRevenue: number;
+  hostelTotals: Map<string, { beds: number; revenue: number }>;
+  underfilledRooms: number;
+};
+
+type OperationsSnapshot = {
+  actionsNeeded: number;
+  chronicCount: number;
+  chronicAmount: number;
+  totalDue: number;
+  vacantBeds: number;
+  vacancyRevenue: number;
+  underfilledRooms: number;
+  expiringInvites: number;
+  activeMoveOuts: number;
+  moveOutNeedsAction: number;
+};
+
+type PriorityItem = {
+  id: string;
+  title: string;
+  description: string;
+  detailLines: string[];
+  rank: number;
 };
 
 type SendRemindersPayload = {
@@ -184,20 +221,13 @@ const META_LIST_ROW_TITLE_LIMIT = 24;
 const META_LIST_ROW_DESCRIPTION_LIMIT = 72;
 
 const HELP_TEXT = [
-  "Available Commands",
+  "What would you like to manage?",
   "",
-  "SUMMARY",
-  "DUES",
-  "EXPENSES TODAY",
-  "INTERNET 1000",
-  "UNDO EXPENSE",
-  "CONNECTED",
-  "DISCONNECT",
-  "SEND REMINDERS",
-  "INVITE",
-  "HELP",
+  "Collections",
+  "Occupancy",
+  "Operations",
   "",
-  "Reply CONFIRM or CANCEL when confirming an action.",
+  "You can also type a tenant name, phone number, or room number.",
 ].join("\n");
 
 const LINK_SUCCESS_TEXT = [
@@ -205,35 +235,15 @@ const LINK_SUCCESS_TEXT = [
   "",
   "Welcome to Sri Adithya Hostel Assistant",
   "",
-  "Available Commands:",
-  "",
-  "SUMMARY",
-  "DUES",
-  "EXPENSES TODAY",
-  "INTERNET 1000",
-  "UNDO EXPENSE",
-  "CONNECTED",
-  "DISCONNECT",
-  "SEND REMINDERS",
-  "INVITE",
-  "HELP",
+  "Send HELP to open the operations menu.",
+  "You can also type a tenant name, phone number, or room number.",
 ].join("\n");
 
 const ALREADY_CONNECTED_TEXT = [
   "This WhatsApp number is already connected.",
   "",
-  "Available Commands:",
-  "",
-  "SUMMARY",
-  "DUES",
-  "EXPENSES TODAY",
-  "INTERNET 1000",
-  "UNDO EXPENSE",
-  "CONNECTED",
-  "DISCONNECT",
-  "SEND REMINDERS",
-  "INVITE",
-  "HELP",
+  "Send HELP to open the operations menu.",
+  "You can also type a tenant name, phone number, or room number.",
 ].join("\n");
 
 const EXPENSE_TEMPLATE_ALIASES: Record<string, string> = {
@@ -333,20 +343,6 @@ export function parseExplicitSearchQuery(message: string) {
 
 function isSendRemindersCommand(upper: string) {
   return upper === "SEND REMINDERS" || upper === "SEND REMINDER";
-}
-
-function parseConnectScopeCommand(message: string) {
-  const normalized = String(message || "").trim().replace(/\s+/g, " ");
-  const upper = normalized.toUpperCase();
-  if (upper === "ALL HOSTELS" || upper === "CONNECT ALL") {
-    return { kind: "all" as const };
-  }
-  const match = normalized.match(/^connect\s+(.+)$/i);
-  if (!match) return null;
-  const target = match[1]?.trim();
-  if (!target) return null;
-  if (target.toUpperCase() === "ALL") return { kind: "all" as const };
-  return { kind: "hostel" as const, target };
 }
 
 function normalizeSendRemindersPayload(payload: any): SendRemindersPayload | null {
@@ -1119,27 +1115,55 @@ export class OwnerWhatsAppAssistantService {
     }
 
     if (parsed.command === "HELP") {
-      return this.respondAndLog({
-        ownerId,
-        phone: normalizedPhone,
-        message,
-        command: "HELP",
-        response: HELP_TEXT,
-        success: true,
-      });
+      return this.handleHelp(ownerId, normalizedPhone, message);
     }
 
     if (parsed.command === "SUMMARY") {
       return this.handleSummary(ownerId, normalizedPhone, message);
     }
 
-    const scopeCommand = parseConnectScopeCommand(message);
-    if (scopeCommand) {
-      return this.handleScopeCommand(ownerId, normalizedPhone, message, scopeCommand);
-    }
-
     if (parsed.command === "DUES") {
       return this.handleDues(ownerId, normalizedPhone, message);
+    }
+
+    if (parsed.command === "COLLECTIONS") {
+      return this.handleCollections(ownerId, normalizedPhone, message);
+    }
+
+    if (parsed.command === "VACANCIES") {
+      return this.handleVacancies(ownerId, normalizedPhone, message);
+    }
+
+    if (parsed.command === "OCCUPANCY") {
+      return this.handleVacancies(ownerId, normalizedPhone, message);
+    }
+
+    if (parsed.command === "WATCHLIST") {
+      return this.handleWatchlist(ownerId, normalizedPhone, message);
+    }
+
+    if (parsed.command === "INBOX" || parsed.command === "PRIORITIES") {
+      return this.handlePriorityInbox(ownerId, normalizedPhone, message);
+    }
+
+    if (parsed.command === "REVENUE") {
+      return this.handleRevenueProtection(ownerId, normalizedPhone, message);
+    }
+
+    if (parsed.command === "CLOSING") {
+      return this.handleClosingReport(ownerId, normalizedPhone, message);
+    }
+
+    if (parsed.command === "INSIGHTS") {
+      return this.handleCollectionInsights(ownerId, normalizedPhone, message);
+    }
+
+    if (parsed.command === "TODAY" || parsed.command === "ACTIONS" || parsed.command === "OPERATIONS") {
+      return this.handleOperations(ownerId, normalizedPhone, message);
+    }
+
+    if (parsed.command === "ACTIVITY") {
+      return this.handleActivity(ownerId, normalizedPhone, message);
     }
 
     if (parsed.command === "INVITATIONS") {
@@ -1148,6 +1172,26 @@ export class OwnerWhatsAppAssistantService {
 
     if (parsed.command === "MOVEOUTS" || parsed.upper === "MOVE OUTS") {
       return this.handleMoveOuts(ownerId, normalizedPhone, message);
+    }
+
+    if (parsed.upper === "TOP DUE" || parsed.upper === "WHO OWES MOST") {
+      return this.handleTopDue(ownerId, normalizedPhone, message);
+    }
+
+    if (parsed.upper === "MOVEOUT PENDING" || parsed.upper === "MOVE OUT PENDING" || parsed.upper === "MOVE-OUT PENDING") {
+      return this.handleMoveOuts(ownerId, normalizedPhone, message);
+    }
+
+    if (parsed.upper === "VACANT ROOMS") {
+      return this.handleVacancies(ownerId, normalizedPhone, message);
+    }
+
+    if (parsed.upper === "RECENT JOINERS") {
+      return this.handleRecentJoiners(ownerId, normalizedPhone, message);
+    }
+
+    if (parsed.upper === "INVITES EXPIRING" || parsed.upper === "EXPIRING INVITES") {
+      return this.handleExpiringInvites(ownerId, normalizedPhone, message);
     }
 
     if (isSendRemindersCommand(parsed.upper)) {
@@ -1199,6 +1243,22 @@ export class OwnerWhatsAppAssistantService {
     }
 
     return this.handleEntitySearch(ownerId, normalizedPhone, message);
+  }
+
+  private async handleHelp(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "HELP",
+      response: HELP_TEXT,
+      success: true,
+      buttons: [
+        { id: this.interactionId("dues", "view", "owner", ownerId), title: "Collections" },
+        { id: this.interactionId("vacancy", "view", "owner", ownerId), title: "Occupancy" },
+        { id: this.interactionId("operations", "view", "owner", ownerId), title: "Operations" },
+      ],
+    });
   }
 
   private async handleOwnerAssistantPayload(
@@ -1279,6 +1339,8 @@ export class OwnerWhatsAppAssistantService {
       if (action === "resend") return this.handleTenantInvitationResendRequest(ownerId, phone, message, id);
       if (action === "profile") return this.sendTenantProfileSummary(ownerId, phone, message, id);
       if (action === "agreement") return this.sendTenantAgreementSummary(ownerId, phone, message, id);
+      if (action === "call") return this.sendTenantCallInfo(ownerId, phone, message, id);
+      if (action === "room") return this.sendTenantRoom(ownerId, phone, message, id);
     }
 
     if (screen === "room" && entityType === "room") {
@@ -1288,8 +1350,48 @@ export class OwnerWhatsAppAssistantService {
     }
 
     if (screen === "dues" && (entityType === "hostel" || entityType === "owner")) {
-      if (action === "view") return this.handleDues(ownerId, phone, message);
+      if (action === "view") return entityType === "hostel"
+        ? this.handleDues(ownerId, phone, message, [id])
+        : this.handleDues(ownerId, phone, message);
       if (action === "remind") return this.handleScopedDuesReminderRequest(ownerId, phone, message, entityType, id, param);
+      if (action === "bucket") return this.handleDuesBucket(ownerId, phone, message, entityType, id, param);
+      if (action === "insights") return this.handleCollectionInsights(ownerId, phone, message);
+    }
+
+    if (screen === "vacancy" && action === "view") {
+      return this.handleVacancies(ownerId, phone, message);
+    }
+
+    if (screen === "watchlist" && action === "view") {
+      return this.handleWatchlist(ownerId, phone, message);
+    }
+
+    if (screen === "collections" && action === "view") {
+      return this.handleCollections(ownerId, phone, message);
+    }
+
+    if (screen === "operations" && action === "view") {
+      return this.handleOperations(ownerId, phone, message);
+    }
+
+    if (screen === "operations" && action === "queues") {
+      return this.handleOperationsQueues(ownerId, phone, message);
+    }
+
+    if (screen === "inbox" && action === "view") {
+      return this.handlePriorityInbox(ownerId, phone, message);
+    }
+
+    if (screen === "revenue" && action === "view") {
+      return this.handleRevenueProtection(ownerId, phone, message);
+    }
+
+    if (screen === "closing" && action === "view") {
+      return this.handleClosingReport(ownerId, phone, message);
+    }
+
+    if (screen === "activity" && action === "view") {
+      return this.handleActivity(ownerId, phone, message);
     }
 
     if (screen === "invite" && action === "pending") {
@@ -1305,6 +1407,7 @@ export class OwnerWhatsAppAssistantService {
     }
 
     if (screen === "expense") {
+      if (action === "view") return this.handleExpenseCenter(ownerId, phone, message);
       if (action === "today") return this.handleExpenseReport(ownerId, phone, "EXPENSES TODAY");
       if (action === "month") return this.handleExpenseReport(ownerId, phone, "EXPENSES MONTH");
       if (action === "categories") return this.handleTopExpenseCategories(ownerId, phone, message);
@@ -1327,15 +1430,6 @@ export class OwnerWhatsAppAssistantService {
           ].join("\n"),
           success: true,
         });
-      }
-    }
-
-    if (screen === "scope" && action === "connect") {
-      if (entityType === "owner" && id === ownerId && param === "all") {
-        return this.setSessionScope(ownerId, phone, message, null);
-      }
-      if (entityType === "hostel") {
-        return this.setSessionScope(ownerId, phone, message, id);
       }
     }
 
@@ -1406,11 +1500,9 @@ export class OwnerWhatsAppAssistantService {
           "No matching tenant, room, lead, or hostel found.",
           "",
           "Try:",
-          "SEARCH SHIVA",
-          "SEARCH G1",
-          "SEARCH 8008046952",
-          "",
-          "Send HELP to view commands.",
+          "SHIVA",
+          "G1",
+          "8008046952",
         ].join("\n"),
         success: true,
       });
@@ -1779,27 +1871,45 @@ export class OwnerWhatsAppAssistantService {
       const totalDue = Number(overview.total_due || overview.outstanding || 0);
       const status = String(overview.status || "Unknown").toUpperCase();
       const activeMoveOut = await this.getTenantActiveMoveOut(ownerId, tenantId);
+      const collectionContext = totalDue > 0 ? await this.getTenantCollectionContext(ownerId, tenantId) : null;
+      const recentPayment = lastPayment?.date
+        ? Date.now() - new Date(lastPayment.date).getTime() <= 2 * 24 * 60 * 60 * 1000
+        : false;
+      const shouldCall = Boolean(collectionContext && (collectionContext.daysOverdue >= 14 || collectionContext.reminderCount >= 2));
+      const recommendation = totalDue > 0
+        ? shouldCall
+          ? "Recommendation: Call Tenant"
+          : "Recommendation: Send Reminder"
+        : recentPayment
+          ? "Recommendation: No collection action"
+          : "";
       const buttons: WhatsAppButton[] = activeMoveOut
         ? [
             { id: this.interactionId("moveout", "list", "tenant", tenantId), title: "Review Move-Out" },
-            { id: this.interactionId("tenant", "payments", "tenant", tenantId), title: "Settlement" },
+            { id: this.interactionId("tenant", "call", "tenant", tenantId), title: "Call" },
             { id: this.interactionId("tenant", "actions", "tenant", tenantId), title: "Actions" },
           ]
         : status === "INVITED"
           ? [
               { id: this.interactionId("tenant", "resend", "tenant", tenantId), title: "Resend Invite" },
-              { id: this.interactionId("tenant", "invite", "tenant", tenantId), title: "View Invite" },
+              { id: this.interactionId("tenant", "call", "tenant", tenantId), title: "Call" },
               { id: this.interactionId("tenant", "actions", "tenant", tenantId), title: "Actions" },
             ]
-          : totalDue > 0
+          : totalDue > 0 && shouldCall
+            ? [
+                { id: this.interactionId("tenant", "call", "tenant", tenantId), title: "Call" },
+                { id: this.interactionId("tenant", "remind", "tenant", tenantId), title: "Reminder" },
+                { id: this.interactionId("tenant", "actions", "tenant", tenantId), title: "Actions" },
+              ]
+          : totalDue > 0 && !recentPayment
             ? [
                 { id: this.interactionId("tenant", "remind", "tenant", tenantId), title: "Send Reminder" },
-                { id: this.interactionId("tenant", "payments", "tenant", tenantId), title: "Payments" },
+                { id: this.interactionId("tenant", "call", "tenant", tenantId), title: "Call" },
                 { id: this.interactionId("tenant", "actions", "tenant", tenantId), title: "Actions" },
               ]
             : [
+                { id: this.interactionId("tenant", "profile", "tenant", tenantId), title: "Profile" },
                 { id: this.interactionId("tenant", "payments", "tenant", tenantId), title: "Payments" },
-                { id: this.interactionId("tenant", "dues", "tenant", tenantId), title: "Dues" },
                 { id: this.interactionId("tenant", "actions", "tenant", tenantId), title: "Actions" },
               ];
       const body = [
@@ -1812,6 +1922,10 @@ export class OwnerWhatsAppAssistantService {
         "",
         "💰 Last Payment:",
         lastPayment ? `${money(lastPayment.amount)} on ${formatShortDate(new Date(lastPayment.date))}` : "No payments found",
+        "",
+        collectionContext && totalDue > 0 ? `Reminders sent: ${collectionContext.reminderCount}` : "",
+        collectionContext && totalDue > 0 ? `Days overdue: ${collectionContext.daysOverdue}` : "",
+        recommendation,
         "",
         activeMoveOut ? `Move-Out: ${activeMoveOut.status}` : "",
         `Status: ${overview.status || "Unknown"}`,
@@ -2015,6 +2129,56 @@ export class OwnerWhatsAppAssistantService {
         { id: this.interactionId("tenant", "payments", "tenant", tenantId), title: "Payments" },
       ],
     });
+  }
+
+  private async sendTenantCallInfo(ownerId: string, phone: string, message: string, tenantId: string): Promise<InboundOwnerResult> {
+    const overview: any = await tenantService.getOwnerTenantOverview(tenantId, ownerId);
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "TENANT_CALL",
+      response: [
+        "Call Tenant",
+        "",
+        overview.name || "Tenant",
+        overview.phone ? `Phone: ${displayWhatsAppPhone(overview.phone)}` : "No phone number found.",
+        `Room: ${overview.room_number || "N/A"}`,
+      ].filter(Boolean).join("\n"),
+      success: true,
+      buttons: [
+        { id: this.interactionId("tenant", "card", "tenant", tenantId), title: "Tenant Card" },
+        { id: this.interactionId("tenant", "actions", "tenant", tenantId), title: "Actions" },
+      ],
+    });
+  }
+
+  private async sendTenantRoom(ownerId: string, phone: string, message: string, tenantId: string): Promise<InboundOwnerResult> {
+    const rows = await prisma.$queryRaw<Array<{ room_id: string }>>`
+      SELECT r.id::text AS room_id
+      FROM room_allocations ra
+      JOIN tenants t ON t.id = ra.tenant_id
+      JOIN rooms r ON r.id = ra.room_id
+      WHERE ra.tenant_id = ${tenantId}::uuid
+        AND ra.is_active = true
+        AND ra.end_date IS NULL
+        AND t.owner_id = ${ownerId}::uuid
+      LIMIT 1
+    `;
+    if (!rows[0]?.room_id) {
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "TENANT_ROOM",
+        response: "No active room is assigned to this tenant.",
+        success: false,
+        buttons: [
+          { id: this.interactionId("tenant", "card", "tenant", tenantId), title: "Tenant Card" },
+        ],
+      });
+    }
+    return this.sendRoomCard(ownerId, phone, message, rows[0].room_id);
   }
 
   private async sendTenantAgreementSummary(ownerId: string, phone: string, message: string, tenantId: string): Promise<InboundOwnerResult> {
@@ -2469,6 +2633,28 @@ export class OwnerWhatsAppAssistantService {
     return rows[0] || null;
   }
 
+  private async getTenantCollectionContext(ownerId: string, tenantId: string): Promise<{ reminderCount: number; daysOverdue: number } | null> {
+    const rows = await prisma.$queryRaw<Array<{ reminder_count: number; days_overdue: number }>>`
+      SELECT
+        COUNT(DISTINCT rl.id)::int AS reminder_count,
+        GREATEST(0, MAX((CURRENT_DATE - ro.due_date)::int))::int AS days_overdue
+      FROM rent_obligations ro
+      LEFT JOIN reminder_logs rl ON rl.obligation_id = ro.id
+      WHERE ro.owner_id = ${ownerId}::uuid
+        AND ro.tenant_id = ${tenantId}::uuid
+        AND ro.status::text IN ('PENDING', 'PARTIAL')
+        AND ro.is_superseded = false
+        AND ro.due_date <= CURRENT_DATE
+      HAVING SUM((ro.total_amount + COALESCE(ro.late_fee, 0))) > 0
+    `;
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      reminderCount: Number(row.reminder_count || 0),
+      daysOverdue: Number(row.days_overdue || 0),
+    };
+  }
+
   private async getOwnerRoom(ownerId: string, roomId: string): Promise<{
     id: string;
     room_no: string;
@@ -2659,7 +2845,7 @@ export class OwnerWhatsAppAssistantService {
 
   private async handleSummary(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
     try {
-      const hostels = await this.getScopedHostels(ownerId, phone);
+      const hostels = await this.getActiveHostels(ownerId);
       if (hostels.length === 0) {
         return this.respondAndLog({
           ownerId,
@@ -2723,10 +2909,776 @@ export class OwnerWhatsAppAssistantService {
     }
   }
 
-  private async handleDues(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
+  private async getVacancySummary(ownerId: string): Promise<VacancySummary> {
+    const rows = await prisma.$queryRaw<VacancyRoomRow[]>`
+      SELECT
+        r.id::text AS room_id,
+        r.room_no,
+        h.name AS hostel_name,
+        r.capacity,
+        COUNT(ra.id)::int AS occupied,
+        r.base_rent
+      FROM rooms r
+      JOIN hostels h ON h.id = r.hostel_id
+      LEFT JOIN room_allocations ra ON ra.room_id = r.id AND ra.is_active = true AND ra.end_date IS NULL
+      WHERE h.owner_id = ${ownerId}::uuid
+        AND h.is_active = true
+        AND r.is_active = true
+      GROUP BY r.id, r.room_no, h.name, r.capacity, r.base_rent
+      HAVING r.capacity - COUNT(ra.id) > 0
+      ORDER BY h.name ASC, r.room_no ASC
+      LIMIT 10
+    `;
+
+    const hostelTotals = new Map<string, { beds: number; revenue: number }>();
+    let totalVacant = 0;
+    let lostRevenue = 0;
+    let underfilledRooms = 0;
+
+    for (const row of rows) {
+      const vacant = Math.max(0, Number(row.capacity) - Number(row.occupied));
+      const revenue = vacant * Number(row.base_rent || 0);
+      totalVacant += vacant;
+      lostRevenue += revenue;
+      if (Number(row.capacity) > 0 && Number(row.occupied) / Number(row.capacity) < 0.5) {
+        underfilledRooms += 1;
+      }
+      const current = hostelTotals.get(row.hostel_name) || { beds: 0, revenue: 0 };
+      hostelTotals.set(row.hostel_name, {
+        beds: current.beds + vacant,
+        revenue: current.revenue + revenue,
+      });
+    }
+
+    return { rows, totalVacant, lostRevenue, hostelTotals, underfilledRooms };
+  }
+
+  private async getOperationsSnapshot(ownerId: string): Promise<OperationsSnapshot> {
+    const [pending, vacancy, inviteRows, moveOutRows] = await Promise.all([
+      this.getPendingDues(ownerId),
+      this.getVacancySummary(ownerId),
+      prisma.$queryRaw<Array<{ expiring_count: number }>>`
+        SELECT COUNT(*)::int AS expiring_count
+        FROM tenant_invitations
+        WHERE owner_id = ${ownerId}::uuid
+          AND status = 'PENDING'
+          AND expires_at > now()
+          AND expires_at <= now() + interval '24 hours'
+      `,
+      prisma.$queryRaw<Array<{ active_count: number; action_count: number }>>`
+        SELECT
+          COUNT(DISTINCT mor.id)::int AS active_count,
+          COUNT(DISTINCT mor.id) FILTER (
+            WHERE mor.status::text IN ('REQUESTED', 'PENDING_REVIEW')
+              OR d.id IS NOT NULL
+              OR (est.id IS NOT NULL AND (est.confirmed_by_owner = false OR est.payment_status <> 'PAID'))
+          )::int AS action_count
+        FROM move_out_requests mor
+        LEFT JOIN exit_disputes d ON d.request_id = mor.id AND d.status = 'OPEN'
+        LEFT JOIN exit_settlement_transactions est ON est.request_id = mor.id
+        WHERE mor.owner_id = ${ownerId}::uuid
+          AND mor.status::text NOT IN ('COMPLETED', 'REJECTED')
+      `,
+    ]);
+
+    const chronic = pending.buckets?.chronic || [];
+    const chronicAmount = chronic.reduce((sum: number, row: PendingTenantDues) => sum + row.amount, 0);
+    const expiringInvites = Number(inviteRows[0]?.expiring_count || 0);
+    const activeMoveOuts = Number(moveOutRows[0]?.active_count || 0);
+    const moveOutNeedsAction = Number(moveOutRows[0]?.action_count || 0);
+    const actionsNeeded = chronic.length + vacancy.totalVacant + expiringInvites + moveOutNeedsAction;
+
+    return {
+      actionsNeeded,
+      chronicCount: chronic.length,
+      chronicAmount,
+      totalDue: pending.totalPending,
+      vacantBeds: vacancy.totalVacant,
+      vacancyRevenue: vacancy.lostRevenue,
+      underfilledRooms: vacancy.underfilledRooms,
+      expiringInvites,
+      activeMoveOuts,
+      moveOutNeedsAction,
+    };
+  }
+
+  private async handleCollections(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
+    const rows = await prisma.$queryRaw<Array<{
+      tenant_id: string;
+      tenant_name: string;
+      room_no: string | null;
+      amount_paid: number;
+      payment_date: Date;
+    }>>`
+      SELECT
+        p.tenant_id::text,
+        COALESCE(pr.name, t.guardian_name, 'Tenant') AS tenant_name,
+        r.room_no,
+        p.amount_paid::float AS amount_paid,
+        p.payment_date
+      FROM payments p
+      JOIN tenants t ON t.id = p.tenant_id
+      LEFT JOIN profiles pr ON pr.id = t.profile_id
+      LEFT JOIN room_allocations ra ON ra.tenant_id = t.id AND ra.is_active = true AND ra.end_date IS NULL
+      LEFT JOIN rooms r ON r.id = ra.room_id
+      WHERE p.owner_id = ${ownerId}::uuid
+        AND p.payment_date = CURRENT_DATE
+      ORDER BY p.created_at DESC
+      LIMIT 10
+    `;
+    const total = rows.reduce((sum: number, row: { amount_paid: number }) => sum + Number(row.amount_paid || 0), 0);
+    const lines = rows.slice(0, 5).map((row: { tenant_name: string; amount_paid: number; room_no: string | null }) =>
+      `${row.tenant_name} ${money(row.amount_paid)}${row.room_no ? ` - Room ${row.room_no}` : ""}`
+    );
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "COLLECTIONS",
+      response: [
+        "Today Collections",
+        "",
+        money(total),
+        `${rows.length} Payments`,
+        "",
+        ...(lines.length ? lines : ["No payments recorded today."]),
+      ].join("\n"),
+      success: true,
+      buttons: [
+        { id: this.interactionId("dues", "view", "owner", ownerId), title: "Pending" },
+        { id: this.interactionId("watchlist", "view", "owner", ownerId), title: "Watchlist" },
+        { id: this.interactionId("dues", "insights", "owner", ownerId), title: "Insights" },
+      ],
+    });
+  }
+
+  private async handleVacancies(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
+    const summary = await this.getVacancySummary(ownerId);
+    const rows = summary.rows;
+    const summaryLines = Array.from(summary.hostelTotals.entries()).slice(0, 6).map(([hostel, totals]) =>
+      `${hostel}: ${totals.beds} beds - ${money(totals.revenue)}`
+    );
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "VACANCIES",
+      response: [
+        "Vacancy Fill Center",
+        "",
+        `${summary.totalVacant} Vacant Beds`,
+        `Lost Revenue This Month: ${money(summary.lostRevenue)}`,
+        summary.underfilledRooms > 0 ? `${summary.underfilledRooms} rooms under 50% occupancy` : "",
+        "",
+        ...(summaryLines.length ? summaryLines : ["No vacancies found."]),
+      ].filter(Boolean).join("\n"),
+      success: true,
+      list: rows.length > 0 ? {
+        buttonText: "Fill vacancy",
+        sections: [{
+          title: "Vacant Rooms",
+          rows: this.paginateRows(rows.map((row: { room_id: string; room_no: string; hostel_name: string; capacity: number; occupied: number; base_rent: number | null }) => {
+            const vacant = Math.max(0, row.capacity - row.occupied);
+            return {
+              id: this.interactionId("room", "card", "room", row.room_id),
+              title: `Room ${row.room_no}`,
+              description: `${row.hostel_name} - ${vacant} beds${row.base_rent ? ` - ${money(row.base_rent)}` : ""}`,
+            };
+          }), "vacancy:rooms:page", 0),
+        }],
+      } : undefined,
+    });
+  }
+
+  private async handleWatchlist(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
+    const pending = await this.getPendingDues(ownerId, (await this.getActiveHostels(ownerId)).map((hostel) => hostel.id));
+    const chronic = (pending.buckets?.chronic || []).slice(0, 8);
+    const moveOutRows = await prisma.$queryRaw<Array<{ tenant_id: string; tenant_name: string; room_no: string | null; status: string }>>`
+      SELECT
+        mor.tenant_id::text,
+        COALESCE(p.name, t.guardian_name, 'Tenant') AS tenant_name,
+        r.room_no,
+        mor.status::text AS status
+      FROM move_out_requests mor
+      JOIN tenants t ON t.id = mor.tenant_id
+      LEFT JOIN profiles p ON p.id = t.profile_id
+      LEFT JOIN room_allocations ra ON ra.tenant_id = t.id AND ra.is_active = true AND ra.end_date IS NULL
+      LEFT JOIN rooms r ON r.id = ra.room_id
+      WHERE mor.owner_id = ${ownerId}::uuid
+        AND mor.status::text NOT IN ('COMPLETED', 'REJECTED')
+      ORDER BY mor.created_at DESC
+      LIMIT 5
+    `;
+
+    const rows = [
+      ...chronic.map((row) => ({
+        id: this.interactionId("tenant", "card", "tenant", row.tenantId),
+        title: row.name,
+        description: `Chronic due - ${money(row.amount)}${row.room !== "N/A" ? ` - Room ${row.room}` : ""}`,
+      })),
+      ...moveOutRows.map((row: { tenant_id: string; tenant_name: string; room_no: string | null; status: string }) => ({
+        id: this.interactionId("tenant", "card", "tenant", row.tenant_id),
+        title: row.tenant_name,
+        description: `Move-out ${row.status}${row.room_no ? ` - Room ${row.room_no}` : ""}`,
+      })),
+    ].slice(0, 10);
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "WATCHLIST",
+      response: [
+        "Watchlist",
+        "",
+        `${rows.length} Tenants Being Monitored`,
+        "",
+        rows.length ? "Open a tenant for next action." : "No chronic dues or active move-outs found.",
+      ].join("\n"),
+      success: true,
+      list: rows.length > 0 ? {
+        buttonText: "View",
+        sections: [{ title: "Watchlist", rows }],
+      } : undefined,
+    });
+  }
+
+  private async handlePriorityInbox(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
+    const [pending, vacancy, moveOutRows, inviteRows] = await Promise.all([
+      this.getPendingDues(ownerId),
+      this.getVacancySummary(ownerId),
+      prisma.$queryRaw<Array<{
+        request_id: string;
+        tenant_id: string;
+        tenant_name: string;
+        hostel_name: string;
+        blocked_amount: number;
+        has_dispute: boolean;
+        settlement_status: string | null;
+      }>>`
+        SELECT
+          mor.id::text AS request_id,
+          mor.tenant_id::text,
+          COALESCE(p.name, t.guardian_name, 'Tenant') AS tenant_name,
+          h.name AS hostel_name,
+          COALESCE(ABS(est.net_settlement_amount), est.total_dues, 0)::float AS blocked_amount,
+          EXISTS (
+            SELECT 1 FROM exit_disputes d
+            WHERE d.request_id = mor.id AND d.status = 'OPEN'
+          ) AS has_dispute,
+          est.payment_status AS settlement_status
+        FROM move_out_requests mor
+        JOIN tenants t ON t.id = mor.tenant_id
+        JOIN hostels h ON h.id = mor.hostel_id
+        LEFT JOIN profiles p ON p.id = t.profile_id
+        LEFT JOIN exit_settlement_transactions est ON est.request_id = mor.id
+        WHERE mor.owner_id = ${ownerId}::uuid
+          AND mor.status::text NOT IN ('COMPLETED', 'REJECTED')
+        ORDER BY
+          CASE
+            WHEN EXISTS (SELECT 1 FROM exit_disputes d WHERE d.request_id = mor.id AND d.status = 'OPEN') THEN 0
+            WHEN est.id IS NOT NULL AND (est.confirmed_by_owner = false OR est.payment_status <> 'PAID') THEN 1
+            ELSE 2
+          END,
+          mor.created_at DESC
+        LIMIT 1
+      `,
+      prisma.$queryRaw<Array<{
+        invitation_id: string;
+        tenant_id: string;
+        name: string;
+        hostel_name: string;
+        room_no: string;
+        base_rent: number | null;
+        expires_at: Date;
+      }>>`
+        SELECT
+          ti.id::text AS invitation_id,
+          ti.tenant_id::text,
+          ti.name,
+          h.name AS hostel_name,
+          r.room_no,
+          r.base_rent,
+          ti.expires_at
+        FROM tenant_invitations ti
+        JOIN hostels h ON h.id = ti.hostel_id
+        JOIN rooms r ON r.id = ti.room_id
+        WHERE ti.owner_id = ${ownerId}::uuid
+          AND ti.status = 'PENDING'
+          AND ti.expires_at > now()
+          AND ti.expires_at <= now() + interval '24 hours'
+        ORDER BY ti.expires_at ASC
+        LIMIT 1
+      `,
+    ]);
+
+    const topDue = [...(pending.buckets?.chronic || []), ...pending.rows]
+      .sort((a, b) => (b.daysOverdue || 0) - (a.daysOverdue || 0) || b.amount - a.amount)[0];
+    const topVacancy = [...vacancy.rows]
+      .sort((a, b) => ((b.capacity - b.occupied) * Number(b.base_rent || 0)) - ((a.capacity - a.occupied) * Number(a.base_rent || 0)))[0];
+
+    const items: PriorityItem[] = [];
+    if (topDue) {
+      const ignored = (topDue.reminderCount || 0) >= 2 ? `${topDue.reminderCount} reminders ignored` : `${topDue.reminderCount || 0} reminders sent`;
+      items.push({
+        id: this.interactionId("tenant", "call", "tenant", topDue.tenantId),
+        title: topDue.name,
+        description: `${money(topDue.amount)} due - ${topDue.daysOverdue || 0}d late`,
+        detailLines: [
+          `${topDue.name}${topDue.hostelName ? ` (${topDue.hostelName})` : ""}`,
+          `${money(topDue.amount)} overdue`,
+          `${topDue.daysOverdue || 0} days late`,
+          ignored,
+          "Expected recovery: High",
+          "Action: Call",
+        ],
+        rank: 1,
+      });
+    }
+
+    const moveOut = moveOutRows[0];
+    if (moveOut) {
+      items.push({
+        id: this.interactionId("moveout", "list", "owner", ownerId),
+        title: "Move-Out Review",
+        description: `${moveOut.hostel_name}${moveOut.blocked_amount ? ` - ${money(moveOut.blocked_amount)}` : ""}`,
+        detailLines: [
+          moveOut.has_dispute ? "Dispute Review" : "Settlement Approval",
+          moveOut.hostel_name,
+          moveOut.blocked_amount ? `${money(moveOut.blocked_amount)} blocked` : `${moveOut.tenant_name} needs review`,
+          "Action: Review",
+        ],
+        rank: 2,
+      });
+    }
+
+    const invite = inviteRows[0];
+    if (invite) {
+      items.push({
+        id: this.interactionId("invite", "resend", "invitation", invite.invitation_id),
+        title: "Invite Expiring",
+        description: `${invite.hostel_name} Room ${invite.room_no}`,
+        detailLines: [
+          "Invitation Expiring",
+          invite.hostel_name,
+          `Room ${invite.room_no}`,
+          invite.base_rent ? `Potential revenue: ${money(invite.base_rent)}/month` : "",
+          "Action: Resend",
+        ].filter(Boolean),
+        rank: 3,
+      });
+    }
+
+    if (topVacancy) {
+      const vacant = Math.max(0, topVacancy.capacity - topVacancy.occupied);
+      const revenue = vacant * Number(topVacancy.base_rent || 0);
+      items.push({
+        id: this.interactionId("room", "card", "room", topVacancy.room_id),
+        title: `Room ${topVacancy.room_no}`,
+        description: `${vacant} vacant - ${money(revenue)}/mo`,
+        detailLines: [
+          "Vacancy Leakage",
+          topVacancy.hostel_name,
+          `Room ${topVacancy.room_no}: ${vacant} vacant beds`,
+          `Potential revenue: ${money(revenue)}/month`,
+          "Action: Fill vacancy",
+        ],
+        rank: 4,
+      });
+    }
+
+    const priorityItems = items.sort((a, b) => a.rank - b.rank).slice(0, 4);
+    const body = priorityItems.length
+      ? [
+          "Top Priorities Today",
+          "",
+          ...priorityItems.slice(0, 3).flatMap((item, index) => [
+            `${index + 1}. ${item.detailLines[0]}`,
+            ...item.detailLines.slice(1),
+            "",
+          ]),
+        ].join("\n").trim()
+      : [
+          "Top Priorities Today",
+          "",
+          "No urgent operational items found.",
+        ].join("\n");
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "PRIORITY_INBOX",
+      response: body,
+      success: true,
+      list: priorityItems.length > 0 ? {
+        buttonText: "Open priority",
+        sections: [{
+          title: "Priority Inbox",
+          rows: priorityItems.map((item) => ({
+            id: item.id,
+            title: item.title,
+            description: item.description,
+          })),
+        }],
+      } : undefined,
+      buttons: priorityItems.length === 0 ? [
+        { id: this.interactionId("dues", "view", "owner", ownerId), title: "Collections" },
+        { id: this.interactionId("vacancy", "view", "owner", ownerId), title: "Occupancy" },
+        { id: this.interactionId("activity", "view", "owner", ownerId), title: "Activity" },
+      ] : undefined,
+    });
+  }
+
+  private async handleOperations(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
+    const snapshot = await this.getOperationsSnapshot(ownerId);
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "OPERATIONS",
+      response: [
+        `${snapshot.actionsNeeded} Actions Need Attention`,
+        "",
+        "Collections",
+        `${snapshot.chronicCount} chronic defaulters`,
+        `${money(snapshot.chronicAmount)} overdue >15 days`,
+        "",
+        "Occupancy",
+        `${snapshot.vacantBeds} vacant beds`,
+        `${money(snapshot.vacancyRevenue)} potential monthly revenue`,
+        snapshot.underfilledRooms > 0 ? `${snapshot.underfilledRooms} rooms under 50% occupancy` : "",
+        "",
+        "Invitations",
+        `${snapshot.expiringInvites} expiring today`,
+        "",
+        "Move-Outs",
+        `${snapshot.activeMoveOuts} active`,
+        `${snapshot.moveOutNeedsAction} need action`,
+      ].filter(Boolean).join("\n"),
+      success: true,
+      buttons: [
+        { id: this.interactionId("dues", "view", "owner", ownerId), title: "Collections" },
+        { id: this.interactionId("vacancy", "view", "owner", ownerId), title: "Occupancy" },
+        { id: this.interactionId("operations", "queues", "owner", ownerId), title: "Operations" },
+      ],
+    });
+  }
+
+  private async handleOperationsQueues(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "OPERATIONS_QUEUES",
+      response: [
+        "Operations Queues",
+        "",
+        "Choose the queue that needs attention.",
+      ].join("\n"),
+      success: true,
+      buttons: [
+        { id: this.interactionId("moveout", "list", "owner", ownerId), title: "Move-Outs" },
+        { id: this.interactionId("invite", "pending", "owner", ownerId), title: "Invitations" },
+        { id: this.interactionId("watchlist", "view", "owner", ownerId), title: "Watchlist" },
+      ],
+    });
+  }
+
+  private async handleActivity(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
+    const [payments, activations, invitations, moveOuts, expenses] = await Promise.all([
+      prisma.$queryRaw<Array<{ tenant_id: string; tenant_name: string; amount: number; created_at: Date }>>`
+        SELECT p.tenant_id::text, COALESCE(pr.name, t.guardian_name, 'Tenant') AS tenant_name, p.amount_paid::float AS amount, p.created_at
+        FROM payments p
+        JOIN tenants t ON t.id = p.tenant_id
+        LEFT JOIN profiles pr ON pr.id = t.profile_id
+        WHERE p.owner_id = ${ownerId}::uuid
+          AND p.created_at >= date_trunc('day', now())
+        ORDER BY p.created_at DESC
+        LIMIT 5
+      `,
+      prisma.$queryRaw<Array<{ tenant_id: string; tenant_name: string; activated_at: Date }>>`
+        SELECT t.id::text AS tenant_id, COALESCE(pr.name, t.guardian_name, 'Tenant') AS tenant_name, t.activation_completed_at AS activated_at
+        FROM tenants t
+        LEFT JOIN profiles pr ON pr.id = t.profile_id
+        WHERE t.owner_id = ${ownerId}::uuid
+          AND t.activation_completed_at >= date_trunc('day', now())
+        ORDER BY t.activation_completed_at DESC
+        LIMIT 5
+      `,
+      prisma.$queryRaw<Array<{ tenant_id: string; name: string; created_at: Date }>>`
+        SELECT tenant_id::text, name, created_at
+        FROM tenant_invitations
+        WHERE owner_id = ${ownerId}::uuid
+          AND created_at >= date_trunc('day', now())
+        ORDER BY created_at DESC
+        LIMIT 5
+      `,
+      prisma.$queryRaw<Array<{ tenant_id: string; tenant_name: string; status: string; created_at: Date }>>`
+        SELECT mor.tenant_id::text, COALESCE(pr.name, t.guardian_name, 'Tenant') AS tenant_name, mor.status::text AS status, mor.created_at
+        FROM move_out_requests mor
+        JOIN tenants t ON t.id = mor.tenant_id
+        LEFT JOIN profiles pr ON pr.id = t.profile_id
+        WHERE mor.owner_id = ${ownerId}::uuid
+          AND mor.created_at >= date_trunc('day', now())
+        ORDER BY mor.created_at DESC
+        LIMIT 5
+      `,
+      prisma.$queryRaw<Array<{ title: string; amount: number; created_at: Date }>>`
+        SELECT title, amount::float AS amount, created_at
+        FROM expenses
+        WHERE owner_id = ${ownerId}::uuid
+          AND created_at >= date_trunc('day', now())
+        ORDER BY created_at DESC
+        LIMIT 5
+      `,
+    ]);
+
+    const items = [
+      ...payments.map((row: { tenant_name: string; amount: number; created_at: Date }) => ({ at: row.created_at, text: `${row.tenant_name} paid ${money(row.amount)}` })),
+      ...activations.map((row: { tenant_name: string; activated_at: Date }) => ({ at: row.activated_at, text: `${row.tenant_name} activated account` })),
+      ...invitations.map((row: { name: string; created_at: Date }) => ({ at: row.created_at, text: `Invitation sent to ${row.name}` })),
+      ...moveOuts.map((row: { tenant_name: string; status: string; created_at: Date }) => ({ at: row.created_at, text: `${row.tenant_name} move-out ${row.status}` })),
+      ...expenses.map((row: { title: string; amount: number; created_at: Date }) => ({ at: row.created_at, text: `${row.title} expense ${money(row.amount)} recorded` })),
+    ].sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, 8);
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "ACTIVITY",
+      response: [
+        "Today Activity",
+        "",
+        ...(items.length ? items.map((item) => item.text) : ["No activity recorded today."]),
+      ].join("\n"),
+      success: true,
+      buttons: [
+        { id: this.interactionId("dues", "view", "owner", ownerId), title: "Collections" },
+        { id: this.interactionId("operations", "view", "owner", ownerId), title: "Operations" },
+        { id: this.interactionId("vacancy", "view", "owner", ownerId), title: "Occupancy" },
+      ],
+    });
+  }
+
+  private async handleRevenueProtection(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
+    const [pending, vacancy, settlementRows] = await Promise.all([
+      this.getPendingDues(ownerId),
+      this.getVacancySummary(ownerId),
+      prisma.$queryRaw<Array<{ blocked_amount: number }>>`
+        SELECT COALESCE(SUM(ABS(est.net_settlement_amount) + est.total_dues), 0)::float AS blocked_amount
+        FROM exit_settlement_transactions est
+        JOIN move_out_requests mor ON mor.id = est.request_id
+        WHERE est.owner_id = ${ownerId}::uuid
+          AND mor.status::text NOT IN ('COMPLETED', 'REJECTED')
+          AND (est.payment_status <> 'PAID' OR est.confirmed_by_owner = false)
+      `,
+    ]);
+    const settlementBlocked = Number(settlementRows[0]?.blocked_amount || 0);
+    const totalAtRisk = pending.totalPending + vacancy.lostRevenue + settlementBlocked;
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "REVENUE_PROTECTION",
+      response: [
+        "Revenue Protection",
+        "",
+        `Overdue Rent: ${money(pending.totalPending)}`,
+        `Vacant Beds: ${money(vacancy.lostRevenue)} potential/month`,
+        `Pending Move-Out Settlements: ${money(settlementBlocked)}`,
+        "",
+        `Total Revenue At Risk: ${money(totalAtRisk)}`,
+      ].join("\n"),
+      success: true,
+      buttons: [
+        { id: this.interactionId("dues", "view", "owner", ownerId), title: "Collections" },
+        { id: this.interactionId("vacancy", "view", "owner", ownerId), title: "Occupancy" },
+        { id: this.interactionId("operations", "queues", "owner", ownerId), title: "Operations" },
+      ],
+    });
+  }
+
+  private async handleClosingReport(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
+    const [collectionsRows, expenseRows, activationRows, moveOutRows, allocationRows] = await Promise.all([
+      prisma.$queryRaw<Array<{ total: number; count: number }>>`
+        SELECT COALESCE(SUM(amount_paid), 0)::float AS total, COUNT(*)::int AS count
+        FROM payments
+        WHERE owner_id = ${ownerId}::uuid
+          AND payment_date = CURRENT_DATE
+      `,
+      prisma.$queryRaw<Array<{ total: number; count: number }>>`
+        SELECT COALESCE(SUM(amount), 0)::float AS total, COUNT(*)::int AS count
+        FROM expenses
+        WHERE owner_id = ${ownerId}::uuid
+          AND date = CURRENT_DATE
+      `,
+      prisma.$queryRaw<Array<{ count: number }>>`
+        SELECT COUNT(*)::int AS count
+        FROM tenants
+        WHERE owner_id = ${ownerId}::uuid
+          AND activation_completed_at >= date_trunc('day', now())
+      `,
+      prisma.$queryRaw<Array<{ count: number }>>`
+        SELECT COUNT(*)::int AS count
+        FROM move_out_requests
+        WHERE owner_id = ${ownerId}::uuid
+          AND created_at >= date_trunc('day', now())
+      `,
+      prisma.$queryRaw<Array<{ count: number }>>`
+        SELECT COUNT(*)::int AS count
+        FROM room_allocations ra
+        JOIN hostels h ON h.id = ra.hostel_id
+        WHERE h.owner_id = ${ownerId}::uuid
+          AND ra.created_at >= date_trunc('day', now())
+      `,
+    ]);
+    const collected = Number(collectionsRows[0]?.total || 0);
+    const expenses = Number(expenseRows[0]?.total || 0);
+    const net = collected - expenses;
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "CLOSING_REPORT",
+      response: [
+        "Today's Results",
+        "",
+        `Collected: ${money(collected)}`,
+        `Expenses: ${money(expenses)}`,
+        `New Tenants: ${Number(activationRows[0]?.count || 0)}`,
+        `Move-Out Requests: ${Number(moveOutRows[0]?.count || 0)}`,
+        `Vacancies Filled: ${Number(allocationRows[0]?.count || 0)}`,
+        "",
+        `Net Impact: ${net >= 0 ? "+" : ""}${money(net)}`,
+      ].join("\n"),
+      success: true,
+      buttons: [
+        { id: this.interactionId("activity", "view", "owner", ownerId), title: "Activity" },
+        { id: this.interactionId("revenue", "view", "owner", ownerId), title: "Revenue" },
+        { id: this.interactionId("inbox", "view", "owner", ownerId), title: "Inbox" },
+      ],
+    });
+  }
+
+  private async handleTopDue(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
+    const pending = await this.getPendingDues(ownerId);
+    const rows = pending.rows.slice(0, 10);
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "TOP_DUE",
+      response: [
+        "Top Due Tenants",
+        "",
+        rows.length ? `Total Pending: ${money(pending.totalPending)}` : "No pending dues found.",
+      ].join("\n"),
+      success: true,
+      list: rows.length > 0 ? {
+        buttonText: "Open tenant",
+        sections: [{
+          title: "Top Due",
+          rows: rows.map((row) => ({
+            id: this.interactionId("tenant", "card", "tenant", row.tenantId),
+            title: row.name,
+            description: `${money(row.amount)} - ${row.daysOverdue || 0}d late${row.room !== "N/A" ? ` - Room ${row.room}` : ""}`,
+          })),
+        }],
+      } : undefined,
+    });
+  }
+
+  private async handleRecentJoiners(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
+    const rows = await prisma.$queryRaw<Array<{ tenant_id: string; tenant_name: string; room_no: string | null; joined_on: Date | null; activated_at: Date | null }>>`
+      SELECT
+        t.id::text AS tenant_id,
+        COALESCE(p.name, t.guardian_name, 'Tenant') AS tenant_name,
+        r.room_no,
+        t.joined_on,
+        t.activation_completed_at AS activated_at
+      FROM tenants t
+      LEFT JOIN profiles p ON p.id = t.profile_id
+      LEFT JOIN room_allocations ra ON ra.tenant_id = t.id AND ra.is_active = true AND ra.end_date IS NULL
+      LEFT JOIN rooms r ON r.id = ra.room_id
+      WHERE t.owner_id = ${ownerId}::uuid
+        AND t.status::text = 'ACTIVE'
+      ORDER BY COALESCE(t.activation_completed_at, t.joined_on::timestamp, t.created_at) DESC
+      LIMIT 10
+    `;
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "RECENT_JOINERS",
+      response: [
+        "Recent Joiners",
+        "",
+        rows.length ? "Open a tenant for details." : "No active tenants found.",
+      ].join("\n"),
+      success: true,
+      list: rows.length > 0 ? {
+        buttonText: "Open tenant",
+        sections: [{
+          title: "Recent Joiners",
+          rows: rows.map((row: { tenant_id: string; tenant_name: string; room_no: string | null; activated_at: Date | null }) => ({
+            id: this.interactionId("tenant", "card", "tenant", row.tenant_id),
+            title: row.tenant_name,
+            description: `${row.room_no ? `Room ${row.room_no}` : "Room N/A"}${row.activated_at ? ` - ${formatShortDate(row.activated_at)}` : ""}`,
+          })),
+        }],
+      } : undefined,
+    });
+  }
+
+  private async handleExpiringInvites(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
+    const rows = await prisma.$queryRaw<Array<{ invitation_id: string; name: string; hostel_name: string; room_no: string; expires_at: Date }>>`
+      SELECT ti.id::text AS invitation_id, ti.name, h.name AS hostel_name, r.room_no, ti.expires_at
+      FROM tenant_invitations ti
+      JOIN hostels h ON h.id = ti.hostel_id
+      JOIN rooms r ON r.id = ti.room_id
+      WHERE ti.owner_id = ${ownerId}::uuid
+        AND ti.status = 'PENDING'
+        AND ti.expires_at > now()
+      ORDER BY ti.expires_at ASC
+      LIMIT 10
+    `;
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "EXPIRING_INVITES",
+      response: [
+        "Expiring Invitations",
+        "",
+        rows.length ? `${rows.length} pending invitations sorted by expiry.` : "No pending invitations found.",
+      ].join("\n"),
+      success: true,
+      list: rows.length > 0 ? {
+        buttonText: "Open invite",
+        sections: [{
+          title: "Invitations",
+          rows: rows.map((row: { invitation_id: string; name: string; hostel_name: string; room_no: string; expires_at: Date }) => ({
+            id: this.interactionId("invite", "resend", "invitation", row.invitation_id),
+            title: row.name,
+            description: `${row.hostel_name} - Room ${row.room_no} - ${formatShortDate(row.expires_at)}`,
+          })),
+        }],
+      } : undefined,
+    });
+  }
+
+  private async handleDues(ownerId: string, phone: string, message: string, hostelIds?: string[]): Promise<InboundOwnerResult> {
     try {
-      const scopedHostels = await this.getScopedHostels(ownerId, phone);
-      const pending = await this.getPendingDues(ownerId, scopedHostels.map((hostel) => hostel.id));
+      const activeHostels = await this.getActiveHostels(ownerId);
+      const selectedHostelIds = hostelIds?.length ? hostelIds : activeHostels.map((hostel) => hostel.id);
+      const pending = await this.getPendingDues(ownerId, selectedHostelIds);
       if (pending.hostels.length === 0) {
         return this.respondAndLog({
           ownerId,
@@ -2741,56 +3693,49 @@ export class OwnerWhatsAppAssistantService {
       const fresh = pending.buckets?.fresh || [];
       const reminded = pending.buckets?.reminded || [];
       const chronic = pending.buckets?.chronic || [];
-      const topRows = pending.rows.slice(0, 5);
+      const freshAmount = fresh.reduce((sum, row) => sum + row.amount, 0);
+      const remindedAmount = reminded.reduce((sum, row) => sum + row.amount, 0);
+      const chronicAmount = chronic.reduce((sum, row) => sum + row.amount, 0);
       const scopeHostel = pending.hostels.length === 1 ? pending.hostels[0] : null;
       const scopeEntityType = scopeHostel ? "hostel" : "owner";
       const scopeEntityId = scopeHostel?.id || ownerId;
       const conversion = pending.conversionRate != null ? `${pending.conversionRate}%` : "N/A";
 
-      const response = topRows.length > 0
+      const response = pending.rows.length > 0
         ? [
-            "⚠️ Dues Command Center",
+            "Collection Center",
             "",
             pending.scopeLabel || (scopeHostel ? scopeHostel.name : `All Hostels (${pending.hostels.length})`),
             "",
-            ...topRows.map((row, index) =>
-              `${index + 1}. ${row.name} - ${money(row.amount)}${row.room && row.room !== "N/A" ? ` (Room ${row.room})` : ""}`
-            ),
+            `Total Due: ${money(pending.totalPending)}`,
+            `${pending.rows.length} Tenants`,
             "",
-            `Total Pending: ${money(pending.totalPending)}`,
-            `Fresh: ${fresh.length}`,
-            `Reminded: ${reminded.length}`,
-            `Chronic: ${chronic.length}`,
-            `90d Reminder Conversion: ${conversion}`,
-            `Message Credits: ${pending.messagesRemaining ?? 0}`,
+            `Fresh: ${money(freshAmount)} (${fresh.length})`,
+            `Reminded: ${money(remindedAmount)} (${reminded.length})`,
+            `Chronic: ${money(chronicAmount)} (${chronic.length})`,
             "",
-            "Choose a collection action.",
+            `Reminder conversion: ${conversion}`,
+            `Message credits: ${pending.messagesRemaining ?? 0}`,
           ].join("\n")
         : [
-            "⚠️ Dues Command Center",
+            "Collection Center",
             "",
             "No pending dues found.",
             "",
-            "Total Pending: ₹0",
+            "Total Due: ₹0",
           ].join("\n");
 
-      const buttons: WhatsAppButton[] = [];
-      if (fresh.length > 0) {
-        buttons.push({
-          id: this.interactionId("dues", "remind", scopeEntityType, scopeEntityId, "fresh"),
-          title: "Remind Fresh",
-        });
-      }
-      if (pending.rows.length > 0) {
-        buttons.push({
-          id: this.interactionId("dues", "remind", scopeEntityType, scopeEntityId, "all"),
-          title: "Remind All",
-        });
-      }
-      buttons.push({
-        id: this.interactionId("invite", "pending", "owner", ownerId),
-        title: "Invitations",
-      });
+      const actionRows = [
+        { id: this.interactionId("dues", "bucket", scopeEntityType, scopeEntityId, "chronic"), title: "Chronic", description: `${chronic.length} tenants - ${money(chronicAmount)}` },
+        { id: this.interactionId("dues", "bucket", scopeEntityType, scopeEntityId, "fresh"), title: "Fresh", description: `${fresh.length} tenants - ${money(freshAmount)}` },
+        { id: this.interactionId("dues", "insights", "owner", ownerId), title: "Insights", description: "Reminder conversion and timing" },
+        { id: this.interactionId("dues", "remind", scopeEntityType, scopeEntityId, "all"), title: "Remind All", description: `${pending.rows.length} tenants, ${pending.rows.length} messages` },
+      ];
+      const hostelRows = activeHostels.map((hostel) => ({
+        id: this.interactionId("dues", "view", "hostel", hostel.id),
+        title: hostel.name,
+        description: "Open hostel collection view",
+      }));
 
       return this.respondAndLog({
         ownerId,
@@ -2799,7 +3744,13 @@ export class OwnerWhatsAppAssistantService {
         command: "DUES",
         response,
         success: true,
-        buttons: buttons.slice(0, 3),
+        list: {
+          buttonText: "Open center",
+          sections: [
+            { title: "Actions", rows: this.paginateRows(actionRows, "dues:actions:page", 0) },
+            ...(hostelRows.length > 1 ? [{ title: "Hostels", rows: this.paginateRows(hostelRows, "dues:hostels:page", 0) }] : []),
+          ],
+        },
       });
     } catch (error: any) {
       logger.error("dues.failed", { owner_id: ownerId, error: error?.message || String(error) });
@@ -2816,8 +3767,8 @@ export class OwnerWhatsAppAssistantService {
 
   private async handleSendRemindersRequest(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
     try {
-      const scopedHostels = await this.getScopedHostels(ownerId, phone);
-      const pending = await this.getPendingDues(ownerId, scopedHostels.map((hostel) => hostel.id));
+      const hostels = await this.getActiveHostels(ownerId);
+      const pending = await this.getPendingDues(ownerId, hostels.map((hostel) => hostel.id));
       if (pending.hostels.length === 0) {
         return this.respondAndLog({
           ownerId,
@@ -2894,7 +3845,7 @@ export class OwnerWhatsAppAssistantService {
     entityId: string,
     bucketParam: string
   ): Promise<InboundOwnerResult> {
-    const hostelIds = entityType === "hostel" ? [entityId] : (await this.getScopedHostels(ownerId, phone)).map((hostel) => hostel.id);
+    const hostelIds = entityType === "hostel" ? [entityId] : (await this.getActiveHostels(ownerId)).map((hostel) => hostel.id);
     const pending = await this.getPendingDues(ownerId, hostelIds);
     const bucket = bucketParam === "fresh" ? "fresh" : "all";
     const sourceRows = bucket === "fresh" ? (pending.buckets?.fresh || []) : pending.rows;
@@ -2944,6 +3895,127 @@ export class OwnerWhatsAppAssistantService {
       buttons: [
         { id: "CONFIRM", title: "Confirm" },
         { id: "CANCEL", title: "Cancel" },
+      ],
+    });
+  }
+
+  private async handleDuesBucket(
+    ownerId: string,
+    phone: string,
+    message: string,
+    entityType: string,
+    entityId: string,
+    bucketParam: string
+  ): Promise<InboundOwnerResult> {
+    const hostelIds = entityType === "hostel" ? [entityId] : (await this.getActiveHostels(ownerId)).map((hostel) => hostel.id);
+    const pending = await this.getPendingDues(ownerId, hostelIds);
+    const bucket = bucketParam === "fresh" ? "fresh" : bucketParam === "reminded" ? "reminded" : "chronic";
+    const rows = (pending.buckets?.[bucket] || []).slice(0, 10);
+    const total = rows.reduce((sum, row) => sum + row.amount, 0);
+    const title = bucket === "fresh" ? "Fresh Dues" : bucket === "reminded" ? "Reminded Dues" : "Chronic Defaulters";
+
+    if (rows.length === 0) {
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "DUES_BUCKET",
+        response: [title, "", "No tenants in this bucket."].join("\n"),
+        success: true,
+        buttons: [
+          { id: this.interactionId("dues", "view", entityType, entityId), title: "Collections" },
+        ],
+      });
+    }
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "DUES_BUCKET",
+      response: [
+        title,
+        "",
+        pending.scopeLabel || "All Hostels",
+        `Total: ${money(total)}`,
+        `Tenants: ${rows.length}`,
+        "",
+        "Open a tenant or stage reminders.",
+      ].join("\n"),
+      success: true,
+      list: {
+        buttonText: "Open tenant",
+        sections: [{
+          title: title.slice(0, 24),
+          rows: this.paginateRows(rows.map((row) => ({
+            id: this.interactionId("tenant", "card", "tenant", row.tenantId),
+            title: row.name,
+            description: `${money(row.amount)}${row.room && row.room !== "N/A" ? ` - Room ${row.room}` : ""}`,
+          })), "dues:bucket:page", 0),
+        }],
+      },
+    });
+  }
+
+  private async handleCollectionInsights(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
+    const rows = await prisma.$queryRaw<Array<{
+      reminder_type: string;
+      sent_count: number;
+      converted_count: number;
+    }>>`
+      SELECT
+        COALESCE(reminder_type, 'REMINDER') AS reminder_type,
+        COUNT(*)::int AS sent_count,
+        COUNT(*) FILTER (WHERE converted_to_payment = true)::int AS converted_count
+      FROM reminder_logs
+      WHERE hostel_id IN (
+        SELECT id FROM hostels WHERE owner_id = ${ownerId}::uuid AND is_active = true
+      )
+        AND sent_at >= now() - interval '90 days'
+      GROUP BY COALESCE(reminder_type, 'REMINDER')
+      ORDER BY sent_count DESC
+      LIMIT 5
+    `;
+
+    const bestDayRows = await prisma.$queryRaw<Array<{ day_name: string; converted_count: number }>>`
+      SELECT
+        trim(to_char(sent_at, 'Day')) AS day_name,
+        COUNT(*) FILTER (WHERE converted_to_payment = true)::int AS converted_count
+      FROM reminder_logs
+      WHERE hostel_id IN (
+        SELECT id FROM hostels WHERE owner_id = ${ownerId}::uuid AND is_active = true
+      )
+        AND sent_at >= now() - interval '90 days'
+      GROUP BY trim(to_char(sent_at, 'Day')), EXTRACT(ISODOW FROM sent_at)
+      ORDER BY converted_count DESC, EXTRACT(ISODOW FROM sent_at)
+      LIMIT 1
+    `;
+
+    const lines = rows.length > 0
+      ? rows.map((row: { reminder_type: string; sent_count: number; converted_count: number }) => {
+          const rate = row.sent_count > 0 ? Math.round((row.converted_count / row.sent_count) * 100) : 0;
+          return `${titleCase(row.reminder_type)}: ${rate}% paid (${row.converted_count}/${row.sent_count})`;
+        })
+      : ["No reminder conversion data yet."];
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "COLLECTION_INSIGHTS",
+      response: [
+        "Reminder Insights",
+        "",
+        ...lines,
+        "",
+        bestDayRows[0] ? `Best day: ${bestDayRows[0].day_name}` : "",
+        "",
+        "Use this before spending credits on reminders.",
+      ].filter(Boolean).join("\n"),
+      success: true,
+      buttons: [
+        { id: this.interactionId("dues", "view", "owner", ownerId), title: "Collections" },
+        { id: this.interactionId("dues", "bucket", "owner", ownerId, "chronic"), title: "Chronic" },
       ],
     });
   }
@@ -3038,6 +4110,10 @@ export class OwnerWhatsAppAssistantService {
   private async handleExpenseReport(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
     try {
       const parsed = parseCommand(message);
+      if (parsed.upper === "EXPENSES") {
+        return this.handleExpenseCenter(ownerId, phone, message);
+      }
+
       const words = parsed.normalized.toLowerCase().split(" ");
 
       let range: string | undefined = "month";
@@ -3128,6 +4204,65 @@ export class OwnerWhatsAppAssistantService {
         success: false,
       });
     }
+  }
+
+  private async handleExpenseCenter(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
+    const [report, totals] = await Promise.all([
+      expenseService.getAllExpenses(ownerId, {
+        range: "month",
+        hostelId: undefined,
+        sort: "recent",
+        limit: 5,
+        offset: 0,
+      }),
+      prisma.$queryRaw<Array<{ current_month: number; previous_month: number }>>`
+        SELECT
+          COALESCE(SUM(amount) FILTER (WHERE date >= date_trunc('month', CURRENT_DATE)), 0)::float AS current_month,
+          COALESCE(SUM(amount) FILTER (
+            WHERE date >= date_trunc('month', CURRENT_DATE - interval '1 month')
+              AND date < date_trunc('month', CURRENT_DATE)
+          ), 0)::float AS previous_month
+        FROM expenses
+        WHERE owner_id = ${ownerId}::uuid
+      `,
+    ]);
+    const currentMonth = Number(totals[0]?.current_month || report.kpis?.this_month_expenses || 0);
+    const previousMonth = Number(totals[0]?.previous_month || 0);
+    const growth = previousMonth > 0 ? Math.round(((currentMonth - previousMonth) / previousMonth) * 100) : null;
+    const categories = (report.category_breakdown || []).slice(0, 3);
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "EXPENSE_CENTER",
+      response: [
+        "Expense Center",
+        "",
+        `This Month: ${money(currentMonth)}`,
+        growth != null ? `Month Change: ${growth >= 0 ? "+" : ""}${growth}%` : "",
+        "",
+        ...(categories.length
+          ? [
+              "Top Categories",
+              ...categories.map((row: any) => `${row.category}: ${money(row.amount)}`),
+            ]
+          : ["No expense categories yet."]),
+      ].filter(Boolean).join("\n"),
+      success: true,
+      list: {
+        buttonText: "Open action",
+        sections: [{
+          title: "Expenses",
+          rows: [
+            { id: this.interactionId("expense", "add", "owner", ownerId), title: "Add Expense", description: "Record a new spend" },
+            { id: this.interactionId("expense", "today", "owner", ownerId), title: "Today", description: "Today's expenses" },
+            { id: this.interactionId("expense", "categories", "owner", ownerId), title: "Categories", description: "Category breakdown" },
+            { id: this.interactionId("expense", "undo", "owner", ownerId), title: "Undo Last", description: "Delete recent WhatsApp expense" },
+          ],
+        }],
+      },
+    });
   }
 
   private async handleTopExpenseCategories(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
@@ -3243,8 +4378,8 @@ export class OwnerWhatsAppAssistantService {
   }
 
   private async handleInvitations(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
-    const scopedHostels = await this.getScopedHostels(ownerId, phone);
-    const hostelIds = scopedHostels.map((hostel) => hostel.id);
+    const activeHostels = await this.getActiveHostels(ownerId);
+    const hostelIds = activeHostels.map((hostel) => hostel.id);
     const rows = await prisma.$queryRaw<Array<{
       id: string;
       tenant_id: string;
@@ -3284,13 +4419,14 @@ export class OwnerWhatsAppAssistantService {
         response: [
           "Pending Invitations",
           "",
-          scopedHostels.length === 1 ? scopedHostels[0].name : `All Hostels (${scopedHostels.length})`,
+          `All Hostels (${activeHostels.length})`,
           "",
           "No pending invitations.",
         ].join("\n"),
         success: true,
         buttons: [
-          { id: this.interactionId("scope", "connect", "owner", ownerId, "all"), title: "All Hostels" },
+          { id: this.interactionId("vacancy", "view", "owner", ownerId), title: "Vacancies" },
+          { id: this.interactionId("operations", "view", "owner", ownerId), title: "Operations" },
         ],
       });
     }
@@ -3299,7 +4435,7 @@ export class OwnerWhatsAppAssistantService {
     const body = [
       "Pending Invitations",
       "",
-      scopedHostels.length === 1 ? scopedHostels[0].name : `All Hostels (${scopedHostels.length})`,
+      `All Hostels (${activeHostels.length})`,
       `Pending: ${rows.length}`,
       `Expiring Soon: ${expiring.length}`,
       "",
@@ -3468,8 +4604,8 @@ export class OwnerWhatsAppAssistantService {
   }
 
   private async handleMoveOuts(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
-    const scopedHostels = await this.getScopedHostels(ownerId, phone);
-    const hostelIds = scopedHostels.map((hostel) => hostel.id);
+    const activeHostels = await this.getActiveHostels(ownerId);
+    const hostelIds = activeHostels.map((hostel) => hostel.id);
     const rows = await prisma.$queryRaw<Array<{
       id: string;
       tenant_id: string;
@@ -3521,7 +4657,7 @@ export class OwnerWhatsAppAssistantService {
         response: [
           "Move-Outs",
           "",
-          scopedHostels.length === 1 ? scopedHostels[0].name : `All Hostels (${scopedHostels.length})`,
+          `All Hostels (${activeHostels.length})`,
           "",
           "No owner action needed.",
         ].join("\n"),
@@ -3532,7 +4668,7 @@ export class OwnerWhatsAppAssistantService {
     const body = [
       "Move-Outs",
       "",
-      scopedHostels.length === 1 ? scopedHostels[0].name : `All Hostels (${scopedHostels.length})`,
+      `All Hostels (${activeHostels.length})`,
       `Action Needed: ${rows.length}`,
       "",
       "Open a tenant to review the workflow.",
@@ -4425,7 +5561,6 @@ export class OwnerWhatsAppAssistantService {
           id::text,
           owner_id::text,
           phone_number,
-          connected_hostel_id::text,
           current_screen,
           pending_action,
           pending_action_expires_at,
@@ -4463,139 +5598,6 @@ export class OwnerWhatsAppAssistantService {
         error: error?.message || String(error),
       });
     }
-  }
-
-  private async getOwnerSession(ownerId: string, phone: string): Promise<OwnerWhatsAppSession | null> {
-    try {
-      const rows = await prisma.$queryRaw<OwnerWhatsAppSession[]>`
-        SELECT
-          id::text,
-          owner_id::text,
-          phone_number,
-          connected_hostel_id::text,
-          current_screen,
-          pending_action,
-          pending_action_expires_at,
-          last_interaction_at
-        FROM whatsapp_owner_sessions
-        WHERE owner_id = ${ownerId}::uuid
-          AND phone_number = ${phone}
-        LIMIT 1
-      `;
-      return rows[0] || null;
-    } catch (error: any) {
-      if (this.isMissingTableError(error)) return null;
-      throw error;
-    }
-  }
-
-  private async getScopedHostels(ownerId: string, phone: string): Promise<HostelRow[]> {
-    const session = await this.getOwnerSession(ownerId, phone);
-    if (!session?.connected_hostel_id) return this.getActiveHostels(ownerId);
-    const rows = await prisma.$queryRaw<HostelRow[]>`
-      SELECT id::text, name
-      FROM hostels
-      WHERE id = ${session.connected_hostel_id}::uuid
-        AND owner_id = ${ownerId}::uuid
-        AND is_active = true
-      LIMIT 1
-    `;
-    return rows.length > 0 ? rows : this.getActiveHostels(ownerId);
-  }
-
-  private async handleScopeCommand(
-    ownerId: string,
-    phone: string,
-    message: string,
-    scopeCommand: { kind: "all" } | { kind: "hostel"; target: string }
-  ): Promise<InboundOwnerResult> {
-    if (scopeCommand.kind === "all") return this.setSessionScope(ownerId, phone, message, null);
-    const hostel = await this.resolveHostelTarget(ownerId, scopeCommand.target);
-    if (!hostel) {
-      return this.respondAndLog({
-        ownerId,
-        phone,
-        message,
-        command: "SCOPE_CONNECT",
-        response: [
-          "Hostel not found.",
-          "",
-          "Try:",
-          "CONNECT SAH-1",
-          "CONNECT ALL",
-        ].join("\n"),
-        success: false,
-      });
-    }
-    return this.setSessionScope(ownerId, phone, message, hostel.id);
-  }
-
-  private async setSessionScope(ownerId: string, phone: string, message: string, hostelId: string | null): Promise<InboundOwnerResult> {
-    await this.getOrCreateOwnerSession(ownerId, phone);
-    try {
-      await prisma.$executeRaw`
-        UPDATE whatsapp_owner_sessions
-        SET connected_hostel_id = ${hostelId}::uuid,
-            current_screen = 'SCOPE',
-            last_interaction_at = now(),
-            updated_at = now()
-        WHERE owner_id = ${ownerId}::uuid
-          AND phone_number = ${phone}
-      `;
-    } catch (error: any) {
-      if (!this.isMissingTableError(error)) throw error;
-    }
-
-    const hostel = hostelId
-      ? await prisma.hostels.findFirst({
-          where: { id: hostelId, owner_id: ownerId, is_active: true },
-          select: { name: true },
-        })
-      : null;
-
-    return this.respondAndLog({
-      ownerId,
-      phone,
-      message,
-      command: "SCOPE_CONNECT",
-      response: [
-        "Scope Updated",
-        "",
-        hostel ? `Connected Hostel: ${hostel.name}` : "Connected Scope: All Hostels",
-        "",
-        "SUMMARY, DUES, INVITATIONS, MOVEOUTS, and EXPENSES will use this scope.",
-      ].join("\n"),
-      success: true,
-      buttons: [
-        { id: this.interactionId("scope", "connect", "owner", ownerId, "all"), title: "All Hostels" },
-        { id: this.interactionId("dues", "view", "owner", ownerId), title: "Dues" },
-        { id: this.interactionId("invite", "pending", "owner", ownerId), title: "Invitations" },
-      ],
-    });
-  }
-
-  private async resolveHostelTarget(ownerId: string, target: string): Promise<HostelRow | null> {
-    const normalized = String(target || "").trim();
-    const rows = await prisma.$queryRaw<HostelRow[]>`
-      SELECT id::text, name
-      FROM hostels
-      WHERE owner_id = ${ownerId}::uuid
-        AND is_active = true
-        AND (
-          lower(name) = lower(${normalized})
-          OR lower(receipt_prefix) = lower(${normalized})
-          OR name ILIKE ${`%${normalized}%`}
-        )
-      ORDER BY
-        CASE
-          WHEN lower(receipt_prefix) = lower(${normalized}) THEN 0
-          WHEN lower(name) = lower(${normalized}) THEN 1
-          ELSE 2
-        END,
-        name ASC
-      LIMIT 1
-    `;
-    return rows[0] || null;
   }
 
   private isMissingTableError(error: any) {
