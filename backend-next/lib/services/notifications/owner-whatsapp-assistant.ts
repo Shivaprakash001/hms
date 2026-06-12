@@ -283,6 +283,12 @@ function parseCommand(message: string) {
   return { normalized, upper, command };
 }
 
+export function parseExplicitSearchQuery(message: string) {
+  const normalized = String(message || "").trim().replace(/\s+/g, " ");
+  const match = normalized.match(/^search\s+(.+)$/i);
+  return match?.[1]?.trim() || null;
+}
+
 function isSendRemindersCommand(upper: string) {
   return upper === "SEND REMINDERS" || upper === "SEND REMINDER";
 }
@@ -405,55 +411,98 @@ function paymentMethodForToken(token: string) {
   return PAYMENT_METHOD_ALIASES[String(token || "").trim().toLowerCase()] || null;
 }
 
-function formatExpenseTitle(category: string, templateKey: string, vendorName?: string) {
-  const base = category || titleCase(templateKey) || "Expense";
-  if (!vendorName) return base;
-  if (category === "Staff Salary") return `${base} - ${vendorName}`;
-  return `${base} - ${vendorName}`;
+function isPositiveAmountToken(token: string) {
+  const cleaned = String(token || "").replace(/[,₹]/g, "");
+  return /^\d+(\.\d{1,2})?$/.test(cleaned) && Number(cleaned) > 0;
+}
+
+function amountFromToken(token: string) {
+  return Number(String(token || "").replace(/[,₹]/g, ""));
+}
+
+function isKnownExpenseReportText(upper: string) {
+  if (
+    upper === "EXPENSES" ||
+    upper === "EXPENSES TODAY" ||
+    upper === "EXPENSES WEEK" ||
+    upper === "EXPENSES MONTH" ||
+    upper === "LAST 5 EXPENSES" ||
+    upper === "TOP CATEGORIES"
+  ) {
+    return true;
+  }
+
+  if (upper.startsWith("EXPENSES CATEGORY ")) {
+    const tokens = upper.split(" ").filter(Boolean);
+    return tokens.length >= 3 && !tokens.some(isPositiveAmountToken);
+  }
+
+  return false;
+}
+
+function titleTokensForExpense(tokens: string[], category: string) {
+  if (category !== "Staff Salary" || tokens.length <= 1) return tokens;
+  const salaryIndex = tokens.findIndex((token) => categoryForExpenseToken(token) === "Staff Salary");
+  if (salaryIndex !== 0) return tokens;
+  return [...tokens.slice(1), tokens[0]];
 }
 
 export function parseOwnerExpenseWriteCommand(message: string): CreateExpensePayload | null {
   const normalized = String(message || "").trim().replace(/\s+/g, " ");
   if (!normalized) return null;
+  if (isKnownExpenseReportText(normalized.toUpperCase())) return null;
 
   const tokens = normalized.split(" ").filter(Boolean);
-  if (tokens.length < 2) return null;
+  if (tokens.length < 1) return null;
 
-  const first = tokens[0]?.toLowerCase() || "";
-  const isExplicitExpense = first === "expense";
-  const bodyTokens = isExplicitExpense ? tokens.slice(1) : tokens;
-  if (bodyTokens.length < 2) return null;
+  const capturePrefixes = new Set(["expense", "expenses", "paid", "spent"]);
+  let bodyTokens = tokens;
+  let hadCapturePrefix = false;
+  while (bodyTokens.length > 0 && capturePrefixes.has(bodyTokens[0].toLowerCase())) {
+    hadCapturePrefix = true;
+    bodyTokens = bodyTokens.slice(1);
+  }
+  if (bodyTokens.length < 1) return null;
 
-  const firstBody = bodyTokens[0]?.toLowerCase() || "";
-  if (!isExplicitExpense && !categoryForExpenseToken(firstBody)) return null;
+  const amountIndex = bodyTokens.findIndex(isPositiveAmountToken);
+  if (amountIndex < 0) return null;
 
-  const amountIndex = bodyTokens.findIndex((token) => {
-    const cleaned = token.replace(/[,₹]/g, "");
-    return /^\d+(\.\d{1,2})?$/.test(cleaned) && Number(cleaned) > 0;
-  });
-  if (amountIndex <= 0) return null;
-
-  const amount = Number(bodyTokens[amountIndex].replace(/[,₹]/g, ""));
+  const amount = amountFromToken(bodyTokens[amountIndex]);
   if (!Number.isFinite(amount) || amount <= 0) return null;
 
-  const beforeAmount = bodyTokens.slice(0, amountIndex);
-  const afterAmount = bodyTokens.slice(amountIndex + 1);
-  const templateKey = normalizeExpenseTemplateKey(beforeAmount[0] || "");
-  const category = categoryForExpenseToken(templateKey) || "Miscellaneous";
-
   let payment_method = "cash";
-  const vendorTokens: string[] = [];
-  for (const token of [...beforeAmount.slice(1), ...afterAmount]) {
+  const beforeAmount: string[] = [];
+  const afterAmount: string[] = [];
+
+  bodyTokens.forEach((token, index) => {
+    if (index === amountIndex) return;
     const method = paymentMethodForToken(token);
     if (method) {
       payment_method = method;
-      continue;
+      return;
     }
-    vendorTokens.push(token);
-  }
+    if (index < amountIndex) beforeAmount.push(token);
+    else afterAmount.push(token);
+  });
 
-  const vendor_name = vendorTokens.length > 0 ? titleCase(vendorTokens.join(" ")) : undefined;
-  const title = formatExpenseTitle(category, templateKey, vendor_name);
+  const descriptorTokens = [...beforeAmount, ...afterAmount];
+  if (descriptorTokens.length === 0 && !hadCapturePrefix) return null;
+
+  const categoryToken = descriptorTokens.find((token) => Boolean(categoryForExpenseToken(token))) || "";
+  const templateKey = normalizeExpenseTemplateKey(categoryToken);
+  const category = categoryForExpenseToken(templateKey) || "Miscellaneous";
+
+  const titleSourceTokens = beforeAmount.length > 0 && afterAmount.length > 0 ? beforeAmount : descriptorTokens;
+  const titleTokens = titleTokensForExpense(titleSourceTokens, category);
+  const title = titleTokens.length > 0 ? titleCase(titleTokens.join(" ")) : "Expense";
+
+  let vendor_name: string | undefined;
+  if (category === "Staff Salary") {
+    const personTokens = descriptorTokens.filter((token) => categoryForExpenseToken(token) !== "Staff Salary");
+    vendor_name = personTokens.length > 0 ? titleCase(personTokens.join(" ")) : undefined;
+  } else if (beforeAmount.length > 0 && afterAmount.length > 0) {
+    vendor_name = titleCase(afterAmount.join(" "));
+  }
 
   return {
     action: CREATE_EXPENSE_ACTION,
@@ -471,7 +520,7 @@ export function parseOwnerExpenseWriteCommand(message: string): CreateExpensePay
 }
 
 function isExpenseReportCommand(parsed: ReturnType<typeof parseCommand>) {
-  return parsed.command === "EXPENSES" || parsed.upper === "LAST 5 EXPENSES" || parsed.upper === "TOP CATEGORIES";
+  return isKnownExpenseReportText(parsed.upper);
 }
 
 export class OwnerWhatsAppAssistantService {
@@ -1008,6 +1057,29 @@ export class OwnerWhatsAppAssistantService {
       return this.handleDisconnectWhatsAppRequest(ownerId, normalizedPhone, message, verifiedIdentity);
     }
 
+    const explicitSearchQuery = parseExplicitSearchQuery(message);
+    if (explicitSearchQuery) {
+      return this.handleEntitySearch(ownerId, normalizedPhone, message, explicitSearchQuery);
+    }
+
+    if (parsed.command === "SEARCH") {
+      return this.respondAndLog({
+        ownerId,
+        phone: normalizedPhone,
+        message,
+        command: "ENTITY_SEARCH_EMPTY",
+        response: [
+          "What should I search for?",
+          "",
+          "Try:",
+          "SEARCH SHIVA",
+          "SEARCH G1",
+          "SEARCH 8008046952",
+        ].join("\n"),
+        success: true,
+      });
+    }
+
     if (isExpenseReportCommand(parsed)) {
       return this.handleExpenseReport(ownerId, normalizedPhone, message);
     }
@@ -1075,30 +1147,64 @@ export class OwnerWhatsAppAssistantService {
     }
   }
 
-  private async handleEntitySearch(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
-    const query = normalizeSearchText(message);
+  private async handleEntitySearch(ownerId: string, phone: string, message: string, explicitQuery?: string): Promise<InboundOwnerResult> {
+    const query = normalizeSearchText(explicitQuery || message);
     if (query.length < 2) {
       return this.respondAndLog({
         ownerId,
         phone,
         message,
-        command: "ENTITY_SEARCH",
+        command: "ENTITY_SEARCH_EMPTY",
         response: HELP_TEXT,
         success: true,
       });
     }
 
-    const results = await this.findEntityMatches(ownerId, query);
+    let results: EntitySearchResult[] = [];
+    try {
+      results = await this.findEntityMatches(ownerId, query);
+    } catch (error: any) {
+      logger.error("entity.search_failed", {
+        owner_id: ownerId,
+        query,
+        error: error?.message || String(error),
+      });
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "ENTITY_SEARCH_ERROR",
+        response: [
+          "Search is not available right now.",
+          "",
+          "Try again in a minute, or open HMS if this is urgent.",
+        ].join("\n"),
+        success: false,
+      });
+    }
+
+    const primaryType = results[0]?.type || "NONE";
+    const searchCommand = results.length === 0 ? "ENTITY_SEARCH_NONE" : `ENTITY_SEARCH_${primaryType}_${results.length}`;
+    logger.info("entity.search_attempt", {
+      owner_id: ownerId,
+      query,
+      matches: results.length,
+      primary_type: primaryType,
+    });
+
     if (results.length === 0) {
       return this.respondAndLog({
         ownerId,
         phone,
         message,
-        command: "ENTITY_SEARCH",
+        command: searchCommand,
         response: [
           "No matching tenant, room, lead, or hostel found.",
           "",
-          "Try a full name, mobile number, or room number.",
+          "Try:",
+          "SEARCH SHIVA",
+          "SEARCH G1",
+          "SEARCH 8008046952",
           "",
           "Send HELP to view commands.",
         ].join("\n"),
@@ -1107,6 +1213,13 @@ export class OwnerWhatsAppAssistantService {
     }
 
     if (results.length === 1) {
+      await this.logMessage({
+        ownerId,
+        phone,
+        message,
+        command: searchCommand,
+        success: true,
+      });
       return this.openEntityResult(ownerId, phone, message, results[0]);
     }
 
@@ -1129,7 +1242,7 @@ export class OwnerWhatsAppAssistantService {
         ownerId,
         phone,
         message,
-        command: "ENTITY_SEARCH",
+        command: searchCommand,
         response: body,
         success: true,
         buttons: results.map((result) => ({
@@ -1154,7 +1267,7 @@ export class OwnerWhatsAppAssistantService {
       ownerId,
       phone,
       message,
-      command: "ENTITY_SEARCH",
+      command: searchCommand,
       response: body,
       success: true,
       list: {
@@ -2344,8 +2457,11 @@ export class OwnerWhatsAppAssistantService {
       message,
       command: CREATE_EXPENSE_ACTION,
       response: [
-        payload.category,
-        money(payload.amount),
+        "Expense Draft",
+        "",
+        `Category: ${payload.category}`,
+        `Title: ${payload.title}`,
+        `Amount: ${money(payload.amount)}`,
         payload.vendor_name ? `Vendor: ${payload.vendor_name}` : "",
         `Payment: ${payload.payment_method.toUpperCase()}`,
         "Date: Today",

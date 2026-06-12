@@ -30,11 +30,11 @@ It is not an AI chatbot. Every write operation requires an explicit confirmation
 | `SUMMARY` | Shows revenue, pending dues, occupancy, and expenses for the owner's active hostel scope. | Existing dashboard service |
 | `DUES` | Shows up to 10 tenants with the highest pending dues and total pending amount. | Existing payment dues service |
 | `SEND REMINDERS` | Starts a confirmation flow to remind tenants from the current top pending dues list. | Existing reminder service |
-| `internet 1000`, `expense gas 1200` | Creates a pending expense draft for owner confirmation. | Existing expense service after confirmation |
+| `internet 1000`, `expense gas 1200`, `paid milk 50`, `expenses milk 50` | Creates a pending expense draft for owner confirmation when a positive amount is present. | Existing expense service after confirmation |
 | `expenses today`, `expenses week`, `expenses month` | Shows recent expense totals and capped ledger rows. | Existing expense service |
 | `expenses category internet`, `top categories` | Shows category-specific or category summary expenses. | Existing expense service |
 | `undo expense` | Creates a pending delete action for the latest recent WhatsApp-created expense. | Existing expense service after confirmation |
-| `Rahul`, `9876543210`, `G1` | Resolves tenant, lead, room, or hostel and opens an entity card. | Existing tenant, payment, room, lead, and dashboard data |
+| `Rahul`, `9876543210`, `G1`, `SEARCH Rahul` | Resolves tenant, lead, room, or hostel and opens an entity card. | Existing tenant, payment, room, lead, and dashboard data |
 | Tenant card buttons | Shows payments, dues, reminder confirmation, or move-out date/confirmation flow. | Existing payment, financial, reminder, and move-out services |
 | Room card buttons | Shows active room tenants, room occupancy, or starts an invite flow with the room preselected. | Existing room allocation and invitation services |
 | `CONNECTED` | Shows verified owner WhatsApp numbers and connected dates. | `owner_whatsapp_identities` |
@@ -58,6 +58,8 @@ It is not an AI chatbot. Every write operation requires an explicit confirmation
 14. Unknown verified-owner messages are treated as deterministic entity searches after known commands fail.
 15. Entity search returns tenant, room, lead, or hostel cards. WhatsApp buttons and list messages are the primary selection UI; text fallback is only used when interactive delivery fails.
 16. Tenant reminder and move-out actions from cards still require same-phone `CONFIRM` before they call existing HMS services.
+17. Expense reporting is reserved for exact report commands such as `expenses today`, `expenses week`, `expenses month`, `expenses category internet`, `last 5 expenses`, and `top categories`; amount-bearing phrases such as `expenses milk 50` become expense drafts.
+18. `SEARCH <query>` is an explicit entity-search fallback for debugging and deterministic owner use. Search misses return a visible no-results response instead of silently failing.
 
 Unsupported owner commands return `HELP`.
 Unlinked numbers are only handled by the owner assistant when they send `LINK`; other messages continue through existing WhatsApp routing.
