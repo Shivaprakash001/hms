@@ -66,6 +66,7 @@ const delegateAliases: Record<string, string> = {
   messageLog: "message_logs",
   messagePack: "message_packs",
   messagePacks: "message_packs",
+  whatsappOwnerSession: "whatsapp_owner_sessions",
   hostelDailySnapshot: "hostel_daily_snapshots",
   ownerOnboardingState: "owner_onboarding_states",
   paymentWebhookEvent: "payment_webhook_events",

@@ -26,6 +26,7 @@ It is not an AI chatbot. Every write operation requires an explicit confirmation
 | Command | Purpose | Data source |
 |---|---|---|
 | `LINK HMS-XXXX` | Connects an owner account to one WhatsApp number. Owners may connect multiple verified numbers. | `owner_whatsapp_identities` |
+| `CONNECT SAH-1`, `CONNECT ALL`, `ALL HOSTELS` | Sets the current WhatsApp operating scope for this owner phone. | `whatsapp_owner_sessions` |
 | `HELP` | Shows supported commands. | Static response |
 | `SUMMARY` | Shows revenue, pending dues, occupancy, and expenses for the owner's active hostel scope. | Existing dashboard service |
 | `DUES` | Shows up to 10 tenants with the highest pending dues and total pending amount. | Existing payment dues service |
@@ -35,8 +36,10 @@ It is not an AI chatbot. Every write operation requires an explicit confirmation
 | `expenses category internet`, `top categories` | Shows category-specific or category summary expenses. | Existing expense service |
 | `undo expense` | Creates a pending delete action for the latest recent WhatsApp-created expense. | Existing expense service after confirmation |
 | `Rahul`, `9876543210`, `G1`, `SEARCH Rahul` | Resolves tenant, lead, room, or hostel and opens an entity card. | Existing tenant, payment, room, lead, and dashboard data |
-| Tenant card buttons | Shows payments, dues, reminder confirmation, or move-out date/confirmation flow. | Existing payment, financial, reminder, and move-out services |
+| Tenant card buttons | Shows context-aware next actions, payments, dues, reminders, profile, agreements, invite resend, or move-out date/confirmation flow. | Existing payment, financial, reminder, invitation, agreement, and move-out services |
 | Room card buttons | Shows active room tenants, room occupancy, or starts an invite flow with the room preselected. | Existing room allocation and invitation services |
+| `INVITATIONS` | Shows pending invitation and activation work for the current scope. | Existing tenant invitation data |
+| `MOVEOUTS` | Shows move-out requests needing owner attention. | Existing move-out, inspection, settlement, and dispute data |
 | `CONNECTED` | Shows verified owner WhatsApp numbers and connected dates. | `owner_whatsapp_identities` |
 | `DISCONNECT` | Starts a confirmation flow to remove the sender's WhatsApp number from the owner assistant. | `owner_whatsapp_identities` after confirmation |
 | `CONFIRM` / `CANCEL` | Confirms or cancels a pending owner assistant action. | `owner_assistant_confirmations` |
@@ -55,11 +58,14 @@ It is not an AI chatbot. Every write operation requires an explicit confirmation
 11. Confirmed expense actions call the existing expense service instead of writing finance rows directly.
 12. Confirmed disconnect actions remove only the sender's WhatsApp number and notify the disconnected number plus remaining connected owner numbers.
 13. The owner dashboard Automation section shows connected numbers with last seen time and last command type from `owner_assistant_messages`.
-14. Unknown verified-owner messages are treated as deterministic entity searches after known commands fail.
-15. Entity search returns tenant, room, lead, or hostel cards. WhatsApp buttons and list messages are the primary selection UI; text fallback is only used when interactive delivery fails.
-16. Tenant reminder and move-out actions from cards still require same-phone `CONFIRM` before they call existing HMS services.
-17. Expense reporting is reserved for exact report commands such as `expenses today`, `expenses week`, `expenses month`, `expenses category internet`, `last 5 expenses`, and `top categories`; amount-bearing phrases such as `expenses milk 50` become expense drafts.
-18. `SEARCH <query>` is an explicit entity-search fallback for debugging and deterministic owner use. Search misses return a visible no-results response instead of silently failing.
+14. `whatsapp_owner_sessions` stores per-owner-phone scope, current screen, pending action metadata, and last interaction time.
+15. `CONNECT SAH-1`, `CONNECT ALL`, and `ALL HOSTELS` change scope without affecting the existing `DISCONNECT` unlink command.
+16. Unknown verified-owner messages are treated as deterministic entity searches after known commands fail.
+17. Entity search returns tenant, room, lead, or hostel cards. WhatsApp buttons and list messages are the primary selection UI; text fallback is only used when interactive delivery fails.
+18. Tenant reminder, invite resend, and move-out actions from cards still require same-phone `CONFIRM` before they call existing HMS services.
+19. Dues, invitation, move-out, and expense screens render action cards/lists before HOME is introduced.
+20. Expense reporting is reserved for exact report commands such as `expenses today`, `expenses week`, `expenses month`, `expenses category internet`, `last 5 expenses`, and `top categories`; amount-bearing phrases such as `expenses milk 50` become expense drafts.
+21. `SEARCH <query>` is an explicit entity-search fallback for debugging and deterministic owner use. Search misses return a visible no-results response instead of silently failing.
 
 Unsupported owner commands return `HELP`.
 Unlinked numbers are only handled by the owner assistant when they send `LINK`; other messages continue through existing WhatsApp routing.
@@ -95,6 +101,8 @@ The owner assistant is person-first, not search-result-first. Owners can send a 
 8. Reminder buttons create a confirmation and reuse `reminderService.sendManualReminder`.
 9. Move-out buttons ask for planned exit date, create a confirmation, and reuse `moveOutService.createRequest`.
 10. Room invite buttons reuse the existing invite flow with the room preselected.
+11. Tenant action lists expose the full tenant action center while the card keeps the most likely next actions visible.
+12. Dues screens bucket tenants into fresh, reminded, and chronic groups and preview reminder cost before confirmation.
 
 ## Cron jobs
 
@@ -155,6 +163,7 @@ The owner assistant is person-first, not search-result-first. Owners can send a 
 | `owner_whatsapp_identities` | Verified owner phone mappings and temporary link codes. |
 | `owner_assistant_messages` | Owner assistant command audit records. |
 | `owner_assistant_confirmations` | Short-lived confirmation records for assistant-triggered actions. |
+| `whatsapp_owner_sessions` | Per-owner-phone WhatsApp scope, current screen, pending action metadata, and last interaction time. |
 
 **How this works:**
 1. Logs preserve delivery evidence.
