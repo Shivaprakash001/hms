@@ -109,6 +109,69 @@ export class TenantInvitationLifecycleService {
     };
   }
 
+  async checkTenantPhoneUniqueness(phone: string): Promise<{ isUnique: boolean; reason?: string; tenantName?: string }> {
+    const normalizedPhone = normalizeIndianPhone(phone);
+    if (!normalizedPhone) {
+      return { isUnique: true };
+    }
+
+    // 1. Check if there is an active tenant in the database with this phone number across all hostels
+    const existingTenant = await prisma.tenants.findFirst({
+      where: {
+        status: { in: ["ACTIVE", "INVITED"] },
+        OR: [
+          { phone_1: normalizedPhone },
+          { phone_2: normalizedPhone },
+          { phone_3: normalizedPhone },
+          { profiles: { phone: normalizedPhone } }
+        ]
+      },
+      include: {
+        hostels: true,
+        profiles: true,
+        tenant_invitations: {
+          orderBy: { created_at: "desc" },
+          take: 1,
+          include: {
+            hostel: true
+          }
+        }
+      }
+    });
+
+    if (existingTenant) {
+      const tenantName = existingTenant.profiles?.name || existingTenant.tenant_invitations[0]?.name || "Existing Tenant";
+      const hostelName = existingTenant.hostels?.name || existingTenant.tenant_invitations[0]?.hostel?.name || "another hostel";
+      return {
+        isUnique: false,
+        reason: `Tenant '${tenantName}' with this phone number is already active in ${hostelName}.`,
+        tenantName
+      };
+    }
+
+    // 2. Check if there is an active invitation with this phone number in any hostel
+    const existingInvite = await prisma.tenant_invitations.findFirst({
+      where: {
+        phone: normalizedPhone,
+        status: { in: ["PENDING", "OPENED", "ACTIVATION_STARTED"] },
+        expires_at: { gt: new Date() }
+      },
+      include: {
+        hostel: true
+      }
+    });
+
+    if (existingInvite) {
+      return {
+        isUnique: false,
+        reason: `An active invitation already exists for this phone number (for '${existingInvite.name}') in ${existingInvite.hostel?.name || "another hostel"}.`,
+        tenantName: existingInvite.name
+      };
+    }
+
+    return { isUnique: true };
+  }
+
   async createInvitation(data: any, ownerId: string) {
     const normalizedEmail = data.email ? normalizeEmail(data.email) : null;
     const normalizedPhone = normalizeIndianPhone(data.phone);
@@ -128,6 +191,23 @@ export class TenantInvitationLifecycleService {
 
     const owner = await prisma.profile.findUnique({ where: { id: ownerId } });
     if (!owner || owner.role !== "OWNER") throw new Error("NOT_FOUND: Owner profile not found");
+
+    if (normalizedPhone) {
+      const uniqueness = await this.checkTenantPhoneUniqueness(normalizedPhone);
+      if (!uniqueness.isUnique) {
+        // If active invitation under the SAME owner exists, we can still resend/update it.
+        const activeExisting = await prisma.tenant_invitations.findFirst({
+          where: {
+            owner_id: ownerId,
+            status: { in: ACTIVE_INVITE_STATUSES },
+            phone: normalizedPhone,
+          },
+        });
+        if (!activeExisting) {
+          throw new Error(`ALREADY_EXISTS: ${uniqueness.reason}`);
+        }
+      }
+    }
 
     const activeExisting = await prisma.tenant_invitations.findFirst({
       where: {

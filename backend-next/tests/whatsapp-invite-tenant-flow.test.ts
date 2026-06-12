@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { prisma } from "@/lib/db";
 import { whatsappWebhookEventService } from "@/lib/services/notifications/whatsapp-webhook-event-service";
 import { MetaWhatsAppProvider } from "@/lib/services/notifications/providers/whatsapp/meta-provider";
-import { getSelectionState, deleteSelectionState } from "@/lib/services/notifications/whatsapp-selection-state";
+import { getSelectionState, deleteSelectionState, setSelectionState } from "@/lib/services/notifications/whatsapp-selection-state";
 import { rateLimitService } from "@/lib/services/rate-limit-service";
 import crypto from "crypto";
 import { tenantInvitationLifecycleService } from "@/src/services/tenants/tenant-invitation-lifecycle-service";
@@ -449,5 +449,77 @@ describe("WhatsApp Tenant Onboarding - Invite Flow", () => {
       where: { phone_number: "919876543211" },
     });
     expect(guardianIdentity).toBeNull();
+  });
+
+  it("Scenario 11: Global Phone Uniqueness Check in Structured Command (Cross-Hostel)", async () => {
+    const ownerPhone = "919999999999";
+    const { hostels } = await seedOwnerAndProperties(ownerPhone, 2);
+
+    // Seed an active tenant in Hostel 1
+    const activeTenantId = crypto.randomUUID();
+    const tenantPhone = "+917777777777";
+    await prisma.$executeRaw`
+      INSERT INTO "test"."profiles" (id, email, name, role, phone)
+      VALUES (${activeTenantId}::uuid, 'active-tenant-test@test.com', 'Active Tenant Test', 'TENANT', ${tenantPhone})
+    `;
+    await prisma.$executeRaw`
+      INSERT INTO "test"."tenants" (id, profile_id, hostel_id, phone_1, status)
+      VALUES (${crypto.randomUUID()}::uuid, ${activeTenantId}::uuid, ${hostels[0].id}::uuid, ${tenantPhone}, 'ACTIVE')
+    `;
+
+    const sendTextMessageSpy = vi.spyOn(MetaWhatsAppProvider.prototype, "sendTextMessage");
+
+    // Command: invite New Guy 7777777777 Sri Hostel 2 101
+    const payload = makeWebhookPayload(ownerPhone, "invite New Guy 7777777777 Sri Hostel 2 101");
+    await whatsappWebhookEventService.processWebhookEvent(payload.eventId, payload.payload);
+
+    // Selection state should be deleted due to duplicate error
+    const state = await getSelectionState(ownerPhone);
+    expect(state).toBeNull();
+
+    expect(sendTextMessageSpy).toHaveBeenCalledWith(
+      expect.stringContaining(ownerPhone.slice(-10)),
+      expect.stringContaining("Cannot invite: Tenant 'Active Tenant Test' with this phone number is already active in Sri Hostel 1.")
+    );
+  });
+
+  it("Scenario 12: Global Phone Uniqueness Check in Guided Wizard (AWAITING_PHONE)", async () => {
+    const ownerPhone = "919999999999";
+    const { hostels } = await seedOwnerAndProperties(ownerPhone, 2);
+
+    // Seed an active tenant in Hostel 1
+    const activeTenantId = crypto.randomUUID();
+    const tenantPhone = "+917777777777";
+    await prisma.$executeRaw`
+      INSERT INTO "test"."profiles" (id, email, name, role, phone)
+      VALUES (${activeTenantId}::uuid, 'active-tenant-test@test.com', 'Active Tenant Test', 'TENANT', ${tenantPhone})
+    `;
+    await prisma.$executeRaw`
+      INSERT INTO "test"."tenants" (id, profile_id, hostel_id, phone_1, status)
+      VALUES (${crypto.randomUUID()}::uuid, ${activeTenantId}::uuid, ${hostels[0].id}::uuid, ${tenantPhone}, 'ACTIVE')
+    `;
+
+    // Initialize state to AWAITING_PHONE using the helper function setSelectionState
+    await setSelectionState(ownerPhone, {
+      phone: ownerPhone,
+      action: "INVITE_TENANT",
+      step: "AWAITING_PHONE",
+      data: { name: "New Guy" }
+    });
+
+    const sendTextMessageSpy = vi.spyOn(MetaWhatsAppProvider.prototype, "sendTextMessage");
+
+    // Send the duplicate phone number
+    const payload = makeWebhookPayload(ownerPhone, "7777777777");
+    await whatsappWebhookEventService.processWebhookEvent(payload.eventId, payload.payload);
+
+    // Selection state should be deleted
+    const state = await getSelectionState(ownerPhone);
+    expect(state).toBeNull();
+
+    expect(sendTextMessageSpy).toHaveBeenCalledWith(
+      expect.stringContaining(ownerPhone.slice(-10)),
+      expect.stringContaining("Cannot invite: Tenant 'Active Tenant Test' with this phone number is already active in Sri Hostel 1.")
+    );
   });
 }, 30000);

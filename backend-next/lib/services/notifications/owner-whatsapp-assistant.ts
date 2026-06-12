@@ -1430,25 +1430,37 @@ export class OwnerWhatsAppAssistantService {
           });
         }
 
-        // Check if there is an active invitation with this phone number
-        const activeExisting = await prisma.tenant_invitations.findFirst({
-          where: {
-            owner_id: ownerId,
-            status: { in: ["SENT", "PENDING", "ACCEPTED"] },
-            phone: normalized,
-          },
-        });
-
-        if (activeExisting) {
-          await deleteSelectionState(phone);
-          return this.respondAndLog({
-            ownerId,
-            phone,
-            message,
-            command: "INVITE_TENANT_PHONE_DUPLICATE",
-            response: `An active invitation already exists for +91 ${normalized.slice(-10)}. Discarding current flow.`,
-            success: false,
+        // Check global phone uniqueness
+        const uniqueness = await tenantInvitationLifecycleService.checkTenantPhoneUniqueness(normalized);
+        if (!uniqueness.isUnique) {
+          const activeExisting = await prisma.tenant_invitations.findFirst({
+            where: {
+              owner_id: ownerId,
+              status: { in: ["SENT", "PENDING", "ACCEPTED"] },
+              phone: normalized,
+            },
           });
+
+          await deleteSelectionState(phone);
+          if (activeExisting) {
+            return this.respondAndLog({
+              ownerId,
+              phone,
+              message,
+              command: "INVITE_TENANT_PHONE_DUPLICATE",
+              response: `An active invitation already exists for +91 ${normalized.slice(-10)} (for '${activeExisting.name}'). Discarding current flow.`,
+              success: false,
+            });
+          } else {
+            return this.respondAndLog({
+              ownerId,
+              phone,
+              message,
+              command: "INVITE_TENANT_PHONE_DUPLICATE",
+              response: `❌ Cannot invite: ${uniqueness.reason} Discarding current flow.`,
+              success: false,
+            });
+          }
         }
 
         const hostels = await prisma.hostels.findMany({
@@ -1675,6 +1687,12 @@ export class OwnerWhatsAppAssistantService {
         const defaults = await hostelBillingPreferencesService.resolveTenantInviteDefaults(selectedRoom.id, ownerId);
         const resolved = defaults.resolved_values;
 
+        const maintenanceType = resolved.maintenance_type || "NONE";
+        const maintenanceAmount = maintenanceType === "NONE" ? 0 : Number(resolved.maintenance_charge || 0);
+        const maintenanceText = maintenanceType !== "NONE" && maintenanceAmount > 0
+          ? `₹${maintenanceAmount.toLocaleString("en-IN")} (${maintenanceType.toLowerCase()})`
+          : "N/A";
+
         const hostel = await prisma.hostels.findUnique({
           where: { id: hostelId },
           select: { name: true },
@@ -1690,6 +1708,8 @@ export class OwnerWhatsAppAssistantService {
             roomNo: selectedRoom.room_no,
             monthlyRent: resolved.monthly_rent,
             advanceDeposit: resolved.advance_deposit,
+            maintenanceType,
+            maintenanceAmount,
           },
         });
 
@@ -1702,6 +1722,7 @@ export class OwnerWhatsAppAssistantService {
           `Room: Room ${selectedRoom.room_no}`,
           `Monthly Rent: ₹${resolved.monthly_rent.toLocaleString("en-IN")}`,
           `Security Deposit: ₹${resolved.advance_deposit.toLocaleString("en-IN")}`,
+          `Maintenance Charge: ${maintenanceText}`,
           "",
           "Send invitation? Reply YES or NO.",
         ].join("\n");
@@ -1739,6 +1760,8 @@ export class OwnerWhatsAppAssistantService {
               room_id: state.data.roomId,
               monthly_rent: state.data.monthlyRent,
               advance_deposit: state.data.advanceDeposit,
+              maintenance_type: state.data.maintenanceType,
+              maintenance_amount: state.data.maintenanceAmount,
             };
 
             await tenantInvitationLifecycleService.createInvitation(invitePayload, ownerId);
@@ -1865,24 +1888,37 @@ export class OwnerWhatsAppAssistantService {
     if (parsed.phone) {
       const normalized = normalizeIndianPhone(parsed.phone);
       if (normalized) {
-        const activeExisting = await prisma.tenant_invitations.findFirst({
-          where: {
-            owner_id: ownerId,
-            status: { in: ["SENT", "PENDING", "ACCEPTED"] },
-            phone: normalized,
-          },
-        });
-
-        if (activeExisting) {
-          await deleteSelectionState(phone);
-          return this.respondAndLog({
-            ownerId,
-            phone,
-            message,
-            command: "INVITE_TENANT_PHONE_DUPLICATE",
-            response: `An active invitation already exists for +91 ${normalized.slice(-10)}. Discarding current flow.`,
-            success: false,
+        // Check global phone uniqueness
+        const uniqueness = await tenantInvitationLifecycleService.checkTenantPhoneUniqueness(normalized);
+        if (!uniqueness.isUnique) {
+          const activeExisting = await prisma.tenant_invitations.findFirst({
+            where: {
+              owner_id: ownerId,
+              status: { in: ["SENT", "PENDING", "ACCEPTED"] },
+              phone: normalized,
+            },
           });
+
+          await deleteSelectionState(phone);
+          if (activeExisting) {
+            return this.respondAndLog({
+              ownerId,
+              phone,
+              message,
+              command: "INVITE_TENANT_PHONE_DUPLICATE",
+              response: `An active invitation already exists for +91 ${normalized.slice(-10)} (for '${activeExisting.name}'). Discarding current flow.`,
+              success: false,
+            });
+          } else {
+            return this.respondAndLog({
+              ownerId,
+              phone,
+              message,
+              command: "INVITE_TENANT_PHONE_DUPLICATE",
+              response: `❌ Cannot invite: ${uniqueness.reason} Discarding current flow.`,
+              success: false,
+            });
+          }
         }
         data.phone = normalized;
       }
@@ -2136,6 +2172,12 @@ export class OwnerWhatsAppAssistantService {
     const defaults = await hostelBillingPreferencesService.resolveTenantInviteDefaults(data.roomId, ownerId);
     const resolved = defaults.resolved_values;
 
+    const maintenanceType = resolved.maintenance_type || "NONE";
+    const maintenanceAmount = maintenanceType === "NONE" ? 0 : Number(resolved.maintenance_charge || 0);
+    const maintenanceText = maintenanceType !== "NONE" && maintenanceAmount > 0
+      ? `₹${maintenanceAmount.toLocaleString("en-IN")} (${maintenanceType.toLowerCase()})`
+      : "N/A";
+
     const hostel = hostels.find((h) => h.id === data.hostelId);
 
     await setSelectionState(phone, {
@@ -2146,6 +2188,8 @@ export class OwnerWhatsAppAssistantService {
         ...data,
         monthlyRent: resolved.monthly_rent,
         advanceDeposit: resolved.advance_deposit,
+        maintenanceType,
+        maintenanceAmount,
       },
     });
 
@@ -2163,6 +2207,7 @@ export class OwnerWhatsAppAssistantService {
         `Room: Room ${data.roomNo}`,
         `Monthly Rent: ₹${resolved.monthly_rent.toLocaleString("en-IN")}`,
         `Security Deposit: ₹${resolved.advance_deposit.toLocaleString("en-IN")}`,
+        `Maintenance Charge: ${maintenanceText}`,
         "",
         "Send invitation? Reply YES or NO.",
       ].join("\n"),
