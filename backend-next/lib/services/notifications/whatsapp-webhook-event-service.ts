@@ -322,6 +322,15 @@ export class WhatsAppWebhookEventService {
       const commandResults: any[] = [];
 
       for (const msg of messages) {
+        logger.info("whatsapp.webhook.inbound_message", {
+          webhook_event_id: eventId,
+          from: msg.from,
+          message_id: msg.messageId,
+          message_type: msg.messageType,
+          interactive_type: msg.interactiveType || null,
+          body_preview: msg.body.slice(0, 80),
+        });
+
         const ownerResult = await ownerWhatsAppAssistantService.processInboundMessage(msg.from, msg.body);
         if (ownerResult?.handled) {
           commandResults.push({

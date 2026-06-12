@@ -242,6 +242,10 @@ export class MetaWhatsAppProvider {
       }));
 
     if (cleanButtons.length === 0) {
+      logger.warn("whatsapp.interactive.button.no_buttons_fallback", {
+        phone: maskWhatsAppPhone(phone),
+        body_chars: bodyText.length,
+      });
       return this.sendTextMessage(to, bodyText);
     }
 
@@ -261,7 +265,34 @@ export class MetaWhatsAppProvider {
       },
     };
 
-    return this.sendBody(url, body, "WhatsApp button send failed");
+    logger.info("whatsapp.interactive.button.send_started", {
+      phone: maskWhatsAppPhone(phone),
+      button_count: cleanButtons.length,
+      button_ids: cleanButtons.map((button) => button.reply.id),
+      body_chars: bodyText.length,
+    });
+
+    try {
+      const result = await this.sendBody(url, body, "WhatsApp button send failed");
+      logger.info("whatsapp.interactive.button.send_success", {
+        phone: maskWhatsAppPhone(phone),
+        providerMessageId: result.providerMessageId,
+        attempts: result.attempts,
+        raw: result.raw,
+      });
+      return result;
+    } catch (error: any) {
+      logger.error("whatsapp.interactive.button.send_failed", {
+        phone: maskWhatsAppPhone(phone),
+        status: error?.status || null,
+        provider_code: error?.providerCode || null,
+        error_code: error?.code || null,
+        error: error?.message || String(error),
+        raw: error?.raw || null,
+        stack: error?.stack || null,
+      });
+      throw error;
+    }
   }
 
   async sendListMessage(
@@ -287,6 +318,10 @@ export class MetaWhatsAppProvider {
       .slice(0, 10);
 
     if (cleanSections.length === 0) {
+      logger.warn("whatsapp.interactive.list.no_rows_fallback", {
+        phone: maskWhatsAppPhone(phone),
+        body_chars: bodyText.length,
+      });
       return this.sendTextMessage(to, bodyText);
     }
 
@@ -307,7 +342,36 @@ export class MetaWhatsAppProvider {
       },
     };
 
-    return this.sendBody(url, body, "WhatsApp list send failed");
+    logger.info("whatsapp.interactive.list.send_started", {
+      phone: maskWhatsAppPhone(phone),
+      section_count: cleanSections.length,
+      row_count: cleanSections.reduce((sum, section) => sum + section.rows.length, 0),
+      row_ids: cleanSections.flatMap((section) => section.rows.map((row) => row.id)),
+      body_chars: bodyText.length,
+      button_text: String(buttonText || "View options").slice(0, 20),
+    });
+
+    try {
+      const result = await this.sendBody(url, body, "WhatsApp list send failed");
+      logger.info("whatsapp.interactive.list.send_success", {
+        phone: maskWhatsAppPhone(phone),
+        providerMessageId: result.providerMessageId,
+        attempts: result.attempts,
+        raw: result.raw,
+      });
+      return result;
+    } catch (error: any) {
+      logger.error("whatsapp.interactive.list.send_failed", {
+        phone: maskWhatsAppPhone(phone),
+        status: error?.status || null,
+        provider_code: error?.providerCode || null,
+        error_code: error?.code || null,
+        error: error?.message || String(error),
+        raw: error?.raw || null,
+        stack: error?.stack || null,
+      });
+      throw error;
+    }
   }
 
   async sendOtp(input: { to: string; otp: string; purpose: string }): Promise<WhatsAppSendResult> {

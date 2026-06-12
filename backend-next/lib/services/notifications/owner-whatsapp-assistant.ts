@@ -1167,7 +1167,9 @@ export class OwnerWhatsAppAssistantService {
       logger.error("entity.search_failed", {
         owner_id: ownerId,
         query,
+        search_type: error?.searchType || "unknown",
         error: error?.message || String(error),
+        stack: error?.stack || error?.cause?.stack || null,
       });
       return this.respondAndLog({
         ownerId,
@@ -1303,13 +1305,37 @@ export class OwnerWhatsAppAssistantService {
     return String(label || "Open").replace(/\s+/g, " ").slice(0, 20);
   }
 
+  private async runEntitySearchStage<T>(
+    searchType: string,
+    ownerId: string,
+    query: string,
+    operation: () => Promise<T>
+  ): Promise<T> {
+    try {
+      return await operation();
+    } catch (error: any) {
+      logger.error("entity.search_stage_failed", {
+        owner_id: ownerId,
+        query,
+        search_type: searchType,
+        error: error?.message || String(error),
+        stack: error?.stack || null,
+      });
+      const wrapped = new Error(error?.message || `Entity search ${searchType} failed`);
+      (wrapped as any).searchType = searchType;
+      (wrapped as any).cause = error;
+      if (error?.stack) wrapped.stack = error.stack;
+      throw wrapped;
+    }
+  }
+
   private async findEntityMatches(ownerId: string, query: string): Promise<EntitySearchResult[]> {
     const like = `%${query}%`;
     const digits = query.replace(/\D/g, "");
     const phoneLike = digits.length >= 4 ? `%${digits}%` : null;
     const results: EntitySearchResult[] = [];
 
-    const rooms = await prisma.$queryRaw<Array<{
+    const rooms = await this.runEntitySearchStage("room_exact", ownerId, query, () => prisma.$queryRaw<Array<{
       id: string;
       room_no: string;
       hostel_name: string;
@@ -1330,7 +1356,7 @@ export class OwnerWhatsAppAssistantService {
         AND lower(r.room_no) = lower(${query})
       GROUP BY r.id, r.room_no, h.name, r.capacity
       LIMIT 3
-    `;
+    `);
 
     for (const room of rooms) {
       results.push({
@@ -1342,7 +1368,9 @@ export class OwnerWhatsAppAssistantService {
       });
     }
 
-    const activeTenants = await this.searchTenants(ownerId, like, phoneLike, "ACTIVE", 10);
+    const activeTenants = await this.runEntitySearchStage("tenant_active", ownerId, query, () =>
+      this.searchTenants(ownerId, like, phoneLike, "ACTIVE", 10)
+    );
     results.push(...activeTenants.map((tenant) => ({
       type: "TENANT" as const,
       id: tenant.id,
@@ -1351,7 +1379,9 @@ export class OwnerWhatsAppAssistantService {
       priority: phoneLike && tenant.phone_digits?.includes(digits) ? 5 : 10,
     })));
 
-    const invitedTenants = await this.searchTenants(ownerId, like, phoneLike, "INVITED", 10);
+    const invitedTenants = await this.runEntitySearchStage("tenant_invited", ownerId, query, () =>
+      this.searchTenants(ownerId, like, phoneLike, "INVITED", 10)
+    );
     results.push(...invitedTenants.map((tenant) => ({
       type: "TENANT" as const,
       id: tenant.id,
@@ -1360,7 +1390,7 @@ export class OwnerWhatsAppAssistantService {
       priority: phoneLike && tenant.phone_digits?.includes(digits) ? 15 : 20,
     })));
 
-    const leads = await prisma.$queryRaw<Array<{
+    const leads = await this.runEntitySearchStage("lead", ownerId, query, () => prisma.$queryRaw<Array<{
       id: string;
       student_name: string;
       student_phone: string | null;
@@ -1385,7 +1415,7 @@ export class OwnerWhatsAppAssistantService {
         )
       ORDER BY l.last_activity_at DESC
       LIMIT 5
-    `;
+    `);
 
     for (const lead of leads) {
       results.push({
@@ -1398,7 +1428,7 @@ export class OwnerWhatsAppAssistantService {
     }
 
     if (rooms.length === 0) {
-      const roomContains = await prisma.$queryRaw<Array<{
+      const roomContains = await this.runEntitySearchStage("room_contains", ownerId, query, () => prisma.$queryRaw<Array<{
         id: string;
         room_no: string;
         hostel_name: string;
@@ -1420,7 +1450,7 @@ export class OwnerWhatsAppAssistantService {
         GROUP BY r.id, r.room_no, h.name, r.capacity
         ORDER BY r.room_no ASC
         LIMIT 5
-      `;
+      `);
 
       for (const room of roomContains) {
         results.push({
@@ -1433,7 +1463,7 @@ export class OwnerWhatsAppAssistantService {
       }
     }
 
-    const hostels = await prisma.hostels.findMany({
+    const hostels = await this.runEntitySearchStage("hostel", ownerId, query, () => prisma.hostels.findMany({
       where: {
         owner_id: ownerId,
         is_active: true,
@@ -1442,7 +1472,7 @@ export class OwnerWhatsAppAssistantService {
       select: { id: true, name: true },
       take: 3,
       orderBy: { name: "asc" },
-    });
+    }));
     results.push(...hostels.map((hostel) => ({
       type: "HOSTEL" as const,
       id: hostel.id,
@@ -1478,7 +1508,7 @@ export class OwnerWhatsAppAssistantService {
         r.room_no,
         regexp_replace(COALESCE(p.phone, t.phone_1, ti.phone, ''), '\\D', '', 'g') AS phone_digits
       FROM tenants t
-      LEFT JOIN profile p ON p.id = t.profile_id
+      LEFT JOIN profiles p ON p.id = t.profile_id
       LEFT JOIN LATERAL (
         SELECT name, phone
         FROM tenant_invitations
@@ -1843,7 +1873,7 @@ export class OwnerWhatsAppAssistantService {
       SELECT t.id::text, COALESCE(p.name, t.guardian_name, 'Tenant') AS name, t.status::text AS status
       FROM room_allocations ra
       JOIN tenants t ON t.id = ra.tenant_id
-      LEFT JOIN profile p ON p.id = t.profile_id
+      LEFT JOIN profiles p ON p.id = t.profile_id
       WHERE ra.room_id = ${roomId}::uuid
         AND ra.is_active = true
         AND ra.end_date IS NULL
@@ -2467,10 +2497,11 @@ export class OwnerWhatsAppAssistantService {
         "Date: Today",
         "",
         "Confirm?",
-        "",
-        "CONFIRM",
-        "CANCEL",
       ].filter(Boolean).join("\n"),
+      buttons: [
+        { id: "CONFIRM", title: "Confirm" },
+        { id: "CANCEL", title: "Cancel" },
+      ],
       success: true,
     });
   }
@@ -3462,7 +3493,12 @@ export class OwnerWhatsAppAssistantService {
           logger.warn("response.list_send_failed_fallback", {
             owner_id: input.ownerId,
             command: input.command,
+            status: interactiveError?.status || null,
+            provider_code: interactiveError?.providerCode || null,
+            error_code: interactiveError?.code || null,
             error: interactiveError?.message || String(interactiveError),
+            raw: interactiveError?.raw || null,
+            stack: interactiveError?.stack || null,
           });
           await this.getProvider().sendTextMessage(input.phone, this.withTextFallbackOptions(input.response, input.list.sections));
         }
@@ -3473,7 +3509,12 @@ export class OwnerWhatsAppAssistantService {
           logger.warn("response.button_send_failed_fallback", {
             owner_id: input.ownerId,
             command: input.command,
+            status: interactiveError?.status || null,
+            provider_code: interactiveError?.providerCode || null,
+            error_code: interactiveError?.code || null,
             error: interactiveError?.message || String(interactiveError),
+            raw: interactiveError?.raw || null,
+            stack: interactiveError?.stack || null,
           });
           await this.getProvider().sendTextMessage(input.phone, this.withButtonFallbackOptions(input.response, input.buttons));
         }
