@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { prisma } from "@/lib/db";
 import { getLogger } from "@/lib/logger";
 import { dashboardService } from "@/lib/services/dashboard-service";
+import { expenseService } from "@/lib/services/expense-service";
 import { paymentService } from "@/src/services/payments/payment-service";
 import { reminderService } from "@/src/services/payments/reminder-service";
 import { MetaWhatsAppProvider, normalizeWhatsAppPhone } from "./providers/whatsapp/meta-provider";
@@ -36,6 +37,8 @@ export type OwnerWhatsAppConnection = {
   phone_number: string;
   verified_at: string | null;
   created_at: string;
+  last_seen_at: string | null;
+  last_command: string | null;
 };
 
 type HostelRow = {
@@ -64,6 +67,38 @@ type SendRemindersPayload = {
   createdAt: string;
 };
 
+type CreateExpensePayload = {
+  action: "CREATE_EXPENSE";
+  title: string;
+  amount: number;
+  date: string;
+  category: string;
+  payment_method: string;
+  vendor_name?: string;
+  raw_command: string;
+  template_key?: string;
+  phone_number: string;
+  createdAt: string;
+};
+
+type UndoExpensePayload = {
+  action: "UNDO_EXPENSE";
+  expense_id: string;
+  title: string;
+  amount: number;
+  category: string;
+  date: string;
+  phone_number: string;
+  createdAt: string;
+};
+
+type DisconnectWhatsAppPayload = {
+  action: "DISCONNECT_WHATSAPP";
+  identity_id: string;
+  phone_number: string;
+  createdAt: string;
+};
+
 type InboundOwnerResult = {
   handled: boolean;
   ownerId?: string | null;
@@ -72,18 +107,30 @@ type InboundOwnerResult = {
 };
 
 const SEND_REMINDERS_ACTION = "SEND_REMINDERS";
+const CREATE_EXPENSE_ACTION = "CREATE_EXPENSE";
+const UNDO_EXPENSE_ACTION = "UNDO_EXPENSE";
+const DISCONNECT_WHATSAPP_ACTION = "DISCONNECT_WHATSAPP";
 const CONFIRMATION_WINDOW_MS = 5 * 60 * 1000;
+const EXPENSE_UNDO_WINDOW_MS = 30 * 60 * 1000;
+const EXPENSE_REPORT_LIMIT = 5;
+const EXPENSE_DRAFT_RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
+const EXPENSE_DRAFT_RATE_LIMIT_MAX = 15;
 
 const HELP_TEXT = [
   "Available Commands",
   "",
   "SUMMARY",
   "DUES",
+  "EXPENSES TODAY",
+  "INTERNET 1000",
+  "UNDO EXPENSE",
+  "CONNECTED",
+  "DISCONNECT",
   "SEND REMINDERS",
   "INVITE",
   "HELP",
   "",
-  "Reply YES or NO when confirming an action.",
+  "Reply CONFIRM or CANCEL when confirming an action.",
 ].join("\n");
 
 const LINK_SUCCESS_TEXT = [
@@ -95,6 +142,11 @@ const LINK_SUCCESS_TEXT = [
   "",
   "SUMMARY",
   "DUES",
+  "EXPENSES TODAY",
+  "INTERNET 1000",
+  "UNDO EXPENSE",
+  "CONNECTED",
+  "DISCONNECT",
   "SEND REMINDERS",
   "INVITE",
   "HELP",
@@ -107,10 +159,57 @@ const ALREADY_CONNECTED_TEXT = [
   "",
   "SUMMARY",
   "DUES",
+  "EXPENSES TODAY",
+  "INTERNET 1000",
+  "UNDO EXPENSE",
+  "CONNECTED",
+  "DISCONNECT",
   "SEND REMINDERS",
   "INVITE",
   "HELP",
 ].join("\n");
+
+const EXPENSE_TEMPLATE_ALIASES: Record<string, string> = {
+  internet: "Internet",
+  wifi: "Internet",
+  broadband: "Internet",
+  jio: "Internet",
+  airtel: "Internet",
+  salary: "Staff Salary",
+  wages: "Staff Salary",
+  staff: "Staff Salary",
+  gas: "Gas Cylinders",
+  cylinder: "Gas Cylinders",
+  lpg: "Gas Cylinders",
+  electricity: "Electricity",
+  current: "Electricity",
+  eb: "Electricity",
+  power: "Electricity",
+  water: "Water",
+  tanker: "Water",
+  milk: "Food & Groceries",
+  rice: "Food & Groceries",
+  groceries: "Food & Groceries",
+  grocery: "Food & Groceries",
+  food: "Food & Groceries",
+  plumber: "Maintenance & Repairs",
+  repair: "Maintenance & Repairs",
+  repairs: "Maintenance & Repairs",
+  maintenance: "Maintenance & Repairs",
+};
+
+const PAYMENT_METHOD_ALIASES: Record<string, string> = {
+  cash: "cash",
+  upi: "upi",
+  gpay: "upi",
+  phonepe: "upi",
+  paytm: "upi",
+  card: "card",
+  bank: "bank",
+  transfer: "bank",
+  neft: "bank",
+  imps: "bank",
+};
 
 function money(value: unknown) {
   const amount = Number(value || 0);
@@ -118,6 +217,32 @@ function money(value: unknown) {
   return `₹${new Intl.NumberFormat("en-IN", {
     maximumFractionDigits: 0,
   }).format(Math.round(amount))}`;
+}
+
+function displayWhatsAppPhone(phone: string) {
+  const clean = String(phone || "").replace(/[^0-9]/g, "");
+  if (!clean) return phone || "Unknown number";
+  if (clean.startsWith("91") && clean.length === 12) return `+91 ${clean.slice(2)}`;
+  return `+${clean}`;
+}
+
+function maskWhatsAppPhone(phone: string) {
+  const clean = String(phone || "").replace(/[^0-9]/g, "");
+  if (!clean) return phone || "Unknown number";
+  const local = clean.startsWith("91") && clean.length === 12 ? clean.slice(2) : clean.slice(-10);
+  if (local.length < 6) return displayWhatsAppPhone(clean);
+  return `+91 XXXXX${local.slice(-5)}`;
+}
+
+function formatConnectionDate(value: string | Date | null | undefined) {
+  if (!value) return "N/A";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "N/A";
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date);
 }
 
 function formatShortDate(date: Date) {
@@ -150,6 +275,141 @@ function normalizeSendRemindersPayload(payload: any): SendRemindersPayload | nul
     totalPending: Number(payload.totalPending || 0),
     createdAt: String(payload.createdAt || new Date().toISOString()),
   };
+}
+
+function normalizeCreateExpensePayload(payload: any): CreateExpensePayload | null {
+  if (!payload || payload.action !== CREATE_EXPENSE_ACTION) return null;
+  const amount = Number(payload.amount || 0);
+  if (!payload.title || !Number.isFinite(amount) || amount <= 0 || !payload.category) return null;
+  return {
+    action: CREATE_EXPENSE_ACTION,
+    title: String(payload.title),
+    amount,
+    date: String(payload.date || new Date().toISOString().slice(0, 10)),
+    category: String(payload.category),
+    payment_method: String(payload.payment_method || "cash"),
+    vendor_name: payload.vendor_name ? String(payload.vendor_name) : undefined,
+    raw_command: String(payload.raw_command || ""),
+    template_key: payload.template_key ? String(payload.template_key) : undefined,
+    phone_number: String(payload.phone_number || ""),
+    createdAt: String(payload.createdAt || new Date().toISOString()),
+  };
+}
+
+function normalizeUndoExpensePayload(payload: any): UndoExpensePayload | null {
+  if (!payload || payload.action !== UNDO_EXPENSE_ACTION) return null;
+  const amount = Number(payload.amount || 0);
+  if (!payload.expense_id || !payload.title || !Number.isFinite(amount) || amount <= 0) return null;
+  return {
+    action: UNDO_EXPENSE_ACTION,
+    expense_id: String(payload.expense_id),
+    title: String(payload.title),
+    amount,
+    category: String(payload.category || "Miscellaneous"),
+    date: String(payload.date || ""),
+    phone_number: String(payload.phone_number || ""),
+    createdAt: String(payload.createdAt || new Date().toISOString()),
+  };
+}
+
+function normalizeDisconnectWhatsAppPayload(payload: any): DisconnectWhatsAppPayload | null {
+  if (!payload || payload.action !== DISCONNECT_WHATSAPP_ACTION) return null;
+  if (!payload.identity_id || !payload.phone_number) return null;
+  return {
+    action: DISCONNECT_WHATSAPP_ACTION,
+    identity_id: String(payload.identity_id),
+    phone_number: String(payload.phone_number),
+    createdAt: String(payload.createdAt || new Date().toISOString()),
+  };
+}
+
+function titleCase(input: string) {
+  return input
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function normalizeExpenseTemplateKey(input: string) {
+  return String(input || "").trim().toLowerCase();
+}
+
+function categoryForExpenseToken(token: string) {
+  return EXPENSE_TEMPLATE_ALIASES[normalizeExpenseTemplateKey(token)] || null;
+}
+
+function paymentMethodForToken(token: string) {
+  return PAYMENT_METHOD_ALIASES[String(token || "").trim().toLowerCase()] || null;
+}
+
+function formatExpenseTitle(category: string, templateKey: string, vendorName?: string) {
+  const base = category || titleCase(templateKey) || "Expense";
+  if (!vendorName) return base;
+  if (category === "Staff Salary") return `${base} - ${vendorName}`;
+  return `${base} - ${vendorName}`;
+}
+
+export function parseOwnerExpenseWriteCommand(message: string): CreateExpensePayload | null {
+  const normalized = String(message || "").trim().replace(/\s+/g, " ");
+  if (!normalized) return null;
+
+  const tokens = normalized.split(" ").filter(Boolean);
+  if (tokens.length < 2) return null;
+
+  const first = tokens[0]?.toLowerCase() || "";
+  const isExplicitExpense = first === "expense";
+  const bodyTokens = isExplicitExpense ? tokens.slice(1) : tokens;
+  if (bodyTokens.length < 2) return null;
+
+  const firstBody = bodyTokens[0]?.toLowerCase() || "";
+  if (!isExplicitExpense && !categoryForExpenseToken(firstBody)) return null;
+
+  const amountIndex = bodyTokens.findIndex((token) => {
+    const cleaned = token.replace(/[,₹]/g, "");
+    return /^\d+(\.\d{1,2})?$/.test(cleaned) && Number(cleaned) > 0;
+  });
+  if (amountIndex <= 0) return null;
+
+  const amount = Number(bodyTokens[amountIndex].replace(/[,₹]/g, ""));
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+
+  const beforeAmount = bodyTokens.slice(0, amountIndex);
+  const afterAmount = bodyTokens.slice(amountIndex + 1);
+  const templateKey = normalizeExpenseTemplateKey(beforeAmount[0] || "");
+  const category = categoryForExpenseToken(templateKey) || "Miscellaneous";
+
+  let payment_method = "cash";
+  const vendorTokens: string[] = [];
+  for (const token of [...beforeAmount.slice(1), ...afterAmount]) {
+    const method = paymentMethodForToken(token);
+    if (method) {
+      payment_method = method;
+      continue;
+    }
+    vendorTokens.push(token);
+  }
+
+  const vendor_name = vendorTokens.length > 0 ? titleCase(vendorTokens.join(" ")) : undefined;
+  const title = formatExpenseTitle(category, templateKey, vendor_name);
+
+  return {
+    action: CREATE_EXPENSE_ACTION,
+    title,
+    amount,
+    date: new Date().toISOString().slice(0, 10),
+    category,
+    payment_method,
+    vendor_name,
+    raw_command: normalized,
+    template_key: templateKey || undefined,
+    phone_number: "",
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function isExpenseReportCommand(parsed: ReturnType<typeof parseCommand>) {
+  return parsed.command === "EXPENSES" || parsed.upper === "LAST 5 EXPENSES" || parsed.upper === "TOP CATEGORIES";
 }
 
 export class OwnerWhatsAppAssistantService {
@@ -215,13 +475,29 @@ export class OwnerWhatsAppAssistantService {
       phone_number: string;
       verified_at: Date | null;
       created_at: Date;
+      last_seen_at: Date | null;
+      last_command: string | null;
     }>>`
-      SELECT id::text, phone_number, verified_at, created_at
-      FROM owner_whatsapp_identities
-      WHERE owner_id = ${ownerId}::uuid
-        AND is_verified = true
-        AND phone_number IS NOT NULL
-      ORDER BY verified_at DESC NULLS LAST, created_at DESC
+      SELECT
+        i.id::text,
+        i.phone_number,
+        i.verified_at,
+        i.created_at,
+        m.created_at AS last_seen_at,
+        m.command AS last_command
+      FROM owner_whatsapp_identities i
+      LEFT JOIN LATERAL (
+        SELECT created_at, command
+        FROM owner_assistant_messages
+        WHERE owner_id = i.owner_id
+          AND phone_number = i.phone_number
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) m ON true
+      WHERE i.owner_id = ${ownerId}::uuid
+        AND i.is_verified = true
+        AND i.phone_number IS NOT NULL
+      ORDER BY i.verified_at DESC NULLS LAST, i.created_at DESC
     `;
 
     return rows.map((row: {
@@ -229,11 +505,15 @@ export class OwnerWhatsAppAssistantService {
       phone_number: string;
       verified_at: Date | null;
       created_at: Date;
+      last_seen_at: Date | null;
+      last_command: string | null;
     }) => ({
       id: row.id,
       phone_number: row.phone_number,
       verified_at: row.verified_at ? row.verified_at.toISOString() : null,
       created_at: row.created_at.toISOString(),
+      last_seen_at: row.last_seen_at ? row.last_seen_at.toISOString() : null,
+      last_command: row.last_command || null,
     }));
   }
 
@@ -253,18 +533,12 @@ export class OwnerWhatsAppAssistantService {
       throw new Error("NOT_FOUND: WhatsApp connection not found");
     }
 
-    try {
-      await this.getProvider().sendTextMessage(
-        disconnected.phone_number,
-        "This WhatsApp number has been disconnected from the Sri Adithya Hostel Assistant."
-      );
-    } catch (error: any) {
-      logger.warn("disconnect.notice_failed", {
-        owner_id: ownerId,
-        connection_id: connectionId,
-        error: error?.message || String(error),
-      });
-    }
+    await this.notifyDisconnectedNumber(ownerId, disconnected.phone_number);
+    await this.notifyOwnerConnections(ownerId, this.buildConnectionChangedNotice({
+      event: "disconnected",
+      phone: disconnected.phone_number,
+      connectedCount: await this.countConnections(ownerId),
+    }), [disconnected.phone_number]);
 
     return {
       id: disconnected.id,
@@ -628,8 +902,8 @@ export class OwnerWhatsAppAssistantService {
       }
     }
 
-    if (parsed.command === "YES" || parsed.command === "NO") {
-      return this.handleConfirmationResponse(ownerId, normalizedPhone, message, parsed.command as "YES" | "NO");
+    if (["YES", "NO", "CONFIRM", "CANCEL"].includes(parsed.command)) {
+      return this.handleConfirmationResponse(ownerId, normalizedPhone, message, parsed.command);
     }
 
     if (parsed.command === "HELP") {
@@ -653,6 +927,27 @@ export class OwnerWhatsAppAssistantService {
 
     if (isSendRemindersCommand(parsed.upper)) {
       return this.handleSendRemindersRequest(ownerId, normalizedPhone, message);
+    }
+
+    if (parsed.command === "CONNECTED") {
+      return this.handleConnectedWhatsAppRequest(ownerId, normalizedPhone, message);
+    }
+
+    if (parsed.command === "DISCONNECT") {
+      return this.handleDisconnectWhatsAppRequest(ownerId, normalizedPhone, message, verifiedIdentity);
+    }
+
+    if (isExpenseReportCommand(parsed)) {
+      return this.handleExpenseReport(ownerId, normalizedPhone, message);
+    }
+
+    if (parsed.upper === "UNDO EXPENSE") {
+      return this.handleUndoExpenseRequest(ownerId, normalizedPhone, message);
+    }
+
+    const expenseDraft = parseOwnerExpenseWriteCommand(message);
+    if (expenseDraft) {
+      return this.handleCreateExpenseRequest(ownerId, normalizedPhone, message, expenseDraft);
     }
 
     return this.respondAndLog({
@@ -800,7 +1095,7 @@ export class OwnerWhatsAppAssistantService {
       WHERE id = ${identity.id}::uuid
     `;
 
-    return this.respondAndLog({
+    const result = await this.respondAndLog({
       ownerId: identity.owner_id,
       phone,
       message,
@@ -808,6 +1103,14 @@ export class OwnerWhatsAppAssistantService {
       response: LINK_SUCCESS_TEXT,
       success: true,
     });
+
+    await this.notifyOwnerConnections(identity.owner_id, this.buildConnectionChangedNotice({
+      event: "connected",
+      phone,
+      connectedCount: await this.countConnections(identity.owner_id),
+    }), [phone]);
+
+    return result;
   }
 
   private async handleSummary(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
@@ -976,8 +1279,8 @@ export class OwnerWhatsAppAssistantService {
           "",
           "Send reminders now?",
           "",
-          "YES",
-          "NO",
+          "CONFIRM",
+          "CANCEL",
         ].join("\n"),
         success: true,
       });
@@ -994,36 +1297,376 @@ export class OwnerWhatsAppAssistantService {
     }
   }
 
+  private async handleCreateExpenseRequest(
+    ownerId: string,
+    phone: string,
+    message: string,
+    draft: CreateExpensePayload
+  ): Promise<InboundOwnerResult> {
+    const withinLimit = await this.checkExpenseDraftRateLimit(ownerId, phone);
+    if (!withinLimit) {
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: CREATE_EXPENSE_ACTION,
+        response: "Too many expense attempts. Please wait a few minutes and try again.",
+        success: false,
+      });
+    }
+
+    const payload: CreateExpensePayload = {
+      ...draft,
+      phone_number: phone,
+      createdAt: new Date().toISOString(),
+    };
+
+    await this.createPendingConfirmation(ownerId, phone, CREATE_EXPENSE_ACTION, payload);
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: CREATE_EXPENSE_ACTION,
+      response: [
+        payload.category,
+        money(payload.amount),
+        payload.vendor_name ? `Vendor: ${payload.vendor_name}` : "",
+        `Payment: ${payload.payment_method.toUpperCase()}`,
+        "Date: Today",
+        "",
+        "Confirm?",
+        "",
+        "CONFIRM",
+        "CANCEL",
+      ].filter(Boolean).join("\n"),
+      success: true,
+    });
+  }
+
+  private async checkExpenseDraftRateLimit(ownerId: string, phone: string) {
+    const since = new Date(Date.now() - EXPENSE_DRAFT_RATE_LIMIT_WINDOW_MS);
+    const rows = await prisma.$queryRaw<Array<{ count: number }>>`
+      SELECT COUNT(*)::int AS count
+      FROM owner_assistant_confirmations
+      WHERE owner_id = ${ownerId}::uuid
+        AND phone_number = ${phone}
+        AND action_type = ${CREATE_EXPENSE_ACTION}
+        AND created_at >= ${since}
+    `;
+    return Number(rows[0]?.count || 0) < EXPENSE_DRAFT_RATE_LIMIT_MAX;
+  }
+
+  private async handleExpenseReport(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
+    try {
+      const parsed = parseCommand(message);
+      const words = parsed.normalized.toLowerCase().split(" ");
+
+      let range: string | undefined = "month";
+      let categories: string[] | undefined;
+      let limit = EXPENSE_REPORT_LIMIT;
+      let title = "Expenses This Month";
+
+      if (parsed.upper === "LAST 5 EXPENSES") {
+        range = undefined;
+        limit = 5;
+        title = "Last 5 Expenses";
+      } else if (parsed.upper === "TOP CATEGORIES") {
+        return await this.handleTopExpenseCategories(ownerId, phone, message);
+      } else if (words[0] === "expenses") {
+        const scope = words[1] || "month";
+        if (scope === "today") {
+          range = "today";
+          title = "Expenses Today";
+        } else if (scope === "week" || scope === "this-week") {
+          range = "week";
+          title = "Expenses This Week";
+        } else if (scope === "month" || scope === "this-month") {
+          range = "month";
+          title = "Expenses This Month";
+        } else if (scope === "category" && words[2]) {
+          range = "month";
+          const key = normalizeExpenseTemplateKey(words.slice(2).join(" "));
+          const category = categoryForExpenseToken(key) || titleCase(key);
+          categories = [category];
+          title = `${category} Expenses`;
+        }
+      }
+
+      const report = await expenseService.getAllExpenses(ownerId, {
+        range,
+        hostelId: undefined,
+        categories,
+        sort: "recent",
+        limit,
+        offset: 0,
+      });
+
+      const rows = (report.expenses || []).slice(0, limit);
+      const total = rows.reduce((sum: number, row: any) => sum + Number(row.amount || 0), 0);
+      const lines = rows.map((row: any, index: number) => {
+        const date = row.date ? formatShortDate(new Date(row.date)) : "";
+        return `${index + 1}. ${row.title || row.category} - ${money(row.amount)}${date ? ` (${date})` : ""}`;
+      });
+
+      const response = rows.length > 0
+        ? [
+            title,
+            "",
+            ...lines,
+            "",
+            `Shown Total: ${money(total)}`,
+            report.total > rows.length ? `Showing ${rows.length} of ${report.total}` : "",
+          ].filter(Boolean).join("\n")
+        : [
+            title,
+            "",
+            "No expenses found.",
+            "",
+            "Total: ₹0",
+          ].join("\n");
+
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "EXPENSE_REPORT",
+        response,
+        success: true,
+      });
+    } catch (error: any) {
+      logger.error("expense.report_failed", { owner_id: ownerId, error: error?.message || String(error) });
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: "EXPENSE_REPORT",
+        response: "Could not fetch expenses right now. Please try again later.",
+        success: false,
+      });
+    }
+  }
+
+  private async handleTopExpenseCategories(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
+    const report = await expenseService.getAllExpenses(ownerId, {
+      range: "month",
+      hostelId: undefined,
+      sort: "recent",
+      limit: 1,
+      offset: 0,
+    });
+
+    const categories = (report.category_breakdown || []).slice(0, 5);
+    const response = categories.length > 0
+      ? [
+          "Top Categories This Month",
+          "",
+          ...categories.map((row: any, index: number) =>
+            `${index + 1}. ${row.category} - ${money(row.amount)} (${Math.round(Number(row.percentage || 0))}%)`
+          ),
+          "",
+          `Total: ${money(report.kpis?.this_month_expenses || 0)}`,
+        ].join("\n")
+      : [
+          "Top Categories This Month",
+          "",
+          "No expenses found.",
+          "",
+          "Total: ₹0",
+        ].join("\n");
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "TOP_EXPENSE_CATEGORIES",
+      response,
+      success: true,
+    });
+  }
+
+  private async handleUndoExpenseRequest(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
+    const since = new Date(Date.now() - EXPENSE_UNDO_WINDOW_MS);
+    const rows = await prisma.$queryRaw<Array<{
+      id: string;
+      title: string;
+      amount: number;
+      category: string;
+      date: Date;
+    }>>`
+      SELECT id::text, title, amount::float AS amount, category, date
+      FROM expenses
+      WHERE owner_id = ${ownerId}::uuid
+        AND created_at >= ${since}
+        AND metadata->>'source' = 'OWNER_WHATSAPP_ASSISTANT'
+        AND metadata->>'phone_number' = ${phone}
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+    const expense = rows[0];
+
+    if (!expense) {
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command: UNDO_EXPENSE_ACTION,
+        response: "No recent WhatsApp-created expense found to undo.",
+        success: false,
+      });
+    }
+
+    const payload: UndoExpensePayload = {
+      action: UNDO_EXPENSE_ACTION,
+      expense_id: expense.id,
+      title: expense.title,
+      amount: Number(expense.amount || 0),
+      category: expense.category,
+      date: expense.date ? expense.date.toISOString().slice(0, 10) : "",
+      phone_number: phone,
+      createdAt: new Date().toISOString(),
+    };
+
+    await this.createPendingConfirmation(ownerId, phone, UNDO_EXPENSE_ACTION, payload);
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: UNDO_EXPENSE_ACTION,
+      response: [
+        "Last Expense",
+        "",
+        payload.title,
+        money(payload.amount),
+        payload.category,
+        "",
+        "Delete?",
+        "",
+        "CONFIRM",
+        "CANCEL",
+      ].join("\n"),
+      success: true,
+    });
+  }
+
+  private async handleConnectedWhatsAppRequest(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
+    const connections = await this.listConnections(ownerId);
+    const lines = connections.map((connection, index) => [
+      `${index + 1}. ${maskWhatsAppPhone(connection.phone_number)}`,
+      `Connected: ${formatConnectionDate(connection.verified_at || connection.created_at)}`,
+    ].join("\n"));
+
+    const response = connections.length > 0
+      ? [
+          "Connected Owner Numbers",
+          "",
+          lines.join("\n\n"),
+          "",
+          `Total: ${connections.length}`,
+        ].join("\n")
+      : [
+          "Connected Owner Numbers",
+          "",
+          "No WhatsApp numbers are connected.",
+          "",
+          "Generate a link code in Settings → Automation.",
+        ].join("\n");
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "CONNECTED",
+      response,
+      success: true,
+    });
+  }
+
+  private async handleDisconnectWhatsAppRequest(
+    ownerId: string,
+    phone: string,
+    message: string,
+    identity: OwnerIdentity
+  ): Promise<InboundOwnerResult> {
+    const payload: DisconnectWhatsAppPayload = {
+      action: DISCONNECT_WHATSAPP_ACTION,
+      identity_id: identity.id,
+      phone_number: phone,
+      createdAt: new Date().toISOString(),
+    };
+
+    await this.createPendingConfirmation(ownerId, phone, DISCONNECT_WHATSAPP_ACTION, payload);
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: DISCONNECT_WHATSAPP_ACTION,
+      response: [
+        "⚠️ Disconnect WhatsApp Assistant?",
+        "",
+        "This will remove ONLY this phone number:",
+        "",
+        maskWhatsAppPhone(phone),
+        "",
+        "You will stop receiving:",
+        "",
+        "• Daily Briefings",
+        "• Dues Alerts",
+        "• Expense Commands",
+        "• Assistant Responses",
+        "",
+        "Reply CONFIRM to disconnect.",
+        "",
+        "Reply CANCEL to keep it connected.",
+      ].join("\n"),
+      success: true,
+    });
+  }
+
   private async handleConfirmationResponse(
     ownerId: string,
     phone: string,
     message: string,
-    command: "YES" | "NO"
+    command: string
   ): Promise<InboundOwnerResult> {
-    if (command === "NO") {
-      const cancelled = await this.cancelPendingConfirmation(ownerId, phone, SEND_REMINDERS_ACTION);
+    if (command === "NO" || command === "CANCEL") {
+      const cancelled = await this.cancelLatestPendingConfirmation(ownerId, phone);
       return this.respondAndLog({
         ownerId,
         phone,
         message,
         command,
         response: cancelled
-          ? "Cancelled. No reminders were sent."
-          : "No pending reminder action found. Send SEND REMINDERS after DUES.",
+          ? "Cancelled. No changes were made."
+          : "No pending action found.",
         success: Boolean(cancelled),
       });
     }
 
-    const confirmation = await this.confirmPendingAction(ownerId, phone, SEND_REMINDERS_ACTION);
+    const confirmation = await this.confirmLatestPendingAction(ownerId, phone);
     if (!confirmation) {
       return this.respondAndLog({
         ownerId,
         phone,
         message,
         command,
-        response: "No pending reminder action found, or it expired. Send SEND REMINDERS again.",
+        response: "No pending action found, or it expired.",
         success: false,
       });
+    }
+
+    if (confirmation.action_type === CREATE_EXPENSE_ACTION) {
+      return this.confirmCreateExpense(ownerId, phone, message, command, confirmation);
+    }
+
+    if (confirmation.action_type === UNDO_EXPENSE_ACTION) {
+      return this.confirmUndoExpense(ownerId, phone, message, command, confirmation);
+    }
+
+    if (confirmation.action_type === DISCONNECT_WHATSAPP_ACTION) {
+      return this.confirmDisconnectWhatsApp(ownerId, phone, message, command, confirmation);
     }
 
     const payload = normalizeSendRemindersPayload(confirmation.payload_json);
@@ -1088,6 +1731,197 @@ export class OwnerWhatsAppAssistantService {
     });
   }
 
+  private async confirmCreateExpense(
+    ownerId: string,
+    phone: string,
+    message: string,
+    command: string,
+    confirmation: { id: string; payload_json: any }
+  ): Promise<InboundOwnerResult> {
+    const payload = normalizeCreateExpensePayload(confirmation.payload_json);
+    if (!payload || payload.phone_number !== phone) {
+      await this.updateConfirmationStatus(confirmation.id, "FAILED");
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command,
+        response: "Could not read the pending expense. Send the expense again.",
+        success: false,
+      });
+    }
+
+    try {
+      const expense = await expenseService.createExpense({
+        owner_id: ownerId,
+        title: payload.title,
+        amount: payload.amount,
+        date: payload.date,
+        category: payload.category,
+        status: "paid",
+        hostel_id: null,
+        vendor_name: payload.vendor_name,
+        payment_method: payload.payment_method,
+        created_by: ownerId,
+        expense_type: "BUSINESS",
+        tags: ["whatsapp"],
+        metadata: {
+          source: "OWNER_WHATSAPP_ASSISTANT",
+          confirmed_via: "WHATSAPP",
+          raw_command: payload.raw_command,
+          template_key: payload.template_key || null,
+          phone_number: phone,
+          confirmation_id: confirmation.id,
+        },
+      });
+
+      await this.updateConfirmationStatus(confirmation.id, "COMPLETED");
+
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command,
+        response: [
+          "Expense Created",
+          "",
+          expense.title,
+          money(Number(expense.amount || payload.amount)),
+          expense.category,
+          "",
+          "Reply UNDO EXPENSE within 30 minutes if this was a mistake.",
+        ].join("\n"),
+        success: true,
+      });
+    } catch (error: any) {
+      await this.updateConfirmationStatus(confirmation.id, "FAILED");
+      logger.error("expense.create_failed", { owner_id: ownerId, error: error?.message || String(error) });
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command,
+        response: "Could not create the expense. Please try again.",
+        success: false,
+      });
+    }
+  }
+
+  private async confirmUndoExpense(
+    ownerId: string,
+    phone: string,
+    message: string,
+    command: string,
+    confirmation: { id: string; payload_json: any }
+  ): Promise<InboundOwnerResult> {
+    const payload = normalizeUndoExpensePayload(confirmation.payload_json);
+    if (!payload || payload.phone_number !== phone) {
+      await this.updateConfirmationStatus(confirmation.id, "FAILED");
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command,
+        response: "Could not read the pending undo action. Send UNDO EXPENSE again.",
+        success: false,
+      });
+    }
+
+    try {
+      await expenseService.deleteExpense(payload.expense_id, ownerId);
+      await this.updateConfirmationStatus(confirmation.id, "COMPLETED");
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command,
+        response: [
+          "Expense Deleted",
+          "",
+          payload.title,
+          money(payload.amount),
+          "",
+          "Done.",
+        ].join("\n"),
+        success: true,
+      });
+    } catch (error: any) {
+      await this.updateConfirmationStatus(confirmation.id, "FAILED");
+      logger.error("expense.undo_failed", { owner_id: ownerId, expense_id: payload.expense_id, error: error?.message || String(error) });
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command,
+        response: "Could not delete the expense. It may already have been changed in HMS.",
+        success: false,
+      });
+    }
+  }
+
+  private async confirmDisconnectWhatsApp(
+    ownerId: string,
+    phone: string,
+    message: string,
+    command: string,
+    confirmation: { id: string; payload_json: any }
+  ): Promise<InboundOwnerResult> {
+    const payload = normalizeDisconnectWhatsAppPayload(confirmation.payload_json);
+    if (!payload || payload.phone_number !== phone) {
+      await this.updateConfirmationStatus(confirmation.id, "FAILED");
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command,
+        response: "Could not read the pending disconnect action. Send DISCONNECT again.",
+        success: false,
+      });
+    }
+
+    const rows = await prisma.$queryRaw<Array<{ id: string; phone_number: string }>>`
+      DELETE FROM owner_whatsapp_identities
+      WHERE id = ${payload.identity_id}::uuid
+        AND owner_id = ${ownerId}::uuid
+        AND phone_number = ${phone}
+        AND is_verified = true
+      RETURNING id::text, phone_number
+    `;
+    const disconnected = rows[0];
+
+    if (!disconnected) {
+      await this.updateConfirmationStatus(confirmation.id, "FAILED");
+      return this.respondAndLog({
+        ownerId,
+        phone,
+        message,
+        command,
+        response: "This WhatsApp number is already disconnected.",
+        success: false,
+      });
+    }
+
+    await this.updateConfirmationStatus(confirmation.id, "COMPLETED");
+    await this.notifyOwnerConnections(ownerId, this.buildConnectionChangedNotice({
+      event: "disconnected",
+      phone: disconnected.phone_number,
+      connectedCount: await this.countConnections(ownerId),
+    }), [disconnected.phone_number]);
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command,
+      response: [
+        "Disconnected",
+        "",
+        "This WhatsApp number has been removed from the Owner Assistant.",
+      ].join("\n"),
+      success: true,
+    });
+  }
+
   private async getPendingDues(ownerId: string): Promise<PendingDuesResult> {
     const hostels = await this.getActiveHostels(ownerId);
     if (hostels.length === 0) {
@@ -1126,7 +1960,7 @@ export class OwnerWhatsAppAssistantService {
     ownerId: string,
     phone: string,
     actionType: string,
-    payload: SendRemindersPayload
+    payload: SendRemindersPayload | CreateExpensePayload | UndoExpensePayload | DisconnectWhatsAppPayload
   ) {
     const expiresAt = new Date(Date.now() + CONFIRMATION_WINDOW_MS);
     await this.expirePendingConfirmations(ownerId, phone);
@@ -1161,6 +1995,56 @@ export class OwnerWhatsAppAssistantService {
         now()
       )
     `;
+  }
+
+  private async confirmLatestPendingAction(ownerId: string, phone: string): Promise<{
+    id: string;
+    action_type: string;
+    payload_json: any;
+  } | null> {
+    await this.expirePendingConfirmations(ownerId, phone);
+    const rows = await prisma.$queryRaw<Array<{
+      id: string;
+      action_type: string;
+      payload_json: any;
+    }>>`
+      UPDATE owner_assistant_confirmations
+      SET status = 'CONFIRMED',
+          updated_at = now()
+      WHERE id = (
+        SELECT id
+        FROM owner_assistant_confirmations
+        WHERE owner_id = ${ownerId}::uuid
+          AND phone_number = ${phone}
+          AND status = 'PENDING'
+          AND expires_at > now()
+        ORDER BY created_at DESC
+        LIMIT 1
+      )
+      RETURNING id::text, action_type, payload_json
+    `;
+    return rows[0] || null;
+  }
+
+  private async cancelLatestPendingConfirmation(ownerId: string, phone: string) {
+    await this.expirePendingConfirmations(ownerId, phone);
+    const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+      UPDATE owner_assistant_confirmations
+      SET status = 'CANCELLED',
+          updated_at = now()
+      WHERE id = (
+        SELECT id
+        FROM owner_assistant_confirmations
+        WHERE owner_id = ${ownerId}::uuid
+          AND phone_number = ${phone}
+          AND status = 'PENDING'
+          AND expires_at > now()
+        ORDER BY created_at DESC
+        LIMIT 1
+      )
+      RETURNING id::text
+    `;
+    return rows[0] || null;
   }
 
   private async confirmPendingAction(ownerId: string, phone: string, actionType: string): Promise<{
@@ -1264,6 +2148,88 @@ export class OwnerWhatsAppAssistantService {
       ORDER BY name ASC
     `;
     return rows;
+  }
+
+  private async notifyOwnerConnections(ownerId: string, text: string, excludePhones: string[] = []) {
+    const excluded = new Set(excludePhones.map((phone) => normalizeWhatsAppPhone(phone)));
+    let connections: OwnerWhatsAppConnection[] = [];
+    try {
+      connections = await this.listConnections(ownerId);
+    } catch (error: any) {
+      logger.warn("connections.notify_lookup_failed", {
+        owner_id: ownerId,
+        error: error?.message || String(error),
+      });
+      return;
+    }
+
+    for (const connection of connections) {
+      const target = normalizeWhatsAppPhone(connection.phone_number);
+      if (excluded.has(target)) continue;
+      try {
+        await this.getProvider().sendTextMessage(target, text);
+      } catch (error: any) {
+        logger.warn("connections.notify_failed", {
+          owner_id: ownerId,
+          phone: target,
+          error: error?.message || String(error),
+        });
+      }
+    }
+  }
+
+  private async countConnections(ownerId: string) {
+    const rows = await prisma.$queryRaw<Array<{ count: number }>>`
+      SELECT COUNT(*)::int AS count
+      FROM owner_whatsapp_identities
+      WHERE owner_id = ${ownerId}::uuid
+        AND is_verified = true
+        AND phone_number IS NOT NULL
+    `;
+    return Number(rows[0]?.count || 0);
+  }
+
+  private buildConnectionChangedNotice(input: {
+    event: "connected" | "disconnected";
+    phone: string;
+    connectedCount: number;
+  }) {
+    const verb = input.event === "connected" ? "connected to" : "disconnected from";
+    const action = input.event === "connected" ? "connected" : "disconnected";
+    return [
+      "🔔 WhatsApp Assistant Updated",
+      "",
+      `An owner number was ${verb} Sri Adithya Hostels.`,
+      "",
+      `Number: ${maskWhatsAppPhone(input.phone)}`,
+      `Connected Numbers: ${input.connectedCount}`,
+      "",
+      input.event === "connected"
+        ? "If this was not expected, review:"
+        : "If this was not expected, review:",
+      "Settings → Automation → Owner WhatsApp Assistant",
+      "",
+      `Status: ${action}`,
+    ].join("\n");
+  }
+
+  private async notifyDisconnectedNumber(ownerId: string, phone: string) {
+    try {
+      await this.getProvider().sendTextMessage(
+        phone,
+        [
+          "Disconnected",
+          "",
+          "This WhatsApp number has been removed from the Owner Assistant.",
+        ].join("\n")
+      );
+    } catch (error: any) {
+      logger.warn("disconnect.notice_failed", {
+        owner_id: ownerId,
+        phone,
+        error: error?.message || String(error),
+      });
+    }
   }
 
   private async respondAndLog(input: {
@@ -1480,8 +2446,9 @@ export class OwnerWhatsAppAssistantService {
           });
         }
 
-        if (hostels.length === 1) {
-          const hostel = hostels[0];
+        const [onlyHostel] = hostels;
+        if (hostels.length === 1 && onlyHostel) {
+          const hostel = onlyHostel;
           const rooms = await prisma.rooms.findMany({
             where: { hostel_id: hostel.id, is_active: true },
             orderBy: { room_no: "asc" },
@@ -1945,8 +2912,9 @@ export class OwnerWhatsAppAssistantService {
     let resolvedRoomId: string | undefined;
     let resolvedRoomNo: string | undefined;
 
-    if (hostels.length === 1) {
-      resolvedHostelId = hostels[0].id;
+    const [onlyHostel] = hostels;
+    if (hostels.length === 1 && onlyHostel) {
+      resolvedHostelId = onlyHostel.id;
       if (parsed.tokens.length > 0) {
         const roomToken = parsed.tokens[0];
         const cleanRoomToken = roomToken.toLowerCase().replace(/^room\s+/, "").trim();

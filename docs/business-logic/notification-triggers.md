@@ -20,8 +20,8 @@
 
 ## WhatsApp Owner Assistant Phase 1A
 
-Phase 1A is a read-only WhatsApp operational interface for verified hostel owners.
-It is not an AI chatbot and does not perform write operations.
+The WhatsApp owner assistant is an operational interface for verified hostel owners.
+It is not an AI chatbot. Every write operation requires an explicit confirmation from the same verified owner phone.
 
 | Command | Purpose | Data source |
 |---|---|---|
@@ -30,7 +30,13 @@ It is not an AI chatbot and does not perform write operations.
 | `SUMMARY` | Shows revenue, pending dues, occupancy, and expenses for the owner's active hostel scope. | Existing dashboard service |
 | `DUES` | Shows up to 10 tenants with the highest pending dues and total pending amount. | Existing payment dues service |
 | `SEND REMINDERS` | Starts a confirmation flow to remind tenants from the current top pending dues list. | Existing reminder service |
-| `YES` / `NO` | Confirms or cancels a pending owner assistant action. | `owner_assistant_confirmations` |
+| `internet 1000`, `expense gas 1200` | Creates a pending expense draft for owner confirmation. | Existing expense service after confirmation |
+| `expenses today`, `expenses week`, `expenses month` | Shows recent expense totals and capped ledger rows. | Existing expense service |
+| `expenses category internet`, `top categories` | Shows category-specific or category summary expenses. | Existing expense service |
+| `undo expense` | Creates a pending delete action for the latest recent WhatsApp-created expense. | Existing expense service after confirmation |
+| `CONNECTED` | Shows verified owner WhatsApp numbers and connected dates. | `owner_whatsapp_identities` |
+| `DISCONNECT` | Starts a confirmation flow to remove the sender's WhatsApp number from the owner assistant. | `owner_whatsapp_identities` after confirmation |
+| `CONFIRM` / `CANCEL` | Confirms or cancels a pending owner assistant action. | `owner_assistant_confirmations` |
 
 **How this works:**
 1. The owner generates a temporary code from HMS with `/api/owner/whatsapp/link-code`.
@@ -40,8 +46,12 @@ It is not an AI chatbot and does not perform write operations.
 5. `SUMMARY` and `DUES` reuse existing HMS services instead of duplicating calculations.
 6. Every handled owner command is logged in `owner_assistant_messages`.
 7. The owner dashboard lists verified WhatsApp numbers through `/api/owner/whatsapp/connections` and can disconnect a number through `/api/owner/whatsapp/connections/:connectionId`.
-8. `SEND REMINDERS` stores a 5-minute pending confirmation in `owner_assistant_confirmations`; only `YES` from the same verified owner phone executes it.
-9. Confirmed reminder actions call the existing reminder service instead of sending tenant reminders directly from the assistant.
+8. New WhatsApp connections notify the owner's other connected WhatsApp numbers with connected count and Settings review path.
+9. `SEND REMINDERS`, expense capture, expense undo, and WhatsApp disconnect store 5-minute pending confirmations in `owner_assistant_confirmations`; only `CONFIRM` from the same verified owner phone executes them.
+10. Confirmed reminder actions call the existing reminder service instead of sending tenant reminders directly from the assistant.
+11. Confirmed expense actions call the existing expense service instead of writing finance rows directly.
+12. Confirmed disconnect actions remove only the sender's WhatsApp number and notify the disconnected number plus remaining connected owner numbers.
+13. The owner dashboard Automation section shows connected numbers with last seen time and last command type from `owner_assistant_messages`.
 
 Unsupported owner commands return `HELP`.
 Unlinked numbers are only handled by the owner assistant when they send `LINK`; other messages continue through existing WhatsApp routing.

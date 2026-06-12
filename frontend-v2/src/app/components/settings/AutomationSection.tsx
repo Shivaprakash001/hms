@@ -37,6 +37,8 @@ interface WhatsAppConnection {
   phone_number: string;
   verified_at?: string | null;
   created_at: string;
+  last_seen_at?: string | null;
+  last_command?: string | null;
 }
 
 function formatPhone(phone: string) {
@@ -53,6 +55,24 @@ function formatConnectedAt(value?: string | null) {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(date);
+}
+
+function formatActivityAt(value?: string | null) {
+  if (!value) return 'No commands yet';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'No commands yet';
+  return new Intl.DateTimeFormat('en-IN', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date);
+}
+
+function formatCommandType(command?: string | null) {
+  if (!command) return 'No command yet';
+  return command
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, char => char.toUpperCase());
 }
 
 function formatExpiresAt(value?: string | null) {
@@ -103,6 +123,18 @@ export function AutomationSection({ hostelId, policy }: Props) {
 
   useEffect(() => {
     loadWhatsAppConnections();
+  }, [loadWhatsAppConnections]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      loadWhatsAppConnections(true);
+    }, 15000);
+    const onFocus = () => loadWhatsAppConnections(true);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', onFocus);
+    };
   }, [loadWhatsAppConnections]);
 
   useEffect(() => {
@@ -246,7 +278,7 @@ export function AutomationSection({ hostelId, policy }: Props) {
               )}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Verified owner numbers that can use SUMMARY, DUES, and HELP.
+              Verified owner numbers that can use SUMMARY, DUES, expense commands, and DISCONNECT.
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -287,6 +319,12 @@ export function AutomationSection({ hostelId, policy }: Props) {
                     <Clock3 className="h-3.5 w-3.5" />
                     <span>{formatConnectedAt(connection.verified_at || connection.created_at)}</span>
                   </div>
+                  <div className="text-xs text-muted-foreground">
+                    Last Used: {formatActivityAt(connection.last_seen_at)}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Last Command: {formatCommandType(connection.last_command)}
+                  </div>
                 </div>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
@@ -326,6 +364,22 @@ export function AutomationSection({ hostelId, policy }: Props) {
             {loadingConnections ? 'Loading connected numbers...' : 'No owner WhatsApp numbers are connected yet.'}
           </div>
         )}
+
+        <div className="rounded-md border border-border bg-muted/20 px-3 py-3">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">WhatsApp commands</p>
+          <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+            <code className="rounded bg-background px-2 py-1 text-foreground">SUMMARY</code>
+            <code className="rounded bg-background px-2 py-1 text-foreground">DUES</code>
+            <code className="rounded bg-background px-2 py-1 text-foreground">internet 1000</code>
+            <code className="rounded bg-background px-2 py-1 text-foreground">expenses today</code>
+            <code className="rounded bg-background px-2 py-1 text-foreground">undo expense</code>
+            <code className="rounded bg-background px-2 py-1 text-foreground">CONNECTED</code>
+            <code className="rounded bg-background px-2 py-1 text-destructive">DISCONNECT</code>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            CONNECTED lists verified owner numbers. DISCONNECT removes only the WhatsApp number that sends it, after confirmation.
+          </p>
+        </div>
 
         {whatsAppLinkCode && (
           <div className="rounded-md border border-accent/30 bg-accent/5 p-3 space-y-2">
