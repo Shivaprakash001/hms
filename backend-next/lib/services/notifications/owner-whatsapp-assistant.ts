@@ -221,13 +221,11 @@ const META_LIST_ROW_TITLE_LIMIT = 24;
 const META_LIST_ROW_DESCRIPTION_LIMIT = 72;
 
 const HELP_TEXT = [
-  "What would you like to manage?",
-  "",
-  "Collections",
-  "Occupancy",
-  "Operations",
-  "",
-  "You can also type a tenant name, phone number, or room number.",
+  "What would you like to do?",
+].join("\n");
+
+const COMMANDS_TEXT = [
+  "What would you like to do?",
 ].join("\n");
 
 const LINK_SUCCESS_TEXT = [
@@ -235,14 +233,14 @@ const LINK_SUCCESS_TEXT = [
   "",
   "Welcome to Sri Adithya Hostel Assistant",
   "",
-  "Send HELP to open the operations menu.",
+  "Send HELP for quick actions.",
   "You can also type a tenant name, phone number, or room number.",
 ].join("\n");
 
 const ALREADY_CONNECTED_TEXT = [
   "This WhatsApp number is already connected.",
   "",
-  "Send HELP to open the operations menu.",
+  "Send HELP for quick actions.",
   "You can also type a tenant name, phone number, or room number.",
 ].join("\n");
 
@@ -309,6 +307,15 @@ function maskWhatsAppPhone(phone: string) {
   const local = clean.startsWith("91") && clean.length === 12 ? clean.slice(2) : clean.slice(-10);
   if (local.length < 6) return displayWhatsAppPhone(clean);
   return `+91 XXXXX${local.slice(-5)}`;
+}
+
+function hmsUrl(path: string) {
+  const base = (
+    process.env.NEXT_PUBLIC_FRONTEND_URL ||
+    process.env.FRONTEND_URL ||
+    "https://sriadithyahostels.in"
+  ).replace(/\/$/, "");
+  return `${base}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
 function formatConnectionDate(value: string | Date | null | undefined) {
@@ -816,277 +823,15 @@ export class OwnerWhatsAppAssistantService {
         // Resolve priority_type
         const priority = latestBriefing.priority_type;
         if (priority === "COLLECTIONS") {
-          const pending = await this.getPendingDues(ownerId);
-          const topRows = pending.rows.slice(0, 10);
-          const tenantBlocks = topRows.map((row) => `${row.name}\n${money(row.amount)}`);
-          const response = topRows.length > 0
-            ? [
-                "⚠️ Collections Requiring Attention",
-                "",
-                tenantBlocks.join("\n\n"),
-                "",
-                "Total Pending",
-                money(pending.totalPending),
-                "",
-                "Reply:",
-                "SEND REMINDERS",
-              ].join("\n")
-            : [
-                "⚠️ Collections Requiring Attention",
-                "",
-                "No pending collections.",
-                "",
-                "Total Pending",
-                "₹0",
-              ].join("\n");
-
-          return this.respondAndLog({
-            ownerId,
-            phone: normalizedPhone,
-            message,
-            command: "QUICK_ACTION",
-            response,
-            success: true,
-          });
+          return this.handleDues(ownerId, normalizedPhone, message);
         } else if (priority === "ONBOARDING") {
-          const invites = await prisma.tenants.findMany({
-            where: { owner_id: ownerId, status: "INVITED" },
-            include: {
-              profiles: { select: { name: true } },
-              room_allocations: {
-                where: { is_active: true },
-                include: { room: { select: { room_no: true } } }
-              },
-              rule_acceptances: { select: { id: true } },
-              agreements: { select: { status: true } }
-            },
-            orderBy: { created_at: "desc" }
-          });
-
-          if (invites.length === 0) {
-            return this.respondAndLog({
-              ownerId,
-              phone: normalizedPhone,
-              message,
-              command: "QUICK_ACTION",
-              response: [
-                "👥 Pending Onboarding",
-                "",
-                "No onboarding pending.",
-              ].join("\n"),
-              success: true,
-            });
-          }
-
-          const inviteLines = invites.map((invite: any) => {
-            const name = invite.profiles?.name || invite.guardian_name || "Resident";
-            const roomNo = invite.room_allocations?.[0]?.room?.room_no || "N/A";
-            let step = "";
-            if (roomNo === "N/A") {
-              step = "Room Allocation Pending";
-            } else if (!invite.document_verified) {
-              step = "ID Verification Pending";
-            } else {
-              const hasSignedAgreement = invite.agreements?.some((a: any) => a.status === "SIGNED");
-              if (!hasSignedAgreement) {
-                step = "Agreement Pending";
-              } else {
-                step = "Pending Activation";
-              }
-            }
-            return `${name}\n${step}`;
-          });
-
-          const response = [
-            "👥 Pending Onboarding",
-            "",
-            inviteLines.join("\n\n"),
-            "",
-            "👉 Next Best Action: Reply INVITE to invite a new tenant.",
-          ].join("\n");
-
-          return this.respondAndLog({
-            ownerId,
-            phone: normalizedPhone,
-            message,
-            command: "QUICK_ACTION",
-            response,
-            success: true,
-          });
+          return this.handleInvitations(ownerId, normalizedPhone, message);
         } else if (priority === "OCCUPANCY") {
-          const hostels = await this.getActiveHostels(ownerId);
-          const lines: string[] = [];
-          let totalVacant = 0;
-          let totalOccupied = 0;
-          let totalCapacity = 0;
-
-          for (const hostel of hostels) {
-            try {
-              const stats = await dashboardService.getOwnerStatsShell(ownerId, hostel.id);
-              const vacant = stats.vacant_beds || 0;
-              const occupied = stats.occupied_beds || 0;
-              const capacity = stats.total_capacity || 0;
-              totalVacant += vacant;
-              totalOccupied += occupied;
-              totalCapacity += capacity;
-
-              lines.push(hostel.name);
-              lines.push(`${vacant} Vacant Bed${vacant === 1 ? "" : "s"}`);
-              lines.push("");
-            } catch {}
-          }
-
-          if (lines.length > 0 && lines[lines.length - 1] === "") {
-            lines.pop();
-          }
-
-          const overallOccupancy = totalCapacity > 0 ? Math.round((totalOccupied / totalCapacity) * 100) : 0;
-          const response = [
-            "🏠 Occupancy Alert",
-            "",
-            ...lines,
-            "",
-            "Occupancy",
-            `${overallOccupancy}%`,
-            "",
-            "👉 Next Best Action: Reply INVITE to assign a room and send an invitation.",
-          ].join("\n");
-
-          return this.respondAndLog({
-            ownerId,
-            phone: normalizedPhone,
-            message,
-            command: "QUICK_ACTION",
-            response,
-            success: true,
-          });
+          return this.handleVacancies(ownerId, normalizedPhone, message);
         } else if (priority === "PROFITABILITY") {
-          const hostels = await this.getActiveHostels(ownerId);
-          let totalRev = 0;
-          let totalExp = 0;
-          const categoryTotals = new Map<string, number>();
-
-          for (const hostel of hostels) {
-            try {
-              const stats = await dashboardService.getOwnerStatsShell(ownerId, hostel.id);
-              totalRev += stats.revenue || 0;
-              totalExp += stats.monthly_expenses || 0;
-
-              const categories = stats.intelligence?.expenses?.categories || [];
-              for (const cat of categories) {
-                const name = cat.category || "Other";
-                const amount = Number(cat.amount || 0);
-                categoryTotals.set(name, (categoryTotals.get(name) || 0) + amount);
-              }
-            } catch {}
-          }
-
-          const overallRatio = totalRev > 0 ? Math.round((totalExp / totalRev) * 100) : 0;
-
-          const sortedCategories = Array.from(categoryTotals.entries())
-            .map(([category, amount]) => ({ category, amount }))
-            .sort((a, b) => b.amount - a.amount);
-
-          const categoryLines: string[] = [];
-          for (const cat of sortedCategories.slice(0, 3)) {
-            categoryLines.push(cat.category);
-            categoryLines.push(money(cat.amount));
-            categoryLines.push("");
-          }
-          if (categoryLines.length > 0) {
-            categoryLines.pop();
-          }
-
-          const response = [
-            "💸 Expense Review",
-            "",
-            "Revenue",
-            money(totalRev),
-            "",
-            "Expenses",
-            money(totalExp),
-            "",
-            "Expense Ratio",
-            `${overallRatio}%`,
-            ...(categoryLines.length > 0 ? ["", "Top Categories", "", ...categoryLines] : [])
-          ].join("\n");
-
-          return this.respondAndLog({
-            ownerId,
-            phone: normalizedPhone,
-            message,
-            command: "QUICK_ACTION",
-            response,
-            success: true,
-          });
+          return this.handleOpenHmsRedirect(ownerId, normalizedPhone, message, "Expense review", "/owner/dashboard");
         } else if (priority === "OPERATIONS") {
-          const moveOuts = await prisma.move_out_requests.findMany({
-            where: {
-              owner_id: ownerId,
-              status: { notIn: ["COMPLETED", "REJECTED"] }
-            },
-            include: {
-              tenant: {
-                include: {
-                  profiles: { select: { name: true } },
-                  room_allocations: {
-                    where: { is_active: true },
-                    include: { room: { select: { room_no: true } } }
-                  }
-                }
-              }
-            },
-            orderBy: { created_at: "desc" }
-          });
-
-          if (moveOuts.length === 0) {
-            return this.respondAndLog({
-              ownerId,
-              phone: normalizedPhone,
-              message,
-              command: "QUICK_ACTION",
-              response: [
-                "📦 Operations Alert",
-                "",
-                "No pending move-out requests.",
-              ].join("\n"),
-              success: true,
-            });
-          }
-
-          const lines: string[] = [];
-          for (const req of moveOuts) {
-            const name = req.tenant?.profiles?.name || "Resident";
-            const roomNo = req.tenant?.room_allocations?.[0]?.room?.room_no || "N/A";
-            const exitDateStr = req.planned_exit_date
-              ? formatShortDate(req.planned_exit_date)
-              : "N/A";
-            lines.push(name);
-            lines.push(`Room ${roomNo}`);
-            lines.push(`Exit Date: ${exitDateStr}`);
-            lines.push("");
-          }
-
-          if (lines.length > 0) {
-            lines.pop();
-          }
-
-          const response = [
-            "📦 Operations Alert",
-            "",
-            "Move-Out Requests",
-            "",
-            ...lines
-          ].join("\n");
-
-          return this.respondAndLog({
-            ownerId,
-            phone: normalizedPhone,
-            message,
-            command: "QUICK_ACTION",
-            response,
-            success: true,
-          });
+          return this.handleMoveOuts(ownerId, normalizedPhone, message);
         } else {
           return this.respondAndLog({
             ownerId,
@@ -1118,8 +863,21 @@ export class OwnerWhatsAppAssistantService {
       return this.handleHelp(ownerId, normalizedPhone, message);
     }
 
+    if (parsed.command === "COMMANDS" || parsed.upper === "?" || parsed.upper === "WHAT CAN I ASK") {
+      return this.handleCommandExamples(ownerId, normalizedPhone, message);
+    }
+
     if (parsed.command === "SUMMARY") {
-      return this.handleSummary(ownerId, normalizedPhone, message);
+      return this.handleOpenHmsRedirect(ownerId, normalizedPhone, message, "Dashboard summary", "/owner/dashboard");
+    }
+
+    if (
+      parsed.upper === "TODAYS MONEY" ||
+      parsed.upper === "TODAY'S MONEY" ||
+      parsed.upper === "TODAY MONEY" ||
+      parsed.upper === "MONEY TODAY"
+    ) {
+      return this.handleTodaysMoney(ownerId, normalizedPhone, message);
     }
 
     if (parsed.command === "DUES") {
@@ -1139,7 +897,7 @@ export class OwnerWhatsAppAssistantService {
     }
 
     if (parsed.command === "WATCHLIST") {
-      return this.handleWatchlist(ownerId, normalizedPhone, message);
+      return this.handleOpenHmsRedirect(ownerId, normalizedPhone, message, "Attention list", "/owner/dashboard");
     }
 
     if (parsed.command === "INBOX" || parsed.command === "PRIORITIES") {
@@ -1147,23 +905,23 @@ export class OwnerWhatsAppAssistantService {
     }
 
     if (parsed.command === "REVENUE") {
-      return this.handleRevenueProtection(ownerId, normalizedPhone, message);
+      return this.handleOpenHmsRedirect(ownerId, normalizedPhone, message, "Revenue report", "/owner/dashboard");
     }
 
     if (parsed.command === "CLOSING") {
-      return this.handleClosingReport(ownerId, normalizedPhone, message);
+      return this.handleOpenHmsRedirect(ownerId, normalizedPhone, message, "Closing report", "/owner/dashboard");
     }
 
     if (parsed.command === "INSIGHTS") {
-      return this.handleCollectionInsights(ownerId, normalizedPhone, message);
+      return this.handleOpenHmsRedirect(ownerId, normalizedPhone, message, "Reminder insights", "/owner/dashboard");
     }
 
     if (parsed.command === "TODAY" || parsed.command === "ACTIONS" || parsed.command === "OPERATIONS") {
-      return this.handleOperations(ownerId, normalizedPhone, message);
+      return this.handlePriorityInbox(ownerId, normalizedPhone, message);
     }
 
     if (parsed.command === "ACTIVITY") {
-      return this.handleActivity(ownerId, normalizedPhone, message);
+      return this.handleOpenHmsRedirect(ownerId, normalizedPhone, message, "Activity feed", "/owner/dashboard");
     }
 
     if (parsed.command === "INVITATIONS") {
@@ -1187,7 +945,7 @@ export class OwnerWhatsAppAssistantService {
     }
 
     if (parsed.upper === "RECENT JOINERS") {
-      return this.handleRecentJoiners(ownerId, normalizedPhone, message);
+      return this.handleOpenHmsRedirect(ownerId, normalizedPhone, message, "Recent joiners", "/owner/tenants");
     }
 
     if (parsed.upper === "INVITES EXPIRING" || parsed.upper === "EXPIRING INVITES") {
@@ -1253,10 +1011,205 @@ export class OwnerWhatsAppAssistantService {
       command: "HELP",
       response: HELP_TEXT,
       success: true,
+      list: {
+        buttonText: "Quick actions",
+        sections: [
+          {
+            title: "Quick actions",
+            rows: [
+              { id: this.interactionId("menu", "search", "owner", ownerId), title: "Find Tenant", description: "Name, phone, or room" },
+              { id: this.interactionId("expense", "add", "owner", ownerId), title: "Record Expense", description: "Save a quick spend" },
+              { id: this.interactionId("menu", "invite", "owner", ownerId), title: "Invite Tenant", description: "Start invite flow" },
+              { id: this.interactionId("dues", "view", "owner", ownerId), title: "Pending Rent", description: "Collection actions" },
+              { id: this.interactionId("moveout", "list", "owner", ownerId), title: "Move-Outs", description: "Review requests" },
+            ],
+          },
+        ],
+      },
+    });
+  }
+
+  private async handleCommandExamples(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "COMMANDS",
+      response: COMMANDS_TEXT,
+      success: true,
+      list: {
+        buttonText: "Quick actions",
+        sections: [
+          {
+            title: "Quick actions",
+            rows: [
+              { id: this.interactionId("menu", "search", "owner", ownerId), title: "Find Tenant", description: "Name, phone, or room" },
+              { id: this.interactionId("expense", "add", "owner", ownerId), title: "Record Expense", description: "Save a quick spend" },
+              { id: this.interactionId("menu", "invite", "owner", ownerId), title: "Invite Tenant", description: "Start invite flow" },
+              { id: this.interactionId("dues", "view", "owner", ownerId), title: "Pending Rent", description: "Collection actions" },
+              { id: this.interactionId("moveout", "list", "owner", ownerId), title: "Move-Outs", description: "Review requests" },
+            ],
+          },
+        ],
+      },
+    });
+  }
+
+  private async handleMenuSection(
+    ownerId: string,
+    phone: string,
+    message: string,
+    section: "TENANTS" | "MONEY" | "OPERATIONS" | "REPORTS"
+  ): Promise<InboundOwnerResult> {
+    const configs = {
+      TENANTS: {
+        title: "Tenants",
+        body: [
+          "Tenants",
+          "",
+          "Find a person, invite a new resident, or review move-outs.",
+          "",
+          "Tip: type SHIVA, G1, or a phone number anytime.",
+        ].join("\n"),
+        rows: [
+          { id: this.interactionId("menu", "search", "owner", ownerId), title: "Search Tenant", description: "Name, phone, or room" },
+          { id: this.interactionId("menu", "invite", "owner", ownerId), title: "Invite Tenant", description: "Start invite flow" },
+          { id: this.interactionId("moveout", "list", "owner", ownerId), title: "Move-Outs", description: "Requests and settlements" },
+          { id: this.interactionId("invite", "pending", "owner", ownerId), title: "Pending Invites", description: "Activation follow-ups" },
+        ],
+      },
+      MONEY: {
+        title: "Money",
+        body: [
+          "Money",
+          "",
+          "Quick money actions.",
+        ].join("\n"),
+        rows: [
+          { id: this.interactionId("dues", "view", "owner", ownerId), title: "Pending Rent", description: "Who owes money" },
+          { id: this.interactionId("menu", "today_money", "owner", ownerId), title: "Today's Money", description: "Collected minus expenses" },
+          { id: this.interactionId("expense", "view", "owner", ownerId), title: "Expenses", description: "Add, today, categories" },
+        ],
+      },
+      OPERATIONS: {
+        title: "Operations",
+        body: [
+          "Operations",
+          "",
+          "Quick action queues.",
+        ].join("\n"),
+        rows: [
+          { id: this.interactionId("vacancy", "view", "owner", ownerId), title: "Empty Beds", description: "Vacancies and lost rent" },
+          { id: this.interactionId("operations", "view", "owner", ownerId), title: "What Needs Action", description: "Owner action queue" },
+          { id: this.interactionId("moveout", "list", "owner", ownerId), title: "Move-Outs", description: "Requests and settlements" },
+        ],
+      },
+      REPORTS: {
+        title: "Quick reports",
+        body: [
+          "Quick reports",
+          "",
+          "For detailed monitoring, open HMS.",
+        ].join("\n"),
+        rows: [
+          { id: this.interactionId("activity", "view", "owner", ownerId), title: "Today's Activity", description: "Payments and changes" },
+          { id: this.interactionId("operations", "view", "owner", ownerId), title: "What Needs Action", description: "Action queue" },
+        ],
+      },
+    } as const;
+    const config = configs[section];
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: `MENU_${section}`,
+      response: config.body,
+      success: true,
+      list: {
+        buttonText: "Open",
+        sections: [{ title: config.title, rows: [...config.rows] }],
+      },
+    });
+  }
+
+  private async handleTodaysMoney(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
+    const [payments, expenses] = await Promise.all([
+      prisma.$queryRaw<Array<{ total: number; count: number }>>`
+        SELECT COALESCE(SUM(amount_paid), 0)::float AS total, COUNT(*)::int AS count
+        FROM payments
+        WHERE owner_id = ${ownerId}::uuid
+          AND payment_date = CURRENT_DATE
+      `,
+      prisma.$queryRaw<Array<{ total: number; count: number }>>`
+        SELECT COALESCE(SUM(amount), 0)::float AS total, COUNT(*)::int AS count
+        FROM expenses
+        WHERE owner_id = ${ownerId}::uuid
+          AND date = CURRENT_DATE
+      `,
+    ]);
+
+    const collected = Number(payments[0]?.total || 0);
+    const paymentCount = Number(payments[0]?.count || 0);
+    const spent = Number(expenses[0]?.total || 0);
+    const expenseCount = Number(expenses[0]?.count || 0);
+    const net = collected - spent;
+
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "TODAYS_MONEY",
+      response: [
+        "Today Money",
+        "",
+        `Collected: ${money(collected)}`,
+        `Expenses: ${money(spent)}`,
+        "",
+        `Net: ${money(net)}`,
+        "",
+        `Payments: ${paymentCount}`,
+        `Expenses: ${expenseCount}`,
+      ].join("\n"),
+      success: true,
       buttons: [
-        { id: this.interactionId("dues", "view", "owner", ownerId), title: "Collections" },
-        { id: this.interactionId("vacancy", "view", "owner", ownerId), title: "Occupancy" },
-        { id: this.interactionId("operations", "view", "owner", ownerId), title: "Operations" },
+        { id: this.interactionId("collections", "view", "owner", ownerId), title: "Payments" },
+        { id: this.interactionId("expense", "today", "owner", ownerId), title: "Expenses" },
+        { id: this.interactionId("activity", "view", "owner", ownerId), title: "Details" },
+      ],
+    });
+  }
+
+  private async handleOpenHmsRedirect(
+    ownerId: string,
+    phone: string,
+    message: string,
+    title: string,
+    path: string
+  ): Promise<InboundOwnerResult> {
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "OPEN_HMS_REDIRECT",
+      response: [
+        title,
+        "",
+        "This is better handled in HMS.",
+        "",
+        hmsUrl(path),
+        "",
+        "For WhatsApp, try a quick action:",
+        "Shiva",
+        "G1",
+        "milk 500",
+        "dues",
+      ].join("\n"),
+      success: true,
+      buttons: [
+        { id: this.interactionId("menu", "search", "owner", ownerId), title: "Search" },
+        { id: this.interactionId("dues", "view", "owner", ownerId), title: "Dues" },
+        { id: this.interactionId("menu", "invite", "owner", ownerId), title: "Invite" },
       ],
     });
   }
@@ -1341,6 +1294,39 @@ export class OwnerWhatsAppAssistantService {
       if (action === "agreement") return this.sendTenantAgreementSummary(ownerId, phone, message, id);
       if (action === "call") return this.sendTenantCallInfo(ownerId, phone, message, id);
       if (action === "room") return this.sendTenantRoom(ownerId, phone, message, id);
+      if (action === "openhms") return this.sendTenantHmsLink(ownerId, phone, message, id);
+    }
+
+    if (screen === "menu" && entityType === "owner") {
+      if (action === "tenants") return this.handleMenuSection(ownerId, phone, message, "TENANTS");
+      if (action === "money") return this.handleMenuSection(ownerId, phone, message, "MONEY");
+      if (action === "operations") return this.handleMenuSection(ownerId, phone, message, "OPERATIONS");
+      if (action === "reports") return this.handleOpenHmsRedirect(ownerId, phone, message, "Reports", "/owner/dashboard");
+      if (action === "search") {
+        return this.respondAndLog({
+          ownerId,
+          phone,
+          message,
+          command: "SEARCH_HELP",
+          response: [
+            "Search Tenant or Room",
+            "",
+            "Type a tenant name, phone number, or room number.",
+            "",
+            "Examples:",
+            "SHIVA",
+            "G1",
+            "8008046952",
+          ].join("\n"),
+          success: true,
+          buttons: [
+            { id: this.interactionId("menu", "tenants", "owner", ownerId), title: "Tenants" },
+            { id: this.interactionId("menu", "money", "owner", ownerId), title: "Money" },
+          ],
+        });
+      }
+      if (action === "invite") return this.startInviteTenantFlow(ownerId, phone);
+      if (action === "today_money") return this.handleTodaysMoney(ownerId, phone, message);
     }
 
     if (screen === "room" && entityType === "room") {
@@ -1355,7 +1341,7 @@ export class OwnerWhatsAppAssistantService {
         : this.handleDues(ownerId, phone, message);
       if (action === "remind") return this.handleScopedDuesReminderRequest(ownerId, phone, message, entityType, id, param);
       if (action === "bucket") return this.handleDuesBucket(ownerId, phone, message, entityType, id, param);
-      if (action === "insights") return this.handleCollectionInsights(ownerId, phone, message);
+      if (action === "insights") return this.handleOpenHmsRedirect(ownerId, phone, message, "Reminder insights", "/owner/dashboard");
     }
 
     if (screen === "vacancy" && action === "view") {
@@ -1363,7 +1349,7 @@ export class OwnerWhatsAppAssistantService {
     }
 
     if (screen === "watchlist" && action === "view") {
-      return this.handleWatchlist(ownerId, phone, message);
+      return this.handleOpenHmsRedirect(ownerId, phone, message, "Attention list", "/owner/dashboard");
     }
 
     if (screen === "collections" && action === "view") {
@@ -1371,7 +1357,7 @@ export class OwnerWhatsAppAssistantService {
     }
 
     if (screen === "operations" && action === "view") {
-      return this.handleOperations(ownerId, phone, message);
+      return this.handlePriorityInbox(ownerId, phone, message);
     }
 
     if (screen === "operations" && action === "queues") {
@@ -1383,15 +1369,15 @@ export class OwnerWhatsAppAssistantService {
     }
 
     if (screen === "revenue" && action === "view") {
-      return this.handleRevenueProtection(ownerId, phone, message);
+      return this.handleOpenHmsRedirect(ownerId, phone, message, "Revenue report", "/owner/dashboard");
     }
 
     if (screen === "closing" && action === "view") {
-      return this.handleClosingReport(ownerId, phone, message);
+      return this.handleOpenHmsRedirect(ownerId, phone, message, "Closing report", "/owner/dashboard");
     }
 
     if (screen === "activity" && action === "view") {
-      return this.handleActivity(ownerId, phone, message);
+      return this.handleOpenHmsRedirect(ownerId, phone, message, "Activity feed", "/owner/dashboard");
     }
 
     if (screen === "invite" && action === "pending") {
@@ -1875,59 +1861,80 @@ export class OwnerWhatsAppAssistantService {
       const recentPayment = lastPayment?.date
         ? Date.now() - new Date(lastPayment.date).getTime() <= 2 * 24 * 60 * 60 * 1000
         : false;
-      const shouldCall = Boolean(collectionContext && (collectionContext.daysOverdue >= 14 || collectionContext.reminderCount >= 2));
-      const recommendation = totalDue > 0
-        ? shouldCall
-          ? "Recommendation: Call Tenant"
-          : "Recommendation: Send Reminder"
-        : recentPayment
-          ? "Recommendation: No collection action"
-          : "";
+      const remindersDidNotConvert = Boolean(
+        collectionContext &&
+        collectionContext.reminderCount >= 2 &&
+        collectionContext.convertedReminderCount === 0
+      );
+      const shouldCall = Boolean(
+        collectionContext &&
+        (collectionContext.daysOverdue >= 15 || collectionContext.reminderCount >= 3 || remindersDidNotConvert)
+      );
+      const recommendation = activeMoveOut
+        ? "Recommended: Review Move-Out"
+        : status === "INVITED"
+          ? "Recommended: Resend Invite"
+          : totalDue > 0
+            ? shouldCall
+              ? "Recommended: Call Tenant"
+              : "Recommended: Send Reminder"
+            : recentPayment
+              ? "Recommended: No collection action"
+              : "Recommended: View Profile";
+      const recommendationReason = totalDue > 0 && shouldCall
+        ? remindersDidNotConvert
+          ? "Reason: Previous reminders did not result in payment."
+          : collectionContext?.daysOverdue
+            ? `Reason: ${collectionContext.daysOverdue} days pending.`
+            : ""
+        : "";
       const buttons: WhatsAppButton[] = activeMoveOut
         ? [
             { id: this.interactionId("moveout", "list", "tenant", tenantId), title: "Review Move-Out" },
             { id: this.interactionId("tenant", "call", "tenant", tenantId), title: "Call" },
-            { id: this.interactionId("tenant", "actions", "tenant", tenantId), title: "Actions" },
+            { id: this.interactionId("tenant", "openhms", "tenant", tenantId), title: "Open HMS" },
           ]
         : status === "INVITED"
           ? [
               { id: this.interactionId("tenant", "resend", "tenant", tenantId), title: "Resend Invite" },
               { id: this.interactionId("tenant", "call", "tenant", tenantId), title: "Call" },
-              { id: this.interactionId("tenant", "actions", "tenant", tenantId), title: "Actions" },
+              { id: this.interactionId("tenant", "openhms", "tenant", tenantId), title: "Open HMS" },
             ]
           : totalDue > 0 && shouldCall
             ? [
                 { id: this.interactionId("tenant", "call", "tenant", tenantId), title: "Call" },
                 { id: this.interactionId("tenant", "remind", "tenant", tenantId), title: "Reminder" },
-                { id: this.interactionId("tenant", "actions", "tenant", tenantId), title: "Actions" },
+                { id: this.interactionId("tenant", "openhms", "tenant", tenantId), title: "Open HMS" },
               ]
           : totalDue > 0 && !recentPayment
             ? [
                 { id: this.interactionId("tenant", "remind", "tenant", tenantId), title: "Send Reminder" },
                 { id: this.interactionId("tenant", "call", "tenant", tenantId), title: "Call" },
-                { id: this.interactionId("tenant", "actions", "tenant", tenantId), title: "Actions" },
+                { id: this.interactionId("tenant", "openhms", "tenant", tenantId), title: "Open HMS" },
               ]
             : [
                 { id: this.interactionId("tenant", "profile", "tenant", tenantId), title: "Profile" },
-                { id: this.interactionId("tenant", "payments", "tenant", tenantId), title: "Payments" },
-                { id: this.interactionId("tenant", "actions", "tenant", tenantId), title: "Actions" },
+                { id: this.interactionId("tenant", "room", "tenant", tenantId), title: "Room" },
+                { id: this.interactionId("tenant", "openhms", "tenant", tenantId), title: "Open HMS" },
               ];
       const body = [
-        `👤 ${overview.name || "Tenant"}`,
+        overview.name || "Tenant",
+        `Room ${overview.room_number || "N/A"}`,
         "",
-        overview.phone ? `📱 ${maskWhatsAppPhone(overview.phone)}` : "",
-        `🏠 Room ${overview.room_number || "N/A"}`,
-        overview.current_room?.floor != null ? `Floor ${overview.current_room.floor}` : "",
-        `⚠️ Due: ${money(totalDue)}`,
+        activeMoveOut
+          ? `Move-out ${activeMoveOut.status}`
+          : status === "INVITED"
+            ? "Invitation pending"
+            : totalDue > 0
+              ? `${money(totalDue)} overdue`
+              : "No dues pending",
+        totalDue > 0 && collectionContext?.daysOverdue ? `${collectionContext.daysOverdue} days pending` : "",
+        totalDue > 0 && collectionContext ? `${collectionContext.reminderCount} reminders sent` : "",
         "",
-        "💰 Last Payment:",
-        lastPayment ? `${money(lastPayment.amount)} on ${formatShortDate(new Date(lastPayment.date))}` : "No payments found",
-        "",
-        collectionContext && totalDue > 0 ? `Reminders sent: ${collectionContext.reminderCount}` : "",
-        collectionContext && totalDue > 0 ? `Days overdue: ${collectionContext.daysOverdue}` : "",
         recommendation,
+        recommendationReason,
         "",
-        activeMoveOut ? `Move-Out: ${activeMoveOut.status}` : "",
+        lastPayment ? `Last payment: ${money(lastPayment.amount)} on ${formatShortDate(new Date(lastPayment.date))}` : "",
         `Status: ${overview.status || "Unknown"}`,
       ].filter(Boolean).join("\n");
 
@@ -2126,7 +2133,7 @@ export class OwnerWhatsAppAssistantService {
       success: true,
       buttons: [
         { id: this.interactionId("tenant", "card", "tenant", tenantId), title: "Tenant Card" },
-        { id: this.interactionId("tenant", "payments", "tenant", tenantId), title: "Payments" },
+        { id: this.interactionId("tenant", "openhms", "tenant", tenantId), title: "Open HMS" },
       ],
     });
   }
@@ -2148,7 +2155,31 @@ export class OwnerWhatsAppAssistantService {
       success: true,
       buttons: [
         { id: this.interactionId("tenant", "card", "tenant", tenantId), title: "Tenant Card" },
-        { id: this.interactionId("tenant", "actions", "tenant", tenantId), title: "Actions" },
+        { id: this.interactionId("tenant", "openhms", "tenant", tenantId), title: "Open HMS" },
+      ],
+    });
+  }
+
+  private async sendTenantHmsLink(ownerId: string, phone: string, message: string, tenantId: string): Promise<InboundOwnerResult> {
+    const overview: any = await tenantService.getOwnerTenantOverview(tenantId, ownerId);
+    const url = hmsUrl(`/owner/tenants?tenantId=${encodeURIComponent(tenantId)}`);
+    return this.respondAndLog({
+      ownerId,
+      phone,
+      message,
+      command: "TENANT_OPEN_HMS",
+      response: [
+        "Open HMS",
+        "",
+        overview.name || "Tenant",
+        `Room: ${overview.room_number || "N/A"}`,
+        "",
+        url,
+      ].join("\n"),
+      success: true,
+      buttons: [
+        { id: this.interactionId("tenant", "card", "tenant", tenantId), title: "Tenant Card" },
+        { id: this.interactionId("tenant", "call", "tenant", tenantId), title: "Call" },
       ],
     });
   }
@@ -2633,10 +2664,11 @@ export class OwnerWhatsAppAssistantService {
     return rows[0] || null;
   }
 
-  private async getTenantCollectionContext(ownerId: string, tenantId: string): Promise<{ reminderCount: number; daysOverdue: number } | null> {
-    const rows = await prisma.$queryRaw<Array<{ reminder_count: number; days_overdue: number }>>`
+  private async getTenantCollectionContext(ownerId: string, tenantId: string): Promise<{ reminderCount: number; convertedReminderCount: number; daysOverdue: number } | null> {
+    const rows = await prisma.$queryRaw<Array<{ reminder_count: number; converted_reminder_count: number; days_overdue: number }>>`
       SELECT
         COUNT(DISTINCT rl.id)::int AS reminder_count,
+        COUNT(DISTINCT rl.id) FILTER (WHERE rl.converted_to_payment = true)::int AS converted_reminder_count,
         GREATEST(0, MAX((CURRENT_DATE - ro.due_date)::int))::int AS days_overdue
       FROM rent_obligations ro
       LEFT JOIN reminder_logs rl ON rl.obligation_id = ro.id
@@ -2651,6 +2683,7 @@ export class OwnerWhatsAppAssistantService {
     if (!row) return null;
     return {
       reminderCount: Number(row.reminder_count || 0),
+      convertedReminderCount: Number(row.converted_reminder_count || 0),
       daysOverdue: Number(row.days_overdue || 0),
     };
   }
@@ -3047,8 +3080,8 @@ export class OwnerWhatsAppAssistantService {
       success: true,
       buttons: [
         { id: this.interactionId("dues", "view", "owner", ownerId), title: "Pending" },
-        { id: this.interactionId("watchlist", "view", "owner", ownerId), title: "Watchlist" },
-        { id: this.interactionId("dues", "insights", "owner", ownerId), title: "Insights" },
+        { id: this.interactionId("dues", "bucket", "owner", ownerId, "chronic"), title: "Chronic" },
+        { id: this.interactionId("dues", "remind", "owner", ownerId, "all"), title: "Remind All" },
       ],
     });
   }
@@ -3066,7 +3099,7 @@ export class OwnerWhatsAppAssistantService {
       message,
       command: "VACANCIES",
       response: [
-        "Vacancy Fill Center",
+        "Empty Beds",
         "",
         `${summary.totalVacant} Vacant Beds`,
         `Lost Revenue This Month: ${money(summary.lostRevenue)}`,
@@ -3131,7 +3164,7 @@ export class OwnerWhatsAppAssistantService {
       message,
       command: "WATCHLIST",
       response: [
-        "Watchlist",
+        "Attention Needed",
         "",
         `${rows.length} Tenants Being Monitored`,
         "",
@@ -3140,7 +3173,7 @@ export class OwnerWhatsAppAssistantService {
       success: true,
       list: rows.length > 0 ? {
         buttonText: "View",
-        sections: [{ title: "Watchlist", rows }],
+        sections: [{ title: "Attention", rows }],
       } : undefined,
     });
   }
@@ -3221,18 +3254,19 @@ export class OwnerWhatsAppAssistantService {
 
     const items: PriorityItem[] = [];
     if (topDue) {
-      const ignored = (topDue.reminderCount || 0) >= 2 ? `${topDue.reminderCount} reminders ignored` : `${topDue.reminderCount || 0} reminders sent`;
+      const shouldCall = (topDue.daysOverdue || 0) >= 15 || (topDue.reminderCount || 0) >= 3;
+      const recommendedAction = shouldCall ? "Call Tenant" : "Send Reminder";
+      const ignored = (topDue.reminderCount || 0) >= 2 ? `${topDue.reminderCount} reminders sent` : `${topDue.reminderCount || 0} reminders sent`;
       items.push({
-        id: this.interactionId("tenant", "call", "tenant", topDue.tenantId),
+        id: this.interactionId("tenant", shouldCall ? "call" : "remind", "tenant", topDue.tenantId),
         title: topDue.name,
-        description: `${money(topDue.amount)} due - ${topDue.daysOverdue || 0}d late`,
+        description: `${money(topDue.amount)} due - ${recommendedAction}`,
         detailLines: [
           `${topDue.name}${topDue.hostelName ? ` (${topDue.hostelName})` : ""}`,
           `${money(topDue.amount)} overdue`,
           `${topDue.daysOverdue || 0} days late`,
           ignored,
-          "Expected recovery: High",
-          "Action: Call",
+          `Recommended: ${recommendedAction}`,
         ],
         rank: 1,
       });
@@ -3243,12 +3277,12 @@ export class OwnerWhatsAppAssistantService {
       items.push({
         id: this.interactionId("moveout", "list", "owner", ownerId),
         title: "Move-Out Review",
-        description: `${moveOut.hostel_name}${moveOut.blocked_amount ? ` - ${money(moveOut.blocked_amount)}` : ""}`,
+        description: "Recommended: Review",
         detailLines: [
           moveOut.has_dispute ? "Dispute Review" : "Settlement Approval",
           moveOut.hostel_name,
           moveOut.blocked_amount ? `${money(moveOut.blocked_amount)} blocked` : `${moveOut.tenant_name} needs review`,
-          "Action: Review",
+          "Recommended: Review",
         ],
         rank: 2,
       });
@@ -3259,13 +3293,13 @@ export class OwnerWhatsAppAssistantService {
       items.push({
         id: this.interactionId("invite", "resend", "invitation", invite.invitation_id),
         title: "Invite Expiring",
-        description: `${invite.hostel_name} Room ${invite.room_no}`,
+        description: "Recommended: Resend",
         detailLines: [
           "Invitation Expiring",
           invite.hostel_name,
           `Room ${invite.room_no}`,
           invite.base_rent ? `Potential revenue: ${money(invite.base_rent)}/month` : "",
-          "Action: Resend",
+          "Recommended: Resend",
         ].filter(Boolean),
         rank: 3,
       });
@@ -3277,14 +3311,14 @@ export class OwnerWhatsAppAssistantService {
       items.push({
         id: this.interactionId("room", "card", "room", topVacancy.room_id),
         title: `Room ${topVacancy.room_no}`,
-        description: `${vacant} vacant - ${money(revenue)}/mo`,
+        description: "Recommended: Invite",
         detailLines: [
-          "Vacancy Leakage",
+          "Empty Beds",
           topVacancy.hostel_name,
           `Room ${topVacancy.room_no}: ${vacant} vacant beds`,
-          `Potential revenue: ${money(revenue)}/month`,
-          "Action: Fill vacancy",
-        ],
+          revenue > 0 ? `Potential rent: ${money(revenue)}/month` : "",
+          "Recommended: Invite",
+        ].filter(Boolean),
         rank: 4,
       });
     }
@@ -3292,7 +3326,7 @@ export class OwnerWhatsAppAssistantService {
     const priorityItems = items.sort((a, b) => a.rank - b.rank).slice(0, 4);
     const body = priorityItems.length
       ? [
-          "Top Priorities Today",
+          "What Needs Action",
           "",
           ...priorityItems.slice(0, 3).flatMap((item, index) => [
             `${index + 1}. ${item.detailLines[0]}`,
@@ -3301,7 +3335,7 @@ export class OwnerWhatsAppAssistantService {
           ]),
         ].join("\n").trim()
       : [
-          "Top Priorities Today",
+          "What Needs Action",
           "",
           "No urgent operational items found.",
         ].join("\n");
@@ -3316,7 +3350,7 @@ export class OwnerWhatsAppAssistantService {
       list: priorityItems.length > 0 ? {
         buttonText: "Open priority",
         sections: [{
-          title: "Priority Inbox",
+          title: "What Needs Action",
           rows: priorityItems.map((item) => ({
             id: item.id,
             title: item.title,
@@ -3325,9 +3359,9 @@ export class OwnerWhatsAppAssistantService {
         }],
       } : undefined,
       buttons: priorityItems.length === 0 ? [
-        { id: this.interactionId("dues", "view", "owner", ownerId), title: "Collections" },
-        { id: this.interactionId("vacancy", "view", "owner", ownerId), title: "Occupancy" },
-        { id: this.interactionId("activity", "view", "owner", ownerId), title: "Activity" },
+        { id: this.interactionId("dues", "view", "owner", ownerId), title: "Pending Rent" },
+        { id: this.interactionId("moveout", "list", "owner", ownerId), title: "Move-Outs" },
+        { id: this.interactionId("menu", "search", "owner", ownerId), title: "Search" },
       ] : undefined,
     });
   }
@@ -3340,7 +3374,7 @@ export class OwnerWhatsAppAssistantService {
       message,
       command: "OPERATIONS",
       response: [
-        `${snapshot.actionsNeeded} Actions Need Attention`,
+        `${snapshot.actionsNeeded} Items Need Attention`,
         "",
         "Collections",
         `${snapshot.chronicCount} chronic defaulters`,
@@ -3382,7 +3416,7 @@ export class OwnerWhatsAppAssistantService {
       buttons: [
         { id: this.interactionId("moveout", "list", "owner", ownerId), title: "Move-Outs" },
         { id: this.interactionId("invite", "pending", "owner", ownerId), title: "Invitations" },
-        { id: this.interactionId("watchlist", "view", "owner", ownerId), title: "Watchlist" },
+        { id: this.interactionId("watchlist", "view", "owner", ownerId), title: "Attention" },
       ],
     });
   }
@@ -3450,7 +3484,7 @@ export class OwnerWhatsAppAssistantService {
       message,
       command: "ACTIVITY",
       response: [
-        "Today Activity",
+        "Today's Activity",
         "",
         ...(items.length ? items.map((item) => item.text) : ["No activity recorded today."]),
       ].join("\n"),
@@ -3485,7 +3519,7 @@ export class OwnerWhatsAppAssistantService {
       message,
       command: "REVENUE_PROTECTION",
       response: [
-        "Revenue Protection",
+        "Money at Risk",
         "",
         `Overdue Rent: ${money(pending.totalPending)}`,
         `Vacant Beds: ${money(vacancy.lostRevenue)} potential/month`,
@@ -3703,7 +3737,7 @@ export class OwnerWhatsAppAssistantService {
 
       const response = pending.rows.length > 0
         ? [
-            "Collection Center",
+            "Pending Rent",
             "",
             pending.scopeLabel || (scopeHostel ? scopeHostel.name : `All Hostels (${pending.hostels.length})`),
             "",
@@ -3718,7 +3752,7 @@ export class OwnerWhatsAppAssistantService {
             `Message credits: ${pending.messagesRemaining ?? 0}`,
           ].join("\n")
         : [
-            "Collection Center",
+            "Pending Rent",
             "",
             "No pending dues found.",
             "",
@@ -3728,7 +3762,6 @@ export class OwnerWhatsAppAssistantService {
       const actionRows = [
         { id: this.interactionId("dues", "bucket", scopeEntityType, scopeEntityId, "chronic"), title: "Chronic", description: `${chronic.length} tenants - ${money(chronicAmount)}` },
         { id: this.interactionId("dues", "bucket", scopeEntityType, scopeEntityId, "fresh"), title: "Fresh", description: `${fresh.length} tenants - ${money(freshAmount)}` },
-        { id: this.interactionId("dues", "insights", "owner", ownerId), title: "Insights", description: "Reminder conversion and timing" },
         { id: this.interactionId("dues", "remind", scopeEntityType, scopeEntityId, "all"), title: "Remind All", description: `${pending.rows.length} tenants, ${pending.rows.length} messages` },
       ];
       const hostelRows = activeHostels.map((hostel) => ({
@@ -3745,7 +3778,7 @@ export class OwnerWhatsAppAssistantService {
         response,
         success: true,
         list: {
-          buttonText: "Open center",
+          buttonText: "Open action",
           sections: [
             { title: "Actions", rows: this.paginateRows(actionRows, "dues:actions:page", 0) },
             ...(hostelRows.length > 1 ? [{ title: "Hostels", rows: this.paginateRows(hostelRows, "dues:hostels:page", 0) }] : []),
@@ -4207,48 +4240,16 @@ export class OwnerWhatsAppAssistantService {
   }
 
   private async handleExpenseCenter(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
-    const [report, totals] = await Promise.all([
-      expenseService.getAllExpenses(ownerId, {
-        range: "month",
-        hostelId: undefined,
-        sort: "recent",
-        limit: 5,
-        offset: 0,
-      }),
-      prisma.$queryRaw<Array<{ current_month: number; previous_month: number }>>`
-        SELECT
-          COALESCE(SUM(amount) FILTER (WHERE date >= date_trunc('month', CURRENT_DATE)), 0)::float AS current_month,
-          COALESCE(SUM(amount) FILTER (
-            WHERE date >= date_trunc('month', CURRENT_DATE - interval '1 month')
-              AND date < date_trunc('month', CURRENT_DATE)
-          ), 0)::float AS previous_month
-        FROM expenses
-        WHERE owner_id = ${ownerId}::uuid
-      `,
-    ]);
-    const currentMonth = Number(totals[0]?.current_month || report.kpis?.this_month_expenses || 0);
-    const previousMonth = Number(totals[0]?.previous_month || 0);
-    const growth = previousMonth > 0 ? Math.round(((currentMonth - previousMonth) / previousMonth) * 100) : null;
-    const categories = (report.category_breakdown || []).slice(0, 3);
-
     return this.respondAndLog({
       ownerId,
       phone,
       message,
       command: "EXPENSE_CENTER",
       response: [
-        "Expense Center",
+        "What expense action?",
         "",
-        `This Month: ${money(currentMonth)}`,
-        growth != null ? `Month Change: ${growth >= 0 ? "+" : ""}${growth}%` : "",
-        "",
-        ...(categories.length
-          ? [
-              "Top Categories",
-              ...categories.map((row: any) => `${row.category}: ${money(row.amount)}`),
-            ]
-          : ["No expense categories yet."]),
-      ].filter(Boolean).join("\n"),
+        "To record now, send what you paid for and amount.",
+      ].join("\n"),
       success: true,
       list: {
         buttonText: "Open action",
@@ -4257,7 +4258,6 @@ export class OwnerWhatsAppAssistantService {
           rows: [
             { id: this.interactionId("expense", "add", "owner", ownerId), title: "Add Expense", description: "Record a new spend" },
             { id: this.interactionId("expense", "today", "owner", ownerId), title: "Today", description: "Today's expenses" },
-            { id: this.interactionId("expense", "categories", "owner", ownerId), title: "Categories", description: "Category breakdown" },
             { id: this.interactionId("expense", "undo", "owner", ownerId), title: "Undo Last", description: "Delete recent WhatsApp expense" },
           ],
         }],

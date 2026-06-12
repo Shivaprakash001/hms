@@ -26,32 +26,27 @@ It is not an AI chatbot. Every write operation requires an explicit confirmation
 | Command | Purpose | Data source |
 |---|---|---|
 | `LINK HMS-XXXX` | Connects an owner account to one WhatsApp number. Owners may connect multiple verified numbers. | `owner_whatsapp_identities` |
-| `HELP` | Opens the operations menu for Collections, Occupancy, and Operations. | Static response |
-| `SUMMARY` | Shows revenue, pending dues, occupancy, and expenses across active hostels. | Existing dashboard service |
-| `INBOX`, `PRIORITIES` | Opens the priority inbox with the highest-impact next actions first. | Existing dues, vacancy, invitation, and move-out data |
-| `TODAY`, `ACTIONS`, `OPERATIONS` | Opens the unified action queue for items needing owner attention now. | Existing dues, vacancy, invitation, and move-out data |
-| `REVENUE` | Shows overdue rent, vacancy leakage, move-out settlement exposure, and total revenue at risk. | Existing dues, room, and settlement data |
-| `CLOSING` | Shows today's collections, expenses, new tenants, move-outs, vacancies filled, and net impact. | Existing payment, expense, tenant, move-out, and room allocation data |
-| `INSIGHTS` | Shows reminder conversion intelligence and best reminder timing. | `reminder_logs` |
-| `DUES` | Opens the Collection Center with fresh, reminded, and chronic buckets. | Existing payment dues and reminder conversion data |
-| Collection intelligence | Shows chronic defaulters, reminder history, conversion rate, and call/reminder recommendations. | `rent_obligations`, `reminder_logs`, `payments` |
-| `COLLECTIONS` | Shows today's collected payments and links to pending dues, watchlist, and insights. | Existing payments and dues data |
-| `VACANCIES`, `OCCUPANCY` | Opens the Vacancy Fill Center with vacant beds, underfilled rooms, and estimated lost revenue. | Existing room allocation data |
-| `WATCHLIST` | Shows automatic risk lists from chronic dues and active move-outs. | Existing dues and move-out data |
-| `ACTIVITY` | Shows what happened today: payments, activations, invitations, move-outs, and expenses. | Existing operational logs and domain tables |
-| `TOP DUE`, `MOVEOUT PENDING`, `VACANT ROOMS`, `RECENT JOINERS`, `INVITES EXPIRING` | Opens operational search queues without requiring a tenant name. | Existing operational tables |
+| `HELP` | Opens a short action list: Find Tenant, Record Expense, Invite Tenant, Pending Rent, Move-Outs. | Static response |
+| `COMMANDS`, `?`, `WHAT CAN I ASK` | Opens the same short action list instead of a command manual. | Static response |
+| Daily briefing | Sends the morning focus and the next action, not a dashboard report. | Existing dashboard and operational services |
+| Smart alerts | Sends only actionable alerts such as move-out request, invitation expiring, chronic overdue tenant, payment failure, or owner phone changes. | Existing operational services |
+| `DUES` | Opens Pending Rent with quick reminder actions. | Existing payment dues and reminder conversion data |
+| `COLLECTIONS` | Answers a quick collection question and links to pending rent. | Existing payments and dues data |
+| `TODAYS MONEY`, `TODAY'S MONEY`, `MONEY TODAY` | Shows today's collections, expenses, net cashflow, and quick links. | Existing payments and expense data |
+| `VACANCIES`, `OCCUPANCY` | Answers a quick vacancy question and supports invite actions. | Existing room allocation data |
+| `TOP DUE`, `MOVEOUT PENDING`, `VACANT ROOMS`, `INVITES EXPIRING` | Opens action-oriented queues without requiring a tenant name. | Existing operational tables |
 | `SEND REMINDERS` | Starts a confirmation flow to remind tenants from the current top pending dues list. | Existing reminder service |
 | `internet 1000`, `expense gas 1200`, `paid milk 50`, `expenses milk 50` | Creates a pending expense draft for owner confirmation when a positive amount is present. | Existing expense service after confirmation |
-| `EXPENSES` | Opens the Expense Center with action rows for add, today, categories, and undo. | Existing expense service |
+| `EXPENSES` | Opens quick expense actions for add, today, and undo. | Existing expense service |
 | `expenses today`, `expenses week`, `expenses month` | Shows recent expense totals and capped ledger rows. | Existing expense service |
 | `expenses category internet`, `top categories` | Shows category-specific or category summary expenses. | Existing expense service |
 | `undo expense` | Creates a pending delete action for the latest recent WhatsApp-created expense. | Existing expense service after confirmation |
 | `Rahul`, `9876543210`, `G1`, `SEARCH Rahul` | Resolves tenant, lead, room, or hostel and opens an entity card. | Existing tenant, payment, room, lead, and dashboard data |
-| Tenant card buttons | Shows context-aware next actions, payments, dues, reminders, profile, agreements, invite resend, or move-out date/confirmation flow. | Existing payment, financial, reminder, invitation, agreement, and move-out services |
+| Tenant card buttons | Shows a decision card with the recommended next action: Reminder, Call, Resend, Review, Profile, Room, or Open HMS. | Existing payment, financial, reminder, invitation, agreement, and move-out services |
 | Room card buttons | Shows active room tenants, room occupancy, or starts an invite flow with the room preselected. | Existing room allocation and invitation services |
 | `INVITATIONS` | Shows pending invitation and activation work across active hostels. | Existing tenant invitation data |
 | `MOVEOUTS` | Shows the move-out action queue across active hostels. | Existing move-out, inspection, settlement, and dispute data |
-| Operation card buttons | Open Collections, Occupancy, Operations, Move-Outs, Invitations, and Vacancies without typed commands. | Existing operational services |
+| Open HMS buttons | Return a deep link when the task belongs in the web app. | HMS web app |
 | `CONNECTED` | Shows verified owner WhatsApp numbers and connected dates. | `owner_whatsapp_identities` |
 | `DISCONNECT` | Starts a confirmation flow to remove the sender's WhatsApp number from the owner assistant. | `owner_whatsapp_identities` after confirmation |
 | `CONFIRM` / `CANCEL` | Confirms or cancels a pending owner assistant action. | `owner_assistant_confirmations` |
@@ -61,7 +56,7 @@ It is not an AI chatbot. Every write operation requires an explicit confirmation
 2. The owner sends `LINK HMS-XXXX` from WhatsApp.
 3. The WhatsApp webhook validates the code, stores the verified phone mapping, and sends a WhatsApp confirmation message.
 4. Future owner commands resolve the owner only from that verified phone mapping.
-5. `SUMMARY` and `DUES` reuse existing HMS services instead of duplicating calculations.
+5. WhatsApp uses existing HMS services instead of duplicating calculations.
 6. Every handled owner command is logged in `owner_assistant_messages`.
 7. The owner dashboard lists verified WhatsApp numbers through `/api/owner/whatsapp/connections` and can disconnect a number through `/api/owner/whatsapp/connections/:connectionId`.
 8. New WhatsApp connections notify the owner's other connected WhatsApp numbers with connected count and Settings review path.
@@ -74,15 +69,13 @@ It is not an AI chatbot. Every write operation requires an explicit confirmation
 15. Dues, invitations, move-outs, collections, and vacancy screens start from all active hostels and only narrow down when the owner taps an explicit hostel or room row.
 16. Unknown verified-owner messages are treated as deterministic entity searches after known commands fail.
 17. Entity search returns tenant, room, lead, or hostel cards. WhatsApp buttons and list messages are the primary selection UI; text fallback is only used when interactive delivery fails.
-18. Tenant cards choose contextual next actions. Chronic overdue tenants surface `Call`; recent payers surface `Profile` and `Payments`.
+18. Tenant cards choose contextual next actions. Chronic overdue tenants surface `Call`; reminders with no payment conversion recommend calling; recent payers surface `Profile` and `Room`; longer work goes to `Open HMS`.
 19. Tenant reminder, invite resend, and move-out actions from cards still require same-phone `CONFIRM` before they call existing HMS services.
-20. `INBOX` and `PRIORITIES` rank the next best actions before showing module-level screens.
-21. `REVENUE` treats overdue rent, vacancies, and blocked move-out settlements as revenue leakage.
-22. `TODAY`, `ACTIONS`, and `OPERATIONS` show the action queue before drilling into individual centers.
-23. Dues, invitation, move-out, vacancy, activity, and expense screens render action cards/lists before HOME is introduced.
-24. Operational search phrases such as `TOP DUE`, `VACANT ROOMS`, and `INVITES EXPIRING` open queues directly.
-25. Expense reporting is reserved for exact report commands such as `expenses today`, `expenses week`, `expenses month`, `expenses category internet`, `last 5 expenses`, and `top categories`; amount-bearing phrases such as `expenses milk 50` become expense drafts.
-26. `SEARCH <query>` is an explicit entity-search fallback for debugging and deterministic owner use. Search misses return a visible no-results response instead of silently failing.
+20. `HELP`, `COMMANDS`, `?`, and `WHAT CAN I ASK` stay intentionally short and open action rows, not a command encyclopedia.
+21. Dashboard-style reports such as revenue, closing, insights, and watchlists are documented in the V3 audit as removal candidates before deletion.
+22. Operational search phrases such as `TOP DUE`, `VACANT ROOMS`, and `INVITES EXPIRING` open queues directly.
+23. Expense reporting is reserved for exact report commands such as `expenses today`, `expenses week`, `expenses month`, `expenses category internet`, `last 5 expenses`, and `top categories`; amount-bearing phrases such as `expenses milk 50` become expense drafts.
+24. `SEARCH <query>` is an explicit entity-search fallback for debugging and deterministic owner use. Search misses return a visible no-results response instead of silently failing.
 
 Unsupported owner commands return `HELP`.
 Unlinked numbers are only handled by the owner assistant when they send `LINK`; other messages continue through existing WhatsApp routing.

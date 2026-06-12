@@ -18,6 +18,11 @@ export interface BriefingPayload {
   };
 }
 
+type PriorityScore = {
+  type: BriefingPriorityType;
+  score: number;
+};
+
 export class BriefingEngine {
   /**
    * Generates a versioned daily briefing for a hostel owner, calculates their priority topic,
@@ -82,7 +87,7 @@ export class BriefingEngine {
     let totalPendingOnboarding = 0;
     let totalAlertsCount = 0;
     const allAlerts: any[] = [];
-    const hostelNames = hostels.map((h) => h.name);
+    const hostelNames = hostels.map((h: any) => h.name);
 
     for (const item of statsList) {
       const s = item.stats;
@@ -124,7 +129,7 @@ export class BriefingEngine {
     const operationsScore = totalOperationsTasks * 10;
 
     // Find the highest score
-    const scores = [
+    const scores: PriorityScore[] = [
       { type: "COLLECTIONS" as const, score: collectionsScore },
       { type: "OCCUPANCY" as const, score: occupancyScore },
       { type: "ONBOARDING" as const, score: onboardingScore },
@@ -133,7 +138,7 @@ export class BriefingEngine {
     ];
 
     // Find the winner (highest score > 0)
-    let winner = scores.reduce(
+    let winner = scores.reduce<PriorityScore>(
       (prev, current) => (current.score > prev.score ? current : prev),
       { type: "HEALTHY" as const, score: 0 }
     );
@@ -149,13 +154,23 @@ export class BriefingEngine {
         totalPending: totalPendingDues,
         score: collectionsScore,
       };
-      summaryText = `🎯 Recover ₹${totalOverdueAmount.toLocaleString("en-IN")} from ${totalOverdueCount} overdue tenant${totalOverdueCount === 1 ? "" : "s"}`;
+      const tenantLabel = totalOverdueCount === 1 ? "tenant" : "tenants";
+      summaryText = [
+        "Today's focus: Pending rent",
+        `${totalOverdueCount} overdue ${tenantLabel} need follow-up.`,
+        "Open Pending Rent to call or send reminders.",
+      ].join("\n");
     } else if (priorityType === "ONBOARDING") {
       priorityPayload = {
         pendingOnboardingCount: totalPendingOnboarding,
         score: onboardingScore,
       };
-      summaryText = `🎯 Complete onboarding for ${totalPendingOnboarding} tenant${totalPendingOnboarding === 1 ? "" : "s"}`;
+      const tenantLabel = totalPendingOnboarding === 1 ? "tenant" : "tenants";
+      summaryText = [
+        "Today's focus: Pending onboarding",
+        `${totalPendingOnboarding} ${tenantLabel} need activation follow-up.`,
+        "Open Invitations to resend or review.",
+      ].join("\n");
     } else if (priorityType === "OCCUPANCY") {
       priorityPayload = {
         vacantBeds: totalVacantBeds,
@@ -164,7 +179,12 @@ export class BriefingEngine {
         totalCapacity,
         score: occupancyScore,
       };
-      summaryText = `🎯 Fill ${totalVacantBeds} vacant bed${totalVacantBeds === 1 ? "" : "s"}`;
+      const bedLabel = totalVacantBeds === 1 ? "bed" : "beds";
+      summaryText = [
+        "Today's focus: Empty beds",
+        `${totalVacantBeds} vacant ${bedLabel} can be filled.`,
+        "Open Vacancies to invite tenants.",
+      ].join("\n");
     } else if (priorityType === "PROFITABILITY") {
       priorityPayload = {
         monthlyExpenses: totalExpenses,
@@ -172,7 +192,11 @@ export class BriefingEngine {
         totalRevenue,
         score: profitabilityScore,
       };
-      summaryText = `🎯 Review expenses — costs reached ${expenseRatio}% of revenue`;
+      summaryText = [
+        "Today's focus: Expense review",
+        "Spending needs owner review.",
+        "Open HMS for the full finance view.",
+      ].join("\n");
     } else if (priorityType === "OPERATIONS") {
       priorityPayload = {
         pendingMoveOuts,
@@ -181,12 +205,21 @@ export class BriefingEngine {
         totalOperationsTasks,
         score: operationsScore,
       };
-      summaryText = `🎯 ${totalOperationsTasks} operational task${totalOperationsTasks === 1 ? "" : "s"} require${totalOperationsTasks === 1 ? "s" : ""} attention`;
+      const taskLabel = totalOperationsTasks === 1 ? "item" : "items";
+      summaryText = [
+        "Today's focus: Operations",
+        `${totalOperationsTasks} ${taskLabel} need review.`,
+        "Open Move-Outs or Pending Invitations.",
+      ].join("\n");
     } else {
       priorityPayload = {
         score: 0,
       };
-      summaryText = "🎯 No action needed — operations running smoothly";
+      summaryText = [
+        "Today's focus: No urgent action",
+        "Operations look clear.",
+        "Search a tenant, record an expense, or invite a tenant when needed.",
+      ].join("\n");
     }
 
     const payload: BriefingPayload = {
