@@ -6,6 +6,7 @@ import { moveOutService } from '@features/move-out/api';
 import { useTenantDashboard } from '@features/tenant-portal/hooks/useTenantDashboard';
 import { MoveOutStepper } from '@features/tenants/components/moveout/MoveOutStepper';
 import { Link } from 'react-router-dom';
+import { canonicalMoveOutStatus } from '@/shared/types/moveout';
 
 const fmt = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
 const GOOGLE_REVIEW_URL = 'https://search.google.com/local/writereview?placeid=ChIJW1hB1g13yzsRscG4r7mVPt4';
@@ -116,6 +117,7 @@ export function TenantMoveOutPage() {
         planned_exit_date: timelineData.planned_exit_date,
       }
     : null);
+  const requestStatus = request ? canonicalMoveOutStatus(request.status) : '';
   const settlement = timelineData.settlement as Record<string, unknown> | undefined;
 
   const [showDisputeForm, setShowDisputeForm] = useState(false);
@@ -156,7 +158,7 @@ export function TenantMoveOutPage() {
   }
 
   // --- Feedback Flow (when status is COMPLETED) ---
-  if (active && request && String(request.status).toUpperCase() === 'COMPLETED') {
+  if (active && request && requestStatus === 'COMPLETED') {
     if (feedbackSubmitted) {
       return (
         <div className="space-y-6 max-w-md mx-auto py-10 px-4 text-center">
@@ -324,7 +326,7 @@ export function TenantMoveOutPage() {
         <MoveOutStepper request={request as Record<string, unknown>} hostelId="" />
 
         {/* Conditional Settlement Required Card */}
-        {String(request.status).toUpperCase() === 'SETTLEMENT_PENDING' && (
+        {['SETTLEMENT_PENDING', 'SETTLEMENT_APPROVED', 'SETTLEMENT_PENDING_PAYMENT'].includes(requestStatus) && (
           tenantOwesMoney ? (
             <div className="rounded-xl border border-red-200 bg-red-50 p-4 space-y-3">
               <div className="flex items-center gap-2 text-red-700 font-bold text-sm">
@@ -406,7 +408,7 @@ export function TenantMoveOutPage() {
 
         {/* Actions section */}
         <div className="space-y-3">
-          {['REQUESTED', 'SETTLEMENT_PENDING'].includes(String(request.status).toUpperCase()) && (
+          {['REQUESTED', 'SETTLEMENT_PENDING'].includes(requestStatus) && (
             <button
               type="button"
               disabled={cancelMutation.isPending}
@@ -421,7 +423,7 @@ export function TenantMoveOutPage() {
             </button>
           )}
 
-          {['SETTLEMENT_PENDING', 'APPROVED', 'VACATED'].includes(String(request.status).toUpperCase()) && (
+          {['SETTLEMENT_PENDING', 'SETTLEMENT_APPROVED', 'PHYSICALLY_VACATED', 'SETTLEMENT_PENDING_PAYMENT'].includes(requestStatus) && (
             !showDisputeForm ? (
               <button
                 type="button"
@@ -496,15 +498,6 @@ export function TenantMoveOutPage() {
                 </div>
               </div>
             )
-          )}
-
-          {String(request.status).toUpperCase() === 'DISPUTED' && (
-            <div className="p-4 rounded-xl border border-destructive/20 bg-destructive/5 text-destructive space-y-1">
-              <p className="text-sm font-semibold">⚠️ Dispute Under Review</p>
-              <p className="text-xs opacity-90">
-                You have raised a dispute regarding the settlement calculations. The owner has been notified and is reviewing the details.
-              </p>
-            </div>
           )}
         </div>
       </div>

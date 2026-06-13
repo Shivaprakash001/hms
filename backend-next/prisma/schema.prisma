@@ -1555,6 +1555,9 @@ enum TenantStatus {
 enum MoveOutStatus {
   REQUESTED
   SETTLEMENT_PENDING
+  SETTLEMENT_APPROVED
+  PHYSICALLY_VACATED
+  SETTLEMENT_PENDING_PAYMENT
   APPROVED
   VACATED
   COMPLETED
@@ -1578,9 +1581,12 @@ enum MoveOutReason {
 
 // ============================================================
 // Move-Out / Exit Management System (migration 060+061)
-// Workflow: REQUESTED → INSPECTION_PENDING → INSPECTION_DONE →
-//           SETTLEMENT_APPROVED → PAYMENT_PENDING → COMPLETED
-//           (branch: DISPUTED → PAYMENT_PENDING)
+// Workflow: REQUESTED → SETTLEMENT_PENDING → SETTLEMENT_APPROVED →
+//           PHYSICALLY_VACATED → SETTLEMENT_PENDING_PAYMENT → COMPLETED
+//           (branch: REJECTED)
+//
+// Legacy enum values APPROVED and VACATED remain readable during
+// reconciliation, but new writes should use the canonical statuses above.
 // ============================================================
 
 model move_out_requests {

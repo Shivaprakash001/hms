@@ -15,14 +15,38 @@ import { MoveOutStatus } from "@prisma/client";
 import { prisma } from "../db";
 
 // ─── Transition Graph ──────────────────────────────────────────
+// APPROVED and VACATED are legacy readable statuses. New writes should use
+// SETTLEMENT_APPROVED and PHYSICALLY_VACATED.
+
+export const MOVE_OUT_STATUS = {
+  REQUESTED: "REQUESTED",
+  SETTLEMENT_PENDING: "SETTLEMENT_PENDING",
+  SETTLEMENT_APPROVED: "SETTLEMENT_APPROVED",
+  PHYSICALLY_VACATED: "PHYSICALLY_VACATED",
+  SETTLEMENT_PENDING_PAYMENT: "SETTLEMENT_PENDING_PAYMENT",
+  COMPLETED: "COMPLETED",
+  REJECTED: "REJECTED",
+} as const;
+
+const LEGACY_STATUS_ALIASES: Partial<Record<MoveOutStatus, MoveOutStatus>> = {
+  APPROVED: "SETTLEMENT_APPROVED" as MoveOutStatus,
+  VACATED: "PHYSICALLY_VACATED" as MoveOutStatus,
+};
+
+export function canonicalMoveOutStatus(status: MoveOutStatus | string): string {
+  return (LEGACY_STATUS_ALIASES[status as MoveOutStatus] || status) as string;
+}
 
 const TRANSITIONS: Record<MoveOutStatus, MoveOutStatus[]> = {
-  REQUESTED:           ["SETTLEMENT_PENDING", "REJECTED"],
-  SETTLEMENT_PENDING:  ["APPROVED", "REJECTED"],
-  APPROVED:            ["VACATED"],
-  VACATED:             ["COMPLETED"],
-  COMPLETED:           [],
-  REJECTED:            [],
+  REQUESTED: ["SETTLEMENT_PENDING", "REJECTED"],
+  SETTLEMENT_PENDING: ["SETTLEMENT_APPROVED", "REJECTED"],
+  SETTLEMENT_APPROVED: ["PHYSICALLY_VACATED"],
+  PHYSICALLY_VACATED: ["SETTLEMENT_PENDING_PAYMENT", "COMPLETED"],
+  SETTLEMENT_PENDING_PAYMENT: ["COMPLETED"],
+  COMPLETED: [],
+  REJECTED: [],
+  APPROVED: ["PHYSICALLY_VACATED"],
+  VACATED: ["SETTLEMENT_PENDING_PAYMENT", "COMPLETED"],
 };
 
 /**
@@ -64,10 +88,13 @@ type Capability =
 const BLOCKED_CAPABILITIES: Record<MoveOutStatus, Capability[]> = {
   REQUESTED:           ["TRANSFER_ROOM", "MODIFY_RENT_AMOUNT", "CHANGE_ROOMMATE", "EDIT_PROFILE"],
   SETTLEMENT_PENDING:  ["TRANSFER_ROOM", "MODIFY_RENT_AMOUNT", "CHANGE_ROOMMATE", "EDIT_PROFILE"],
-  APPROVED:            ["TRANSFER_ROOM", "MODIFY_RENT_AMOUNT", "CHANGE_ROOMMATE", "EDIT_PROFILE"],
-  VACATED:             ["TRANSFER_ROOM", "GENERATE_RENT", "MODIFY_RENT_AMOUNT", "CHANGE_ROOMMATE", "EDIT_PROFILE"],
+  SETTLEMENT_APPROVED: ["TRANSFER_ROOM", "MODIFY_RENT_AMOUNT", "CHANGE_ROOMMATE", "EDIT_PROFILE"],
+  PHYSICALLY_VACATED:  [],
+  SETTLEMENT_PENDING_PAYMENT: [],
   COMPLETED:           ["TRANSFER_ROOM", "GENERATE_RENT", "MODIFY_RENT_AMOUNT", "CHANGE_ROOMMATE", "EDIT_PROFILE", "CANCEL_REQUEST"],
   REJECTED:            [],
+  APPROVED:            ["TRANSFER_ROOM", "MODIFY_RENT_AMOUNT", "CHANGE_ROOMMATE", "EDIT_PROFILE"],
+  VACATED:             [],
 };
 
 /**
@@ -130,22 +157,26 @@ export interface TenantStep {
 const TENANT_STEPS = [
   { label: "Request Submitted",     icon: "📋", description: "Your move-out request has been received." },
   { label: "Settlement Pending",    icon: "💰", description: "Reviewing dues and calculating final settlement." },
-  { label: "Move-Out Approved",     icon: "✅", description: "Move-out approved. Awaiting physical vacate." },
-  { label: "Bed Vacated",           icon: "🚪", description: "Bed vacated. Awaiting final deposit settlement." },
+  { label: "Settlement Approved",   icon: "✅", description: "Settlement approved. Awaiting physical exit." },
+  { label: "Physical Exit",         icon: "🚪", description: "Room released. Final settlement remains separate." },
+  { label: "Payment Pending",       icon: "💳", description: "Settlement collection is pending." },
   { label: "Exit Completed",        icon: "🏁", description: "Your move-out is complete. Thank you!" },
 ];
 
 const STATUS_TO_STEP: Record<string, number> = {
   REQUESTED: 0,
   SETTLEMENT_PENDING: 1,
+  SETTLEMENT_APPROVED: 2,
+  PHYSICALLY_VACATED: 3,
+  SETTLEMENT_PENDING_PAYMENT: 4,
+  COMPLETED: 5,
+  REJECTED: -1,
   APPROVED: 2,
   VACATED: 3,
-  COMPLETED: 4,
-  REJECTED: -1,
 };
 
 export function getTenantSteps(currentStatus: MoveOutStatus): TenantStep[] {
-  const currentIdx = STATUS_TO_STEP[currentStatus] ?? -1;
+  const currentIdx = STATUS_TO_STEP[canonicalMoveOutStatus(currentStatus)] ?? -1;
   return TENANT_STEPS.map((step, i) => ({
     step: i + 1,
     label: step.label,

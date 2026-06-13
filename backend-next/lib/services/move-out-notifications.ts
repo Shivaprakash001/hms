@@ -22,13 +22,17 @@ const TENANT_MESSAGES: Record<string, { title: string; message: string }> = {
     title: "Room inspection completed",
     message: "Your room inspection is done. The settlement is being calculated.",
   },
-  APPROVED: {
+  SETTLEMENT_APPROVED: {
     title: "Settlement ready for review",
     message: "Your final settlement has been calculated. Open the Move-Out section to review it.",
   },
-  VACATED: {
+  PHYSICALLY_VACATED: {
     title: "Bed vacated",
-    message: "You have vacated the bed. Your status has been set to Former Tenant.",
+    message: "You have vacated the bed. Final settlement remains tracked separately.",
+  },
+  SETTLEMENT_PENDING_PAYMENT: {
+    title: "Settlement payment pending",
+    message: "Your move-out settlement has an outstanding payment to complete.",
   },
   COMPLETED: {
     title: "Move-out complete",
@@ -50,13 +54,17 @@ const OWNER_MESSAGES: Record<string, { title: string; message: (name: string) =>
     title: "Inspection completed",
     message: (n) => `Room inspection for ${n} is done. Review the settlement.`,
   },
-  APPROVED: {
+  SETTLEMENT_APPROVED: {
     title: "Settlement approved",
     message: (n) => `Settlement approved for ${n}. Ready for them to vacate.`,
   },
-  VACATED: {
+  PHYSICALLY_VACATED: {
     title: "Tenant vacated",
     message: (n) => `${n} has vacated the bed. Room is now available.`,
+  },
+  SETTLEMENT_PENDING_PAYMENT: {
+    title: "Settlement payment pending",
+    message: (n) => `${n}'s room is released, but settlement payment is still pending.`,
   },
   COMPLETED: {
     title: "Move-out completed",
@@ -117,13 +125,13 @@ export async function notifyMoveOutTransition(
     let tenantTitle = "";
     let tenantMessage = "";
 
-    if (newStatus === "VACATED") {
+    if (newStatus === "PHYSICALLY_VACATED" || newStatus === "VACATED") {
       if (isFuture) {
         tenantTitle = "Move-out Approved & Vacate Registered";
         tenantMessage = `Your bed vacate has been registered. You remain an active resident until your scheduled exit date: ${dateStr}.`;
       } else {
-        tenantTitle = TENANT_MESSAGES.VACATED.title;
-        tenantMessage = TENANT_MESSAGES.VACATED.message;
+        tenantTitle = TENANT_MESSAGES.PHYSICALLY_VACATED.title;
+        tenantMessage = TENANT_MESSAGES.PHYSICALLY_VACATED.message;
       }
     } else if (newStatus === "COMPLETED") {
       if (isFuture) {

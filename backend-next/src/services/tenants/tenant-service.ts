@@ -195,7 +195,17 @@ export class TenantService {
       if (status === "MOVE_OUT_REQUESTED") {
         where.move_out_requests = {
           some: {
-            status: { in: ["REQUESTED", "APPROVED", "SETTLEMENT_PENDING", "VACATED"] }
+            status: {
+              in: [
+                "REQUESTED",
+                "SETTLEMENT_PENDING",
+                "SETTLEMENT_APPROVED",
+                "PHYSICALLY_VACATED",
+                "SETTLEMENT_PENDING_PAYMENT",
+                "APPROVED",
+                "VACATED",
+              ],
+            },
           }
         };
       } else {

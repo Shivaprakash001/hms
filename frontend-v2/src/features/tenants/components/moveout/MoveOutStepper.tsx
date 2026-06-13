@@ -4,18 +4,21 @@ import {
   Coins, 
   BadgeCheck, 
   DoorOpen, 
+  CreditCard,
   Flag 
 } from 'lucide-react';
+import { canonicalMoveOutStatus } from '@/shared/types/moveout';
 
 const STEP_LABELS = [
   { key: 'REQUESTED', label: 'Request', icon: FileText, desc: 'Request submitted for review' },
   { key: 'SETTLEMENT_PENDING', label: 'Settlement', icon: Coins, desc: 'Dues and refund calculation' },
-  { key: 'APPROVED', label: 'Approved', icon: BadgeCheck, desc: 'Exit and refund approved' },
-  { key: 'VACATED', label: 'Vacated', icon: DoorOpen, desc: 'Room inspected & bed vacated' },
-  { key: 'COMPLETED', label: 'Completed', icon: Flag, desc: 'Security deposit settled' },
+  { key: 'SETTLEMENT_APPROVED', label: 'Approved', icon: BadgeCheck, desc: 'Settlement approved' },
+  { key: 'PHYSICALLY_VACATED', label: 'Vacated', icon: DoorOpen, desc: 'Room released' },
+  { key: 'SETTLEMENT_PENDING_PAYMENT', label: 'Payment', icon: CreditCard, desc: 'Settlement payment pending' },
+  { key: 'COMPLETED', label: 'Completed', icon: Flag, desc: 'Financially closed' },
 ] as const;
 
-const STEPS = ['REQUESTED', 'SETTLEMENT_PENDING', 'APPROVED', 'VACATED', 'COMPLETED'] as const;
+const STEPS = ['REQUESTED', 'SETTLEMENT_PENDING', 'SETTLEMENT_APPROVED', 'PHYSICALLY_VACATED', 'SETTLEMENT_PENDING_PAYMENT', 'COMPLETED'] as const;
 
 interface Props {
   request: Record<string, unknown>;
@@ -23,9 +26,10 @@ interface Props {
 }
 
 export function MoveOutStepper({ request }: Props) {
-  const current = String(request.status ?? 'REQUESTED').toUpperCase();
+  const current = canonicalMoveOutStatus(request.status ?? 'REQUESTED');
   const isRejected = current === 'REJECTED';
   const currentIdx = isRejected ? -1 : STEPS.indexOf(current as (typeof STEPS)[number]);
+  const progressIdx = Math.max(0, currentIdx);
 
   return (
     <div className="space-y-6">
@@ -40,7 +44,7 @@ export function MoveOutStepper({ request }: Props) {
             {/* Active Progress Line */}
             <div 
               className="absolute top-[18px] left-[10%] h-1 bg-[#243A72] rounded-full -translate-y-1/2 transition-all duration-500 ease-out"
-              style={{ width: `${(currentIdx / (STEPS.length - 1)) * 80}%` }}
+              style={{ width: `${(progressIdx / (STEPS.length - 1)) * 80}%` }}
             />
 
             {/* Steps Container */}
@@ -201,4 +205,3 @@ export function MoveOutStepper({ request }: Props) {
     </div>
   );
 }
-

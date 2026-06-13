@@ -357,7 +357,7 @@ export class MoveOutService {
     };
   }
 
-  // ── Approve Settlement → APPROVED ────────────────────
+  // ── Approve Settlement → SETTLEMENT_APPROVED ─────────
   async approveSettlement(
     requestId: string,
     actor: MoveOutActor,
@@ -373,7 +373,7 @@ export class MoveOutService {
       await this.calculateSettlementPreview(requestId),
       confirmedSettlement,
     );
-    assertTransition(req.status as MoveOutStatus, "APPROVED");
+    assertTransition(req.status as MoveOutStatus, "SETTLEMENT_APPROVED" as MoveOutStatus);
 
     return prisma.$transaction(async (tx: Tx) => {
       await tx.exit_settlement_transactions.upsert({
@@ -384,24 +384,24 @@ export class MoveOutService {
       await tx.move_out_requests.update({
         where: { id: requestId },
         data: {
-          status: "APPROVED", reviewed_by: actor.id, reviewed_at: new Date(),
+          status: "SETTLEMENT_APPROVED" as MoveOutStatus, reviewed_by: actor.id, reviewed_at: new Date(),
           review_notes: reviewNotes || null, updated_at: new Date(),
         },
       });
 
-      notifyMoveOutTransition(requestId, "APPROVED");
-      return { ...preview, status: "APPROVED" as MoveOutStatus };
+      notifyMoveOutTransition(requestId, "SETTLEMENT_APPROVED");
+      return { ...preview, status: "SETTLEMENT_APPROVED" as MoveOutStatus };
     });
   }
 
-  // ── Vacate Bed → VACATED ─────────────────────────────────────
+  // ── Vacate Bed → PHYSICALLY_VACATED ─────────────────────────
   async vacate(requestId: string, actor: MoveOutActor, physicalExitDate?: string) {
     const req = await this.requireRequestActor(requestId, actor, {
       action: "vacate this move-out request",
       allowOwner: true,
       allowAdmin: true,
     });
-    assertTransition(req.status as MoveOutStatus, "VACATED");
+    assertTransition(req.status as MoveOutStatus, "PHYSICALLY_VACATED" as MoveOutStatus);
 
     const now = new Date();
     const exitDate = physicalExitDate ? new Date(physicalExitDate) : req.planned_exit_date;
@@ -411,7 +411,7 @@ export class MoveOutService {
       await tx.move_out_requests.update({
         where: { id: requestId },
         data: {
-          status: "VACATED",
+          status: "PHYSICALLY_VACATED" as MoveOutStatus,
           physical_exit_date: exitDate,
           actual_exit_date: exitDate,
           room_release_date: isFutureExit ? null : exitDate,
@@ -452,8 +452,8 @@ export class MoveOutService {
       }
 
       logger.info("move_out.vacated", { id: requestId, tenant_id: req.tenant_id });
-      notifyMoveOutTransition(requestId, "VACATED");
-      return { success: true, request_id: requestId, status: "VACATED" };
+      notifyMoveOutTransition(requestId, "PHYSICALLY_VACATED");
+      return { success: true, request_id: requestId, status: "PHYSICALLY_VACATED" };
     });
   }
 
@@ -611,7 +611,7 @@ export class MoveOutService {
     return prisma.move_out_requests.findMany({
       where: {
         owner_id: ownerId, hostel_id: hostelId,
-        status: { in: ["REQUESTED", "SETTLEMENT_PENDING", "APPROVED"] },
+        status: { in: ["REQUESTED", "SETTLEMENT_PENDING", "SETTLEMENT_APPROVED", "APPROVED"] as MoveOutStatus[] },
         planned_exit_date: { lte: new Date(Date.now() + daysAhead * 86400000) },
       },
       include: { tenant: { include: { profiles: { select: { name: true } }, room_allocations: { where: { is_active: true }, include: { room: { select: { room_no: true, floor: true } } }, take: 1 } } } },

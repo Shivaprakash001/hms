@@ -11,6 +11,9 @@ const STATUS_STYLES: Record<string, string> = {
   // Move-out request statuses
   REQUESTED: 'bg-blue-500/15 text-blue-600 border-blue-500/30',
   SETTLEMENT_PENDING: 'bg-amber-500/15 text-amber-600 border-amber-500/30',
+  SETTLEMENT_APPROVED: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30',
+  PHYSICALLY_VACATED: 'bg-indigo-500/15 text-indigo-600 border-indigo-500/30',
+  SETTLEMENT_PENDING_PAYMENT: 'bg-orange-500/15 text-orange-600 border-orange-500/30',
   APPROVED: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30',
   VACATED: 'bg-indigo-500/15 text-indigo-600 border-indigo-500/30',
   COMPLETED: 'bg-muted text-muted-foreground border-border',
@@ -28,6 +31,9 @@ const LABELS: Record<string, string> = {
   // Move-out request statuses
   REQUESTED: 'Requested',
   SETTLEMENT_PENDING: 'Settlement Pending',
+  SETTLEMENT_APPROVED: 'Settlement Approved',
+  PHYSICALLY_VACATED: 'Physically Vacated',
+  SETTLEMENT_PENDING_PAYMENT: 'Settlement Payment Pending',
   APPROVED: 'Approved',
   VACATED: 'Vacated',
   COMPLETED: 'Completed',

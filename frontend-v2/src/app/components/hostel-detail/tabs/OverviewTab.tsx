@@ -87,11 +87,19 @@ export function OverviewTab({ hostelId }: { hostelId: string }) {
     : (requestsData as any)?.requests ?? [];
 
   const moveOutReqsCount = requestsList.filter(
-    (r: any) => ['REQUESTED', 'SETTLEMENT_PENDING', 'APPROVED', 'VACATED'].includes(r.status)
+    (r: any) => [
+      'REQUESTED',
+      'SETTLEMENT_PENDING',
+      'SETTLEMENT_APPROVED',
+      'PHYSICALLY_VACATED',
+      'SETTLEMENT_PENDING_PAYMENT',
+      'APPROVED',
+      'VACATED',
+    ].includes(r.status)
   ).length;
 
   const upcomingVacanciesCount = requestsList.filter(
-    (r: any) => ['REQUESTED', 'SETTLEMENT_PENDING', 'APPROVED'].includes(r.status)
+    (r: any) => ['REQUESTED', 'SETTLEMENT_PENDING', 'SETTLEMENT_APPROVED', 'APPROVED'].includes(r.status)
   ).length;
 
   const pendingRefundsCount = requestsList.filter(

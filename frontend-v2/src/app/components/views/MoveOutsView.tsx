@@ -10,6 +10,7 @@ import { MoveOutStepper } from '@features/tenants/components/moveout/MoveOutStep
 import { TenantStatusBadge } from '@features/tenants/components/badges/TenantStatusBadge';
 import { ownerService } from '@features/owners/api';
 import { useTenantStore } from '@features/tenants/store/tenantStore';
+import { canonicalMoveOutStatus } from '@/shared/types/moveout';
 
 const fmt = (n: unknown) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
 const fmtDate = (d: unknown) =>
@@ -130,6 +131,7 @@ export function MoveOutsView() {
 
   const active = (detail ?? list.find((r) => String(r.id) === effectiveSelectedId)) as Record<string, unknown> | undefined;
   const activeTenant = active ? tenantInfo(active) : null;
+  const activeStatus = active ? canonicalMoveOutStatus(active.status) : '';
   const settlement = active ? settlementSource(active) : {};
   const inspection = (active?.inspection ?? {}) as Record<string, unknown>;
   const disputes = (active?.disputes ?? []) as Record<string, unknown>[];
@@ -324,7 +326,7 @@ export function MoveOutsView() {
                   </div>
                 ) : (
                   <div className="space-y-4 p-4">
-                    {['REQUESTED', 'SETTLEMENT_PENDING', 'APPROVED'].includes(String(active.status)) && (
+                    {['REQUESTED', 'SETTLEMENT_PENDING', 'SETTLEMENT_APPROVED'].includes(activeStatus) && (
                       <div className="rounded-2xl border border-blue-200 bg-blue-50/40 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div className="flex items-center gap-2.5">
                           <DoorOpen className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0" />
@@ -355,20 +357,22 @@ export function MoveOutsView() {
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-foreground">
-                            {String(active.status).replace(/_/g, ' ')}
+                            {activeStatus.replace(/_/g, ' ')}
                           </p>
                           <p className="mt-1 text-sm text-muted-foreground">
-                            {String(active.status) === 'REQUESTED'
+                            {activeStatus === 'REQUESTED'
                               ? `${activeTenant?.name} is waiting for room inspection.`
-                              : String(active.status) === 'SETTLEMENT_PENDING'
+                              : activeStatus === 'SETTLEMENT_PENDING'
                                 ? 'Inspection is complete. Review and approve the final settlement.'
-                                : String(active.status) === 'APPROVED'
-                                  ? 'Settlement is approved. Release the bed and vacate the tenant.'
-                                  : String(active.status) === 'VACATED'
-                                    ? 'Tenant has physically vacated. Record the final refund or payment collection to complete the move-out.'
-                                    : String(active.status) === 'COMPLETED'
+                                : activeStatus === 'SETTLEMENT_APPROVED'
+                                  ? 'Settlement is approved. Release the bed and record the physical exit.'
+                                  : activeStatus === 'PHYSICALLY_VACATED'
+                                    ? 'Tenant has physically vacated. Complete only after financial closure.'
+                                    : activeStatus === 'SETTLEMENT_PENDING_PAYMENT'
+                                      ? 'Room is released and settlement payment is still pending.'
+                                      : activeStatus === 'COMPLETED'
                                       ? 'Move-out is complete and the room has been released.'
-                                      : String(active.status) === 'REJECTED'
+                                      : activeStatus === 'REJECTED'
                                         ? 'This move-out request was rejected.'
                                         : 'Continue the next operational step below.'}
                           </p>
@@ -376,7 +380,7 @@ export function MoveOutsView() {
                       </div>
                     </div>
 
-                    {(active.inspection || ['SETTLEMENT_PENDING', 'APPROVED', 'VACATED', 'COMPLETED'].includes(String(active.status))) && (
+                    {(active.inspection || ['SETTLEMENT_PENDING', 'SETTLEMENT_APPROVED', 'PHYSICALLY_VACATED', 'SETTLEMENT_PENDING_PAYMENT', 'COMPLETED'].includes(activeStatus)) && (
                       <div className="rounded-2xl border border-border bg-background p-4">
                         <div className="mb-3 flex items-center gap-2">
                           <ClipboardCheck className="h-4 w-4 text-accent" />
@@ -554,7 +558,7 @@ export function MoveOutsView() {
                     )}
 
                     <div className="space-y-3">
-                      {String(active.status) === 'REQUESTED' && (
+                      {activeStatus === 'REQUESTED' && (
                         !showInspectForm ? (
                           <div className="space-y-2">
                             <button
@@ -629,7 +633,7 @@ export function MoveOutsView() {
                         )
                       )}
 
-                      {String(active.status) === 'SETTLEMENT_PENDING' && (
+                      {activeStatus === 'SETTLEMENT_PENDING' && (
                         <div className="rounded-2xl border border-border bg-background p-4 space-y-3">
                           <div className="flex items-center gap-2">
                             <BadgeIndianRupee className="h-4 w-4 text-accent" />
@@ -688,7 +692,7 @@ export function MoveOutsView() {
                         </div>
                       )}
 
-                      {String(active.status) === 'APPROVED' && (
+                      {activeStatus === 'SETTLEMENT_APPROVED' && (
                         <div className="rounded-2xl border border-border bg-background p-4 space-y-3">
                           <div className="flex items-center gap-2">
                             <CalendarDays className="h-4 w-4 text-accent" />
@@ -719,7 +723,7 @@ export function MoveOutsView() {
                         </div>
                       )}
 
-                      {String(active.status) === 'VACATED' && (
+                      {['PHYSICALLY_VACATED', 'SETTLEMENT_PENDING_PAYMENT'].includes(activeStatus) && (
                         <div className="rounded-2xl border border-border bg-background p-4 space-y-3">
                           <div className="flex items-center gap-2">
                             <CheckCircle2 className="h-4 w-4 text-accent" />
@@ -771,15 +775,15 @@ export function MoveOutsView() {
               </div>
 
               {/* STICKY DECISION BAR */}
-              {['REQUESTED', 'SETTLEMENT_PENDING', 'APPROVED', 'VACATED'].includes(String(active.status)) && (
+              {['REQUESTED', 'SETTLEMENT_PENDING', 'SETTLEMENT_APPROVED', 'PHYSICALLY_VACATED', 'SETTLEMENT_PENDING_PAYMENT'].includes(activeStatus) && (
                 <div className="sticky bottom-0 z-10 bg-background/95 backdrop-blur border border-border p-4 flex flex-col sm:flex-row gap-3 justify-between items-center mt-6 shadow-[0_-8px_30px_rgb(0,0,0,0.12)] rounded-2xl">
                   <div className="text-left hidden sm:block">
                     <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Current State</p>
-                    <p className="text-sm font-bold text-foreground capitalize">{String(active.status).toLowerCase().replace(/_/g, ' ')}</p>
+                    <p className="text-sm font-bold text-foreground capitalize">{activeStatus.toLowerCase().replace(/_/g, ' ')}</p>
                   </div>
                   
                   <div className="flex gap-2 w-full sm:w-auto justify-end">
-                    {String(active.status) === 'REQUESTED' && (
+                    {activeStatus === 'REQUESTED' && (
                       <>
                         <button
                           type="button"
@@ -826,7 +830,7 @@ export function MoveOutsView() {
                       </>
                     )}
 
-                    {String(active.status) === 'SETTLEMENT_PENDING' && (
+                    {activeStatus === 'SETTLEMENT_PENDING' && (
                       <>
                         <button
                           type="button"
@@ -851,7 +855,7 @@ export function MoveOutsView() {
                       </>
                     )}
 
-                    {String(active.status) === 'APPROVED' && (
+                    {activeStatus === 'SETTLEMENT_APPROVED' && (
                       <button
                         type="button"
                         disabled={vacateMutation.isPending}
@@ -866,7 +870,7 @@ export function MoveOutsView() {
                       </button>
                     )}
 
-                    {String(active.status) === 'VACATED' && (
+                    {['PHYSICALLY_VACATED', 'SETTLEMENT_PENDING_PAYMENT'].includes(activeStatus) && (
                       <button
                         type="button"
                         disabled={completeMutation.isPending}

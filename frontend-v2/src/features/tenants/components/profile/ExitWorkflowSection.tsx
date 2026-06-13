@@ -16,6 +16,7 @@ import {
 import { moveOutService } from '@features/move-out/api';
 import { MoveOutStepper } from '@features/tenants/components/moveout/MoveOutStepper';
 import { queryKeys } from '@lib/queryKeys';
+import { canonicalMoveOutStatus } from '@/shared/types/moveout';
 
 const fmt = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
 
@@ -34,7 +35,7 @@ export function ExitWorkflowSection({ hostelId, tenantId, status }: Props) {
 
   const list = Array.isArray(requests) ? requests : (requests as Record<string, unknown>)?.requests ?? [];
   const active = (list as Record<string, unknown>[]).find(
-    (r) => String(r.tenant_id) === tenantId && !['CANCELLED', 'REJECTED'].includes(String(r.status))
+    (r) => String(r.tenant_id) === tenantId && !['COMPLETED', 'REJECTED'].includes(canonicalMoveOutStatus(r.status))
   );
 
   const { data: activeDetail, refetch: refetchDetail } = useQuery({
@@ -262,7 +263,7 @@ export function ExitWorkflowSection({ hostelId, tenantId, status }: Props) {
   }
 
   // --- Render Active Request Workflow Controls ---
-  const currentStatus = String(active.status).toUpperCase();
+  const currentStatus = canonicalMoveOutStatus(active.status);
 
   return (
     <div className="space-y-6">
@@ -618,8 +619,8 @@ export function ExitWorkflowSection({ hostelId, tenantId, status }: Props) {
           </div>
         )}
 
-        {/* 3. Approved State: Vacate Bed */}
-        {currentStatus === 'APPROVED' && (
+        {/* 3. Settlement Approved State: Vacate Bed */}
+        {currentStatus === 'SETTLEMENT_APPROVED' && (
           <div className="p-4 rounded-xl border border-border bg-card space-y-3">
             <div className="flex items-center gap-2">
               <CalendarDays className="h-4 w-4 text-[#243A72]" />
@@ -647,8 +648,8 @@ export function ExitWorkflowSection({ hostelId, tenantId, status }: Props) {
           </div>
         )}
 
-        {/* 4. Vacated State: Record final payment */}
-        {currentStatus === 'VACATED' && (
+        {/* 4. Physical Exit State: Record final payment */}
+        {['PHYSICALLY_VACATED', 'SETTLEMENT_PENDING_PAYMENT'].includes(currentStatus) && (
           <div className="p-4 rounded-xl border border-border bg-card space-y-3">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-emerald-600" />

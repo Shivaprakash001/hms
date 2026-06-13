@@ -115,9 +115,8 @@ export function MoveOutsTab({ hostelId }: { hostelId: string }) {
 
 function moveOutStatusClass(status: string) {
   if (status === 'COMPLETED') return 'bg-emerald-500/10 text-emerald-700';
-  if (status === 'PAYMENT_PENDING' || status === 'SETTLEMENT_APPROVED') return 'bg-amber-500/10 text-amber-700';
-  if (status === 'DISPUTED') return 'bg-rose-500/10 text-rose-700';
-  if (status === 'INSPECTION_DONE') return 'bg-sky-500/10 text-sky-700';
+  if (status === 'SETTLEMENT_PENDING_PAYMENT') return 'bg-orange-500/10 text-orange-700';
+  if (status === 'PHYSICALLY_VACATED' || status === 'VACATED') return 'bg-indigo-500/10 text-indigo-700';
+  if (status === 'SETTLEMENT_APPROVED' || status === 'APPROVED') return 'bg-amber-500/10 text-amber-700';
   return 'bg-accent/10 text-accent';
 }
-

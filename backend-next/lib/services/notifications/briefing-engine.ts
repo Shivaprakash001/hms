@@ -117,7 +117,20 @@ export class BriefingEngine {
 
     // Fetch operational tasks counts
     const pendingMoveOuts = await prisma.move_out_requests.count({
-      where: { owner_id: ownerId, status: { in: ["REQUESTED", "SETTLEMENT_PENDING"] } },
+      where: {
+        owner_id: ownerId,
+        status: {
+          in: [
+            "REQUESTED",
+            "SETTLEMENT_PENDING",
+            "SETTLEMENT_APPROVED",
+            "PHYSICALLY_VACATED",
+            "SETTLEMENT_PENDING_PAYMENT",
+            "APPROVED",
+            "VACATED",
+          ],
+        },
+      },
     });
     const pendingDocReviews = await prisma.identificationDocument.count({
       where: { tenant: { owner_id: ownerId }, is_active: true, document_status: "PENDING" },

@@ -3072,7 +3072,15 @@ export class OwnerWhatsAppAssistantService {
         SELECT
           COUNT(DISTINCT mor.id)::int AS active_count,
           COUNT(DISTINCT mor.id) FILTER (
-            WHERE mor.status::text IN ('REQUESTED', 'SETTLEMENT_PENDING')
+            WHERE mor.status::text IN (
+              'REQUESTED',
+              'SETTLEMENT_PENDING',
+              'SETTLEMENT_APPROVED',
+              'PHYSICALLY_VACATED',
+              'SETTLEMENT_PENDING_PAYMENT',
+              'APPROVED',
+              'VACATED'
+            )
               OR d.id IS NOT NULL
               OR (est.id IS NOT NULL AND (est.confirmed_by_owner = false OR est.payment_status IS DISTINCT FROM ${EXIT_SETTLEMENT_SETTLED_STATUS}))
           )::int AS action_count
