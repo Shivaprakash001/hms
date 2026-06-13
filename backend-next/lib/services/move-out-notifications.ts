@@ -183,6 +183,7 @@ export async function notifyMoveOutDisputeRaised(disputeId: string): Promise<voi
         request: {
           select: {
             owner_id: true,
+            hostel_id: true,
             tenant: {
               select: {
                 profile_id: true,
@@ -199,6 +200,21 @@ export async function notifyMoveOutDisputeRaised(disputeId: string): Promise<voi
       },
     });
     if (!dispute) return;
+
+    if (dispute.request.hostel_id) {
+      try {
+        invalidateHostelDashboardCache(dispute.request.hostel_id);
+      } catch (err: any) {
+        logger.error("move_out.dispute_invalidate_hostel_cache_failed", { hostel_id: dispute.request.hostel_id, error: err.message });
+      }
+    }
+    if (dispute.request.owner_id) {
+      try {
+        invalidateOwnerDashboardCache(dispute.request.owner_id);
+      } catch (err: any) {
+        logger.error("move_out.dispute_invalidate_owner_cache_failed", { owner_id: dispute.request.owner_id, error: err.message });
+      }
+    }
 
     const tenantName = dispute.request.tenant?.profiles?.name || "Tenant";
     const roomNo = dispute.request.tenant?.room_allocations?.[0]?.room?.room_no || "unassigned room";
@@ -239,6 +255,7 @@ export async function notifyMoveOutDisputeUpdated(disputeId: string, status: str
         request: {
           select: {
             owner_id: true,
+            hostel_id: true,
             tenant: {
               select: {
                 profile_id: true,
@@ -250,6 +267,21 @@ export async function notifyMoveOutDisputeUpdated(disputeId: string, status: str
       },
     });
     if (!dispute) return;
+
+    if (dispute.request.hostel_id) {
+      try {
+        invalidateHostelDashboardCache(dispute.request.hostel_id);
+      } catch (err: any) {
+        logger.error("move_out.dispute_update_invalidate_hostel_cache_failed", { hostel_id: dispute.request.hostel_id, error: err.message });
+      }
+    }
+    if (dispute.request.owner_id) {
+      try {
+        invalidateOwnerDashboardCache(dispute.request.owner_id);
+      } catch (err: any) {
+        logger.error("move_out.dispute_update_invalidate_owner_cache_failed", { owner_id: dispute.request.owner_id, error: err.message });
+      }
+    }
 
     const tenantName = dispute.request.tenant?.profiles?.name || "Tenant";
     const title = status === "REJECTED"

@@ -48,6 +48,18 @@ export const moveOutService = {
     const response = await api.post(`/move-out/requests/${requestId}/dispute`, payload);
     return unwrap(response);
   },
+  reviewDispute: async (requestId, disputeId, reviewNotes = '') => {
+    const response = await api.post(`/move-out/requests/${requestId}/dispute`, { review: true, disputeId, reviewNotes });
+    return unwrap(response);
+  },
+  resolveDispute: async (requestId, disputeId, resolutionNotes = '') => {
+    const response = await api.post(`/move-out/requests/${requestId}/dispute`, { resolve: true, disputeId, resolutionNotes });
+    return unwrap(response);
+  },
+  rejectDispute: async (requestId, disputeId, rejectionNotes = '') => {
+    const response = await api.post(`/move-out/requests/${requestId}/dispute`, { reject: true, disputeId, rejectionNotes });
+    return unwrap(response);
+  },
   feedback: async (requestId, payload) => {
     const response = await api.post(`/move-out/requests/${requestId}/feedback`, payload);
     return unwrap(response);

@@ -70,6 +70,8 @@ export class DashboardService {
       due_today: number;
       due_this_week: number;
       move_out_open: number;
+      active_dispute_count: number;
+      active_dispute_amount: number;
       category_expenses: Array<{ category: string; amount: number; percentage: number; trend: number }> | null;
       room_utilization: Array<{
         id: string;
@@ -218,11 +220,16 @@ export class DashboardService {
         FROM open_dues
       ),
       move_out_summary AS (
-        SELECT COUNT(*)::int AS move_out_open
-        FROM move_out_requests
-        WHERE owner_id = ${userId}::uuid
-          AND hostel_id = ${hostelId}::uuid
-          AND status NOT IN ('COMPLETED', 'REJECTED')
+        SELECT
+          COUNT(DISTINCT mor.id)::int AS move_out_open,
+          COUNT(DISTINCT d.id)::int AS active_dispute_count,
+          COALESCE(SUM(COALESCE(d.disputed_amount::float, ABS(est.net_settlement_amount::float), est.total_dues::float, 0)), 0)::float AS active_dispute_amount
+        FROM move_out_requests mor
+        LEFT JOIN exit_disputes d ON d.request_id = mor.id AND d.status IN ('OPEN', 'UNDER_REVIEW')
+        LEFT JOIN exit_settlement_transactions est ON est.request_id = mor.id
+        WHERE mor.owner_id = ${userId}::uuid
+          AND mor.hostel_id = ${hostelId}::uuid
+          AND mor.status NOT IN ('COMPLETED', 'REJECTED')
       ),
       category_current AS (
         SELECT category, COALESCE(SUM(amount), 0)::float AS amount
@@ -291,6 +298,8 @@ export class DashboardService {
         COALESCE(ds.due_today, 0)::float AS due_today,
         COALESCE(ds.due_this_week, 0)::float AS due_this_week,
         COALESCE(mo.move_out_open, 0)::int AS move_out_open,
+        COALESCE(mo.active_dispute_count, 0)::int AS active_dispute_count,
+        COALESCE(mo.active_dispute_amount, 0)::float AS active_dispute_amount,
         COALESCE((SELECT jsonb_agg(to_jsonb(cr)) FROM category_rows cr), '[]'::jsonb) AS category_expenses,
         COALESCE((
           SELECT jsonb_agg(
@@ -340,6 +349,8 @@ export class DashboardService {
     const pendingTotal = Number(row.pending_total || 0);
     const overdueTotal = Number(row.overdue_total || 0);
     const overdueCount = Number(row.overdue_tenant_count || row.overdue_count || 0);
+    const activeDisputeCount = Number(row.active_dispute_count || 0);
+    const activeDisputeAmount = Number(row.active_dispute_amount || 0);
     const unpaidTenantCount = operationalPendingInvariantHolds(pendingTotal, Number(row.unpaid_tenant_count || 0))
       ? Number(row.unpaid_tenant_count || 0)
       : 0;
@@ -395,6 +406,13 @@ export class DashboardService {
     };
 
     const alerts = [
+      ...(activeDisputeCount > 0 ? [{
+        severity: "critical",
+        title: `${activeDisputeCount} settlement dispute${activeDisputeCount === 1 ? "" : "s"} open`,
+        impact: `₹${activeDisputeAmount.toLocaleString("en-IN")} at risk`,
+        action: "Review tenant dispute before closing move-out",
+        cta: "Open move-outs",
+      }] : []),
       ...(overdueTotal > 0 ? [{
         severity: overdueCount > 2 || duesAging.overdue_30_plus_count > 0 ? "critical" : "warning",
         title: `${overdueCount} tenant${overdueCount === 1 ? "" : "s"} overdue`,
@@ -526,6 +544,8 @@ export class DashboardService {
           },
           tenant_stability: {
             move_out_requests: Number(row.move_out_open || 0),
+            active_settlement_disputes: activeDisputeCount,
+            settlement_dispute_amount: activeDisputeAmount,
             new_joins: Number(row.joins_this_month || 0),
             exits: Number(row.exits_this_month || 0),
             churn_rate: tenantChurnRate,
@@ -579,6 +599,8 @@ export class DashboardService {
         tenant_movement: {
           recent_joins: Number(row.joins_this_month || 0),
           move_out_requests: Number(row.move_out_open || 0),
+          active_settlement_disputes: activeDisputeCount,
+          settlement_dispute_amount: activeDisputeAmount,
           exits_this_month: Number(row.exits_this_month || 0),
           pending_onboarding: Number(row.pending_invites || 0),
           inactive_invitations: Number(row.inactive_invites || 0),
@@ -958,6 +980,7 @@ export class DashboardService {
       dueTodayAgg,
       dueWeekAgg,
       moveOutOpen,
+      activeDisputeRows,
       joinsThisMonth,
       exitsThisMonth,
       pendingInvites,
@@ -1038,6 +1061,18 @@ export class DashboardService {
       prisma.move_out_requests.count({
         where: { owner_id: userId, hostel_id: hostelId, status: { notIn: ["COMPLETED", "REJECTED"] } },
       }),
+      prisma.$queryRaw<Array<{ active_dispute_count: number; active_dispute_amount: number }>>`
+        SELECT
+          COUNT(DISTINCT d.id)::int AS active_dispute_count,
+          COALESCE(SUM(COALESCE(d.disputed_amount::float, ABS(est.net_settlement_amount::float), est.total_dues::float, 0)), 0)::float AS active_dispute_amount
+        FROM exit_disputes d
+        JOIN move_out_requests mor ON mor.id = d.request_id
+        LEFT JOIN exit_settlement_transactions est ON est.request_id = mor.id
+        WHERE mor.owner_id = ${userId}::uuid
+          AND mor.hostel_id = ${hostelId}::uuid
+          AND mor.status::text NOT IN ('COMPLETED', 'REJECTED')
+          AND d.status IN ('OPEN', 'UNDER_REVIEW')
+      `,
       prisma.tenants.count({
         where: { owner_id: userId, hostel_id: hostelId, status: "ACTIVE", joined_on: { gte: monthStart, lt: nextMonthStart } },
       }),
@@ -1213,6 +1248,8 @@ export class DashboardService {
       oldest_unpaid_due: oldestUnpaid?.due_date || null,
       overdue_30_plus_count: obligationsRisk.filter((o) => (today.getTime() - new Date(o.due_date).getTime()) / 86400000 > 30).length,
     };
+    const activeDisputeCount = Number(activeDisputeRows?.[0]?.active_dispute_count || 0);
+    const activeDisputeAmount = Number(activeDisputeRows?.[0]?.active_dispute_amount || 0);
 
     const highRiskTenants = obligationsRisk.map((ob: any) => {
       const paid = ob.payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid || 0), 0);
@@ -1259,6 +1296,13 @@ export class DashboardService {
           : "Critical";
 
     const alerts = [
+      ...(activeDisputeCount > 0 ? [{
+        severity: "critical",
+        title: `${activeDisputeCount} settlement dispute${activeDisputeCount === 1 ? "" : "s"} open`,
+        impact: `₹${activeDisputeAmount.toLocaleString("en-IN")} at risk`,
+        action: "Review tenant dispute before closing move-out",
+        cta: "Open move-outs",
+      }] : []),
       ...(overdueTotal > 0 ? [{
         severity: overdueCount > 2 || duesAging.overdue_30_plus_count > 0 ? "critical" : "warning",
         title: `${overdueCount} tenant${overdueCount === 1 ? "" : "s"} overdue`,

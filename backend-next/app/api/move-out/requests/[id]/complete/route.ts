@@ -30,6 +30,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (msg.startsWith("NOT_FOUND:")) return apiError(msg, "NOT_FOUND", 404);
     if (msg.startsWith("FORBIDDEN:")) return apiError(msg, "FORBIDDEN", 403);
     if (msg.startsWith("UNAUTHORIZED:")) return apiError(msg, "UNAUTHORIZED", 401);
+    if (msg.startsWith("DISPUTE_OPEN:")) return apiError(msg, "DISPUTE_OPEN", 409);
+    if (msg.startsWith("DISPUTE_REVIEW_REQUIRED:")) return apiError(msg, "DISPUTE_REVIEW_REQUIRED", 409);
     return apiError(msg);
   }
 }

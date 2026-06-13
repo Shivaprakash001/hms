@@ -70,7 +70,22 @@ type RequestAuthPolicy = {
 
 const ACTIVE_DISPUTE_STATUSES = ["OPEN", "UNDER_REVIEW"];
 
+const DISPUTE_TYPE_ALIASES: Record<string, string> = {
+  DEDUCTION: "DAMAGE_CHARGE_DISPUTE",
+  DEDUCTIONS: "DAMAGE_CHARGE_DISPUTE",
+  DAMAGES: "DAMAGE_CHARGE_DISPUTE",
+  DAMAGE: "DAMAGE_CHARGE_DISPUTE",
+  RENT_DUES: "RENT_DUES_DISPUTE",
+  DEPOSIT: "DEPOSIT_REFUND_DISPUTE",
+  CLEANING: "CLEANING_FEE_DISPUTE",
+  MISSING_ITEMS: "MISSING_ITEMS_DISPUTE",
+  OTHER: "SETTLEMENT_DISPUTE",
+};
 
+function normalizeDisputeType(input: string | null | undefined) {
+  const raw = String(input || "SETTLEMENT_DISPUTE").trim().toUpperCase();
+  return DISPUTE_TYPE_ALIASES[raw] || raw;
+}
 
 // ─── Service ───────────────────────────────────────────────────
 export class MoveOutService {
@@ -422,8 +437,10 @@ export class MoveOutService {
       confirmedSettlement,
     );
     assertTransition(req.status as MoveOutStatus, "SETTLEMENT_APPROVED" as MoveOutStatus);
+    await this.assertNoActiveDisputes(requestId);
 
     return prisma.$transaction(async (tx: Tx) => {
+      await this.assertNoActiveDisputes(requestId, tx);
       await tx.exit_settlement_transactions.upsert({
         where: { request_id: requestId },
         create: { request_id: requestId, tenant_id: req.tenant_id, owner_id: req.owner_id, hostel_id: req.hostel_id, ...snapshotFromPreview(preview) },
@@ -562,8 +579,9 @@ export class MoveOutService {
         throw new Error(`DISPUTE_OPEN: Active dispute ${existing.id} is already ${existing.status}.`);
       }
 
+      const disputeType = normalizeDisputeType(params.disputeType);
       const dispute = await tx.exit_disputes.create({
-        data: { request_id: params.requestId, raised_by: params.actor.id, raised_by_role: this.normalizeRole(params.actor), dispute_type: params.disputeType, description: params.description, disputed_amount: params.disputedAmount || null, evidence_urls: params.evidenceUrls || [] },
+        data: { request_id: params.requestId, raised_by: params.actor.id, raised_by_role: this.normalizeRole(params.actor), dispute_type: disputeType, description: params.description, disputed_amount: params.disputedAmount || null, evidence_urls: params.evidenceUrls || [] },
       });
       await this.logMoveOutDisputeActivity(tx, {
         request: req,
@@ -571,7 +589,7 @@ export class MoveOutService {
         actorId: params.actor.id,
         actionType: "DISPUTE_RAISED",
         metadata: {
-          dispute_type: params.disputeType,
+          dispute_type: disputeType,
           disputed_amount: params.disputedAmount || null,
           raised_by_role: this.normalizeRole(params.actor),
         },
@@ -729,10 +747,15 @@ export class MoveOutService {
             },
           },
           settlement: { select: { net_settlement_amount: true, payment_status: true, settlement_direction: true } },
+          disputes: {
+            where: { status: { in: ACTIVE_DISPUTE_STATUSES } },
+            orderBy: { created_at: "desc" },
+          },
         }, orderBy: { created_at: "desc" }, take: params.limit || 50, skip: params.offset || 0,
       }),
       prisma.move_out_requests.count({ where }),
     ]);
+    requests.sort((a: any, b: any) => Number((b.disputes || []).length > 0) - Number((a.disputes || []).length > 0));
     return { requests, total };
   }
 
@@ -750,7 +773,7 @@ export class MoveOutService {
           },
         ],
       },
-      include: { inspection: true, settlement: true, feedback: true, disputes: true },
+      include: { inspection: true, settlement: true, feedback: true, disputes: { orderBy: { created_at: "desc" } } },
       orderBy: { created_at: "desc" },
     });
   }

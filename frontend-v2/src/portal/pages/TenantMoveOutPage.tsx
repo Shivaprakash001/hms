@@ -55,6 +55,7 @@ export function TenantMoveOutPage() {
   const [experienceText, setExperienceText] = useState('');
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   const [calculatedOverallRating, setCalculatedOverallRating] = useState(5);
+  const [submittedDispute, setSubmittedDispute] = useState<Record<string, unknown> | null>(null);
 
   const submitMutation = useMutation({
     mutationFn: () =>
@@ -88,9 +89,12 @@ export function TenantMoveOutPage() {
   const disputeMutation = useMutation({
     mutationFn: (payload: { disputeType: string; description: string; disputedAmount: number }) =>
       moveOutService.dispute(String(request?.id ?? ''), payload),
-    onSuccess: () => {
+    onSuccess: (result) => {
+      setSubmittedDispute((result ?? null) as Record<string, unknown> | null);
       toast.success('Dispute submitted');
       setShowDisputeForm(false);
+      setDisputeDescription('');
+      setDisputedAmount('');
       refetch();
     },
     onError: (e: Error & { response?: { data?: { error?: { message?: string } } } }) =>
@@ -119,9 +123,11 @@ export function TenantMoveOutPage() {
     : null);
   const requestStatus = request ? canonicalMoveOutStatus(request.status) : '';
   const settlement = timelineData.settlement as Record<string, unknown> | undefined;
+  const disputes = Array.isArray(timelineData.disputes) ? timelineData.disputes as Record<string, unknown>[] : [];
+  const activeDispute = disputes.find((d) => ['OPEN', 'UNDER_REVIEW'].includes(String(d.status))) ?? submittedDispute;
 
   const [showDisputeForm, setShowDisputeForm] = useState(false);
-  const [disputeType, setDisputeType] = useState('DEDUCTIONS');
+  const [disputeType, setDisputeType] = useState('DAMAGE_CHARGE_DISPUTE');
   const [disputeDescription, setDisputeDescription] = useState('');
   const [disputedAmount, setDisputedAmount] = useState('');
 
@@ -406,6 +412,27 @@ export function TenantMoveOutPage() {
           </section>
         )}
 
+        {activeDispute && (
+          <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+              <div className="min-w-0 space-y-2">
+                <div>
+                  <p className="text-sm font-bold">Dispute Submitted</p>
+                  <p className="text-xs text-amber-800">Reference: {String(activeDispute.id ?? '').slice(0, 8) || 'Pending'}</p>
+                </div>
+                <div className="grid gap-1 text-xs sm:grid-cols-2">
+                  <p>Amount disputed: <span className="font-semibold">{fmt(Number(activeDispute.disputed_amount ?? 0))}</span></p>
+                  <p>Status: <span className="font-semibold">{String(activeDispute.status ?? 'OPEN').replace(/_/g, ' ')}</span></p>
+                </div>
+                <p className="text-xs text-amber-800">
+                  Awaiting owner review. You do not need to make payment until review is completed.
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* Actions section */}
         <div className="space-y-3">
           {['REQUESTED', 'SETTLEMENT_PENDING'].includes(requestStatus) && (
@@ -443,10 +470,12 @@ export function TenantMoveOutPage() {
                     onChange={(e) => setDisputeType(e.target.value)}
                     className="mt-1 w-full px-2.5 py-2 rounded-lg border border-border bg-background"
                   >
-                    <option value="DEDUCTIONS">Unfair Deductions / Damages</option>
-                    <option value="RENT_DUES">Incorrect Rent Calculation</option>
-                    <option value="DEPOSIT">Incorrect Deposit Amount</option>
-                    <option value="OTHER">Other</option>
+                    <option value="DAMAGE_CHARGE_DISPUTE">Damage charge dispute</option>
+                    <option value="CLEANING_FEE_DISPUTE">Cleaning fee dispute</option>
+                    <option value="MISSING_ITEMS_DISPUTE">Missing items dispute</option>
+                    <option value="RENT_DUES_DISPUTE">Incorrect rent calculation</option>
+                    <option value="DEPOSIT_REFUND_DISPUTE">Incorrect deposit amount</option>
+                    <option value="SETTLEMENT_DISPUTE">Other settlement dispute</option>
                   </select>
                 </label>
 

@@ -3085,7 +3085,7 @@ export class OwnerWhatsAppAssistantService {
               OR (est.id IS NOT NULL AND (est.confirmed_by_owner = false OR est.payment_status IS DISTINCT FROM ${EXIT_SETTLEMENT_SETTLED_STATUS}))
           )::int AS action_count
         FROM move_out_requests mor
-        LEFT JOIN exit_disputes d ON d.request_id = mor.id AND d.status = 'OPEN'
+        LEFT JOIN exit_disputes d ON d.request_id = mor.id AND d.status IN ('OPEN', 'UNDER_REVIEW')
         LEFT JOIN exit_settlement_transactions est ON est.request_id = mor.id
         WHERE mor.owner_id = ${ownerId}::uuid
           AND mor.status::text NOT IN ('COMPLETED', 'REJECTED')
@@ -3267,6 +3267,10 @@ export class OwnerWhatsAppAssistantService {
         hostel_name: string;
         blocked_amount: number;
         has_dispute: boolean;
+        dispute_type: string | null;
+        dispute_amount: number | null;
+        dispute_status: string | null;
+        dispute_description: string | null;
         settlement_status: string | null;
         created_at: Date;
       }>>`
@@ -3275,11 +3279,12 @@ export class OwnerWhatsAppAssistantService {
           mor.tenant_id::text,
           COALESCE(p.name, t.guardian_name, 'Tenant') AS tenant_name,
           h.name AS hostel_name,
-          COALESCE(ABS(est.net_settlement_amount), est.total_dues, 0)::float AS blocked_amount,
-          EXISTS (
-            SELECT 1 FROM exit_disputes d
-            WHERE d.request_id = mor.id AND d.status = 'OPEN'
-          ) AS has_dispute,
+          COALESCE(active_dispute.disputed_amount, ABS(est.net_settlement_amount), est.total_dues, 0)::float AS blocked_amount,
+          active_dispute.id IS NOT NULL AS has_dispute,
+          active_dispute.dispute_type,
+          active_dispute.disputed_amount::float AS dispute_amount,
+          active_dispute.status AS dispute_status,
+          active_dispute.description AS dispute_description,
           est.payment_status AS settlement_status,
           mor.created_at
         FROM move_out_requests mor
@@ -3287,11 +3292,19 @@ export class OwnerWhatsAppAssistantService {
         JOIN hostels h ON h.id = mor.hostel_id
         LEFT JOIN profiles p ON p.id = t.profile_id
         LEFT JOIN exit_settlement_transactions est ON est.request_id = mor.id
+        LEFT JOIN LATERAL (
+          SELECT d.id, d.dispute_type, d.disputed_amount, d.status, d.description
+          FROM exit_disputes d
+          WHERE d.request_id = mor.id
+            AND d.status IN ('OPEN', 'UNDER_REVIEW')
+          ORDER BY d.created_at DESC
+          LIMIT 1
+        ) active_dispute ON true
         WHERE mor.owner_id = ${ownerId}::uuid
           AND mor.status::text NOT IN ('COMPLETED', 'REJECTED')
         ORDER BY
           CASE
-            WHEN EXISTS (SELECT 1 FROM exit_disputes d WHERE d.request_id = mor.id AND d.status = 'OPEN') THEN 0
+            WHEN active_dispute.id IS NOT NULL THEN 0
             WHEN est.id IS NOT NULL AND (est.confirmed_by_owner = false OR est.payment_status IS DISTINCT FROM ${EXIT_SETTLEMENT_SETTLED_STATUS}) THEN 1
             ELSE 2
           END,
@@ -3419,26 +3432,26 @@ export class OwnerWhatsAppAssistantService {
 
     for (const moveOut of moveOutRows) {
       const blockedAmount = Number(moveOut.blocked_amount || 0);
-      const action = moveOut.has_dispute ? "Open HMS" : "Review";
+      const action = "Review";
+      const disputeReason = moveOut.dispute_type ? String(moveOut.dispute_type).replace(/_/g, " ") : "Settlement dispute";
       items.push({
-        id: moveOut.has_dispute
-          ? this.interactionId("tenant", "openhms", "tenant", moveOut.tenant_id)
-          : this.interactionId("moveout", "list", "owner", ownerId),
+        id: this.interactionId("moveout", "list", "owner", ownerId),
         title: moveOut.has_dispute ? "Move-Out Dispute" : "Move-Out Review",
         description: blockedAmount > 0 ? `${money(blockedAmount)} blocked - ${action}` : `Recommended: ${action}`,
         detailLines: [
           moveOut.has_dispute ? "Move-Out Dispute" : "Settlement Approval",
           `${moveOut.tenant_name} (${moveOut.hostel_name})`,
+          moveOut.has_dispute && blockedAmount > 0 ? `Disputed amount: ${money(blockedAmount)}` : "",
           blockedAmount > 0 ? `Money at risk: ${money(blockedAmount)}` : "",
           `Recommended: ${action}`,
           moveOut.has_dispute
-            ? "Why: Dispute needs HMS review"
+            ? `Why: ${disputeReason}. Settlement cannot be completed.`
             : "Why: Settlement is waiting for owner action",
         ].filter(Boolean),
         priorityType: "FINANCIAL",
         moneyAtRisk: blockedAmount,
         operationalAgeDays: daysSince(moveOut.created_at),
-        directAction: !moveOut.has_dispute,
+        directAction: true,
       });
     }
 
@@ -4854,7 +4867,7 @@ export class OwnerWhatsAppAssistantService {
         EXISTS (
           SELECT 1 FROM exit_disputes d
           WHERE d.request_id = mor.id
-            AND d.status = 'OPEN'
+            AND d.status IN ('OPEN', 'UNDER_REVIEW')
         ) AS has_dispute,
         moi.id IS NOT NULL AS has_inspection,
         est.payment_status AS settlement_status

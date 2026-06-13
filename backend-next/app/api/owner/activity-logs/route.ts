@@ -634,6 +634,10 @@ export async function GET(req: NextRequest) {
         is_active: true
       },
       include: {
+        disputes: {
+          where: { status: { in: ['OPEN', 'UNDER_REVIEW'] } },
+          orderBy: { created_at: 'desc' }
+        },
         tenant: {
           include: {
             profiles: { select: { name: true, phone: true } },
@@ -662,6 +666,10 @@ export async function GET(req: NextRequest) {
         status: { notIn: ['COMPLETED', 'REJECTED'] }
       },
       include: {
+        disputes: {
+          where: { status: { in: ['OPEN', 'UNDER_REVIEW'] } },
+          orderBy: { created_at: 'desc' }
+        },
         tenant: {
           include: {
             profiles: { select: { name: true, phone: true } },
@@ -679,7 +687,15 @@ export async function GET(req: NextRequest) {
       name: m.tenant?.profiles?.name || 'Tenant',
       phone: m.tenant?.profiles?.phone || m.tenant?.phone_1 || '',
       roomNo: m.tenant?.room_allocations[0]?.room?.room_no || 'N/A',
-      plannedExitDate: m.planned_exit_date
+      plannedExitDate: m.planned_exit_date,
+      activeDisputes: (m.disputes || []).map((d: any) => ({
+        disputeId: d.id,
+        disputeType: d.dispute_type,
+        disputedAmount: d.disputed_amount != null ? Number(d.disputed_amount) : null,
+        status: d.status,
+        raisedAt: d.created_at
+      })),
+      requiresReview: (m.disputes || []).length > 0
     }));
 
     const totalTasks = overdueTenantsList.length + pendingDocsList.length + pendingMoveOutsList.length;

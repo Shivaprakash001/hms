@@ -135,6 +135,8 @@ export function MoveOutsView() {
   const settlement = active ? settlementSource(active) : {};
   const inspection = (active?.inspection ?? {}) as Record<string, unknown>;
   const disputes = (active?.disputes ?? []) as Record<string, unknown>[];
+  const activeDisputes = disputes.filter((d) => ['OPEN', 'UNDER_REVIEW'].includes(String(d.status)));
+  const hasActiveDispute = activeDisputes.length > 0;
   const direction = String(settlement.settlement_direction ?? settlement.direction ?? 'NONE');
   const netAmount = Number(settlement.net_settlement_amount ?? settlement.net_amount ?? 0);
 
@@ -217,7 +219,38 @@ export function MoveOutsView() {
       setPaymentNotes('');
       invalidate();
     },
-    onError: () => toast.error('Could not complete move-out'),
+    onError: (e: Error & { response?: { data?: { error?: { message?: string } } } }) =>
+      toast.error(e?.response?.data?.error?.message ?? 'Could not complete move-out'),
+  });
+
+  const reviewDisputeMutation = useMutation({
+    mutationFn: ({ disputeId, notes }: { disputeId: string; notes?: string }) =>
+      moveOutService.reviewDispute(effectiveSelectedId!, disputeId, notes || ''),
+    onSuccess: () => {
+      toast.success('Dispute marked under review');
+      invalidate();
+    },
+    onError: () => toast.error('Could not update dispute'),
+  });
+
+  const resolveDisputeMutation = useMutation({
+    mutationFn: ({ disputeId, notes }: { disputeId: string; notes: string }) =>
+      moveOutService.resolveDispute(effectiveSelectedId!, disputeId, notes),
+    onSuccess: () => {
+      toast.success('Dispute resolved');
+      invalidate();
+    },
+    onError: () => toast.error('Could not resolve dispute'),
+  });
+
+  const rejectDisputeMutation = useMutation({
+    mutationFn: ({ disputeId, notes }: { disputeId: string; notes: string }) =>
+      moveOutService.rejectDispute(effectiveSelectedId!, disputeId, notes),
+    onSuccess: () => {
+      toast.success('Dispute rejected');
+      invalidate();
+    },
+    onError: () => toast.error('Could not reject dispute'),
   });
 
   const rejectMutation = useMutation({
@@ -265,6 +298,8 @@ export function MoveOutsView() {
             list.map((r) => {
               const info = tenantInfo(r);
               const selected = effectiveSelectedId === String(r.id);
+              const rowDisputes = Array.isArray(r.disputes) ? r.disputes as Record<string, unknown>[] : [];
+              const rowActiveDispute = rowDisputes.find((d) => ['OPEN', 'UNDER_REVIEW'].includes(String(d.status)));
               return (
                 <button
                   key={String(r.id)}
@@ -285,6 +320,11 @@ export function MoveOutsView() {
                     <CalendarDays className="h-3.5 w-3.5 text-accent" />
                     Planned exit {fmtDate(r.planned_exit_date)}
                   </div>
+                  {rowActiveDispute && (
+                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-900">
+                      <span className="font-bold">Review Required:</span> {fmt(rowActiveDispute.disputed_amount)} disputed
+                    </div>
+                  )}
                 </button>
               );
             })
@@ -349,6 +389,51 @@ export function MoveOutsView() {
                     )}
 
                     <MoveOutStepper request={active} hostelId={hostelId} />
+
+                    {hasActiveDispute && (
+                      <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <p className="text-sm font-bold">Settlement Pending Review</p>
+                            <p className="mt-1 text-xs text-amber-800">
+                              {activeTenant?.name} disputes {fmt(activeDisputes[0].disputed_amount)}. Settlement cannot be completed until this is resolved.
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              disabled={reviewDisputeMutation.isPending || String(activeDisputes[0].status) === 'UNDER_REVIEW'}
+                              onClick={() => reviewDisputeMutation.mutate({ disputeId: String(activeDisputes[0].id) })}
+                              className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-900 disabled:opacity-50"
+                            >
+                              Review
+                            </button>
+                            <button
+                              type="button"
+                              disabled={resolveDisputeMutation.isPending}
+                              onClick={() => {
+                                const notes = window.prompt('Resolution notes');
+                                if (notes !== null) resolveDisputeMutation.mutate({ disputeId: String(activeDisputes[0].id), notes });
+                              }}
+                              className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
+                            >
+                              Resolve
+                            </button>
+                            <button
+                              type="button"
+                              disabled={rejectDisputeMutation.isPending}
+                              onClick={() => {
+                                const notes = window.prompt('Rejection notes');
+                                if (notes !== null) rejectDisputeMutation.mutate({ disputeId: String(activeDisputes[0].id), notes });
+                              }}
+                              className="rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="rounded-2xl border border-border bg-background p-4">
                       <div className="flex items-start gap-3">
@@ -507,6 +592,12 @@ export function MoveOutsView() {
                             date: active.settlement?.settled_at,
                             done: !!active.settlement?.settled_at,
                           },
+                          ...disputes.map((d) => ({
+                            label: String(d.status) === 'REJECTED' ? 'Dispute Rejected' : String(d.status) === 'RESOLVED' ? 'Dispute Resolved' : String(d.status) === 'UNDER_REVIEW' ? 'Dispute Reviewed' : 'Dispute Raised',
+                            description: `${String(d.dispute_type).replace(/_/g, ' ')}${Number(d.disputed_amount || 0) > 0 ? ` · ${fmt(d.disputed_amount)}` : ''}`,
+                            date: d.resolved_at || d.updated_at || d.created_at,
+                            done: true,
+                          })),
                           {
                             label: 'Bed Vacated',
                             description: active.physical_exit_date 
@@ -550,6 +641,9 @@ export function MoveOutsView() {
                                 <p className="font-medium text-foreground">{String(d.dispute_type).replace(/_/g, ' ')}</p>
                                 <span className="text-xs text-muted-foreground">{String(d.status)}</span>
                               </div>
+                              {Number(d.disputed_amount || 0) > 0 && (
+                                <p className="mt-1 text-xs font-semibold text-foreground">Disputed amount: {fmt(d.disputed_amount)}</p>
+                              )}
                               <p className="mt-1 text-xs text-muted-foreground">{String(d.description ?? '')}</p>
                             </div>
                           ))}
@@ -761,11 +855,11 @@ export function MoveOutsView() {
                           />
                           <button
                             type="button"
-                            disabled={completeMutation.isPending}
+                            disabled={completeMutation.isPending || hasActiveDispute}
                             onClick={() => completeMutation.mutate()}
                             className="w-full rounded-xl bg-accent py-3 text-sm font-semibold text-accent-foreground disabled:opacity-50"
                           >
-                            {completeMutation.isPending ? 'Completing move-out...' : 'Confirm payment and complete'}
+                            {hasActiveDispute ? 'Resolve dispute before completion' : completeMutation.isPending ? 'Completing move-out...' : 'Confirm payment and complete'}
                           </button>
                         </div>
                       )}
@@ -873,11 +967,11 @@ export function MoveOutsView() {
                     {['PHYSICALLY_VACATED', 'SETTLEMENT_PENDING_PAYMENT'].includes(activeStatus) && (
                       <button
                         type="button"
-                        disabled={completeMutation.isPending}
+                        disabled={completeMutation.isPending || hasActiveDispute}
                         onClick={() => completeMutation.mutate()}
                         className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-accent text-accent-foreground text-xs font-bold hover:opacity-90 transition-all shadow-sm"
                       >
-                        {completeMutation.isPending ? 'Completing...' : 'Confirm Refund & Complete'}
+                        {hasActiveDispute ? 'Dispute Open' : completeMutation.isPending ? 'Completing...' : 'Confirm Refund & Complete'}
                       </button>
                     )}
                   </div>

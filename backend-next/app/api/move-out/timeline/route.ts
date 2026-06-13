@@ -38,9 +38,18 @@ export async function GET(req: NextRequest) {
 
     if (request.disputes?.length) {
       for (const d of request.disputes) {
-        events.push({ timestamp: d.created_at.toISOString(), type: "DISPUTE", title: `Dispute raised: ${d.dispute_type}`, detail: d.description });
+        const amount = d.disputed_amount != null ? ` | Amount disputed: ₹${Number(d.disputed_amount).toLocaleString("en-IN")}` : "";
+        events.push({ timestamp: d.created_at.toISOString(), type: "DISPUTE_RAISED", title: `Dispute raised: ${String(d.dispute_type).replace(/_/g, " ")}`, detail: `${d.description}${amount}` });
+        if (d.status === "UNDER_REVIEW" && d.updated_at) {
+          events.push({ timestamp: d.updated_at.toISOString(), type: "DISPUTE_REVIEWED", title: "Dispute under owner review", detail: d.resolution_notes || "Awaiting final resolution." });
+        }
         if (d.resolved_at) {
-          events.push({ timestamp: d.resolved_at.toISOString(), type: "DISPUTE_RESOLVED", title: "Dispute resolved", detail: d.resolution_notes || undefined });
+          events.push({
+            timestamp: d.resolved_at.toISOString(),
+            type: d.status === "REJECTED" ? "DISPUTE_REJECTED" : "DISPUTE_RESOLVED",
+            title: d.status === "REJECTED" ? "Dispute rejected" : "Dispute resolved",
+            detail: d.resolution_notes || undefined,
+          });
         }
       }
     }
@@ -76,9 +85,11 @@ export async function GET(req: NextRequest) {
         id: d.id,
         dispute_type: d.dispute_type,
         description: d.description,
+        disputed_amount: d.disputed_amount != null ? Number(d.disputed_amount) : null,
         status: d.status,
         resolution_notes: d.resolution_notes,
         created_at: d.created_at,
+        updated_at: d.updated_at,
         resolved_at: d.resolved_at
       })) : [],
     });
