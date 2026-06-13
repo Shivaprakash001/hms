@@ -71,6 +71,7 @@ type PendingTenantDues = {
   hostelName?: string;
   bucket?: "fresh" | "reminded" | "chronic";
   reminderCount?: number;
+  convertedReminderCount?: number;
   daysOverdue?: number;
 };
 
@@ -84,6 +85,11 @@ type PendingDuesResult = {
     chronic: PendingTenantDues[];
   };
   conversionRate?: number;
+  bucketConversionRates?: {
+    fresh?: number;
+    reminded?: number;
+    chronic?: number;
+  };
   messagesRemaining?: number;
   scopeLabel?: string;
 };
@@ -95,6 +101,7 @@ type VacancyRoomRow = {
   capacity: number;
   occupied: number;
   base_rent: number | null;
+  vacancy_days: number;
 };
 
 type VacancySummary = {
@@ -118,12 +125,17 @@ type OperationsSnapshot = {
   moveOutNeedsAction: number;
 };
 
+type PriorityType = "FINANCIAL" | "OPERATIONAL" | "COMPLIANCE";
+
 type PriorityItem = {
   id: string;
   title: string;
   description: string;
   detailLines: string[];
-  rank: number;
+  priorityType: PriorityType;
+  moneyAtRisk: number;
+  operationalAgeDays: number;
+  directAction: boolean;
 };
 
 type SendRemindersPayload = {
@@ -292,6 +304,20 @@ function money(value: unknown) {
   return `₹${new Intl.NumberFormat("en-IN", {
     maximumFractionDigits: 0,
   }).format(Math.round(amount))}`;
+}
+
+function expectedRecoveryLabel(rate: number | undefined) {
+  if (rate == null) return "Unknown";
+  if (rate >= 50) return "High";
+  if (rate >= 25) return "Medium";
+  return "Low";
+}
+
+function daysSince(value: Date | string | null | undefined) {
+  if (!value) return 0;
+  const time = value instanceof Date ? value.getTime() : new Date(value).getTime();
+  if (!Number.isFinite(time)) return 0;
+  return Math.max(0, Math.floor((Date.now() - time) / (24 * 60 * 60 * 1000)));
 }
 
 function displayWhatsAppPhone(phone: string) {
@@ -900,7 +926,7 @@ export class OwnerWhatsAppAssistantService {
       return this.handleOpenHmsRedirect(ownerId, normalizedPhone, message, "Attention list", "/owner/dashboard");
     }
 
-    if (parsed.command === "INBOX" || parsed.command === "PRIORITIES") {
+    if (parsed.command === "INBOX" || parsed.command === "PRIORITIES" || parsed.upper === "WHAT NEEDS ACTION") {
       return this.handlePriorityInbox(ownerId, normalizedPhone, message);
     }
 
@@ -1589,6 +1615,19 @@ export class OwnerWhatsAppAssistantService {
     return [screen, action, entityType, entityId, param].filter(Boolean).join(":").slice(0, META_BUTTON_ID_LIMIT);
   }
 
+  private priorityTypeWeight(type: PriorityType) {
+    if (type === "FINANCIAL") return 3;
+    if (type === "OPERATIONAL") return 2;
+    return 1;
+  }
+
+  private comparePriorityItems(a: PriorityItem, b: PriorityItem) {
+    return this.priorityTypeWeight(b.priorityType) - this.priorityTypeWeight(a.priorityType)
+      || b.moneyAtRisk - a.moneyAtRisk
+      || b.operationalAgeDays - a.operationalAgeDays
+      || Number(b.directAction) - Number(a.directAction);
+  }
+
   private paginateRows(
     rows: Array<{ id: string; title: string; description?: string }>,
     moreIdPrefix: string,
@@ -1861,6 +1900,9 @@ export class OwnerWhatsAppAssistantService {
       const recentPayment = lastPayment?.date
         ? Date.now() - new Date(lastPayment.date).getTime() <= 2 * 24 * 60 * 60 * 1000
         : false;
+      const lastPaymentLine = lastPayment?.date
+        ? `Last payment: ${money(lastPayment.amount)} on ${formatShortDate(new Date(lastPayment.date))} (${daysSince(lastPayment.date)} days ago)`
+        : "Last payment: Never paid";
       const remindersDidNotConvert = Boolean(
         collectionContext &&
         collectionContext.reminderCount >= 2 &&
@@ -1870,52 +1912,69 @@ export class OwnerWhatsAppAssistantService {
         collectionContext &&
         (collectionContext.daysOverdue >= 15 || collectionContext.reminderCount >= 3 || remindersDidNotConvert)
       );
+      const recentCallOpened = shouldCall
+        ? await this.hasRecentTenantCallOpened(ownerId, phone, tenantId)
+        : false;
+      const effectiveShouldCall = shouldCall && !recentCallOpened;
+      if (effectiveShouldCall) {
+        await this.logCallRecommended(ownerId, phone, tenantId);
+      }
       const recommendation = activeMoveOut
         ? "Recommended: Review Move-Out"
         : status === "INVITED"
           ? "Recommended: Resend Invite"
           : totalDue > 0
-            ? shouldCall
+            ? effectiveShouldCall
               ? "Recommended: Call Tenant"
+              : recentCallOpened && remindersDidNotConvert
+                ? "Recommended: More"
               : "Recommended: Send Reminder"
             : recentPayment
               ? "Recommended: No collection action"
               : "Recommended: View Profile";
-      const recommendationReason = totalDue > 0 && shouldCall
+      const recommendationReason = totalDue > 0 && effectiveShouldCall
         ? remindersDidNotConvert
-          ? "Reason: Previous reminders did not result in payment."
+          ? "Why: Previous reminders did not result in payment."
           : collectionContext?.daysOverdue
-            ? `Reason: ${collectionContext.daysOverdue} days pending.`
+            ? `Why: ${collectionContext.daysOverdue} days pending.`
             : ""
+        : recentCallOpened
+          ? "Why: Call was already opened in the last 24 hours."
         : "";
       const buttons: WhatsAppButton[] = activeMoveOut
         ? [
             { id: this.interactionId("moveout", "list", "tenant", tenantId), title: "Review Move-Out" },
             { id: this.interactionId("tenant", "call", "tenant", tenantId), title: "Call" },
-            { id: this.interactionId("tenant", "openhms", "tenant", tenantId), title: "Open HMS" },
+            { id: this.interactionId("tenant", "actions", "tenant", tenantId), title: "More" },
           ]
         : status === "INVITED"
           ? [
               { id: this.interactionId("tenant", "resend", "tenant", tenantId), title: "Resend Invite" },
               { id: this.interactionId("tenant", "call", "tenant", tenantId), title: "Call" },
-              { id: this.interactionId("tenant", "openhms", "tenant", tenantId), title: "Open HMS" },
+              { id: this.interactionId("tenant", "actions", "tenant", tenantId), title: "More" },
             ]
-          : totalDue > 0 && shouldCall
+          : totalDue > 0 && effectiveShouldCall
             ? [
                 { id: this.interactionId("tenant", "call", "tenant", tenantId), title: "Call" },
                 { id: this.interactionId("tenant", "remind", "tenant", tenantId), title: "Reminder" },
-                { id: this.interactionId("tenant", "openhms", "tenant", tenantId), title: "Open HMS" },
+                { id: this.interactionId("tenant", "actions", "tenant", tenantId), title: "More" },
+              ]
+          : totalDue > 0 && recentCallOpened
+            ? [
+                { id: this.interactionId("tenant", "remind", "tenant", tenantId), title: "Reminder" },
+                { id: this.interactionId("tenant", "actions", "tenant", tenantId), title: "More" },
+                { id: this.interactionId("tenant", "profile", "tenant", tenantId), title: "Profile" },
               ]
           : totalDue > 0 && !recentPayment
             ? [
                 { id: this.interactionId("tenant", "remind", "tenant", tenantId), title: "Send Reminder" },
                 { id: this.interactionId("tenant", "call", "tenant", tenantId), title: "Call" },
-                { id: this.interactionId("tenant", "openhms", "tenant", tenantId), title: "Open HMS" },
+                { id: this.interactionId("tenant", "actions", "tenant", tenantId), title: "More" },
               ]
             : [
                 { id: this.interactionId("tenant", "profile", "tenant", tenantId), title: "Profile" },
                 { id: this.interactionId("tenant", "room", "tenant", tenantId), title: "Room" },
-                { id: this.interactionId("tenant", "openhms", "tenant", tenantId), title: "Open HMS" },
+                { id: this.interactionId("tenant", "actions", "tenant", tenantId), title: "More" },
               ];
       const body = [
         overview.name || "Tenant",
@@ -1934,7 +1993,7 @@ export class OwnerWhatsAppAssistantService {
         recommendation,
         recommendationReason,
         "",
-        lastPayment ? `Last payment: ${money(lastPayment.amount)} on ${formatShortDate(new Date(lastPayment.date))}` : "",
+        lastPaymentLine,
         `Status: ${overview.status || "Unknown"}`,
       ].filter(Boolean).join("\n");
 
@@ -2140,6 +2199,7 @@ export class OwnerWhatsAppAssistantService {
 
   private async sendTenantCallInfo(ownerId: string, phone: string, message: string, tenantId: string): Promise<InboundOwnerResult> {
     const overview: any = await tenantService.getOwnerTenantOverview(tenantId, ownerId);
+    await this.logCallOpened(ownerId, phone, tenantId);
     return this.respondAndLog({
       ownerId,
       phone,
@@ -2155,7 +2215,7 @@ export class OwnerWhatsAppAssistantService {
       success: true,
       buttons: [
         { id: this.interactionId("tenant", "card", "tenant", tenantId), title: "Tenant Card" },
-        { id: this.interactionId("tenant", "openhms", "tenant", tenantId), title: "Open HMS" },
+        { id: this.interactionId("tenant", "actions", "tenant", tenantId), title: "More" },
       ],
     });
   }
@@ -2949,16 +3009,25 @@ export class OwnerWhatsAppAssistantService {
         r.room_no,
         h.name AS hostel_name,
         r.capacity,
-        COUNT(ra.id)::int AS occupied,
-        r.base_rent
+        COUNT(DISTINCT ra.id)::int AS occupied,
+        r.base_rent,
+        GREATEST(
+          0,
+          COALESCE(
+            (CURRENT_DATE - MAX(prev.end_date))::int,
+            (CURRENT_DATE - r.created_at::date)::int,
+            0
+          )
+        )::int AS vacancy_days
       FROM rooms r
       JOIN hostels h ON h.id = r.hostel_id
       LEFT JOIN room_allocations ra ON ra.room_id = r.id AND ra.is_active = true AND ra.end_date IS NULL
+      LEFT JOIN room_allocations prev ON prev.room_id = r.id AND prev.end_date IS NOT NULL
       WHERE h.owner_id = ${ownerId}::uuid
         AND h.is_active = true
         AND r.is_active = true
-      GROUP BY r.id, r.room_no, h.name, r.capacity, r.base_rent
-      HAVING r.capacity - COUNT(ra.id) > 0
+      GROUP BY r.id, r.room_no, h.name, r.capacity, r.base_rent, r.created_at
+      HAVING r.capacity - COUNT(DISTINCT ra.id) > 0
       ORDER BY h.name ASC, r.room_no ASC
       LIMIT 10
     `;
@@ -3112,12 +3181,12 @@ export class OwnerWhatsAppAssistantService {
         buttonText: "Fill vacancy",
         sections: [{
           title: "Vacant Rooms",
-          rows: this.paginateRows(rows.map((row: { room_id: string; room_no: string; hostel_name: string; capacity: number; occupied: number; base_rent: number | null }) => {
+          rows: this.paginateRows(rows.map((row: { room_id: string; room_no: string; hostel_name: string; capacity: number; occupied: number; base_rent: number | null; vacancy_days: number }) => {
             const vacant = Math.max(0, row.capacity - row.occupied);
             return {
               id: this.interactionId("room", "card", "room", row.room_id),
               title: `Room ${row.room_no}`,
-              description: `${row.hostel_name} - ${vacant} beds${row.base_rent ? ` - ${money(row.base_rent)}` : ""}`,
+              description: `${row.hostel_name} - ${vacant} beds - ${Number(row.vacancy_days || 0)} days${row.base_rent ? ` - ${money(row.base_rent)}` : ""}`,
             };
           }), "vacancy:rooms:page", 0),
         }],
@@ -3190,6 +3259,7 @@ export class OwnerWhatsAppAssistantService {
         blocked_amount: number;
         has_dispute: boolean;
         settlement_status: string | null;
+        created_at: Date;
       }>>`
         SELECT
           mor.id::text AS request_id,
@@ -3201,7 +3271,8 @@ export class OwnerWhatsAppAssistantService {
             SELECT 1 FROM exit_disputes d
             WHERE d.request_id = mor.id AND d.status = 'OPEN'
           ) AS has_dispute,
-          est.payment_status AS settlement_status
+          est.payment_status AS settlement_status,
+          mor.created_at
         FROM move_out_requests mor
         JOIN tenants t ON t.id = mor.tenant_id
         JOIN hostels h ON h.id = mor.hostel_id
@@ -3216,7 +3287,7 @@ export class OwnerWhatsAppAssistantService {
             ELSE 2
           END,
           mor.created_at DESC
-        LIMIT 1
+        LIMIT 2
       `,
       prisma.$queryRaw<Array<{
         invitation_id: string;
@@ -3243,65 +3314,99 @@ export class OwnerWhatsAppAssistantService {
           AND ti.expires_at > now()
           AND ti.expires_at <= now() + interval '24 hours'
         ORDER BY ti.expires_at ASC
-        LIMIT 1
+        LIMIT 2
       `,
     ]);
 
-    const topDue = [...(pending.buckets?.chronic || []), ...pending.rows]
-      .sort((a, b) => (b.daysOverdue || 0) - (a.daysOverdue || 0) || b.amount - a.amount)[0];
+    const topDue = [...pending.rows]
+      .sort((a, b) => b.amount - a.amount || (b.daysOverdue || 0) - (a.daysOverdue || 0))[0];
     const topVacancy = [...vacancy.rows]
       .sort((a, b) => ((b.capacity - b.occupied) * Number(b.base_rent || 0)) - ((a.capacity - a.occupied) * Number(a.base_rent || 0)))[0];
 
     const items: PriorityItem[] = [];
     if (topDue) {
       const shouldCall = (topDue.daysOverdue || 0) >= 15 || (topDue.reminderCount || 0) >= 3;
-      const recommendedAction = shouldCall ? "Call Tenant" : "Send Reminder";
+      const recentCallOpened = shouldCall
+        ? await this.hasRecentTenantCallOpened(ownerId, phone, topDue.tenantId)
+        : false;
+      const effectiveShouldCall = shouldCall && !recentCallOpened;
+      if (effectiveShouldCall) {
+        await this.logCallRecommended(ownerId, phone, topDue.tenantId);
+      }
+      const recommendedAction = effectiveShouldCall
+        ? "Call Tenant"
+        : shouldCall && recentCallOpened
+          ? "More"
+          : "Send Reminder";
       const ignored = (topDue.reminderCount || 0) >= 2 ? `${topDue.reminderCount} reminders sent` : `${topDue.reminderCount || 0} reminders sent`;
       items.push({
-        id: this.interactionId("tenant", shouldCall ? "call" : "remind", "tenant", topDue.tenantId),
+        id: this.interactionId(
+          "tenant",
+          effectiveShouldCall ? "call" : shouldCall && recentCallOpened ? "actions" : "remind",
+          "tenant",
+          topDue.tenantId
+        ),
         title: topDue.name,
         description: `${money(topDue.amount)} due - ${recommendedAction}`,
         detailLines: [
           `${topDue.name}${topDue.hostelName ? ` (${topDue.hostelName})` : ""}`,
           `${money(topDue.amount)} overdue`,
           `${topDue.daysOverdue || 0} days late`,
-          ignored,
+          `Money at risk: ${money(topDue.amount)}`,
           `Recommended: ${recommendedAction}`,
+          recentCallOpened
+            ? "Why: Call was already opened in the last 24 hours"
+            : `Why: ${ignored}, no payment received`,
         ],
-        rank: 1,
+        priorityType: "FINANCIAL",
+        moneyAtRisk: topDue.amount,
+        operationalAgeDays: topDue.daysOverdue || 0,
+        directAction: !recentCallOpened,
       });
     }
 
-    const moveOut = moveOutRows[0];
-    if (moveOut) {
+    for (const moveOut of moveOutRows) {
+      const blockedAmount = Number(moveOut.blocked_amount || 0);
+      const action = moveOut.has_dispute ? "Open HMS" : "Review";
       items.push({
-        id: this.interactionId("moveout", "list", "owner", ownerId),
-        title: "Move-Out Review",
-        description: "Recommended: Review",
+        id: moveOut.has_dispute
+          ? this.interactionId("tenant", "openhms", "tenant", moveOut.tenant_id)
+          : this.interactionId("moveout", "list", "owner", ownerId),
+        title: moveOut.has_dispute ? "Move-Out Dispute" : "Move-Out Review",
+        description: blockedAmount > 0 ? `${money(blockedAmount)} blocked - ${action}` : `Recommended: ${action}`,
         detailLines: [
-          moveOut.has_dispute ? "Dispute Review" : "Settlement Approval",
-          moveOut.hostel_name,
-          moveOut.blocked_amount ? `${money(moveOut.blocked_amount)} blocked` : `${moveOut.tenant_name} needs review`,
-          "Recommended: Review",
-        ],
-        rank: 2,
+          moveOut.has_dispute ? "Move-Out Dispute" : "Settlement Approval",
+          `${moveOut.tenant_name} (${moveOut.hostel_name})`,
+          blockedAmount > 0 ? `Money at risk: ${money(blockedAmount)}` : "",
+          `Recommended: ${action}`,
+          moveOut.has_dispute
+            ? "Why: Dispute needs HMS review"
+            : "Why: Settlement is waiting for owner action",
+        ].filter(Boolean),
+        priorityType: "FINANCIAL",
+        moneyAtRisk: blockedAmount,
+        operationalAgeDays: daysSince(moveOut.created_at),
+        directAction: !moveOut.has_dispute,
       });
     }
 
-    const invite = inviteRows[0];
-    if (invite) {
+    for (const invite of inviteRows) {
+      const moneyAtRisk = Number(invite.base_rent || 0);
       items.push({
         id: this.interactionId("invite", "resend", "invitation", invite.invitation_id),
         title: "Invite Expiring",
-        description: "Recommended: Resend",
+        description: moneyAtRisk > 0 ? `${money(moneyAtRisk)}/month - Resend` : "Recommended: Resend",
         detailLines: [
-          "Invitation Expiring",
-          invite.hostel_name,
-          `Room ${invite.room_no}`,
-          invite.base_rent ? `Potential revenue: ${money(invite.base_rent)}/month` : "",
+          `Invite Expiring: ${invite.name}`,
+          `${invite.hostel_name} - Room ${invite.room_no}`,
+          moneyAtRisk > 0 ? `Money at risk: ${money(moneyAtRisk)}/month` : "",
           "Recommended: Resend",
+          "Why: Room is still reserved and activation is incomplete",
         ].filter(Boolean),
-        rank: 3,
+        priorityType: "FINANCIAL",
+        moneyAtRisk,
+        operationalAgeDays: 0,
+        directAction: true,
       });
     }
 
@@ -3309,35 +3414,43 @@ export class OwnerWhatsAppAssistantService {
       const vacant = Math.max(0, topVacancy.capacity - topVacancy.occupied);
       const revenue = vacant * Number(topVacancy.base_rent || 0);
       items.push({
-        id: this.interactionId("room", "card", "room", topVacancy.room_id),
+        id: this.interactionId("room", "invite", "room", topVacancy.room_id),
         title: `Room ${topVacancy.room_no}`,
-        description: "Recommended: Invite",
+        description: revenue > 0 ? `${money(revenue)}/month - Invite` : `${vacant} vacant beds`,
         detailLines: [
-          "Empty Beds",
-          topVacancy.hostel_name,
-          `Room ${topVacancy.room_no}: ${vacant} vacant beds`,
-          revenue > 0 ? `Potential rent: ${money(revenue)}/month` : "",
-          "Recommended: Invite",
+          `Room ${topVacancy.room_no} (${topVacancy.hostel_name})`,
+          `${vacant} vacant beds`,
+          revenue > 0 ? `Money at risk: ${money(revenue)}/month` : "",
+          `Vacant for ${Number(topVacancy.vacancy_days || 0)} days`,
+          "Recommended: Invite Tenant",
+          "Why: Empty beds are revenue leakage",
         ].filter(Boolean),
-        rank: 4,
+        priorityType: "FINANCIAL",
+        moneyAtRisk: revenue,
+        operationalAgeDays: 0,
+        directAction: true,
       });
     }
 
-    const priorityItems = items.sort((a, b) => a.rank - b.rank).slice(0, 4);
+    const priorityItems = items.sort((a, b) => this.comparePriorityItems(a, b)).slice(0, 5);
     const body = priorityItems.length
       ? [
-          "What Needs Action",
+          "Money At Risk Today",
           "",
-          ...priorityItems.slice(0, 3).flatMap((item, index) => [
+          ...priorityItems.slice(0, 5).flatMap((item, index) => [
             `${index + 1}. ${item.detailLines[0]}`,
             ...item.detailLines.slice(1),
             "",
           ]),
         ].join("\n").trim()
       : [
-          "What Needs Action",
+          "Money At Risk Today",
           "",
-          "No urgent operational items found.",
+          "Everything looks healthy today.",
+          "",
+          "No chronic dues",
+          "No pending settlements",
+          "No expiring invitations",
         ].join("\n");
 
     return this.respondAndLog({
@@ -3350,7 +3463,7 @@ export class OwnerWhatsAppAssistantService {
       list: priorityItems.length > 0 ? {
         buttonText: "Open priority",
         sections: [{
-          title: "What Needs Action",
+          title: "Money At Risk",
           rows: priorityItems.map((item) => ({
             id: item.id,
             title: item.title,
@@ -3360,7 +3473,7 @@ export class OwnerWhatsAppAssistantService {
       } : undefined,
       buttons: priorityItems.length === 0 ? [
         { id: this.interactionId("dues", "view", "owner", ownerId), title: "Pending Rent" },
-        { id: this.interactionId("moveout", "list", "owner", ownerId), title: "Move-Outs" },
+        { id: this.interactionId("menu", "invite", "owner", ownerId), title: "Invite" },
         { id: this.interactionId("menu", "search", "owner", ownerId), title: "Search" },
       ] : undefined,
     });
@@ -3734,6 +3847,9 @@ export class OwnerWhatsAppAssistantService {
       const scopeEntityType = scopeHostel ? "hostel" : "owner";
       const scopeEntityId = scopeHostel?.id || ownerId;
       const conversion = pending.conversionRate != null ? `${pending.conversionRate}%` : "N/A";
+      const freshConversion = pending.bucketConversionRates?.fresh;
+      const remindedConversion = pending.bucketConversionRates?.reminded;
+      const chronicConversion = pending.bucketConversionRates?.chronic;
 
       const response = pending.rows.length > 0
         ? [
@@ -3744,13 +3860,25 @@ export class OwnerWhatsAppAssistantService {
             `Total Due: ${money(pending.totalPending)}`,
             `${pending.rows.length} Tenants`,
             "",
-            `Fresh: ${money(freshAmount)} (${fresh.length})`,
-            `Reminded: ${money(remindedAmount)} (${reminded.length})`,
-            `Chronic: ${money(chronicAmount)} (${chronic.length})`,
+            "Fresh Overdue",
+            `${money(freshAmount)} - ${fresh.length} tenants`,
+            "Recommended: Send Reminder",
+            `Expected recovery: ${expectedRecoveryLabel(freshConversion)}`,
+            "",
+            "Chronic Overdue",
+            `${money(chronicAmount)} - ${chronic.length} tenants`,
+            "Recommended: Call",
+            chronicConversion != null
+              ? `Why: Past reminders converted only ${chronicConversion}%`
+              : "Why: Long overdue or repeated reminders need owner follow-up",
+            reminded.length > 0 ? "" : undefined,
+            reminded.length > 0 ? "Reminded" : undefined,
+            reminded.length > 0 ? `${money(remindedAmount)} - ${reminded.length} tenants` : undefined,
+            reminded.length > 0 ? `Expected recovery: ${expectedRecoveryLabel(remindedConversion)}` : undefined,
             "",
             `Reminder conversion: ${conversion}`,
             `Message credits: ${pending.messagesRemaining ?? 0}`,
-          ].join("\n")
+          ].filter((line): line is string => line !== undefined).join("\n")
         : [
             "Pending Rent",
             "",
@@ -5234,6 +5362,7 @@ export class OwnerWhatsAppAssistantService {
       hostel_name: string;
       amount: number;
       reminder_count: number;
+      converted_reminder_count: number;
       days_overdue: number;
     }>>`
       SELECT
@@ -5244,6 +5373,7 @@ export class OwnerWhatsAppAssistantService {
         h.name AS hostel_name,
         SUM((ro.total_amount + COALESCE(ro.late_fee, 0)) - COALESCE(pay.paid_amount, 0))::float AS amount,
         COUNT(DISTINCT rl.id)::int AS reminder_count,
+        COUNT(DISTINCT rl.id) FILTER (WHERE rl.converted_to_payment = true)::int AS converted_reminder_count,
         GREATEST(0, MAX((CURRENT_DATE - ro.due_date)::int))::int AS days_overdue
       FROM rent_obligations ro
       JOIN tenants t ON t.id = ro.tenant_id
@@ -5276,9 +5406,11 @@ export class OwnerWhatsAppAssistantService {
       hostel_name: string;
       amount: number;
       reminder_count: number;
+      converted_reminder_count: number;
       days_overdue: number;
     }) => {
       const reminderCount = Number(row.reminder_count || 0);
+      const convertedReminderCount = Number(row.converted_reminder_count || 0);
       const daysOverdue = Number(row.days_overdue || 0);
       const bucket: PendingTenantDues["bucket"] = daysOverdue >= 14 || reminderCount >= 2
         ? "chronic"
@@ -5293,6 +5425,7 @@ export class OwnerWhatsAppAssistantService {
         hostelId: row.hostel_id,
         hostelName: row.hostel_name,
         reminderCount,
+        convertedReminderCount,
         daysOverdue,
         bucket,
       };
@@ -5303,6 +5436,12 @@ export class OwnerWhatsAppAssistantService {
       fresh: rows.filter((row: PendingTenantDues) => row.bucket === "fresh"),
       reminded: rows.filter((row: PendingTenantDues) => row.bucket === "reminded"),
       chronic: rows.filter((row: PendingTenantDues) => row.bucket === "chronic"),
+    };
+    const conversionRateFor = (bucketRows: PendingTenantDues[]) => {
+      const reminderTotal = bucketRows.reduce((sum, row) => sum + Number(row.reminderCount || 0), 0);
+      if (reminderTotal <= 0) return undefined;
+      const convertedTotal = bucketRows.reduce((sum, row) => sum + Number(row.convertedReminderCount || 0), 0);
+      return Math.round((convertedTotal / reminderTotal) * 100);
     };
 
     const conversionRows = await prisma.$queryRaw<Array<{ total: number; converted: number }>>`
@@ -5330,6 +5469,11 @@ export class OwnerWhatsAppAssistantService {
       totalPending,
       buckets,
       conversionRate,
+      bucketConversionRates: {
+        fresh: conversionRateFor(buckets.fresh),
+        reminded: conversionRateFor(buckets.reminded),
+        chronic: conversionRateFor(buckets.chronic),
+      },
       messagesRemaining: Number(packRows[0]?.remaining || 0),
       scopeLabel: hostels.length === 1 ? hostels[0].name : `All Hostels (${hostels.length})`,
     };
@@ -5840,6 +5984,45 @@ export class OwnerWhatsAppAssistantService {
       ...section.rows.map((row) => `${row.title}: ${row.id}`),
     ]);
     return [response, "", "Options:", ...lines].join("\n");
+  }
+
+  private tenantCallAuditMessage(tenantId: string) {
+    return `tenant:${tenantId}`;
+  }
+
+  private async hasRecentTenantCallOpened(ownerId: string, phone: string, tenantId: string) {
+    const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT id::text
+      FROM owner_assistant_messages
+      WHERE owner_id = ${ownerId}::uuid
+        AND phone_number = ${phone}
+        AND command = 'CALL_OPENED'
+        AND message = ${this.tenantCallAuditMessage(tenantId)}
+        AND created_at >= now() - interval '24 hours'
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+    return Boolean(rows[0]);
+  }
+
+  private async logCallRecommended(ownerId: string, phone: string, tenantId: string) {
+    await this.logMessage({
+      ownerId,
+      phone,
+      message: this.tenantCallAuditMessage(tenantId),
+      command: "CALL_RECOMMENDED",
+      success: true,
+    });
+  }
+
+  private async logCallOpened(ownerId: string, phone: string, tenantId: string) {
+    await this.logMessage({
+      ownerId,
+      phone,
+      message: this.tenantCallAuditMessage(tenantId),
+      command: "CALL_OPENED",
+      success: true,
+    });
   }
 
   private async logMessage(input: {
