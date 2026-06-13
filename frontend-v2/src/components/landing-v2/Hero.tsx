@@ -78,7 +78,7 @@ export function Hero({ availability, content }: { availability?: LandingAvailabi
               transition={{ duration: 1, delay: 0.1, ease: [0.25, 0.4, 0.25, 1] }}
             >
               <div className="relative inline-block w-full mb-6 py-2">
-                <div className="absolute inset-0 pointer-events-none select-none z-0">
+                <div className="absolute -left-[10%] -right-[10%] -top-[15%] -bottom-[15%] pointer-events-none select-none z-0">
                   <motion.svg
                     width="100%"
                     height="100%"
