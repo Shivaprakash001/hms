@@ -77,12 +77,49 @@ export function Hero({ availability, content }: { availability?: LandingAvailabi
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 1, delay: 0.1, ease: [0.25, 0.4, 0.25, 1] }}
             >
-              <h1
-                className="text-[28px] sm:text-4xl md:text-5xl lg:text-6xl font-bold text-[#1B2D5B] leading-tight mb-6"
-                style={{ fontFamily: 'var(--font-display)' }}
-              >
-                {content.title || '400m from SNIST. Home Food. Everything Included.'}
-              </h1>
+              <div className="relative inline-block w-full mb-6 py-2">
+                <div className="absolute inset-0 pointer-events-none select-none z-0">
+                  <motion.svg
+                    width="100%"
+                    height="100%"
+                    viewBox="0 0 1200 600"
+                    initial="hidden"
+                    animate="visible"
+                    preserveAspectRatio="none"
+                    className="w-full h-full text-[#F07B1D] opacity-40"
+                  >
+                    <motion.path
+                      d="M 950 90 
+                         C 1250 300, 1050 480, 600 520
+                         C 250 520, 150 480, 150 300
+                         C 150 120, 350 80, 600 80
+                         C 850 80, 950 180, 950 180"
+                      fill="none"
+                      strokeWidth="10"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      variants={{
+                        hidden: { pathLength: 0, opacity: 0 },
+                        visible: {
+                          pathLength: 1,
+                          opacity: 1,
+                          transition: {
+                            pathLength: { duration: 2.5, ease: [0.43, 0.13, 0.23, 0.96] },
+                            opacity: { duration: 0.5 },
+                          },
+                        },
+                      }}
+                    />
+                  </motion.svg>
+                </div>
+                <h1
+                  className="relative z-10 text-[28px] sm:text-4xl md:text-5xl lg:text-6xl font-bold text-[#1B2D5B] leading-tight"
+                  style={{ fontFamily: 'var(--font-display)' }}
+                >
+                  {content.title || '400m from SNIST. Home Food. Everything Included.'}
+                </h1>
+              </div>
               <p className="text-lg md:text-2xl text-[#2C2C2A] leading-relaxed">
                 {content.subtitle}
               </p>
