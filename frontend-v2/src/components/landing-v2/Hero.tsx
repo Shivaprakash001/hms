@@ -34,41 +34,23 @@ export function Hero({ availability, content }: { availability?: LandingAvailabi
       <div className="max-w-7xl mx-auto px-4">
         <div className="grid md:grid-cols-[55%_45%] gap-12 items-center">
           <div className="space-y-8">
-            <div className="flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left w-full justify-center sm:justify-start">
+            <div className="flex flex-col items-center sm:items-start gap-2 text-center sm:text-left w-full justify-center sm:justify-start">
               <motion.div
-                className="relative flex-shrink-0"
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.8, ease: [0.25, 0.4, 0.25, 1] }}
+                className="inline-flex items-center gap-2 bg-[#1B2D5B] text-white px-4 py-2 rounded-full text-sm border-l-4 border-[#F07B1D] font-medium"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.2, ease: [0.25, 0.4, 0.25, 1] }}
               >
-                <div className="relative w-24 h-28 md:w-28 md:h-32">
-                  <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-24 h-24 md:w-28 md:h-28 rounded-full bg-gradient-to-br from-[#F07B1D]/10 to-[#1B2D5B]/10 border-4 border-white shadow-xl" />
-                  <img
-                    src={content.ownerImage?.url || ownerPhoto}
-                    alt={content.ownerImage?.alt || 'Srinivasa Rao - Owner'}
-                    className="absolute bottom-0 left-1/2 -translate-x-1/2 w-24 h-24 md:w-28 md:h-28 rounded-full object-cover border-4 border-white shadow-xl"
-                  />
-                </div>
+                {content.trustBadge}
               </motion.div>
-
-              <div className="flex flex-col items-center sm:items-start gap-2">
-                <motion.div
-                  className="inline-flex items-center gap-2 bg-[#1B2D5B] text-white px-4 py-2 rounded-full text-sm border-l-4 border-[#F07B1D] font-medium"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6, delay: 0.2, ease: [0.25, 0.4, 0.25, 1] }}
-                >
-                  {content.trustBadge}
-                </motion.div>
-                <motion.div
-                  className="inline-flex items-center gap-2 bg-green-50 text-green-700 border border-green-200 px-4 py-2 rounded-full text-sm font-semibold"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6, delay: 0.3, ease: [0.25, 0.4, 0.25, 1] }}
-                >
-                  <span>78+ SNIST students already live here</span>
-                </motion.div>
-              </div>
+              <motion.div
+                className="inline-flex items-center gap-2 bg-green-50 text-green-700 border border-green-200 px-4 py-2 rounded-full text-sm font-semibold"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.3, ease: [0.25, 0.4, 0.25, 1] }}
+              >
+                <span>78+ SNIST students already live here</span>
+              </motion.div>
             </div>
 
             <motion.div
