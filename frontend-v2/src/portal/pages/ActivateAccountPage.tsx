@@ -999,61 +999,61 @@ export function ActivateAccountPage() {
     if (!ctx) return;
     setError('');
 
-    const profileType = String(ctx.tenant.profile_type || 'STUDENT').toUpperCase();
-    const isStudent = profileType === 'STUDENT';
     const existingTenantSigUrl = ctx.agreement?.tenant_signature_url || '';
     const existingGuardianSigUrl = ctx.agreement?.guardian_signature_url || '';
+    const tenantSigNameValue = (tenantSigName || ctx.agreement?.tenant_signature_name || '').trim();
+    const guardianSigNameValue = (profile.guardian_name || ctx.agreement?.guardian_signature_name || '').trim();
+    const guardianRelationValue = (profile.guardian_relation || ctx.agreement?.guardian_relation || '').trim();
+    const tenantHasSignatureImage = Boolean(tenantSigBlob || existingTenantSigUrl);
+    const guardianHasSignatureImage = Boolean(guardianSigBlob || existingGuardianSigUrl);
+    const tenantSignatureComplete = Boolean(tenantHasSignatureImage && tenantSigNameValue);
+    const guardianSignatureComplete = Boolean(guardianHasSignatureImage && guardianSigNameValue && guardianRelationValue);
 
-    if (!tenantSigName.trim()) {
+    if (tenantHasSignatureImage && !tenantSigNameValue) {
       setError('Your typed full name signature is required');
       return;
     }
-    if (!tenantSigBlob && !existingTenantSigUrl) {
+    if (tenantSigNameValue && !tenantHasSignatureImage) {
       setError('Please draw your signature');
       return;
     }
-    if (isStudent) {
-      const gName = (profile.guardian_name || '').trim();
-      const gRelation = profile.guardian_relation || '';
-      if (!gName) {
-        setError("Parent/Guardian typed full name signature is required");
-        return;
-      }
-      if (!guardianSigBlob && !existingGuardianSigUrl) {
-        setError("Please draw parent/guardian signature");
-        return;
-      }
-      if (!gRelation) {
-        setError("Please select parent/guardian relationship");
-        return;
-      }
+    if (guardianHasSignatureImage && !guardianSigNameValue) {
+      setError("Parent/Guardian typed full name signature is required");
+      return;
+    }
+    if (guardianHasSignatureImage && !guardianRelationValue) {
+      setError("Please select parent/guardian relationship");
+      return;
+    }
+    if (!tenantSignatureComplete && !guardianSignatureComplete) {
+      setError('Add at least one signature: tenant or parent/guardian.');
+      return;
     }
 
     setSubmitting(true);
     try {
-      // 1. Upload Tenant Signature
+      // 1. Upload signatures that are part of this agreement signing.
       let tenantSigUrl = existingTenantSigUrl;
-      if (tenantSigBlob) {
+      if (tenantSignatureComplete && tenantSigBlob) {
         const tenantFile = new File([tenantSigBlob], 'tenant_signature.png', { type: 'image/png' });
         const tenantUpload = await tenantService.uploadActivationSignature(token, tenantFile, 'tenant');
         tenantSigUrl = tenantUpload.url;
       }
 
-      // 2. Upload Guardian Signature if student
       let guardianSigUrl = existingGuardianSigUrl;
-      if (isStudent && guardianSigBlob) {
+      if (guardianSignatureComplete && guardianSigBlob) {
         const guardianFile = new File([guardianSigBlob], 'guardian_signature.png', { type: 'image/png' });
         const guardianUpload = await tenantService.uploadActivationSignature(token, guardianFile, 'guardian');
         guardianSigUrl = guardianUpload.url;
       }
 
-      // 3. Submit step to Activation State Machine
+      // 2. Submit step to Activation State Machine
       const saved = await submitStep('AGREEMENT', {
-        tenant_signature_url: tenantSigUrl,
-        tenant_signature_name: tenantSigName.trim(),
-        guardian_signature_url: isStudent ? guardianSigUrl : null,
-        guardian_signature_name: isStudent ? (profile.guardian_name || '').trim() : null,
-        guardian_relation: isStudent ? profile.guardian_relation : null,
+        tenant_signature_url: tenantSignatureComplete ? tenantSigUrl : null,
+        tenant_signature_name: tenantSignatureComplete ? tenantSigNameValue : null,
+        guardian_signature_url: guardianSignatureComplete ? guardianSigUrl : null,
+        guardian_signature_name: guardianSignatureComplete ? guardianSigNameValue : null,
+        guardian_relation: guardianSignatureComplete ? guardianRelationValue : null,
       });
 
       if (saved) {
@@ -1634,6 +1634,9 @@ export function ActivateAccountPage() {
               </div>
 
               {/* Signature Section - Side-by-Side Action Buttons */}
+              <p className="mt-6 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-xs font-semibold text-emerald-700">
+                At least one signature is required. Tenant, parent/guardian, or both can sign to continue.
+              </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
                 {/* Tenant Signature Button */}
                 <button
@@ -1682,7 +1685,7 @@ export function ActivateAccountPage() {
                         <span>Guardian Signed: {profile.guardian_name || ctx.agreement?.guardian_signature_name}</span>
                       </div>
                     ) : (
-                      <span className="text-xs text-muted-foreground mt-1">Click to sign and enter name</span>
+                      <span className="text-xs text-muted-foreground mt-1">Optional if tenant has signed</span>
                     )}
                   </button>
                 ) : null}

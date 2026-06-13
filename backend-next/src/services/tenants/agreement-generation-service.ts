@@ -623,8 +623,9 @@ export class AgreementGenerationService {
     }
 
     // 5. Signatures and Audit Logs (Force to the bottom or next page)
-    const isStudent = Boolean(data.guardianSignatureName || data.guardianSignatureUrl);
-    const colCount = isStudent ? 3 : 2;
+    const hasTenantSigner = Boolean(data.tenantSignatureName || data.tenantSignatureUrl);
+    const hasGuardianSigner = Boolean(data.guardianSignatureName || data.guardianSignatureUrl);
+    const colCount = hasGuardianSigner ? 3 : 2;
     const colWidth = contentWidth / colCount;
 
     // Check if we need a new page for signatures
@@ -660,7 +661,7 @@ export class AgreementGenerationService {
     });
 
     // Draw Guardian Col (Center, if student)
-    if (isStudent) {
+    if (hasGuardianSigner) {
       page.drawText(sanitizeText(`Parent/Guardian (${data.guardianRelation || "Parent"})`), {
         x: margin + colWidth,
         y: sigYStart,
@@ -726,8 +727,16 @@ export class AgreementGenerationService {
     // Embed Tenant Signature
     if (data.tenantSignatureUrl) {
       await drawSignatureImage(data.tenantSignatureUrl, margin, sigYStart - 42);
-    } else {
+    } else if (hasTenantSigner) {
       page.drawText(sanitizeText("Signed Digitally"), {
+        x: margin,
+        y: sigYStart - 25,
+        size: 9,
+        font: fontItalic,
+        color: COLORS.textMuted,
+      });
+    } else {
+      page.drawText(sanitizeText("Not signed"), {
         x: margin,
         y: sigYStart - 25,
         size: 9,
@@ -737,9 +746,9 @@ export class AgreementGenerationService {
     }
 
     // Embed Guardian Signature
-    if (isStudent && data.guardianSignatureUrl) {
+    if (hasGuardianSigner && data.guardianSignatureUrl) {
       await drawSignatureImage(data.guardianSignatureUrl, margin + colWidth, sigYStart - 42);
-    } else if (isStudent) {
+    } else if (hasGuardianSigner) {
       page.drawText(sanitizeText("Signed Digitally"), {
         x: margin + colWidth,
         y: sigYStart - 25,
@@ -766,7 +775,7 @@ export class AgreementGenerationService {
     const metaY = sigYStart - 55;
     
     // Tenant details
-    page.drawText(sanitizeText(`Name: ${data.tenantSignatureName || data.tenantName}`), {
+    page.drawText(sanitizeText(`Name: ${hasTenantSigner ? (data.tenantSignatureName || data.tenantName) : "N/A"}`), {
       x: margin,
       y: metaY,
       size: 8,
@@ -797,7 +806,7 @@ export class AgreementGenerationService {
     });
 
     // Guardian details
-    if (isStudent) {
+    if (hasGuardianSigner) {
       const gX = margin + colWidth;
       page.drawText(sanitizeText(`Name: ${data.guardianSignatureName || "N/A"}`), {
         x: gX,

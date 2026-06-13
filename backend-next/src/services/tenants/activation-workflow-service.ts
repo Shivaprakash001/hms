@@ -722,20 +722,31 @@ export class ActivationWorkflowService {
   private async signAgreement(profile: any, tenant: any, data: any, context: { ip: string; userAgent: string }) {
     const tenantSigUrl = String(data?.tenant_signature_url || "").trim();
     const tenantSigName = String(data?.tenant_signature_name || "").trim();
-    if (!tenantSigUrl) throw new Error("VALIDATION_ERROR: Tenant signature is required");
-    if (!tenantSigName) throw new Error("VALIDATION_ERROR: Tenant typed signature name is required");
 
-    const profileType = String(tenant.profile_type || "STUDENT").toUpperCase();
-    const isStudent = profileType === "STUDENT";
-
-    const guardianSigUrl = data?.guardian_signature_url ? String(data.guardian_signature_url).trim() : null;
-    const guardianSigName = data?.guardian_signature_name ? String(data.guardian_signature_name).trim() : null;
+    const guardianSigUrl = data?.guardian_signature_url ? String(data.guardian_signature_url).trim() : "";
+    const guardianSigName = data?.guardian_signature_name ? String(data.guardian_signature_name).trim() : "";
     const guardianRelation = data?.guardian_relation ? String(data.guardian_relation).trim() : null;
 
-    if (isStudent) {
+    const hasTenantSignature = Boolean(tenantSigUrl && tenantSigName);
+    const hasGuardianSignature = Boolean(guardianSigUrl && guardianSigName && guardianRelation);
+    const tenantSignatureStarted = Boolean(tenantSigUrl || tenantSigName);
+    const guardianSignatureStarted = Boolean(guardianSigUrl || guardianSigName);
+
+    if (tenantSignatureStarted && !tenantSigUrl) {
+      throw new Error("VALIDATION_ERROR: Tenant signature is required");
+    }
+    if (tenantSignatureStarted && !tenantSigName) {
+      throw new Error("VALIDATION_ERROR: Tenant typed signature name is required");
+    }
+
+    if (guardianSignatureStarted) {
       if (!guardianSigUrl) throw new Error("VALIDATION_ERROR: Parent/Guardian signature is required");
       if (!guardianSigName) throw new Error("VALIDATION_ERROR: Parent/Guardian typed signature name is required");
       if (!guardianRelation) throw new Error("VALIDATION_ERROR: Parent/Guardian relationship is required");
+    }
+
+    if (!hasTenantSignature && !hasGuardianSignature) {
+      throw new Error("VALIDATION_ERROR: At least one signature is required. Add tenant or parent/guardian signature.");
     }
 
     const template = await prisma.agreementTemplate.findFirst({
@@ -764,18 +775,18 @@ export class ActivationWorkflowService {
       data: {
         status: "SIGNED",
         signed_at: now,
-        tenant_signature_url: tenantSigUrl,
-        tenant_signature_name: tenantSigName,
-        tenant_signed_at: now,
-        tenant_ip: context.ip,
-        tenant_user_agent: context.userAgent,
+        tenant_signature_url: hasTenantSignature ? tenantSigUrl : null,
+        tenant_signature_name: hasTenantSignature ? tenantSigName : null,
+        tenant_signed_at: hasTenantSignature ? now : null,
+        tenant_ip: hasTenantSignature ? context.ip : null,
+        tenant_user_agent: hasTenantSignature ? context.userAgent : null,
 
-        guardian_signature_url: guardianSigUrl,
-        guardian_signature_name: guardianSigName,
-        guardian_relation: guardianRelation,
-        guardian_signed_at: isStudent ? now : null,
-        guardian_ip: isStudent ? context.ip : null,
-        guardian_user_agent: isStudent ? context.userAgent : null,
+        guardian_signature_url: hasGuardianSignature ? guardianSigUrl : null,
+        guardian_signature_name: hasGuardianSignature ? guardianSigName : null,
+        guardian_relation: hasGuardianSignature ? guardianRelation : null,
+        guardian_signed_at: hasGuardianSignature ? now : null,
+        guardian_ip: hasGuardianSignature ? context.ip : null,
+        guardian_user_agent: hasGuardianSignature ? context.userAgent : null,
 
         owner_signature_url: template.owner_signature_url,
         owner_signature_name: template.owner_name,
@@ -790,12 +801,12 @@ export class ActivationWorkflowService {
       },
     });
 
-    if (guardianSigName || guardianRelation) {
+    if (hasGuardianSignature) {
       await prisma.tenants.update({
         where: { id: tenant.id },
         data: compactObject({
-          guardian_name: guardianSigName || undefined,
-          guardian_relation: guardianRelation || undefined,
+          guardian_name: guardianSigName,
+          guardian_relation: guardianRelation,
         }),
       });
     }

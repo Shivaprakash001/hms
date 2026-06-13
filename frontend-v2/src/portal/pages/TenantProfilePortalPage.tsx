@@ -275,6 +275,7 @@ export function TenantProfilePortalPage() {
   const owner = data.owner_contact;
   const room = data.room;
   const docs = (data.documents ?? []) as Record<string, unknown>[];
+  const verificationDocs = docs.filter((d) => String(d.doc_type).toUpperCase() !== 'RENTAL_AGREEMENT');
   const verification = data.verification ?? {};
   const moveOut = data.move_out;
   const isStudent = String(t?.profile_type ?? 'STUDENT').toUpperCase() === 'STUDENT';
@@ -939,7 +940,7 @@ export function TenantProfilePortalPage() {
           Upload Aadhaar and {isStudent ? 'College ID' : 'Work ID'} only. Replacing a document archives the older copy and sends the new one to your owner for review.
         </div>
         <ul className="space-y-2 mb-4">
-          {docs.length === 0 && (
+          {verificationDocs.length === 0 && (
             <li className="text-sm text-muted-foreground">No documents uploaded yet.</li>
           )}
 
@@ -979,7 +980,7 @@ export function TenantProfilePortalPage() {
               </li>
             );
           })()}
-          {docs.map((d) => {
+          {verificationDocs.map((d) => {
             const docId = String(d.id);
             const status = String(d.document_status ?? 'PENDING').toUpperCase();
             
