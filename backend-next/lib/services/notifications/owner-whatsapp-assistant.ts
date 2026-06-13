@@ -231,6 +231,7 @@ const META_LIST_BUTTON_TEXT_LIMIT = 20;
 const META_LIST_SECTION_TITLE_LIMIT = 24;
 const META_LIST_ROW_TITLE_LIMIT = 24;
 const META_LIST_ROW_DESCRIPTION_LIMIT = 72;
+const EXIT_SETTLEMENT_SETTLED_STATUS = "SETTLED";
 
 const HELP_TEXT = [
   "What would you like to do?",
@@ -3071,9 +3072,9 @@ export class OwnerWhatsAppAssistantService {
         SELECT
           COUNT(DISTINCT mor.id)::int AS active_count,
           COUNT(DISTINCT mor.id) FILTER (
-            WHERE mor.status::text IN ('REQUESTED', 'PENDING_REVIEW')
+            WHERE mor.status::text IN ('REQUESTED', 'SETTLEMENT_PENDING')
               OR d.id IS NOT NULL
-              OR (est.id IS NOT NULL AND (est.confirmed_by_owner = false OR est.payment_status <> 'PAID'))
+              OR (est.id IS NOT NULL AND (est.confirmed_by_owner = false OR est.payment_status IS DISTINCT FROM ${EXIT_SETTLEMENT_SETTLED_STATUS}))
           )::int AS action_count
         FROM move_out_requests mor
         LEFT JOIN exit_disputes d ON d.request_id = mor.id AND d.status = 'OPEN'
@@ -3248,7 +3249,7 @@ export class OwnerWhatsAppAssistantService {
   }
 
   private async handlePriorityInbox(ownerId: string, phone: string, message: string): Promise<InboundOwnerResult> {
-    const [pending, vacancy, moveOutRows, inviteRows] = await Promise.all([
+    const [pending, vacancy, moveOutRows, expiringInviteRows, openedInviteRows] = await Promise.all([
       this.getPendingDues(ownerId),
       this.getVacancySummary(ownerId),
       prisma.$queryRaw<Array<{
@@ -3283,7 +3284,7 @@ export class OwnerWhatsAppAssistantService {
         ORDER BY
           CASE
             WHEN EXISTS (SELECT 1 FROM exit_disputes d WHERE d.request_id = mor.id AND d.status = 'OPEN') THEN 0
-            WHEN est.id IS NOT NULL AND (est.confirmed_by_owner = false OR est.payment_status <> 'PAID') THEN 1
+            WHEN est.id IS NOT NULL AND (est.confirmed_by_owner = false OR est.payment_status IS DISTINCT FROM ${EXIT_SETTLEMENT_SETTLED_STATUS}) THEN 1
             ELSE 2
           END,
           mor.created_at DESC
@@ -3297,6 +3298,8 @@ export class OwnerWhatsAppAssistantService {
         room_no: string;
         base_rent: number | null;
         expires_at: Date;
+        status: string;
+        opened_at: Date | null;
       }>>`
         SELECT
           ti.id::text AS invitation_id,
@@ -3305,23 +3308,64 @@ export class OwnerWhatsAppAssistantService {
           h.name AS hostel_name,
           r.room_no,
           r.base_rent,
-          ti.expires_at
+          ti.expires_at,
+          ti.status,
+          ti.opened_at
         FROM tenant_invitations ti
         JOIN hostels h ON h.id = ti.hostel_id
         JOIN rooms r ON r.id = ti.room_id
         WHERE ti.owner_id = ${ownerId}::uuid
-          AND ti.status = 'PENDING'
+          AND ti.status IN ('PENDING', 'OPENED')
+          AND ti.activated_at IS NULL
           AND ti.expires_at > now()
           AND ti.expires_at <= now() + interval '24 hours'
-        ORDER BY ti.expires_at ASC
+        ORDER BY
+          CASE WHEN ti.status = 'OPENED' THEN 0 ELSE 1 END,
+          ti.expires_at ASC
         LIMIT 2
+      `,
+      prisma.$queryRaw<Array<{
+        invitation_id: string;
+        tenant_id: string;
+        name: string;
+        hostel_name: string;
+        room_no: string;
+        base_rent: number | null;
+        opened_at: Date;
+        activation_started_at: Date | null;
+      }>>`
+        SELECT
+          ti.id::text AS invitation_id,
+          ti.tenant_id::text,
+          ti.name,
+          h.name AS hostel_name,
+          r.room_no,
+          r.base_rent,
+          ti.opened_at,
+          ti.activation_started_at
+        FROM tenant_invitations ti
+        JOIN tenant_invitation_reservations tir
+          ON tir.invitation_id = ti.id
+          AND tir.status = 'ACTIVE'
+          AND tir.expires_at > now()
+        JOIN hostels h ON h.id = ti.hostel_id
+        JOIN rooms r ON r.id = ti.room_id
+        WHERE ti.owner_id = ${ownerId}::uuid
+          AND ti.status = 'OPENED'
+          AND ti.activated_at IS NULL
+          AND ti.expires_at > now()
+        ORDER BY ti.opened_at ASC
+        LIMIT 5
       `,
     ]);
 
     const topDue = [...pending.rows]
       .sort((a, b) => b.amount - a.amount || (b.daysOverdue || 0) - (a.daysOverdue || 0))[0];
     const topVacancy = [...vacancy.rows]
-      .sort((a, b) => ((b.capacity - b.occupied) * Number(b.base_rent || 0)) - ((a.capacity - a.occupied) * Number(a.base_rent || 0)))[0];
+      .sort((a, b) =>
+        ((b.capacity - b.occupied) * Number(b.base_rent || 0)) - ((a.capacity - a.occupied) * Number(a.base_rent || 0))
+        || Number(b.vacancy_days || 0) - Number(a.vacancy_days || 0)
+      )[0];
 
     const items: PriorityItem[] = [];
     if (topDue) {
@@ -3390,8 +3434,11 @@ export class OwnerWhatsAppAssistantService {
       });
     }
 
-    for (const invite of inviteRows) {
+    const inviteIdsAlreadyQueued = new Set<string>();
+    for (const invite of expiringInviteRows) {
+      inviteIdsAlreadyQueued.add(invite.invitation_id);
       const moneyAtRisk = Number(invite.base_rent || 0);
+      const openedAgeDays = invite.status === "OPENED" ? Math.max(1, daysSince(invite.opened_at)) : 0;
       items.push({
         id: this.interactionId("invite", "resend", "invitation", invite.invitation_id),
         title: "Invite Expiring",
@@ -3401,12 +3448,54 @@ export class OwnerWhatsAppAssistantService {
           `${invite.hostel_name} - Room ${invite.room_no}`,
           moneyAtRisk > 0 ? `Money at risk: ${money(moneyAtRisk)}/month` : "",
           "Recommended: Resend",
-          "Why: Room is still reserved and activation is incomplete",
+          invite.status === "OPENED"
+            ? "Why: Tenant opened the invite and it expires soon"
+            : "Why: Room is still reserved and activation is incomplete",
         ].filter(Boolean),
         priorityType: "FINANCIAL",
         moneyAtRisk,
-        operationalAgeDays: 0,
+        operationalAgeDays: openedAgeDays,
         directAction: true,
+      });
+    }
+
+    for (const invite of openedInviteRows) {
+      if (inviteIdsAlreadyQueued.has(invite.invitation_id)) continue;
+      const moneyAtRisk = Number(invite.base_rent || 0);
+      const openedAgeDays = daysSince(invite.opened_at);
+      const shouldCall = openedAgeDays >= 2;
+      const recentCallOpened = shouldCall
+        ? await this.hasRecentTenantCallOpened(ownerId, phone, invite.tenant_id)
+        : false;
+      const effectiveShouldCall = shouldCall && !recentCallOpened;
+      if (effectiveShouldCall) {
+        await this.logCallRecommended(ownerId, phone, invite.tenant_id);
+      }
+      const recommendedAction = effectiveShouldCall ? "Call Tenant" : "Resend";
+      items.push({
+        id: effectiveShouldCall
+          ? this.interactionId("tenant", "call", "tenant", invite.tenant_id)
+          : this.interactionId("invite", "resend", "invitation", invite.invitation_id),
+        title: "Invite Opened",
+        description: moneyAtRisk > 0
+          ? `${money(moneyAtRisk)}/month - ${effectiveShouldCall ? "Call" : "Resend"}`
+          : `Recommended: ${effectiveShouldCall ? "Call" : "Resend"}`,
+        detailLines: [
+          `Invite Opened: ${invite.name}`,
+          `${invite.hostel_name} - Room ${invite.room_no}`,
+          moneyAtRisk > 0 ? `Money at risk: ${money(moneyAtRisk)}/month` : "",
+          `${openedAgeDays} days since opened`,
+          `Recommended: ${recommendedAction}`,
+          recentCallOpened
+            ? "Why: Call was already opened in the last 24 hours"
+            : invite.activation_started_at
+              ? "Why: Activation started but not completed"
+              : "Why: Room is still reserved and generating no revenue",
+        ].filter(Boolean),
+        priorityType: "FINANCIAL",
+        moneyAtRisk,
+        operationalAgeDays: openedAgeDays,
+        directAction: !recentCallOpened,
       });
     }
 
@@ -3427,7 +3516,7 @@ export class OwnerWhatsAppAssistantService {
         ].filter(Boolean),
         priorityType: "FINANCIAL",
         moneyAtRisk: revenue,
-        operationalAgeDays: 0,
+        operationalAgeDays: Number(topVacancy.vacancy_days || 0),
         directAction: true,
       });
     }
@@ -3620,7 +3709,7 @@ export class OwnerWhatsAppAssistantService {
         JOIN move_out_requests mor ON mor.id = est.request_id
         WHERE est.owner_id = ${ownerId}::uuid
           AND mor.status::text NOT IN ('COMPLETED', 'REJECTED')
-          AND (est.payment_status <> 'PAID' OR est.confirmed_by_owner = false)
+          AND (est.payment_status IS DISTINCT FROM ${EXIT_SETTLEMENT_SETTLED_STATUS} OR est.confirmed_by_owner = false)
       `,
     ]);
     const settlementBlocked = Number(settlementRows[0]?.blocked_amount || 0);
