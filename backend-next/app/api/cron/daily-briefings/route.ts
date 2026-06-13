@@ -14,7 +14,9 @@ const logger = getLogger("cron.daily-briefings");
  * 🕐 CRON — Owner Daily Briefing Scheduler
  * GET /api/cron/daily-briefings
  * 
- * Runs every 15 minutes.
+ * Scheduled daily at 07:30 IST (02:00 UTC).
+ * The route still checks the local owner window and skips owners who already
+ * have a DELIVERED briefing for the local date.
  * Protected by CRON_SECRET bearer token.
  */
 export async function GET(req: NextRequest) {

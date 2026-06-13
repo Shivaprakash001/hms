@@ -4,6 +4,7 @@ import { useWindowVirtualizer } from '@tanstack/react-virtual';
 import { ChevronRight, Bell, Phone, Send } from 'lucide-react';
 import { TenantStatusBadge } from '@features/tenants/components/badges/TenantStatusBadge';
 import { getInitials, type NormalizedTenant } from '@features/tenants/utils/normalize';
+import { getTenantBillingDisplay } from '@features/tenants/utils/billingDisplay';
 
 const fmt = (n: number) => `₹${Number(n).toLocaleString('en-IN')}`;
 
@@ -100,7 +101,7 @@ const TenantMobileRow = memo(function TenantMobileRow({
   onToggleSelect?: (tenantId: string) => void;
 }) {
   const navigate = useNavigate();
-  const overdue = t.outstandingAmount > 0;
+  const billing = getTenantBillingDisplay(t);
 
   const handleClick = () => {
     if (onSelect) {
@@ -152,8 +153,8 @@ const TenantMobileRow = memo(function TenantMobileRow({
             Room {t.room} · {fmt(t.rent)}/mo
           </p>
           <div className="flex items-center justify-between mt-2">
-            <span className={`text-sm font-medium ${overdue ? 'text-destructive' : 'text-emerald-600'}`}>
-              {overdue ? `Due ${fmt(t.outstandingAmount)}` : 'Paid up'}
+            <span className={`text-sm font-medium ${billing.outstandingClassName}`} title={billing.title}>
+              {billing.mobileLabel}
             </span>
             {!onSelect && <ChevronRight className="w-4 h-4 text-muted-foreground" />}
           </div>

@@ -5,7 +5,11 @@ import { getLogger } from "../logger";
 import { financialService } from "../../src/services/payments/financial-service";
 import { tenantAdvanceService } from "../../src/services/payments/tenant-advance-service";
 import { assertTransition, assertCapability, checkCapability, getTenantSteps } from "./move-out-state-machine";
-import { notifyMoveOutTransition } from "./move-out-notifications";
+import {
+  notifyMoveOutDisputeRaised,
+  notifyMoveOutDisputeUpdated,
+  notifyMoveOutTransition,
+} from "./move-out-notifications";
 import { randomUUID } from "crypto";
 
 // Re-export capability guards for use by other services
@@ -63,6 +67,8 @@ type RequestAuthPolicy = {
   allowAdmin?: boolean;
   allowWarden?: boolean;
 };
+
+const ACTIVE_DISPUTE_STATUSES = ["OPEN", "UNDER_REVIEW"];
 
 
 
@@ -145,6 +151,48 @@ export class MoveOutService {
     }
 
     this.forbidden(policy.action);
+  }
+
+  private async assertNoActiveDisputes(requestId: string, tx: Tx | typeof prisma = prisma) {
+    const active = await tx.exit_disputes.findFirst({
+      where: { request_id: requestId, status: { in: ACTIVE_DISPUTE_STATUSES } },
+      select: { id: true, status: true },
+      orderBy: { created_at: "desc" },
+    });
+    if (!active) return;
+
+    if (active.status === "UNDER_REVIEW") {
+      throw new Error(`DISPUTE_REVIEW_REQUIRED: Dispute ${active.id} is under review and must be resolved before financial completion.`);
+    }
+    throw new Error(`DISPUTE_OPEN: Dispute ${active.id} must be reviewed before financial completion.`);
+  }
+
+  private async logMoveOutDisputeActivity(
+    tx: Tx,
+    input: {
+      request: { id: string; owner_id: string; hostel_id: string; tenant_id: string };
+      disputeId: string;
+      actorId: string;
+      actionType: "DISPUTE_RAISED" | "DISPUTE_REVIEWED" | "DISPUTE_RESOLVED" | "DISPUTE_REJECTED";
+      metadata?: Record<string, unknown>;
+    },
+  ) {
+    await tx.activity_logs.create({
+      data: {
+        id: randomUUID(),
+        user_id: input.actorId,
+        owner_id: input.request.owner_id,
+        action_type: input.actionType,
+        entity_type: "MOVE_OUT_DISPUTE",
+        entity_id: input.disputeId,
+        metadata: {
+          request_id: input.request.id,
+          tenant_id: input.request.tenant_id,
+          hostel_id: input.request.hostel_id,
+          ...(input.metadata || {}),
+        },
+      },
+    });
   }
 
   // ── Create Request ───────────────────────────────────────────
@@ -467,9 +515,11 @@ export class MoveOutService {
     const req = await prisma.move_out_requests.findUnique({ where: { id: params.requestId }, include: { settlement: true } });
     if (!req) throw new Error("NOT_FOUND: Move-out request not found");
     assertTransition(req.status as MoveOutStatus, "COMPLETED");
+    await this.assertNoActiveDisputes(params.requestId);
     const now = new Date();
 
     return prisma.$transaction(async (tx: Tx) => {
+      await this.assertNoActiveDisputes(params.requestId, tx);
       if (req.settlement) {
         await tx.exit_settlement_transactions.update({
           where: { id: req.settlement.id },
@@ -477,8 +527,6 @@ export class MoveOutService {
         });
         await applyAdvanceSettlementInTx(tx, req.settlement.id, params.actor.id, now);
       }
-      // Resolve any open disputes
-      await tx.exit_disputes.updateMany({ where: { request_id: params.requestId, status: "OPEN" }, data: { status: "RESOLVED", resolved_at: now, updated_at: now } });
 
       // Waive outstanding rent obligations
       await tx.rent_obligations.updateMany({
@@ -505,27 +553,128 @@ export class MoveOutService {
       allowOwner: true,
       allowAdmin: true,
     });
-    return prisma.$transaction(async (tx: Tx) => {
+    const dispute = await prisma.$transaction(async (tx: Tx) => {
+      const existing = await tx.exit_disputes.findFirst({
+        where: { request_id: params.requestId, status: { in: ACTIVE_DISPUTE_STATUSES } },
+        select: { id: true, status: true },
+      });
+      if (existing) {
+        throw new Error(`DISPUTE_OPEN: Active dispute ${existing.id} is already ${existing.status}.`);
+      }
+
       const dispute = await tx.exit_disputes.create({
         data: { request_id: params.requestId, raised_by: params.actor.id, raised_by_role: this.normalizeRole(params.actor), dispute_type: params.disputeType, description: params.description, disputed_amount: params.disputedAmount || null, evidence_urls: params.evidenceUrls || [] },
       });
-      notifyMoveOutTransition(params.requestId, req.status as MoveOutStatus);
+      await this.logMoveOutDisputeActivity(tx, {
+        request: req,
+        disputeId: dispute.id,
+        actorId: params.actor.id,
+        actionType: "DISPUTE_RAISED",
+        metadata: {
+          dispute_type: params.disputeType,
+          disputed_amount: params.disputedAmount || null,
+          raised_by_role: this.normalizeRole(params.actor),
+        },
+      });
       return dispute;
     });
+    await notifyMoveOutDisputeRaised(dispute.id);
+    return dispute;
+  }
+
+  async reviewDispute(disputeId: string, actor: MoveOutActor, reviewNotes?: string) {
+    const { dispute, request } = await this.requireDisputeActor(disputeId, actor, {
+      action: "review this move-out dispute",
+      allowOwner: true,
+      allowAdmin: true,
+    });
+    if (!ACTIVE_DISPUTE_STATUSES.includes(dispute.status)) {
+      throw new Error(`VALIDATION: Dispute is already ${dispute.status}`);
+    }
+
+    const result = await prisma.$transaction(async (tx: Tx) => {
+      const updated = await tx.exit_disputes.update({
+        where: { id: disputeId },
+        data: {
+          status: "UNDER_REVIEW",
+          resolution_notes: reviewNotes || dispute.resolution_notes || null,
+          updated_at: new Date(),
+        },
+      });
+      await this.logMoveOutDisputeActivity(tx, {
+        request,
+        disputeId,
+        actorId: actor.id,
+        actionType: "DISPUTE_REVIEWED",
+        metadata: { review_notes: reviewNotes || null },
+      });
+      return { reviewed: true, dispute: updated };
+    });
+    await notifyMoveOutDisputeUpdated(disputeId, "UNDER_REVIEW");
+    return result;
   }
 
   // ── Resolve Dispute ──────────────────────────────────────────
   async resolveDispute(disputeId: string, actor: MoveOutActor, resolutionNotes: string) {
-    const { dispute } = await this.requireDisputeActor(disputeId, actor, {
+    const { dispute, request } = await this.requireDisputeActor(disputeId, actor, {
       action: "resolve this move-out dispute",
       allowOwner: true,
       allowAdmin: true,
     });
-    return prisma.$transaction(async (tx: Tx) => {
-      await tx.exit_disputes.update({ where: { id: disputeId }, data: { status: "RESOLVED", resolved_by: actor.id, resolution_notes: resolutionNotes, resolved_at: new Date(), updated_at: new Date() } });
-      const openCount = await tx.exit_disputes.count({ where: { request_id: dispute.request_id, status: "OPEN", id: { not: disputeId } } });
-      return { resolved: true, remaining_disputes: openCount };
+    if (!ACTIVE_DISPUTE_STATUSES.includes(dispute.status)) {
+      throw new Error(`VALIDATION: Dispute is already ${dispute.status}`);
+    }
+    const result = await prisma.$transaction(async (tx: Tx) => {
+      const now = new Date();
+      const updated = await tx.exit_disputes.update({ where: { id: disputeId }, data: { status: "RESOLVED", resolved_by: actor.id, resolution_notes: resolutionNotes, resolved_at: now, updated_at: now } });
+      const openCount = await tx.exit_disputes.count({ where: { request_id: dispute.request_id, status: { in: ACTIVE_DISPUTE_STATUSES }, id: { not: disputeId } } });
+      await this.logMoveOutDisputeActivity(tx, {
+        request,
+        disputeId,
+        actorId: actor.id,
+        actionType: "DISPUTE_RESOLVED",
+        metadata: { resolution_notes: resolutionNotes || null },
+      });
+      return { resolved: true, remaining_disputes: openCount, dispute: updated };
     });
+    await notifyMoveOutDisputeUpdated(disputeId, "RESOLVED");
+    return result;
+  }
+
+  async rejectDispute(disputeId: string, actor: MoveOutActor, rejectionNotes: string) {
+    const { dispute, request } = await this.requireDisputeActor(disputeId, actor, {
+      action: "reject this move-out dispute",
+      allowOwner: true,
+      allowAdmin: true,
+    });
+    if (!ACTIVE_DISPUTE_STATUSES.includes(dispute.status)) {
+      throw new Error(`VALIDATION: Dispute is already ${dispute.status}`);
+    }
+
+    const result = await prisma.$transaction(async (tx: Tx) => {
+      const now = new Date();
+      const updated = await tx.exit_disputes.update({
+        where: { id: disputeId },
+        data: {
+          status: "REJECTED",
+          resolved_by: actor.id,
+          resolution_notes: rejectionNotes,
+          resolved_at: now,
+          updated_at: now,
+        },
+      });
+      const openCount = await tx.exit_disputes.count({ where: { request_id: dispute.request_id, status: { in: ACTIVE_DISPUTE_STATUSES }, id: { not: disputeId } } });
+      await this.logMoveOutDisputeActivity(tx, {
+        request,
+        disputeId,
+        actorId: actor.id,
+        actionType: "DISPUTE_REJECTED",
+        metadata: { rejection_notes: rejectionNotes || null },
+      });
+      return { rejected: true, remaining_disputes: openCount, dispute: updated };
+    });
+    await notifyMoveOutDisputeUpdated(disputeId, "REJECTED");
+    return result;
   }
 
   // ── Submit Feedback ──────────────────────────────────────────

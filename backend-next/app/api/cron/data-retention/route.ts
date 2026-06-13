@@ -10,8 +10,14 @@ import { resolvePreferences } from "@/lib/preferences";
  * 🗑️ DATA RETENTION CRON
  * GET /api/cron/data-retention
  * 
- * Scheduled cleanup of old data based on each hostel's data_retention_months preference.
- * - If data_retention_months > 0: archive/delete records older than the cutoff
+ * FROZEN: Do not schedule this route.
+ *
+ * Current implementation permanently deletes records and has no archive path.
+ * Scheduling requires a written retention policy, backup policy, archive
+ * strategy, and auth review in docs/operations/cron-registry.md.
+ *
+ * Cleanup is based on each hostel's data_retention_months preference.
+ * - If data_retention_months > 0: delete records older than the cutoff
  * - If data_retention_months = 0: retain forever (no action)
  * 
  * Protected by CRON_SECRET to prevent unauthorized invocation.

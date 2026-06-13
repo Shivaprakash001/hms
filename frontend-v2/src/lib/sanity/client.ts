@@ -170,6 +170,7 @@ function mergeLandingContent(result: any): LandingMarketingContent {
       supportingCopy: h?.heroSupportingCopy || fallbackLandingContent.hero.supportingCopy,
       trustBadge: fallbackLandingContent.hero.trustBadge,
       highlights: h?.heroHighlights || fallbackLandingContent.hero.highlights,
+      ownerImage: hasImage(s?.ownerPhoto) ? s.ownerPhoto : undefined,
       carouselImages: h?.gallery && h.gallery.length > 0 ? h.gallery : fallbackLandingContent.hero.carouselImages,
       tourVideos: fallbackLandingContent.hero.tourVideos,
     },

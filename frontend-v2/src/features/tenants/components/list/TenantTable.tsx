@@ -4,6 +4,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { Eye, Bell, LogOut, Send } from 'lucide-react';
 import { TenantStatusBadge } from '@features/tenants/components/badges/TenantStatusBadge';
 import { getInitials, type NormalizedTenant } from '@features/tenants/utils/normalize';
+import { getTenantBillingDisplay } from '@features/tenants/utils/billingDisplay';
 
 const fmt = (n: number) => `₹${Number(n).toLocaleString('en-IN')}`;
 
@@ -50,9 +51,7 @@ export function TenantTable({ tenants, hostelId, onReminder, onMoveOut, onResend
           <div className="relative w-full" style={{ height: rowVirtualizer.getTotalSize() }}>
           {rowVirtualizer.getVirtualItems().map((virtualRow) => {
             const t = tenants[virtualRow.index];
-            const overdue =
-              t.outstandingAmount > 0 &&
-              ['PENDING', 'PARTIAL'].includes(String(t.paymentStatus).toUpperCase());
+            const billing = getTenantBillingDisplay(t);
             return (
               <div
                 key={t.id}
@@ -92,13 +91,12 @@ export function TenantTable({ tenants, hostelId, onReminder, onMoveOut, onResend
                 </div>
                 <div className="px-4 py-3 text-foreground">{t.room}</div>
                 <div className="px-4 py-3">{fmt(t.rent)}/mo</div>
-                <div className="px-4 py-3">
+                <div className="px-4 py-3 min-w-0">
                   <span
-                    className={
-                      overdue ? 'text-destructive font-medium' : 'text-muted-foreground'
-                    }
+                    className={`inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-5 ${billing.dueClassName}`}
+                    title={billing.title}
                   >
-                    {String(t.paymentStatus)}
+                    <span className="truncate">{billing.dueLabel}</span>
                   </span>
                 </div>
                 <div className="px-4 py-3">
@@ -108,11 +106,7 @@ export function TenantTable({ tenants, hostelId, onReminder, onMoveOut, onResend
                   {t.joinDate ? new Date(t.joinDate).toLocaleDateString('en-IN') : '—'}
                 </div>
                 <div className="px-4 py-3 text-right font-medium">
-                  {t.outstandingAmount > 0 ? (
-                    <span className="text-destructive">{fmt(t.outstandingAmount)}</span>
-                  ) : (
-                    <span className="text-emerald-600">Clear</span>
-                  )}
+                  <span className={billing.outstandingClassName}>{billing.outstandingLabel}</span>
                 </div>
                 <div className="px-4 py-3">
                   <div className="flex items-center justify-end gap-1">

@@ -11,7 +11,9 @@ import { NextRequest, NextResponse } from "next/server";
  * Protected by CRON_SECRET bearer token.
  * Idempotent: safe to call multiple times for the same billing month.
  *
- * Decommissioned with the single-owner architecture.
+ * Deprecated and intentionally unscheduled.
+ * Keep this 410 route temporarily so old monitors or manual calls fail clearly.
+ * Do not add this route back to vercel.json without a new overflow-billing design.
  */
 export async function GET(_req: NextRequest) {
   return NextResponse.json(

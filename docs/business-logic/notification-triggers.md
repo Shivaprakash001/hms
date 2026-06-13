@@ -116,18 +116,14 @@ The owner assistant is person-first, not search-result-first. Owners can send a 
 
 ## Cron jobs
 
-| Cron route | Purpose |
-|---|---|
-| `/api/cron/rent-reminders` | Sends rent reminders. |
-| `/api/cron/onboarding-nudges` | Nudges incomplete activation. |
-| `/api/cron/generate-rent` | Creates rent obligations. |
-| `/api/cron/reconcile-payments` | Reconciles payments. |
-| `/api/cron/move-out-releases` | Processes move-out release tasks. |
+The canonical scheduler inventory lives in [Cron Registry](../operations/cron-registry.md).
+Every `/api/cron/*` route must be listed there before it is scheduled.
 
 **How this works:**
 1. Vercel calls cron routes on schedule.
-2. Routes check `CRON_SECRET` when configured.
-3. Services process eligible records in batches.
+2. Routes check `CRON_SECRET`.
+3. Services process eligible records in bounded or naturally scoped batches.
+4. Deprecated, Dormant, and Frozen routes remain unscheduled unless the registry is updated with owner, criticality, schedule, and recovery details.
 
 ## Redis queue and cache invalidation map
 

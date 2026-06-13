@@ -7,12 +7,10 @@ import { NextRequest, NextResponse } from "next/server";
  * 🕐 CRON — Daily Abandonment Nudge Engine
  * GET /api/cron/onboarding-nudges
  *
- * Called by Vercel Cron daily at 10:00 IST (04:30 UTC).
- * Detects stale onboarding owners and sends in-app recovery nudges.
- * Protected by CRON_SECRET bearer token.
- *
- * Vercel cron.json entry:
- *   { "path": "/api/cron/onboarding-nudges", "schedule": "30 4 * * *" }
+ * Deprecated and intentionally unscheduled.
+ * Owner onboarding nudges were removed in the single-business migration.
+ * Keep this 410 route temporarily so old monitors or manual calls fail clearly.
+ * Do not add this route back to vercel.json without a new onboarding-nudge design.
  */
 export async function GET(_req: NextRequest) {
   return NextResponse.json(

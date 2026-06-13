@@ -4,6 +4,13 @@ import { getLogger } from "@/lib/logger";
 
 const logger = getLogger("cron.tenant-analytics");
 
+/**
+ * DORMANT: Analytics repair endpoint only.
+ *
+ * Do not schedule this route until tenant score recalculation is owned by an
+ * event-driven update path or an action intelligence engine. Payment paths and
+ * tenant score reads already perform targeted self-healing recalculations.
+ */
 export async function POST(req: NextRequest) {
   if (req.headers.get("Authorization") !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

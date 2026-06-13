@@ -169,3 +169,104 @@ export async function notifyMoveOutTransition(
     logger.error("move_out.notify_failed", { request_id: requestId, error: err.message });
   }
 }
+
+export async function notifyMoveOutDisputeRaised(disputeId: string): Promise<void> {
+  try {
+    const dispute = await prisma.exit_disputes.findUnique({
+      where: { id: disputeId },
+      select: {
+        id: true,
+        dispute_type: true,
+        disputed_amount: true,
+        description: true,
+        status: true,
+        request: {
+          select: {
+            owner_id: true,
+            tenant: {
+              select: {
+                profile_id: true,
+                profiles: { select: { name: true } },
+                room_allocations: {
+                  where: { is_active: true },
+                  take: 1,
+                  include: { room: { select: { room_no: true } } },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!dispute) return;
+
+    const tenantName = dispute.request.tenant?.profiles?.name || "Tenant";
+    const roomNo = dispute.request.tenant?.room_allocations?.[0]?.room?.room_no || "unassigned room";
+    const amount = dispute.disputed_amount != null
+      ? `Rs. ${Number(dispute.disputed_amount).toLocaleString("en-IN")}`
+      : "Not specified";
+    const reason = String(dispute.dispute_type || "Settlement").replace(/_/g, " ");
+
+    await notificationService.createNotification(
+      dispute.request.owner_id,
+      "Move-out dispute raised",
+      `${tenantName} (${roomNo}) disputed ${amount}. Reason: ${reason}. Review the move-out settlement.`,
+      "move_out_dispute",
+    );
+
+    if (dispute.request.tenant?.profile_id) {
+      await notificationService.createNotification(
+        dispute.request.tenant.profile_id,
+        "Dispute submitted",
+        `Reference ${dispute.id.slice(0, 8)} is ${dispute.status}. Awaiting owner review.`,
+        "move_out_dispute",
+      );
+    }
+
+    logger.info("move_out.dispute_notified", { dispute_id: disputeId });
+  } catch (err: any) {
+    logger.error("move_out.dispute_notify_failed", { dispute_id: disputeId, error: err.message });
+  }
+}
+
+export async function notifyMoveOutDisputeUpdated(disputeId: string, status: string): Promise<void> {
+  try {
+    const dispute = await prisma.exit_disputes.findUnique({
+      where: { id: disputeId },
+      select: {
+        id: true,
+        resolution_notes: true,
+        request: {
+          select: {
+            owner_id: true,
+            tenant: {
+              select: {
+                profile_id: true,
+                profiles: { select: { name: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!dispute) return;
+
+    const tenantName = dispute.request.tenant?.profiles?.name || "Tenant";
+    const title = status === "REJECTED"
+      ? "Move-out dispute rejected"
+      : status === "RESOLVED"
+        ? "Move-out dispute resolved"
+        : "Move-out dispute under review";
+    const tenantMessage = status === "UNDER_REVIEW"
+      ? "Your move-out dispute is under owner review."
+      : dispute.resolution_notes || "The owner has updated your move-out dispute.";
+    const ownerMessage = `${tenantName}'s move-out dispute is now ${status.replace(/_/g, " ").toLowerCase()}.`;
+
+    await notificationService.createNotification(dispute.request.owner_id, title, ownerMessage, "move_out_dispute");
+    if (dispute.request.tenant?.profile_id) {
+      await notificationService.createNotification(dispute.request.tenant.profile_id, title, tenantMessage, "move_out_dispute");
+    }
+  } catch (err: any) {
+    logger.error("move_out.dispute_update_notify_failed", { dispute_id: disputeId, status, error: err.message });
+  }
+}
