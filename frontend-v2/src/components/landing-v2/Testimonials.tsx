@@ -1,6 +1,8 @@
-import { Star } from 'lucide-react';
-import { ScrollReveal, StaggerReveal, StaggerItem } from './ScrollReveal';
+import { useState, useEffect } from 'react';
+import { Star, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ScrollReveal } from './ScrollReveal';
 import type { TestimonialContent } from '@lib/sanity/landingContent';
+import { cn } from '@/app/components/ui/utils';
 
 function initials(name: string) {
   return name
@@ -14,6 +16,24 @@ function initials(name: string) {
 export function Testimonials({ testimonials = [] }: { testimonials?: TestimonialContent[] }) {
   const safeTestimonials = testimonials.filter((testimonial) => testimonial?.name && testimonial?.review);
   if (!safeTestimonials.length) return null;
+
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  useEffect(() => {
+    if (safeTestimonials.length <= 1) return;
+    const interval = setInterval(() => {
+      setActiveIndex((prev) => (prev + 1) % safeTestimonials.length);
+    }, 6000);
+    return () => clearInterval(interval);
+  }, [safeTestimonials.length]);
+
+  const handlePrev = () => {
+    setActiveIndex((prev) => (prev - 1 + safeTestimonials.length) % safeTestimonials.length);
+  };
+
+  const handleNext = () => {
+    setActiveIndex((prev) => (prev + 1) % safeTestimonials.length);
+  };
 
   const avatarThemes = [
     { bg: 'bg-amber-100 border border-amber-200', text: 'text-amber-800' },
@@ -40,15 +60,24 @@ export function Testimonials({ testimonials = [] }: { testimonials?: Testimonial
           </p>
         </ScrollReveal>
 
-        <StaggerReveal staggerDelay={0.12}>
-          <div className="grid gap-6 md:grid-cols-3">
-            {safeTestimonials.map((testimonial, index) => {
-              const theme = avatarThemes[index % avatarThemes.length];
-              const isParent = testimonial.role?.toLowerCase().includes('parent');
+        <ScrollReveal delay={0.3}>
+          <div className="relative max-w-2xl mx-auto">
+            {/* Carousel Container */}
+            <div className="relative h-[320px] sm:h-[260px] md:h-[220px] w-full overflow-hidden sm:overflow-visible">
+              {safeTestimonials.map((testimonial, index) => {
+                const theme = avatarThemes[index % avatarThemes.length];
+                const isParent = testimonial.role?.toLowerCase().includes('parent');
 
-              return (
-                <StaggerItem key={`${testimonial.name}-${index}`}>
-                  <article className="flex h-full flex-col rounded-2xl border border-[#F07B1D]/10 bg-[#FFFDF5]/40 p-6 shadow-md hover:shadow-lg transition-shadow duration-300">
+                return (
+                  <article
+                    key={`${testimonial.name}-${index}`}
+                    className={cn(
+                      "absolute inset-0 flex h-full flex-col rounded-2xl border border-[#F07B1D]/10 bg-[#FFFDF5]/40 p-6 shadow-md hover:shadow-lg transition-all duration-500 ease-in-out",
+                      index === activeIndex
+                        ? "opacity-100 translate-x-0 z-10"
+                        : "opacity-0 translate-x-[50px] md:translate-x-[100px] pointer-events-none z-0"
+                    )}
+                  >
                     <div className="mb-4 flex items-center gap-3">
                       {testimonial.image?.url ? (
                         <img
@@ -78,27 +107,62 @@ export function Testimonials({ testimonials = [] }: { testimonials?: Testimonial
                       </div>
                     </div>
 
-                  <div className="mb-3 flex gap-1">
-                    {[...Array(5)].map((_, i) => (
-                      <Star
-                        key={i}
-                        className={`h-4 w-4 ${
-                          i < Math.round(testimonial.rating || 5) ? 'fill-[#FBB040] text-[#FBB040]' : 'text-gray-300'
-                        }`}
-                      />
-                    ))}
-                  </div>
+                    <div className="mb-3 flex gap-1">
+                      {[...Array(5)].map((_, i) => (
+                        <Star
+                          key={i}
+                          className={`h-4 w-4 ${
+                            i < Math.round(testimonial.rating || 5) ? 'fill-[#FBB040] text-[#FBB040]' : 'text-gray-300'
+                          }`}
+                        />
+                      ))}
+                    </div>
 
-                  <p className="flex-1 text-[15px] leading-relaxed text-[#1B2D5B]">
-                    &quot;{testimonial.review}&quot;
-                  </p>
-                </article>
-              </StaggerItem>
-            );
-          })}
+                    <p className="flex-1 text-[15px] leading-relaxed text-[#1B2D5B]">
+                      &quot;{testimonial.review}&quot;
+                    </p>
+                  </article>
+                );
+              })}
+            </div>
+
+            {/* Controls */}
+            {safeTestimonials.length > 1 && (
+              <div className="mt-6 flex items-center justify-center gap-4">
+                <button
+                  onClick={handlePrev}
+                  className="rounded-full h-10 w-10 border border-[#1B2D5B]/15 flex items-center justify-center text-[#1B2D5B] hover:bg-[#1B2D5B] hover:text-white transition-all cursor-pointer shadow-sm hover:shadow active:scale-95"
+                  aria-label="Previous testimonial"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+
+                <div className="flex gap-2.5 items-center justify-center">
+                  {safeTestimonials.map((_, index) => (
+                    <button
+                      key={index}
+                      className={`w-2.5 h-2.5 rounded-full transition-all cursor-pointer ${
+                        index === activeIndex ? 'bg-[#F07B1D] scale-110' : 'bg-[#1B2D5B]/20 hover:bg-[#1B2D5B]/40'
+                      }`}
+                      onClick={() => setActiveIndex(index)}
+                      aria-label={`Go to testimonial ${index + 1}`}
+                    />
+                  ))}
+                </div>
+
+                <button
+                  onClick={handleNext}
+                  className="rounded-full h-10 w-10 border border-[#1B2D5B]/15 flex items-center justify-center text-[#1B2D5B] hover:bg-[#1B2D5B] hover:text-white transition-all cursor-pointer shadow-sm hover:shadow active:scale-95"
+                  aria-label="Next testimonial"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+              </div>
+            )}
           </div>
-        </StaggerReveal>
+        </ScrollReveal>
       </div>
     </section>
   );
 }
+

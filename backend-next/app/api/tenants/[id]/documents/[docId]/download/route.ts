@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { signedAgreementStatusWhere } from "@/src/services/tenants/agreement-status";
 
 function safeFileName(value: string) {
   return value.replace(/[^a-z0-9._-]/gi, "_").slice(0, 80) || "document";
@@ -41,7 +42,7 @@ export async function GET(
   } else {
     // Check if it's an agreement
     const agreement = await prisma.agreement.findFirst({
-      where: { id: docId, tenant_id: tenantId, status: "SIGNED" },
+      where: { id: docId, tenant_id: tenantId, status: signedAgreementStatusWhere() },
       include: { tenant: { select: { id: true, profile_id: true, owner_id: true } } },
     });
     if (!agreement || !agreement.pdf_url) {

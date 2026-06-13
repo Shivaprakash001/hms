@@ -61,6 +61,7 @@ export async function GET(req: Request) {
       const tenantActiveAllocation = a.tenants?.room_allocations?.[0];
       const roomNo = tenantActiveAllocation?.room?.room_no || a.rent_obligations?.room_allocations?.room?.room_no || "N/A";
       const isAdvance = a.payment_type === "ADVANCE" || a.flow_type === "ADVANCE";
+      const isDeposit = a.payment_type === "DEPOSIT" || a.flow_type === "DEPOSIT";
 
       return {
         attempt_id: a.id,
@@ -73,7 +74,7 @@ export async function GET(req: Request) {
         room_no: roomNo,
         amount: Number(a.amount),
         upi_reference: a.gateway_txn_id || "—",
-        rent_month: isAdvance ? "Advance Payment" : a.rent_obligations?.rent_month,
+        rent_month: isDeposit ? "Security Deposit" : isAdvance ? "Advance Payment" : a.rent_obligations?.rent_month,
         submitted_at: a.raw_webhook_payload?.submitted_at || a.updated_at,
         created_at: a.created_at,
       };

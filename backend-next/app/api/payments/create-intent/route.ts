@@ -53,29 +53,36 @@ export async function POST(req: Request) {
       tenantId = tenant.id;
     }
 
-    // ── ADVANCE payment intent ────────────────────────────────────────────
-    if (payment_type === "ADVANCE") {
+    // ── ADVANCE / DEPOSIT payment intents ─────────────────────────────────
+    if (payment_type === "ADVANCE" || payment_type === "DEPOSIT") {
       if (!amount || typeof amount !== "number" || amount <= 0) {
-        return apiError("amount is required and must be positive for ADVANCE payments", "VALIDATION_ERROR", 400);
+        return apiError(`amount is required and must be positive for ${payment_type} payments`, "VALIDATION_ERROR", 400);
       }
       if (amount > MAX_ADVANCE_AMOUNT) {
         return apiError(`amount cannot exceed ₹${MAX_ADVANCE_AMOUNT.toLocaleString("en-IN")}`, "VALIDATION_ERROR", 400);
       }
       if (!tenantId) {
-        return apiError("Only tenants can initiate advance payments", "FORBIDDEN", 403);
+        return apiError(`Only tenants can initiate ${String(payment_type).toLowerCase()} payments`, "FORBIDDEN", 403);
       }
       // Derive ownerId: tenant's owner
       const tenant = await prisma.tenants.findUnique({ where: { id: tenantId }, select: { owner_id: true } });
       if (!tenant?.owner_id) return apiError("Tenant has no owner assigned", "NOT_FOUND", 404);
 
-      logger.info("create_advance_intent_called", { userId: user.id, tenantId, amount });
-      const result = await paymentService.createAdvancePaymentIntent({
-        tenantId,
-        ownerId: tenant.owner_id,
-        amount,
-        profileId: user.id,
-      });
-      logger.info("advance_intent_ready", { attemptId: result.id, checkoutUrl: result.checkout_url ? "present" : "missing" });
+      logger.info("create_ledger_intent_called", { userId: user.id, tenantId, amount, payment_type });
+      const result = payment_type === "DEPOSIT"
+        ? await paymentService.createDepositPaymentIntent({
+            tenantId,
+            ownerId: tenant.owner_id,
+            amount,
+            profileId: user.id,
+          })
+        : await paymentService.createAdvancePaymentIntent({
+            tenantId,
+            ownerId: tenant.owner_id,
+            amount,
+            profileId: user.id,
+          });
+      logger.info("ledger_intent_ready", { attemptId: result.id, checkoutUrl: result.checkout_url ? "present" : "missing", payment_type });
       return NextResponse.json(result);
     }
 

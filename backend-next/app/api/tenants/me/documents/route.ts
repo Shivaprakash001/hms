@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { imagekit } from "@/lib/imagekit";
 import { eventLog } from "@/lib/services/event-log-service";
 import { backendUrl } from "@/lib/config/domains";
+import { signedAgreementStatusWhere } from "@/src/services/tenants/agreement-status";
 
 const allowedTypesForProfile = (profileType?: string | null) => {
   const type = String(profileType || "STUDENT").toUpperCase();
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest) {
   });
 
   const agreements = await prisma.agreement.findMany({
-    where: { tenant_id: tenant.id, status: "SIGNED" },
+    where: { tenant_id: tenant.id, status: signedAgreementStatusWhere() },
     orderBy: { generated_at: "desc" },
   });
 

@@ -1873,6 +1873,10 @@ model TenantPolicyAcceptance {
 enum AgreementStatus {
   DRAFT
   SIGNED
+  EXPIRING_SOON
+  AGREEMENT_EXPIRED
+  RENEWED
+  TERMINATED
   VOID
 }
 
@@ -1900,13 +1904,29 @@ model Agreement {
   tenant_id               String          @db.Uuid
   hostel_id               String          @db.Uuid
   template_id             String          @db.Uuid
+  renewed_from_agreement_id String?       @db.Uuid
+  renewed_to_agreement_id String?         @db.Uuid
   status                  AgreementStatus @default(DRAFT)
   content_snapshot        Json            // Resolved snapshot of everything (hostel, rent, deposit, joining date, tenant info, custom rules)
   pdf_url                 String?         // URL to stored PDF document in Supabase
+  agreement_version       Int             @default(1)
+  agreement_start_date    DateTime?       @db.Date
+  agreement_end_date      DateTime?       @db.Date
+  agreement_duration_months Int?
+  contract_rent           Decimal?        @db.Decimal(10, 2)
+  contract_security_deposit Decimal?      @db.Decimal(10, 2)
+  contract_maintenance    Decimal?        @db.Decimal(10, 2)
+  contract_maintenance_type String?
+  contract_payment_frequency PaymentFrequency?
   
   generated_at            DateTime        @default(now()) @db.Timestamptz(6)
   signed_at               DateTime?       @db.Timestamptz(6)
   voided_at               DateTime?       @db.Timestamptz(6)
+  expiry_notified_30d_at  DateTime?       @db.Timestamptz(6)
+  expiry_notified_15d_at  DateTime?       @db.Timestamptz(6)
+  expired_notified_at     DateTime?       @db.Timestamptz(6)
+  terminated_at           DateTime?       @db.Timestamptz(6)
+  renewed_at              DateTime?       @db.Timestamptz(6)
 
   // Tenant / Student signature info
   tenant_signature_url    String?         // Signature image PNG URL
@@ -1931,8 +1951,17 @@ model Agreement {
   tenant                  tenants           @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   hostel                  hostels           @relation(fields: [hostel_id], references: [id], onDelete: Cascade)
   template                AgreementTemplate @relation(fields: [template_id], references: [id])
+  renewed_from_agreement  Agreement?        @relation("AgreementRenewedFrom", fields: [renewed_from_agreement_id], references: [id])
+  renewed_agreements      Agreement[]       @relation("AgreementRenewedFrom")
+  renewed_to_agreement    Agreement?        @relation("AgreementRenewedTo", fields: [renewed_to_agreement_id], references: [id])
+  renewed_previous_agreements Agreement[]   @relation("AgreementRenewedTo")
 
   @@index([tenant_id])
+  @@index([tenant_id, status])
   @@index([hostel_id])
+  @@index([hostel_id, status, agreement_end_date])
+  @@index([status, agreement_end_date])
   @@index([status])
+  @@index([renewed_from_agreement_id])
+  @@index([renewed_to_agreement_id])
 }

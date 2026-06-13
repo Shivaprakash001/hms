@@ -13,6 +13,7 @@ This is the canonical registry for every HMS cron route. Any `/api/cron/*` route
 | `/api/cron/migration-audit` | `15 1 * * *` UTC / 06:45 IST | Run migration audit and financial integrity checks. | Active |
 | `/api/cron/move-out-releases` | `30 18 * * *` UTC / 00:00 IST | Release rooms and close tenant state for completed or vacated move-outs whose exit date has passed. | Active |
 | `/api/cron/admissions` | `45 18 * * *` UTC / 00:15 IST | Expire stale admissions room reservations. | Active |
+| `/api/cron/agreement-lifecycle` | `30 1 * * *` UTC / 07:00 IST | Process agreement expiry reminders and lifecycle status transitions. | Active |
 | `/api/cron/daily-briefings` | `0 2 * * *` UTC / 07:30 IST | Send owner daily WhatsApp briefing using `owner_daily_briefing_v1`. | Active |
 | `/api/cron/tenant-analytics` | Not scheduled | Recalculate tenant behavior scores as analytics repair. | Dormant |
 | `/api/cron/data-retention` | Not scheduled | Delete old activity, system event, and reminder logs when retention is configured. | Frozen |
@@ -36,6 +37,7 @@ Validation notes:
 | Payment reconciliation | `/api/cron/reconcile-payments` | P0 Business Critical | `30 3 * * *` UTC / 09:00 IST | Active | Payments |
 | Move-out releases | `/api/cron/move-out-releases` | P1 Important Operations | `30 18 * * *` UTC / 00:00 IST | Active | Move-outs |
 | Admissions reservation expiry | `/api/cron/admissions` | P1 Important Operations | `45 18 * * *` UTC / 00:15 IST | Active | Admissions |
+| Agreement lifecycle | `/api/cron/agreement-lifecycle` | P1 Important Operations | `30 1 * * *` UTC / 07:00 IST | Active | Agreement Lifecycle |
 | Owner daily briefings | `/api/cron/daily-briefings` | P1 Important Operations | `0 2 * * *` UTC / 07:30 IST | Active | WhatsApp Assistant |
 
 ## Platform Maintenance Jobs
@@ -117,6 +119,7 @@ Verification:
 | Payment reconciliation | Repair stuck payment attempts and sync provider status. | P0 | `30 3 * * *` UTC / 09:00 IST | Payments |
 | Move-out releases | Release rooms and close tenant state after exit date. | P1 | `30 18 * * *` UTC / 00:00 IST | Move-outs |
 | Admissions reservation expiry | Expire stale room reservations. | P1 | `45 18 * * *` UTC / 00:15 IST | Admissions |
+| Agreement lifecycle | Transition expiring/expired agreements and create renewal reminders. | P1 | `30 1 * * *` UTC / 07:00 IST | Agreement Lifecycle |
 | Owner daily briefings | Send morning WhatsApp focus briefing. | P1 | `0 2 * * *` UTC / 07:30 IST | WhatsApp Assistant |
 
 ## Dormant Job Report
@@ -153,6 +156,7 @@ Required before scheduling:
 | Payment reconciliation | Re-run the route with `CRON_SECRET`; inspect payment reconciliation runs and provider snapshots for unresolved attempts. |
 | Move-out releases | Re-run the route with `CRON_SECRET`; unreleased completed/vacated move-outs remain eligible until `room_release_date` is set. |
 | Admissions reservation expiry | Re-run the route with `CRON_SECRET`; active expired reservations are updated in bulk. |
+| Agreement lifecycle | Re-run the route with `CRON_SECRET`; agreement reminder timestamps and status checks prevent duplicate lifecycle notifications. |
 | Owner daily briefings | Re-run the route with `CRON_SECRET`; delivered owner/date records are skipped, failed records may retry. |
 | Hostel invariants | Re-run the route with `CRON_SECRET`; inspect persisted invariant failures before remediation. |
 | Migration audit | Re-run the route with `CRON_SECRET`; compare latest audit artifact and `migrationAuditRun` row. |

@@ -27,6 +27,28 @@ import { roomCapacityService } from "./room-capacity-service";
  */
 
 export class DashboardService {
+  private async getAgreementAlertCounts(userId: string, hostelId: string) {
+    const [expiringSoon, expired] = await Promise.all([
+      prisma.agreement.count({
+        where: {
+          hostel_id: hostelId,
+          status: "EXPIRING_SOON",
+          agreement_end_date: { not: null },
+          hostel: { owner_id: userId },
+        },
+      }),
+      prisma.agreement.count({
+        where: {
+          hostel_id: hostelId,
+          status: "AGREEMENT_EXPIRED",
+          agreement_end_date: { not: null },
+          hostel: { owner_id: userId },
+        },
+      }),
+    ]);
+    return { expiringSoon, expired };
+  }
+
   async getOwnerStatsShell(userId: string, hostelId: string) {
     const now = new Date();
     const utcYear = now.getUTCFullYear();
@@ -354,6 +376,7 @@ export class DashboardService {
     const unpaidTenantCount = operationalPendingInvariantHolds(pendingTotal, Number(row.unpaid_tenant_count || 0))
       ? Number(row.unpaid_tenant_count || 0)
       : 0;
+    const agreementAlerts = await this.getAgreementAlertCounts(userId, hostelId);
     const capacityMap = await roomCapacityService.getHostelCapacityMap(hostelId, { ownerId: userId });
     const occupiedBeds = [...capacityMap.values()].reduce((sum, snapshot) => sum + Number(snapshot.occupied || 0), 0);
     const usedBeds = [...capacityMap.values()].reduce((sum, snapshot) => sum + Number(snapshot.used || 0), 0);
@@ -406,6 +429,20 @@ export class DashboardService {
     };
 
     const alerts = [
+      ...(agreementAlerts.expired > 0 ? [{
+        severity: "critical",
+        title: `${agreementAlerts.expired} expired agreement${agreementAlerts.expired === 1 ? "" : "s"}`,
+        impact: "Occupied tenants may be staying without a valid current contract",
+        action: "Review agreement renewals",
+        cta: "Open tenants",
+      }] : []),
+      ...(agreementAlerts.expiringSoon > 0 ? [{
+        severity: "warning",
+        title: `${agreementAlerts.expiringSoon} agreement${agreementAlerts.expiringSoon === 1 ? "" : "s"} expiring soon`,
+        impact: "Renew before contract expiry",
+        action: "Follow up with tenants",
+        cta: "Open tenants",
+      }] : []),
       ...(activeDisputeCount > 0 ? [{
         severity: "critical",
         title: `${activeDisputeCount} settlement dispute${activeDisputeCount === 1 ? "" : "s"} open`,
@@ -1250,6 +1287,7 @@ export class DashboardService {
     };
     const activeDisputeCount = Number(activeDisputeRows?.[0]?.active_dispute_count || 0);
     const activeDisputeAmount = Number(activeDisputeRows?.[0]?.active_dispute_amount || 0);
+    const agreementAlerts = await this.getAgreementAlertCounts(userId, hostelId);
 
     const highRiskTenants = obligationsRisk.map((ob: any) => {
       const paid = ob.payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid || 0), 0);
@@ -1296,6 +1334,20 @@ export class DashboardService {
           : "Critical";
 
     const alerts = [
+      ...(agreementAlerts.expired > 0 ? [{
+        severity: "critical",
+        title: `${agreementAlerts.expired} expired agreement${agreementAlerts.expired === 1 ? "" : "s"}`,
+        impact: "Occupied tenants may be staying without a valid current contract",
+        action: "Review agreement renewals",
+        cta: "Open tenants",
+      }] : []),
+      ...(agreementAlerts.expiringSoon > 0 ? [{
+        severity: "warning",
+        title: `${agreementAlerts.expiringSoon} agreement${agreementAlerts.expiringSoon === 1 ? "" : "s"} expiring soon`,
+        impact: "Renew before contract expiry",
+        action: "Follow up with tenants",
+        cta: "Open tenants",
+      }] : []),
       ...(activeDisputeCount > 0 ? [{
         severity: "critical",
         title: `${activeDisputeCount} settlement dispute${activeDisputeCount === 1 ? "" : "s"} open`,

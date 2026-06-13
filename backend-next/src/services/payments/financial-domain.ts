@@ -14,6 +14,7 @@ export const PAYMENT_FLOW = {
   ADDON: "ADDON",
   RENT: "RENT",
   ADVANCE: "ADVANCE",
+  DEPOSIT: "DEPOSIT",
   MANUAL_UPI_REFERENCE: "MANUAL_UPI_REFERENCE",
 } as const;
 
@@ -54,8 +55,12 @@ export function inferAttemptFinancialMetadata(attempt: any) {
     return platformBillingMetadata(PAYMENT_FLOW.ADDON);
   }
 
-  if (attempt?.payment_type === "ADVANCE") {
+  if (attempt?.payment_type === "ADVANCE" || attempt?.flow_type === PAYMENT_FLOW.ADVANCE) {
     return rentCollectionMetadata(PAYMENT_FLOW.ADVANCE, attempt?.hostel_id);
+  }
+
+  if (attempt?.payment_type === "DEPOSIT" || attempt?.flow_type === PAYMENT_FLOW.DEPOSIT) {
+    return rentCollectionMetadata(PAYMENT_FLOW.DEPOSIT, attempt?.hostel_id);
   }
 
   return rentCollectionMetadata(PAYMENT_FLOW.RENT, attempt?.hostel_id);
@@ -73,7 +78,7 @@ export function platformBillingMetadata(flowType: string) {
 }
 
 export function rentCollectionMetadata(flowType: string, hostelId: string | null | undefined) {
-  const treasuryMode = flowType === PAYMENT_FLOW.RENT || flowType === PAYMENT_FLOW.ADVANCE;
+  const treasuryMode = flowType === PAYMENT_FLOW.RENT || flowType === PAYMENT_FLOW.ADVANCE || flowType === PAYMENT_FLOW.DEPOSIT;
   return {
     payment_domain: PAYMENT_DOMAIN.RENT_COLLECTION,
     scope_type: PAYMENT_SCOPE.HOSTEL,

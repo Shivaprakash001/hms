@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { normalizeIndianPhone } from "@/lib/utils/phone-utils";
 import { backendUrl } from "@/lib/config/domains";
+import { signedAgreementStatusWhere } from "@/src/services/tenants/agreement-status";
 
 const DOC_TYPE_LABELS: Record<string, string> = {
   AADHAAR: "Aadhaar",
@@ -79,7 +80,7 @@ export async function getTenantPortalProfile(profileId: string) {
         orderBy: { created_at: "desc" },
       },
       agreements: {
-        where: { status: "SIGNED" },
+        where: { status: signedAgreementStatusWhere() },
         orderBy: { generated_at: "desc" },
       },
       move_out_requests: {

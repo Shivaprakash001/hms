@@ -7,6 +7,7 @@ import { EmailService } from "../../../lib/services/email-service";
 import { eventLog } from "../../../lib/services/event-log-service";
 import { hostelBillingPreferencesService, type MaintenanceType } from "../../../lib/services/hostel-billing-preferences-service";
 import { roomCapacityService } from "../../../lib/services/room-capacity-service";
+import { onboardingFinancialsService } from "../payments/onboarding-financials-service";
 
 type InvitationStatus = "PENDING" | "OPENED" | "ACTIVATION_STARTED" | "ACTIVATED" | "EXPIRED" | "CANCELLED";
 type ReservationReleaseReason = "ACTIVATED" | "EXPIRED" | "CANCELLED" | "TRANSFERRED";
@@ -309,7 +310,16 @@ export class TenantInvitationLifecycleService {
         },
       });
 
-      return { tenant, invitation, reservation, room: capacity.room };
+      const financials = await onboardingFinancialsService.initializeOnboardingFinancials(tx, {
+        tenantId: tenant.id,
+        ownerId,
+        hostelId: capacity.room.hostel_id,
+        joiningDate,
+        maintenanceCharge,
+        maintenanceType,
+      });
+
+      return { tenant, invitation, reservation, room: capacity.room, financials };
     });
 
     const activationLink = frontendUrl(`/activate/${created.invitation.token}`);
@@ -342,7 +352,7 @@ export class TenantInvitationLifecycleService {
       phone: normalizedPhone,
       activation_link: activationLink,
       action: "INVITED",
-      obligations: [],
+      obligations: created.financials.createdObligations,
       ...delivery,
     };
   }

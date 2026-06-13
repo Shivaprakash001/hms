@@ -17,6 +17,7 @@ import { eventLog } from "../../../lib/services/event-log-service";
 import { eventSystem } from "../../../lib/events";
 import { tenantInvitationLifecycleService } from "./tenant-invitation-lifecycle-service";
 import { AgreementGenerationService } from "./agreement-generation-service";
+import { isSignedAgreementStatus, signedAgreementStatusWhere } from "./agreement-status";
 import { authOtpService } from "../../../lib/services/auth/auth-otp-service";
 
 type ActivationStep = "ACCOUNT" | "RULES" | "AGREEMENT" | "PROFILE" | "ACTIVATE";
@@ -294,7 +295,7 @@ export class ActivationWorkflowService {
 
     const profileCompleted = missingTier1.length === 0;
     const rulesAccepted = Boolean(latestAcceptance);
-    const agreementSigned = (tenant.agreements || []).some((a: any) => a.status === "SIGNED");
+    const agreementSigned = (tenant.agreements || []).some((a: any) => isSignedAgreementStatus(a.status));
     const requiredDocumentTypes = this.requiredDocumentTypes(tenant.profile_type);
     const requiredDocuments = (tenant.identification_documents || []).filter((doc: any) =>
       requiredDocumentTypes.includes(doc.doc_type)
@@ -458,7 +459,7 @@ export class ActivationWorkflowService {
     }
 
     // Ensure we have an active agreement (either DRAFT or SIGNED)
-    let activeAgreement = (tenant.agreements || []).find((a: any) => a.status === "SIGNED" || a.status === "DRAFT");
+    let activeAgreement = (tenant.agreements || []).find((a: any) => a.status === "DRAFT" || isSignedAgreementStatus(a.status));
     if (!activeAgreement) {
       activeAgreement = await prisma.agreement.create({
         data: {
@@ -761,7 +762,7 @@ export class ActivationWorkflowService {
     });
     if (!draft) {
       draft = await prisma.agreement.findFirst({
-        where: { tenant_id: tenant.id, status: "SIGNED" },
+        where: { tenant_id: tenant.id, status: signedAgreementStatusWhere() },
         orderBy: { generated_at: "desc" },
       });
     }

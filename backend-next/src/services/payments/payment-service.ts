@@ -22,6 +22,7 @@ import { paymentOperationalAnomalyService } from "@/lib/services/payment-operati
 import { paymentWebhookEventService } from "@/lib/services/payment-webhook-event-service";
 import { paymentProviderVerificationSnapshotService } from "@/lib/services/payment-provider-verification-snapshot-service";
 import { backendUrl } from "@/lib/config/domains";
+import { activationFinancialStatusService } from "@/src/services/tenants/activation-financial-status-service";
 
 const logger = getLogger("payment.service");
 type MaybeHostelId = string | null;
@@ -1363,6 +1364,180 @@ export class PaymentService {
     }
   }
 
+  /**
+   * Create a PhonePe payment intent for onboarding security deposit.
+   * On SUCCESS, finalizePaymentAttempt credits tenant_advance_ledger as DEPOSIT.
+   */
+  async createDepositPaymentIntent(params: {
+    tenantId: string;
+    ownerId: string;
+    amount?: number;
+    profileId: string;
+  }) {
+    const { tenantId, ownerId } = params;
+    const requestedAmount = params.amount === undefined ? undefined : Number(params.amount);
+    if (requestedAmount !== undefined && requestedAmount <= 0) {
+      throw new Error("BAD_REQUEST: Amount must be positive");
+    }
+
+    const tenant = await prisma.tenants.findUnique({
+      where: { id: tenantId },
+      include: { profiles: true },
+    });
+    if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
+    if (tenant.owner_id !== ownerId) throw new Error("FORBIDDEN: Tenant does not belong to this owner");
+
+    const status = await activationFinancialStatusService.getActivationFinancialStatus(tenantId);
+    const outstandingDeposit = Number(status.depositOutstanding || 0);
+    if (outstandingDeposit <= 0) {
+      throw new Error("BAD_REQUEST: Security deposit is already cleared");
+    }
+    const amount = requestedAmount === undefined ? outstandingDeposit : requestedAmount;
+    const outstandingPaisa = Math.round(outstandingDeposit * 100);
+    const amountPaisa = Math.round(amount * 100);
+    if (amountPaisa > outstandingPaisa + 1) {
+      throw new Error(
+        `BAD_REQUEST: DEPOSIT_AMOUNT_EXCEEDS_OUTSTANDING: Payment (${formatCurrency(amount)}) exceeds security deposit due (${formatCurrency(outstandingDeposit)}).`
+      );
+    }
+
+    const { prefs } = await getTenantOperationalContext(tenant.id, ownerId, tenant.hostel_id);
+    const hostelId = requireFinancialHostelId(tenant.hostel_id, "deposit payment intent");
+
+    if (!prefs.advance_enabled) {
+      throw new Error("BAD_REQUEST: Advance/deposit payments are not enabled for this hostel");
+    }
+    const minPaisa = Math.round(prefs.min_payment_amount * 100);
+    if (amountPaisa < minPaisa) {
+      throw new Error(`BAD_REQUEST: Minimum payment amount is ${formatCurrency(prefs.min_payment_amount)}`);
+    }
+
+    const providerContext = await getProviderContext({
+      paymentDomain: PAYMENT_DOMAIN.RENT_COLLECTION,
+      flowType: PAYMENT_FLOW.DEPOSIT,
+      operationalOwnerId: ownerId,
+      financialOwnerId: ownerId,
+      hostelId,
+      scopeType: PAYMENT_SCOPE.HOSTEL,
+    });
+    const { provider, config } = providerContext;
+    const instance = PaymentProviderFactory.getProvider(provider, config);
+
+    const txResult = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"dep_intent:" + tenantId})::bigint)`;
+      await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId}::uuid FOR UPDATE`;
+
+      const existing = await tx.paymentAttempt.findFirst({
+        where: {
+          tenant_id: tenantId,
+          payment_type: "DEPOSIT",
+          status: { in: ["CREATED", "PENDING"] },
+        },
+        orderBy: { created_at: "desc" },
+      });
+
+      if (existing) {
+        const checkoutUrl = (existing as any).checkout_url || "";
+        const twoMinAgo = new Date(Date.now() - 2 * 60 * 1000);
+        const isInFlight = existing.status === "CREATED" && existing.created_at > twoMinAgo;
+        const hasValidCheckout = checkoutUrl.length > 0 && !checkoutUrl.includes("/payment-return");
+        if (isInFlight || hasValidCheckout) {
+          return { attempt: existing, isReused: true };
+        }
+        await this.updateAttemptStatus(tx, {
+          attemptId: existing.id,
+          fromStatus: existing.status,
+          toStatus: "EXPIRED",
+          source: "CREATE_INTENT",
+          reason: "stale deposit checkout attempt expired before replacement",
+          operationalOwnerId: existing.owner_id,
+          financialOwnerId: existing.owner_id,
+          hostelId: existing.hostel_id,
+          data: { settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE },
+        });
+      }
+
+      const merchantTxnId = `hms_dep_${crypto.randomBytes(6).toString("hex")}`;
+      const newAttempt = await tx.paymentAttempt.create({
+        data: {
+          id: crypto.randomUUID(),
+          tenant_id: tenantId,
+          owner_id: ownerId,
+          provider,
+          merchant_txn_id: merchantTxnId,
+          merchant_transaction_id: merchantTxnId,
+          amount,
+          status: "CREATED",
+          payment_type: "DEPOSIT",
+          hostel_id: hostelId,
+          payment_domain: providerContext.payment_domain,
+          scope_type: providerContext.scope_type,
+          flow_type: providerContext.flow_type,
+          merchant_context_type: providerContext.merchant_context_type,
+          merchant_context_id: providerContext.merchant_context_id,
+          settlement_status: SETTLEMENT_STATUS.NOT_SETTLED,
+        } as any,
+      });
+      await paymentStatusEventService.append(tx, {
+        attemptId: newAttempt.id,
+        fromStatus: null,
+        toStatus: "CREATED",
+        source: "CREATE_INTENT",
+        reason: "deposit payment attempt created",
+        operationalOwnerId: ownerId,
+        financialOwnerId: ownerId,
+        hostelId,
+      });
+      return { attempt: newAttempt, isReused: false };
+    });
+
+    if (txResult.isReused) return txResult.attempt;
+
+    const { attempt } = txResult;
+    try {
+      const result = await instance.createIntent({
+        amount,
+        merchant_txn_id: attempt.merchant_txn_id,
+        tenant_name: tenant.profiles.name,
+        tenant_email: tenant.profiles.email,
+        tenant_phone: tenant.profiles.phone || "",
+        metadata: { tenant_id: tenantId, attempt_id: attempt.id, payment_type: "DEPOSIT" },
+      });
+      return await this.updateAttemptStatusOutsideTx({
+        attemptId: attempt.id,
+        fromStatus: "CREATED",
+        toStatus: "PENDING",
+        source: "CREATE_INTENT",
+        reason: "provider checkout created",
+        operationalOwnerId: ownerId,
+        financialOwnerId: ownerId,
+        hostelId,
+        data: {
+          gateway_txn_id: result.gateway_txn_id,
+          ...this.attemptIdentityData(attempt.merchant_txn_id, result),
+          upi_intent_url: result.upi_intent_url,
+          qr_payload: result.qr_payload,
+          checkout_url: result.checkout_url,
+          expires_at: result.expires_at,
+          raw_create_response: result.raw_response as any,
+        },
+      });
+    } catch (error) {
+      await this.updateAttemptStatusOutsideTx({
+        attemptId: attempt.id,
+        fromStatus: "CREATED",
+        toStatus: "FAILED",
+        source: "CREATE_INTENT",
+        reason: "provider checkout creation failed",
+        operationalOwnerId: ownerId,
+        financialOwnerId: ownerId,
+        hostelId,
+        data: { raw_create_response: { error: String(error) } as any, settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE },
+      });
+      throw error;
+    }
+  }
+
   async previewPaymentAmount(obligationIds: string[], userId: string, tenantId?: string) {
     const obligations = await prisma.rent_obligations.findMany({
       where: { id: { in: obligationIds } },
@@ -1751,6 +1926,67 @@ export class PaymentService {
       }
 
       return finalizedAdvance;
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // 🧾 DEPOSIT PATH: Gateway-driven onboarding security deposit
+    // ──────────────────────────────────────────────────────────────
+    if ((attempt as any).payment_domain === PAYMENT_DOMAIN.RENT_COLLECTION && (attempt as any).flow_type === PAYMENT_FLOW.DEPOSIT) {
+      if (!attempt.tenant_id) {
+        throw new Error("INTERNAL: DEPOSIT payment attempt is missing tenant_id");
+      }
+      const depositTenantId: string = attempt.tenant_id;
+      const finalizedDeposit = await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${depositTenantId}::uuid FOR UPDATE`;
+        await tenantAdvanceService.creditIdempotentInTx(tx, {
+          tenantId: depositTenantId,
+          ownerId: attempt.owner_id,
+          amount: Number(attempt.amount),
+          referenceId: attempt.id,
+          referenceType: "PAYMENT_ATTEMPT",
+          createdBy: attempt.owner_id,
+          reason: "DEPOSIT",
+          notes: "Gateway security deposit payment credited",
+        });
+        return this.updateAttemptStatus(tx, {
+          attemptId,
+          fromStatus: "PROCESSING",
+          toStatus: "SUCCESS",
+          source: context?.source === "reconcile" ? "RECONCILE" : isManualConfirm ? "MANUAL_CONFIRM" : "VERIFY",
+          reason: "deposit ledger credited atomically",
+          actorId: context?.actor?.id || null,
+          operationalOwnerId: attempt.owner_id,
+          financialOwnerId: attempt.owner_id,
+          hostelId: attempt.hostel_id,
+          data: {
+            gateway_txn_id: gatewayTxnId,
+            raw_webhook_payload: rawPayload || null,
+            confirmed_at: new Date(),
+            settlement_status: SETTLEMENT_STATUS.SETTLED,
+            settled_at: new Date(),
+            ...(isManualConfirm && context?.actor ? {
+              manual_confirmed_by: context.actor.id,
+              manual_confirmed_at: new Date(),
+              manual_confirm_ip: context.actor.ip ?? null,
+            } : {}),
+          },
+        });
+      });
+      logger.info("payments.finalize.deposit_credited", {
+        ...requestMeta,
+        attempt_id: attemptId,
+        amount: Number(attempt.amount),
+        tenant_id: attempt.tenant_id,
+      });
+      await eventLog.log("DEPOSIT_CREDITED", attempt.owner_id, {
+        attempt_id: attemptId,
+        merchant_txn_id: attempt.merchant_txn_id,
+        amount: Number(attempt.amount),
+        tenant_id: attempt.tenant_id,
+        gateway_txn_id: gatewayTxnId || null,
+      });
+
+      return finalizedDeposit;
     }
 
     // Use ONLY junction table - no fallback to raw_create_response
@@ -2857,7 +3093,7 @@ export class PaymentService {
       where: {
         status: "SUCCESS",
         OR: [{ payment_domain: PAYMENT_DOMAIN.RENT_COLLECTION }, { payment_domain: null }],
-        flow_type: { notIn: [PAYMENT_FLOW.ADDON, PAYMENT_FLOW.SUBSCRIPTION, PAYMENT_FLOW.ADVANCE] },
+        flow_type: { notIn: [PAYMENT_FLOW.ADDON, PAYMENT_FLOW.SUBSCRIPTION, PAYMENT_FLOW.ADVANCE, PAYMENT_FLOW.DEPOSIT] },
         ...ownerFilter,
         ...hostelFilter,
         ...domainFilter,

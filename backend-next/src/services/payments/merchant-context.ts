@@ -69,11 +69,11 @@ export async function getProviderContext(params: {
     throw new Error("HOSTEL_ACCESS_DENIED: Payment provider hostel does not belong to this owner.");
   }
 
-  if (![PAYMENT_FLOW.RENT, PAYMENT_FLOW.ADVANCE, PAYMENT_FLOW.MANUAL_UPI_REFERENCE].includes(flowType as any)) {
+  if (![PAYMENT_FLOW.RENT, PAYMENT_FLOW.ADVANCE, PAYMENT_FLOW.DEPOSIT, PAYMENT_FLOW.MANUAL_UPI_REFERENCE].includes(flowType as any)) {
     throw new Error(`UNSUPPORTED_RENT_COLLECTION_FLOW: ${flowType}`);
   }
 
-  if ([PAYMENT_FLOW.RENT, PAYMENT_FLOW.ADVANCE].includes(flowType as any)) {
+  if ([PAYMENT_FLOW.RENT, PAYMENT_FLOW.ADVANCE, PAYMENT_FLOW.DEPOSIT].includes(flowType as any)) {
     if (!process.env.PHONEPE_CLIENT_ID || !process.env.PHONEPE_CLIENT_SECRET) {
       throw new Error("CONFIG_ERROR: HMS treasury PhonePe credentials are not configured");
     }
