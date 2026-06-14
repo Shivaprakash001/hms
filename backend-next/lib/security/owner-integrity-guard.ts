@@ -21,8 +21,7 @@ const logger = getLogger("security.owner-integrity");
  * Update this list when adding new owner accounts via bootstrap.
  */
 const EXPECTED_OWNER_EMAILS: string[] = [
-  // Add the production owner email here, e.g.:
-  // "owner@sriadithyahostels.in",
+  "sriadithyahostels@gmail.com",
 ];
 
 /**
