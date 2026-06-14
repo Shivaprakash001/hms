@@ -81,8 +81,8 @@ describe('Tenant Onboarding Integration Flow', () => {
 
     const result = await tenantInvitationLifecycleService.createInvitation({
       name: 'Rahul Sharma',
-      phone: '9876543210',
-      email: 'rahul@test.com',
+      phone: '9876543212',
+      email: 'rahul2@test.com',
       room_id: room.id,
       monthly_rent: 8000,
     }, owner.id);
@@ -99,8 +99,8 @@ describe('Tenant Onboarding Integration Flow', () => {
     const dbInvite = await prisma.tenant_invitations.findUnique({
       where: { id: result.invitation_id },
     });
-    expect(dbInvite?.phone).toBe('+919876543210');
-    expect(dbInvite?.email).toBe('rahul@test.com');
+    expect(dbInvite?.phone).toBe('+919876543212');
+    expect(dbInvite?.email).toBe('rahul2@test.com');
   });
 
   it('should require email (needs_email: true) if WhatsApp fails and no email is provided', async () => {
@@ -109,7 +109,7 @@ describe('Tenant Onboarding Integration Flow', () => {
 
     const result = await tenantInvitationLifecycleService.createInvitation({
       name: 'Rahul Sharma',
-      phone: '9876543210',
+      phone: '9876543213',
       room_id: room.id,
       monthly_rent: 8000,
     }, owner.id);
@@ -128,7 +128,7 @@ describe('Tenant Onboarding Integration Flow', () => {
     sendInvitationSpy.mockRejectedValueOnce(new Error('WhatsApp failed'));
     const initial = await tenantInvitationLifecycleService.createInvitation({
       name: 'Rahul Sharma',
-      phone: '9876543210',
+      phone: '9876543214',
       room_id: room.id,
       monthly_rent: 8000,
     }, owner.id);
@@ -147,7 +147,7 @@ describe('Tenant Onboarding Integration Flow', () => {
     const resendResult = await tenantInvitationLifecycleService.resendInvitation(
       initial.invitation_id,
       { id: owner.id, role: 'OWNER' },
-      { email: 'rahul-fallback@test.com' }
+      { email: 'rahul-fallback4@test.com' }
     );
 
     expect(resendResult.email_sent).toBe(true);
@@ -157,7 +157,7 @@ describe('Tenant Onboarding Integration Flow', () => {
     const dbInvite = await prisma.tenant_invitations.findUnique({
       where: { id: initial.invitation_id },
     });
-    expect(dbInvite?.email).toBe('rahul-fallback@test.com');
+    expect(dbInvite?.email).toBe('rahul-fallback4@test.com');
   });
 
   it('should invite a tenant with zero monthly rent', async () => {

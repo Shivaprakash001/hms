@@ -1170,22 +1170,119 @@ export class AdmissionsService {
         return severityOrder[a.severity as keyof typeof severityOrder] ? (severityOrder[b.severity as keyof typeof severityOrder] - severityOrder[a.severity as keyof typeof severityOrder]) : 0;
       });
 
-      // Legacy fields for backward compatibility
+      // Compute visitor/pre-invite metrics
       const [
         visitors,
         viewedRooms,
         interested,
-        reserved,
-        invited,
-        joined,
       ] = await Promise.all([
         prisma.visitorLead.count({ where }),
         prisma.leadActivity.groupBy({ by: ["lead_id"], where: { activity_type: "VIEW_ROOM", lead: where } }).then((rows: any[]) => rows.length),
         prisma.visitorLead.count({ where: { ...where, status: { in: ["INTERESTED", "ROOM_VISITED", "DECISION_PENDING", "READY_TO_JOIN", "INVITED", "JOINED"] } } }),
-        prisma.roomReservation.count({ where: { lead: where } }),
-        prisma.visitorLead.count({ where: { ...where, status: { in: ["INVITED", "JOINED"] } } }),
-        prisma.visitorLead.count({ where: { ...where, status: "JOINED" } }),
       ]);
+
+      // Compute the new unified onboarding funnel metrics from the single source of truth (tenants table + reservation computed states)
+      const funnelTenants = await prisma.tenants.findMany({
+        where: {
+          owner_id: ownerId,
+          ...(query.hostelId ? { hostel_id: String(query.hostelId) } : {}),
+          status: { in: ["INVITED", "ACTIVE"] },
+        },
+        select: {
+          id: true,
+          status: true,
+          advance_deposit: true,
+          maintenance_charge: true,
+          maintenance_type: true,
+          reservation_policy: true,
+          minimum_reservation_deposit: true,
+        },
+      });
+
+      const funnelTenantIds = funnelTenants.map((t) => t.id);
+
+      const [funnelDepositCredits, funnelMaintenanceObligations] = await Promise.all([
+        prisma.tenant_advance_ledger.groupBy({
+          by: ["tenant_id"],
+          where: {
+            tenant_id: { in: funnelTenantIds },
+            type: "CREDIT",
+            reason: "DEPOSIT",
+          },
+          _sum: { amount: true },
+        }),
+        prisma.rent_obligations.findMany({
+          where: {
+            tenant_id: { in: funnelTenantIds },
+            obligation_type: "MAINTENANCE",
+            is_superseded: false,
+          },
+          select: {
+            tenant_id: true,
+            payments: {
+              select: { amount_paid: true },
+            },
+          },
+        }),
+      ]);
+
+      const funnelDepositCreditsMap = new Map<string, number>();
+      for (const row of funnelDepositCredits) {
+        funnelDepositCreditsMap.set(row.tenant_id, Number(row._sum.amount || 0));
+      }
+
+      const funnelMaintenancePaidMap = new Map<string, number>();
+      for (const row of funnelMaintenanceObligations) {
+        const payments = row.payments || [];
+        const paid = payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid || 0), 0);
+        funnelMaintenancePaidMap.set(row.tenant_id, (funnelMaintenancePaidMap.get(row.tenant_id) || 0) + paid);
+      }
+
+      let funnelInvited = 0;
+      let funnelActivated = 0;
+      let funnelPaymentPending = 0;
+      let funnelReserved = 0;
+      let funnelMovedIn = 0;
+
+      for (const t of funnelTenants) {
+        if (t.status === "INVITED") {
+          funnelInvited++;
+        } else if (t.status === "ACTIVE") {
+          funnelActivated++;
+
+          const requiredDeposit = Number(t.advance_deposit || 0);
+          const paidDeposit = funnelDepositCreditsMap.get(t.id) || 0;
+          const depositOutstanding = Math.max(0, requiredDeposit - paidDeposit);
+
+          const maintenanceType = String(t.maintenance_type || "MONTHLY").toUpperCase();
+          const requiredMaintenance = maintenanceType === "NONE" ? 0 : Number(t.maintenance_charge || 0);
+          const paidMaintenance = funnelMaintenancePaidMap.get(t.id) || 0;
+          const maintenanceOutstanding = Math.max(0, requiredMaintenance - paidMaintenance);
+
+          const isDepositCleared = depositOutstanding <= 0;
+          const isMaintenanceCleared = maintenanceOutstanding <= 0;
+          const isFinanciallyReady = isDepositCleared && isMaintenanceCleared;
+
+          const reservationPolicy = t.reservation_policy || "FULL_DEPOSIT";
+          const minimumReservationDeposit = Number(t.minimum_reservation_deposit || 0);
+
+          const threshold =
+            reservationPolicy === "PARTIAL_DEPOSIT"
+              ? Math.min(requiredDeposit, minimumReservationDeposit)
+              : requiredDeposit;
+
+          if (isFinanciallyReady) {
+            funnelMovedIn++;
+          } else if (
+            paidDeposit >= threshold &&
+            paidMaintenance >= requiredMaintenance
+          ) {
+            funnelReserved++;
+          } else {
+            funnelPaymentPending++;
+          }
+        }
+      }
 
       return {
         // Funnel & Stats
@@ -1193,14 +1290,17 @@ export class AdmissionsService {
           visitors,
           viewed_rooms: viewedRooms,
           interested,
-          reserved,
-          invited,
-          joined,
+          reserved: funnelReserved,
+          invited: funnelInvited,
+          joined: funnelMovedIn,
+          activated: funnelActivated,
+          payment_pending: funnelPaymentPending,
+          moved_in: funnelMovedIn,
           expectedRevenue,
           realizedRevenue: qrRevenue,
           hasEstimatedRent,
         },
-        conversion_rate: visitors > 0 ? Math.round((joined / visitors) * 1000) / 10 : 0,
+        conversion_rate: visitors > 0 ? Math.round((funnelMovedIn / visitors) * 1000) / 10 : 0,
 
         // Snapshot (No Real Opportunity, replaced by Potential Revenue)
         snapshot: {

@@ -9,6 +9,14 @@ vi.mock("@/lib/db", () => {
   const mockPrisma = {
     tenants: {
       update: vi.fn(),
+      findUnique: vi.fn().mockImplementation((args) => {
+        return Promise.resolve({
+          id: args?.where?.id || "tenant-1",
+          advance_deposit: 5000,
+          maintenance_charge: 1000,
+          maintenance_type: "MONTHLY",
+        });
+      }),
     },
     profile: {
       update: vi.fn(),
@@ -33,6 +41,18 @@ vi.mock("@/lib/db", () => {
     },
     roomAllocation: {
       count: vi.fn(),
+    },
+    tenant_advance_ledger: {
+      aggregate: vi.fn().mockResolvedValue({ _sum: { amount: 5000 } }),
+    },
+    rent_obligations: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    phoneVerificationOtp: {
+      findFirst: vi.fn().mockResolvedValue({ status: "VERIFIED" }),
+    },
+    tenantPolicyAcceptance: {
+      create: vi.fn().mockResolvedValue({}),
     },
     $transaction: vi.fn((cb) => cb(mockPrisma)),
     $connect: vi.fn(),

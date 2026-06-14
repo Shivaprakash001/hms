@@ -10,7 +10,6 @@ import { eventLog } from "../../../lib/services/event-log-service";
 import { frontendUrl } from "../../../lib/config/domains";
 import { roomCapacityService } from "../../../lib/services/room-capacity-service";
 import { tenantInvitationLifecycleService } from "./tenant-invitation-lifecycle-service";
-import { assertActivationFinancialReady } from "./activation-financial-enforcement-service";
 
 const logger = getLogger("invitation-service");
 
@@ -274,8 +273,6 @@ export class InvitationService {
         logger.warn(`Activation rejected for tenant ${tenant.id}: status=${tenant.status}`);
         throw new Error("INVALID: Activation link has already been used");
     }
-
-    await assertActivationFinancialReady(tenant.id);
 
     const hashedPassword = await hashPassword(password);
 

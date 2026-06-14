@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 
 // Load test environment variables
 dotenv.config({ path: path.resolve(__dirname, '../.env.test') });
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 
 export default defineConfig({

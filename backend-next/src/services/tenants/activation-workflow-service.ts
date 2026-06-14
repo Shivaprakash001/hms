@@ -19,7 +19,6 @@ import { tenantInvitationLifecycleService } from "./tenant-invitation-lifecycle-
 import { AgreementGenerationService } from "./agreement-generation-service";
 import { currentAgreementWhere, isCurrentAgreementStatus, isSignedAgreementStatus } from "./agreement-status";
 import { authOtpService } from "../../../lib/services/auth/auth-otp-service";
-import { assertActivationFinancialReady } from "./activation-financial-enforcement-service";
 import { getActivationFinancialStatus } from "./activation-financial-status-service";
 import {
   assertAgreementLifecycleComplete,
@@ -1209,7 +1208,6 @@ export class ActivationWorkflowService {
       }
 
       this.validateOperationalInviteData(tenantNow);
-      await assertActivationFinancialReady(tenantNow.id);
 
       const completedAt = new Date();
       await prisma.$transaction(async (tx: any) => {

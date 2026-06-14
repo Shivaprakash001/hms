@@ -67,7 +67,11 @@ describe("BriefingEngine Weighted Scoring Tests", () => {
 
     expect(briefing.priority_type).toBe("COLLECTIONS");
     expect(briefing.priority_payload.score).toBe(400);
-    expect(briefing.template_variables.summary).toBe("🎯 Recover ₹1,00,000 from 5 overdue tenants");
+    expect(briefing.template_variables.summary).toBe([
+      "Today's focus: Pending rent",
+      "5 overdue tenants need follow-up.",
+      "Open Pending Rent to call or send reminders.",
+    ].join("\n"));
   });
 
   it("Scenario 2: OCCUPANCY wins (20 vacant beds => score 150)", async () => {
@@ -95,7 +99,11 @@ describe("BriefingEngine Weighted Scoring Tests", () => {
 
     expect(briefing.priority_type).toBe("OCCUPANCY");
     expect(briefing.priority_payload.score).toBe(150);
-    expect(briefing.template_variables.summary).toBe("🎯 Fill 20 vacant beds");
+    expect(briefing.template_variables.summary).toBe([
+      "Today's focus: Empty beds",
+      "20 vacant beds can be filled.",
+      "Open Vacancies to invite tenants.",
+    ].join("\n"));
   });
 
   it("Scenario 3: ONBOARDING wins (10 pending => score 100)", async () => {
@@ -123,7 +131,11 @@ describe("BriefingEngine Weighted Scoring Tests", () => {
 
     expect(briefing.priority_type).toBe("ONBOARDING");
     expect(briefing.priority_payload.score).toBe(100);
-    expect(briefing.template_variables.summary).toBe("🎯 Complete onboarding for 10 tenants");
+    expect(briefing.template_variables.summary).toBe([
+      "Today's focus: Pending onboarding",
+      "10 tenants need activation follow-up.",
+      "Open Invitations to resend or review.",
+    ].join("\n"));
   });
 
   it("Scenario 4: PROFITABILITY wins (60% expense ratio => score 125)", async () => {
@@ -151,7 +163,11 @@ describe("BriefingEngine Weighted Scoring Tests", () => {
 
     expect(briefing.priority_type).toBe("PROFITABILITY");
     expect(briefing.priority_payload.score).toBe(125);
-    expect(briefing.template_variables.summary).toBe("🎯 Review expenses — costs reached 60% of revenue");
+    expect(briefing.template_variables.summary).toBe([
+      "Today's focus: Expense review",
+      "Spending needs owner review.",
+      "Open HMS for the full finance view.",
+    ].join("\n"));
   });
 
   it("Scenario 5: OPERATIONS wins (15 total tasks => score 150)", async () => {
@@ -179,7 +195,11 @@ describe("BriefingEngine Weighted Scoring Tests", () => {
 
     expect(briefing.priority_type).toBe("OPERATIONS");
     expect(briefing.priority_payload.score).toBe(150);
-    expect(briefing.template_variables.summary).toBe("🎯 15 operational tasks require attention");
+    expect(briefing.template_variables.summary).toBe([
+      "Today's focus: Operations",
+      "15 items need review.",
+      "Open Move-Outs or Pending Invitations.",
+    ].join("\n"));
   });
 
   it("Scenario 6: HEALTHY wins (All scores are 0)", async () => {
@@ -207,6 +227,10 @@ describe("BriefingEngine Weighted Scoring Tests", () => {
 
     expect(briefing.priority_type).toBe("HEALTHY");
     expect(briefing.priority_payload.score).toBe(0);
-    expect(briefing.template_variables.summary).toBe("🎯 No action needed — operations running smoothly");
+    expect(briefing.template_variables.summary).toBe([
+      "Today's focus: No urgent action",
+      "Operations look clear.",
+      "Search a tenant, record an expense, or invite a tenant when needed.",
+    ].join("\n"));
   });
 });

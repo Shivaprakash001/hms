@@ -1,9 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  ActivationFinancialEnforcementError,
-  ActivationFinancialEnforcementService,
-} from "@/src/services/tenants/activation-financial-enforcement-service";
+import { reservationStatusService } from "@/src/services/tenants/reservation-status-service";
 import { activationFinancialStatusService } from "@/src/services/tenants/activation-financial-status-service";
+import { prisma } from "@/lib/db";
+
+vi.mock("@/lib/db", () => {
+  const mockPrisma = {
+    tenants: {
+      findUnique: vi.fn(),
+    },
+  };
+  return { prisma: mockPrisma };
+});
 
 vi.mock("@/src/services/tenants/activation-financial-status-service", () => ({
   activationFinancialStatusService: {
@@ -11,98 +18,138 @@ vi.mock("@/src/services/tenants/activation-financial-status-service", () => ({
   },
 }));
 
-const readyStatus = {
+const mockFinancialStatus = {
   requiredDeposit: 10000,
-  paidDeposit: 10000,
-  depositOutstanding: 0,
+  paidDeposit: 0,
+  depositOutstanding: 10000,
   requiredMaintenance: 1000,
-  paidMaintenance: 1000,
-  maintenanceOutstanding: 0,
-  isDepositCleared: true,
-  isMaintenanceCleared: true,
-  isFinanciallyReady: true,
+  paidMaintenance: 0,
+  maintenanceOutstanding: 1000,
+  isDepositCleared: false,
+  isMaintenanceCleared: false,
+  isFinanciallyReady: false,
 };
 
-describe("ActivationFinancialEnforcementService", () => {
-  let service: ActivationFinancialEnforcementService;
-
+describe("ReservationStatusService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    service = new ActivationFinancialEnforcementService();
   });
 
-  it("blocks activation when deposit is outstanding", async () => {
+  it("returns MOVE_IN_READY status when financial readiness is fully met", async () => {
+    vi.mocked(prisma.tenants.findUnique).mockResolvedValue({
+      id: "tenant-1",
+      reservation_policy: "FULL_DEPOSIT",
+      minimum_reservation_deposit: 0,
+    } as any);
+
     vi.mocked(activationFinancialStatusService.getActivationFinancialStatus).mockResolvedValue({
-      ...readyStatus,
+      ...mockFinancialStatus,
+      paidDeposit: 10000,
+      depositOutstanding: 0,
+      paidMaintenance: 1000,
+      maintenanceOutstanding: 0,
+      isDepositCleared: true,
+      isMaintenanceCleared: true,
+      isFinanciallyReady: true,
+    });
+
+    const status = await reservationStatusService.getReservationStatus("tenant-1");
+    expect(status.status).toBe("MOVE_IN_READY");
+    expect(status.threshold).toBe(10000);
+  });
+
+  it("returns RESERVED when policy is FULL_DEPOSIT, deposit is fully paid, and maintenance is fully paid", async () => {
+    vi.mocked(prisma.tenants.findUnique).mockResolvedValue({
+      id: "tenant-1",
+      reservation_policy: "FULL_DEPOSIT",
+      minimum_reservation_deposit: 0,
+    } as any);
+
+    vi.mocked(activationFinancialStatusService.getActivationFinancialStatus).mockResolvedValue({
+      ...mockFinancialStatus,
+      paidDeposit: 10000,
+      depositOutstanding: 0,
+      paidMaintenance: 1000,
+      maintenanceOutstanding: 0,
+      isDepositCleared: true,
+      isMaintenanceCleared: true,
+      isFinanciallyReady: false,
+    });
+
+    const status = await reservationStatusService.getReservationStatus("tenant-1");
+    expect(status.status).toBe("RESERVED");
+  });
+
+  it("returns RESERVED when policy is PARTIAL_DEPOSIT, paid deposit >= minimum_reservation_deposit, and maintenance is paid", async () => {
+    vi.mocked(prisma.tenants.findUnique).mockResolvedValue({
+      id: "tenant-1",
+      reservation_policy: "PARTIAL_DEPOSIT",
+      minimum_reservation_deposit: 3000,
+    } as any);
+
+    vi.mocked(activationFinancialStatusService.getActivationFinancialStatus).mockResolvedValue({
+      ...mockFinancialStatus,
       paidDeposit: 4000,
       depositOutstanding: 6000,
+      paidMaintenance: 1000,
+      maintenanceOutstanding: 0,
       isDepositCleared: false,
+      isMaintenanceCleared: true,
       isFinanciallyReady: false,
     });
 
-    await expect(service.assertActivationFinancialReady("tenant-1")).rejects.toMatchObject({
-      code: "DEPOSIT_OUTSTANDING",
-      status: 409,
-      details: {
-        requiredDeposit: 10000,
-        paidDeposit: 4000,
-        outstandingDeposit: 6000,
-      },
-    });
+    const status = await reservationStatusService.getReservationStatus("tenant-1");
+    expect(status.status).toBe("RESERVED");
+    expect(status.threshold).toBe(3000);
   });
 
-  it("blocks activation when maintenance is outstanding", async () => {
+  it("returns PAYMENT_PENDING when paid deposit < threshold", async () => {
+    vi.mocked(prisma.tenants.findUnique).mockResolvedValue({
+      id: "tenant-1",
+      reservation_policy: "PARTIAL_DEPOSIT",
+      minimum_reservation_deposit: 3000,
+    } as any);
+
     vi.mocked(activationFinancialStatusService.getActivationFinancialStatus).mockResolvedValue({
-      ...readyStatus,
-      paidMaintenance: 0,
-      maintenanceOutstanding: 1000,
-      isMaintenanceCleared: false,
-      isFinanciallyReady: false,
-    });
-
-    await expect(service.assertActivationFinancialReady("tenant-1")).rejects.toMatchObject({
-      code: "MAINTENANCE_OUTSTANDING",
-      status: 409,
-      details: {
-        requiredMaintenance: 1000,
-        paidMaintenance: 0,
-        outstandingMaintenance: 1000,
-      },
-    });
-  });
-
-  it("blocks activation with complete payload when both are outstanding", async () => {
-    const incomplete = {
-      ...readyStatus,
-      paidDeposit: 0,
-      depositOutstanding: 10000,
-      paidMaintenance: 0,
-      maintenanceOutstanding: 1000,
+      ...mockFinancialStatus,
+      paidDeposit: 2000,
+      depositOutstanding: 8000,
+      paidMaintenance: 1000,
+      maintenanceOutstanding: 0,
       isDepositCleared: false,
+      isMaintenanceCleared: true,
+      isFinanciallyReady: false,
+    });
+
+    const status = await reservationStatusService.getReservationStatus("tenant-1");
+    expect(status.status).toBe("PAYMENT_PENDING");
+  });
+
+  it("returns PAYMENT_PENDING when maintenance is not fully paid, even if deposit is cleared", async () => {
+    vi.mocked(prisma.tenants.findUnique).mockResolvedValue({
+      id: "tenant-1",
+      reservation_policy: "FULL_DEPOSIT",
+      minimum_reservation_deposit: 0,
+    } as any);
+
+    vi.mocked(activationFinancialStatusService.getActivationFinancialStatus).mockResolvedValue({
+      ...mockFinancialStatus,
+      paidDeposit: 10000,
+      depositOutstanding: 0,
+      paidMaintenance: 0,
+      maintenanceOutstanding: 1000,
+      isDepositCleared: true,
       isMaintenanceCleared: false,
       isFinanciallyReady: false,
-    };
-    vi.mocked(activationFinancialStatusService.getActivationFinancialStatus).mockResolvedValue(incomplete);
-
-    await expect(service.assertActivationFinancialReady("tenant-1")).rejects.toMatchObject({
-      code: "ONBOARDING_FINANCIALS_INCOMPLETE",
-      status: 409,
-      details: incomplete,
     });
+
+    const status = await reservationStatusService.getReservationStatus("tenant-1");
+    expect(status.status).toBe("PAYMENT_PENDING");
   });
 
-  it("returns readiness when deposit and maintenance are cleared", async () => {
-    vi.mocked(activationFinancialStatusService.getActivationFinancialStatus).mockResolvedValue(readyStatus);
+  it("throws not found when tenant is missing", async () => {
+    vi.mocked(prisma.tenants.findUnique).mockResolvedValue(null);
 
-    await expect(service.assertActivationFinancialReady("tenant-1")).resolves.toEqual(readyStatus);
-  });
-
-  it("uses a structured error type", () => {
-    const error = new ActivationFinancialEnforcementError("DEPOSIT_OUTSTANDING", "Deposit due", { outstandingDeposit: 1 });
-
-    expect(error).toBeInstanceOf(Error);
-    expect(error.code).toBe("DEPOSIT_OUTSTANDING");
-    expect(error.status).toBe(409);
-    expect(error.details).toEqual({ outstandingDeposit: 1 });
+    await expect(reservationStatusService.getReservationStatus("missing")).rejects.toThrow("NOT_FOUND: Tenant not found");
   });
 });

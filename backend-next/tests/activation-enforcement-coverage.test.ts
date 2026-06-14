@@ -10,14 +10,14 @@ function read(relativePath: string) {
 }
 
 describe("C6 activation financial enforcement coverage", () => {
-  it("enforces through all first-activation writers", () => {
+  it("does not enforce through first-activation writers anymore (decoupled)", () => {
     const invitationService = read("src/services/tenants/invitation-service.ts");
     const activationWorkflowService = read("src/services/tenants/activation-workflow-service.ts");
     const tenantInvitationLifecycleService = read("src/services/tenants/tenant-invitation-lifecycle-service.ts");
 
-    expect(invitationService).toContain("assertActivationFinancialReady(tenant.id)");
-    expect(activationWorkflowService).toContain("assertActivationFinancialReady(tenantNow.id)");
-    expect(tenantInvitationLifecycleService).toContain("assertActivationFinancialReady(tenant.id)");
+    expect(invitationService).not.toContain("assertActivationFinancialReady");
+    expect(activationWorkflowService).not.toContain("assertActivationFinancialReady");
+    expect(tenantInvitationLifecycleService).not.toContain("assertActivationFinancialReady");
   });
 
   it("does not enforce through reactivation, migration, or repair paths", () => {

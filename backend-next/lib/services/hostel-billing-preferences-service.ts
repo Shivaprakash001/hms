@@ -9,6 +9,8 @@ export type BillingDefaults = {
   maintenance_type: MaintenanceType;
   auto_fill_room_rent: boolean;
   allow_override: boolean;
+  reservation_policy?: string;
+  minimum_reservation_deposit?: number;
 };
 
 export type TenantInviteDefaults = {
@@ -24,6 +26,8 @@ export type TenantInviteDefaults = {
     advance_deposit: number;
     maintenance_charge: number;
     maintenance_type: MaintenanceType;
+    reservation_policy?: string;
+    minimum_reservation_deposit?: number;
   };
 };
 
@@ -35,6 +39,8 @@ export const DEFAULT_BILLING_DEFAULTS: BillingDefaults = {
   maintenance_type: "MONTHLY",
   auto_fill_room_rent: true,
   allow_override: true,
+  reservation_policy: "FULL_DEPOSIT",
+  minimum_reservation_deposit: 0,
 };
 
 function nonNegativeNumber(value: unknown, fallback: number) {
@@ -77,6 +83,8 @@ export function normalizeBillingDefaults(rawConfig: unknown): BillingDefaults {
     allow_override: nested.allow_override !== undefined
       ? Boolean(nested.allow_override)
       : DEFAULT_BILLING_DEFAULTS.allow_override,
+    reservation_policy: nested.reservation_policy ?? config.reservation_policy ?? "FULL_DEPOSIT",
+    minimum_reservation_deposit: nonNegativeNumber(nested.minimum_reservation_deposit ?? config.minimum_reservation_deposit, 0),
   };
 }
 
@@ -96,6 +104,12 @@ function sanitizeBillingDefaultsPayload(payload: Partial<BillingDefaults>) {
   }
   if (payload.allow_override !== undefined) {
     next.allow_override = Boolean(payload.allow_override);
+  }
+  if (payload.reservation_policy !== undefined) {
+    next.reservation_policy = String(payload.reservation_policy);
+  }
+  if (payload.minimum_reservation_deposit !== undefined) {
+    next.minimum_reservation_deposit = nonNegativeNumber(payload.minimum_reservation_deposit, 0);
   }
   return next;
 }
@@ -193,6 +207,8 @@ export class HostelBillingPreferencesService {
         advance_deposit: billingDefaults.advance_deposit,
         maintenance_charge: maintenanceCharge,
         maintenance_type: billingDefaults.maintenance_type,
+        reservation_policy: billingDefaults.reservation_policy ?? "FULL_DEPOSIT",
+        minimum_reservation_deposit: billingDefaults.minimum_reservation_deposit ?? 0,
       },
     };
 

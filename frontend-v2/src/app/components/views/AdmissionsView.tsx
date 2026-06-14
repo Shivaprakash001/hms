@@ -932,7 +932,16 @@ function DashboardOverview({
   const vacancyDemandMap = analytics?.vacancyDemandMap || [];
   const lostReasonsData = analytics?.lost_reasons?.[lostFilter] || [];
 
-  const maxCount = Math.max(funnel.visitors || 1, funnel.viewed_rooms || 1, funnel.interested || 1, funnel.reserved || 1, funnel.invited || 1, funnel.joined || 1);
+  const maxCount = Math.max(
+    funnel.visitors || 1,
+    funnel.viewed_rooms || 1,
+    funnel.interested || 1,
+    funnel.invited || 1,
+    funnel.activated || 1,
+    funnel.payment_pending || 1,
+    funnel.reserved || 1,
+    funnel.moved_in || 1
+  );
 
   return (
     <div className="min-h-screen bg-[#F5F5F7] pb-12">
@@ -1159,12 +1168,14 @@ function DashboardOverview({
             {funnelExpanded && (
               <div className="space-y-4 pt-2 border-t border-gray-100 animate-in fade-in duration-200">
                 {[
-                  { label: 'Visitors', count: funnel.visitors ?? 0, color: 'bg-slate-400', revenue: null },
-                  { label: 'Viewed Rooms', count: funnel.viewed_rooms ?? 0, color: 'bg-blue-400', revenue: null },
-                  { label: 'Interested', count: funnel.interested ?? 0, color: 'bg-indigo-400', revenue: null },
-                  { label: 'Reserved', count: funnel.reserved ?? 0, color: 'bg-purple-400', revenue: null },
-                  { label: 'Invited', count: funnel.invited ?? 0, color: 'bg-amber-400', revenue: null },
-                  { label: 'Joined / Converted', count: funnel.joined ?? 0, color: 'bg-emerald-500', revenue: null },
+                  { label: 'Visitors', count: funnel.visitors ?? 0, color: 'bg-slate-400', suffix: 'leads' },
+                  { label: 'Viewed Rooms', count: funnel.viewed_rooms ?? 0, color: 'bg-blue-400', suffix: 'leads' },
+                  { label: 'Interested', count: funnel.interested ?? 0, color: 'bg-indigo-400', suffix: 'leads' },
+                  { label: 'Invited', count: funnel.invited ?? 0, color: 'bg-amber-400', suffix: 'tenants' },
+                  { label: 'Activated', count: funnel.activated ?? 0, color: 'bg-sky-400', suffix: 'tenants' },
+                  { label: 'Payment Pending', count: funnel.payment_pending ?? 0, color: 'bg-rose-400', suffix: 'tenants' },
+                  { label: 'Reserved', count: funnel.reserved ?? 0, color: 'bg-purple-400', suffix: 'tenants' },
+                  { label: 'Moved In', count: funnel.moved_in ?? 0, color: 'bg-emerald-500', suffix: 'tenants' },
                 ].map((stage, idx) => {
                   const width = Math.max((stage.count / maxCount) * 100, stage.count > 0 ? 8 : 0);
 
@@ -1173,7 +1184,7 @@ function DashboardOverview({
                       <div className="flex justify-between text-xs font-medium text-gray-700">
                         <span>{stage.label}</span>
                         <span className="font-bold font-mono">
-                          {stage.count} leads
+                          {stage.count} {stage.suffix}
                         </span>
                       </div>
                       <div className="h-5 w-full bg-gray-100 rounded-lg overflow-hidden flex items-center">

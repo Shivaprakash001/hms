@@ -1,4 +1,5 @@
 import { prisma } from "../db";
+import { reservationStatusService } from "../../src/services/tenants/reservation-status-service";
 
 type DbClient = typeof prisma | any;
 
@@ -33,15 +34,29 @@ export class RoomCapacityService {
       throw new Error("FORBIDDEN: Room belongs to a different owner");
     }
 
-    const [occupied, reservedReservations, activeInvitations] = await Promise.all([
-      db.roomAllocation.count({
-        where: {
-          room_id: roomId,
-          is_active: true,
-          end_date: null,
-          tenant: { status: "ACTIVE" },
-        },
-      }),
+    const activeAllocations = await db.roomAllocation.findMany({
+      where: {
+        room_id: roomId,
+        is_active: true,
+        end_date: null,
+        tenant: { status: "ACTIVE" },
+      },
+      select: {
+        tenant_id: true,
+      },
+    });
+
+    const [resolvedOccupiedCount, reservedReservations, activeInvitations] = await Promise.all([
+      (async () => {
+        let count = 0;
+        for (const alloc of activeAllocations) {
+          const resStatus = await reservationStatusService.getReservationStatus(alloc.tenant_id);
+          if (resStatus.status !== "PAYMENT_PENDING") {
+            count++;
+          }
+        }
+        return count;
+      })(),
       db.tenant_invitation_reservations.count({
         where: {
           room_id: roomId,
@@ -59,7 +74,7 @@ export class RoomCapacityService {
     ]);
 
     const reserved = Math.max(reservedReservations, activeInvitations);
-    return this.toSnapshot(room, occupied, reserved);
+    return this.toSnapshot(room, resolvedOccupiedCount, reserved);
   }
 
   async getHostelCapacityMap(
@@ -77,13 +92,6 @@ export class RoomCapacityService {
         hostels: true,
         _count: {
           select: {
-            room_allocations: {
-              where: {
-                is_active: true,
-                end_date: null,
-                tenant: { status: "ACTIVE" },
-              },
-            },
             tenant_invitation_reservations: {
               where: {
                 status: "ACTIVE",
@@ -101,12 +109,116 @@ export class RoomCapacityService {
       },
     });
 
+    const activeAllocations = await db.roomAllocation.findMany({
+      where: {
+        hostel_id: hostelId,
+        is_active: true,
+        end_date: null,
+        tenant: { status: "ACTIVE" },
+      },
+      select: {
+        room_id: true,
+        tenant_id: true,
+      },
+    });
+
+    const tenantIds = activeAllocations.map((a: any) => a.tenant_id);
+
+    const tenants = await db.tenants.findMany({
+      where: { id: { in: tenantIds } },
+      select: {
+        id: true,
+        advance_deposit: true,
+        maintenance_charge: true,
+        maintenance_type: true,
+        reservation_policy: true,
+        minimum_reservation_deposit: true,
+      },
+    });
+
+    const tenantMap = new Map(tenants.map((t: any) => [t.id, t]));
+
+    const depositCredits = await db.tenant_advance_ledger.groupBy({
+      by: ["tenant_id"],
+      where: {
+        tenant_id: { in: tenantIds },
+        type: "CREDIT",
+        reason: "DEPOSIT",
+      },
+      _sum: { amount: true },
+    });
+    const depositCreditsMap = new Map(depositCredits.map((d: any) => [d.tenant_id, Number(d._sum.amount || 0)]));
+
+    const maintenanceObligations = await db.rent_obligations.findMany({
+      where: {
+        tenant_id: { in: tenantIds },
+        obligation_type: "MAINTENANCE",
+        is_superseded: false,
+      },
+      select: {
+        tenant_id: true,
+        payments: {
+          select: { amount_paid: true },
+        },
+      },
+    });
+
+    const maintenancePaidMap = new Map<string, number>();
+    for (const ob of maintenanceObligations) {
+      const payments = ob.payments || [];
+      const paid = payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid || 0), 0);
+      maintenancePaidMap.set(ob.tenant_id, (maintenancePaidMap.get(ob.tenant_id) || 0) + paid);
+    }
+
+    const isPaymentPending = (tenantId: string) => {
+      const tenant = tenantMap.get(tenantId);
+      if (!tenant) return true;
+
+      const requiredDeposit = Number(tenant.advance_deposit || 0);
+      const paidDeposit = depositCreditsMap.get(tenantId) || 0;
+      const depositOutstanding = Math.max(0, requiredDeposit - paidDeposit);
+
+      const maintenanceType = String(tenant.maintenance_type || "MONTHLY").toUpperCase();
+      const requiredMaintenance = maintenanceType === "NONE" ? 0 : Number(tenant.maintenance_charge || 0);
+      const paidMaintenance = maintenancePaidMap.get(tenantId) || 0;
+
+      const isDepositCleared = depositOutstanding <= 0;
+      const isMaintenanceCleared = requiredMaintenance - paidMaintenance <= 0;
+      const isFinanciallyReady = isDepositCleared && isMaintenanceCleared;
+
+      if (isFinanciallyReady) return false;
+
+      const reservationPolicy = tenant.reservation_policy || "FULL_DEPOSIT";
+      const minimumReservationDeposit = Number(tenant.minimum_reservation_deposit || 0);
+
+      const threshold =
+        reservationPolicy === "PARTIAL_DEPOSIT"
+          ? Math.min(requiredDeposit, minimumReservationDeposit)
+          : requiredDeposit;
+
+      if (
+        paidDeposit >= threshold &&
+        paidMaintenance >= requiredMaintenance
+      ) {
+        return false;
+      }
+
+      return true;
+    };
+
+    const occupiedCountByRoom = new Map<string, number>();
+    for (const alloc of activeAllocations) {
+      if (!isPaymentPending(alloc.tenant_id)) {
+        occupiedCountByRoom.set(alloc.room_id, (occupiedCountByRoom.get(alloc.room_id) || 0) + 1);
+      }
+    }
+
     return new Map(
       rooms.map((room: any) => [
         room.id,
         this.toSnapshot(
           room,
-          Number(room._count?.room_allocations || 0),
+          occupiedCountByRoom.get(room.id) || 0,
           Math.max(
             Number(room._count?.tenant_invitation_reservations || 0),
             Number(room._count?.tenant_invitations || 0)

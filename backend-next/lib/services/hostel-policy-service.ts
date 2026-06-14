@@ -23,6 +23,8 @@ export type HostelPolicy = {
       enabled: boolean;
       default_amount: number;
       refundable: boolean;
+      reservation_policy?: string;
+      minimum_reservation_deposit?: number;
     };
     maintenance: {
       type: MaintenanceType;
@@ -304,6 +306,8 @@ export function normalizeHostelPolicy(hostel: any): HostelPolicy {
         enabled: bool(deposit.enabled ?? config.advance_enabled, false),
         default_amount: nonNegative(deposit.default_amount ?? billingDefaults.advance_deposit ?? config.advance_amount_default, 0, "Default advance deposit", 1000000),
         refundable: bool(deposit.refundable ?? config.advance_refundable, true),
+        reservation_policy: String(deposit.reservation_policy ?? config.reservation_policy ?? "FULL_DEPOSIT"),
+        minimum_reservation_deposit: nonNegative(deposit.minimum_reservation_deposit ?? config.minimum_reservation_deposit, 0, "Minimum reservation deposit", 1000000),
       },
       maintenance: {
         type: maintenanceResolved,
@@ -456,6 +460,8 @@ export function toCompatibilityPreferences(policy: HostelPolicy): Record<string,
     advance_enabled: policy.billing.deposit.enabled,
     advance_amount_default: policy.billing.deposit.default_amount,
     advance_refundable: policy.billing.deposit.refundable,
+    reservation_policy: policy.billing.deposit.reservation_policy ?? "FULL_DEPOSIT",
+    minimum_reservation_deposit: policy.billing.deposit.minimum_reservation_deposit ?? 0,
     maintenance_enabled: policy.billing.maintenance.type !== "NONE",
     maintenance_amount_default: policy.billing.maintenance.amount,
     maintenance_type: policy.billing.maintenance.type,
@@ -465,6 +471,8 @@ export function toCompatibilityPreferences(policy: HostelPolicy): Record<string,
       maintenance_type: policy.billing.maintenance.type,
       auto_fill_room_rent: policy.billing.invite_defaults.auto_fill_room_rent,
       allow_override: policy.billing.invite_defaults.allow_override,
+      reservation_policy: policy.billing.deposit.reservation_policy ?? "FULL_DEPOSIT",
+      minimum_reservation_deposit: policy.billing.deposit.minimum_reservation_deposit ?? 0,
     },
     allow_partial_payments: policy.billing.partial_payments.enabled,
     min_payment_amount: policy.billing.partial_payments.minimum_amount,
@@ -669,6 +677,11 @@ export function validateHostelPolicyForWrite(policy: HostelPolicy) {
   boundedNumber(policy.billing.grace_days, 0, 0, 30, "Grace period");
   nonNegative(policy.billing.late_fee.max_amount, 500, "Maximum late fee", 50000);
   nonNegative(policy.billing.deposit.default_amount, 0, "Default advance deposit", 1000000);
+  const rp = policy.billing.deposit.reservation_policy;
+  if (rp && rp !== "FULL_DEPOSIT" && rp !== "PARTIAL_DEPOSIT") {
+    throw new Error("VALIDATION: reservation_policy must be FULL_DEPOSIT or PARTIAL_DEPOSIT");
+  }
+  nonNegative(policy.billing.deposit.minimum_reservation_deposit ?? 0, 0, "Minimum reservation deposit", 1000000);
   nonNegative(policy.billing.maintenance.amount, 0, "Maintenance amount", 50000);
   nonNegative(policy.billing.partial_payments.minimum_amount, 0, "Minimum payment amount", 1000000);
   boundedNumber(policy.billing.payment_frequency.academic_year_start_month, 6, 1, 12, "Academic year start month");

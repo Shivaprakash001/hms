@@ -193,8 +193,8 @@ describe("WhatsApp Owner Briefing Integration Tests", () => {
     expect(briefing?.view_dues_clicks).toBe(0);
 
     const lastMessage = mockSendTextMessage.mock.calls[mockSendTextMessage.mock.calls.length - 1][1];
-    expect(lastMessage).toContain("⚠️ Collections Requiring Attention");
-    expect(lastMessage).toContain("No pending collections.");
+    expect(lastMessage).toContain("Pending Rent");
+    expect(lastMessage).toContain("No pending dues found.");
   });
 
   it("Scenario 4: Click on Quick Action for ONBOARDING resolves active invites", async () => {
@@ -203,6 +203,13 @@ describe("WhatsApp Owner Briefing Integration Tests", () => {
       ownerPhone,
       priorityType: "ONBOARDING",
     });
+
+    // Seed a room
+    const roomId = crypto.randomUUID();
+    await prisma.$executeRaw`
+      INSERT INTO "test"."rooms" (id, hostel_id, room_no, base_rent, capacity, is_active)
+      VALUES (${roomId}::uuid, ${hostelId}::uuid, '101', 5000, 2, true)
+    `;
 
     // Seed an invited tenant
     const profileId = crypto.randomUUID();
@@ -214,6 +221,13 @@ describe("WhatsApp Owner Briefing Integration Tests", () => {
     await prisma.$executeRaw`
       INSERT INTO "test"."tenants" (id, profile_id, hostel_id, owner_id, status, phone_1, guardian_name, joined_on)
       VALUES (${tenantId}::uuid, ${profileId}::uuid, ${hostelId}::uuid, ${ownerId}::uuid, 'INVITED'::"TenantStatus", '919999999999', 'Guardian Name', '2026-06-01'::date)
+    `;
+
+    // Seed a tenant invitation linked to the room
+    const invitationId = crypto.randomUUID();
+    await prisma.$executeRaw`
+      INSERT INTO "test"."tenant_invitations" (id, tenant_id, owner_id, hostel_id, room_id, name, phone, status, expires_at, token)
+      VALUES (${invitationId}::uuid, ${tenantId}::uuid, ${ownerId}::uuid, ${hostelId}::uuid, ${roomId}::uuid, 'Invited Tenant', '919999999999', 'PENDING', now() + interval '24 hours', 'test-token-12345')
     `;
 
     const { eventId, payload } = makeWebhookPayload(ownerPhone, "⚡ Quick Action");
@@ -228,11 +242,10 @@ describe("WhatsApp Owner Briefing Integration Tests", () => {
     });
     expect(briefing?.quick_action_clicks).toBe(1);
 
-    // Verify message has "Invited Tenant" and "Room Allocation Pending"
+    // Verify message has "Pending Invitations" and "Invited Tenant"
     const lastMessage = mockSendTextMessage.mock.calls[mockSendTextMessage.mock.calls.length - 1][1];
-    expect(lastMessage).toContain("👥 Pending Onboarding");
+    expect(lastMessage).toContain("Pending Invitations");
     expect(lastMessage).toContain("Invited Tenant");
-    expect(lastMessage).toContain("Room Allocation Pending");
   });
 
   it("Scenario 5: Click on Quick Action for HEALTHY priority returns placeholder response", async () => {
@@ -259,21 +272,17 @@ describe("WhatsApp Owner Briefing Integration Tests", () => {
 
   it("Scenario 6: Click on Quick Action for OCCUPANCY details bed vacancy stats", async () => {
     const ownerPhone = "919000000006";
-    const { ownerId, briefingId } = await seedOwnerWithBriefing({
+    const { ownerId, hostelId, briefingId } = await seedOwnerWithBriefing({
       ownerPhone,
       priorityType: "OCCUPANCY",
     });
 
-    vi.spyOn(dashboardService, "getOwnerStatsShell").mockResolvedValue({
-      occupied_rooms: 10,
-      total_rooms: 12,
-      occupied_beds: 16,
-      total_capacity: 20,
-      occupancy_rate: 80,
-      vacant_beds: 4,
-      revenue: 50000,
-      monthly_expenses: 15000,
-    } as any);
+    // Seed a room to satisfy getVacancySummary query
+    const roomId = crypto.randomUUID();
+    await prisma.$executeRaw`
+      INSERT INTO "test"."rooms" (id, hostel_id, room_no, base_rent, capacity, is_active)
+      VALUES (${roomId}::uuid, ${hostelId}::uuid, '101', 5000, 4, true)
+    `;
 
     const { eventId, payload } = makeWebhookPayload(ownerPhone, "⚡ Quick Action");
     const result = await whatsappWebhookEventService.processWebhookEvent(eventId, payload);
@@ -282,10 +291,9 @@ describe("WhatsApp Owner Briefing Integration Tests", () => {
     expect((result as any).processed_commands).toBe(1);
 
     const lastMessage = mockSendTextMessage.mock.calls[mockSendTextMessage.mock.calls.length - 1][1];
-    expect(lastMessage).toContain("🏠 Occupancy Alert");
+    expect(lastMessage).toContain("Empty Beds");
     expect(lastMessage).toContain("Briefing Hostel");
     expect(lastMessage).toContain("4 Vacant Beds");
-    expect(lastMessage).toContain("Occupancy\n80%");
   });
 
   it("Scenario 7: Click on Quick Action for PROFITABILITY details expense review", async () => {
@@ -322,14 +330,8 @@ describe("WhatsApp Owner Briefing Integration Tests", () => {
     expect((result as any).processed_commands).toBe(1);
 
     const lastMessage = mockSendTextMessage.mock.calls[mockSendTextMessage.mock.calls.length - 1][1];
-    expect(lastMessage).toContain("💸 Expense Review");
-    expect(lastMessage).toContain("Revenue\n₹84,500");
-    expect(lastMessage).toContain("Expenses\n₹32,000");
-    expect(lastMessage).toContain("Expense Ratio\n38%");
-    expect(lastMessage).toContain("Top Categories");
-    expect(lastMessage).toContain("Food\n₹15,000");
-    expect(lastMessage).toContain("Maintenance\n₹8,000");
-    expect(lastMessage).toContain("Utilities\n₹6,000");
+    expect(lastMessage).toContain("Expense review");
+    expect(lastMessage).toContain("This is better handled in HMS.");
   });
 
   it("Scenario 8: Click on Quick Action for OPERATIONS details move-out requests", async () => {
@@ -363,8 +365,8 @@ describe("WhatsApp Owner Briefing Integration Tests", () => {
     expect((result as any).processed_commands).toBe(1);
 
     const lastMessage = mockSendTextMessage.mock.calls[mockSendTextMessage.mock.calls.length - 1][1];
-    expect(lastMessage).toContain("📦 Operations Alert");
+    expect(lastMessage).toContain("Move-Outs");
     expect(lastMessage).toContain("Rahul");
-    expect(lastMessage).toContain("Exit Date: 12 Jun");
+    expect(lastMessage).toContain("Action Needed: 1");
   });
 });

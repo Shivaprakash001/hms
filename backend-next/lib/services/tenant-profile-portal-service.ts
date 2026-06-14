@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { normalizeIndianPhone } from "@/lib/utils/phone-utils";
 import { backendUrl } from "@/lib/config/domains";
 import { currentAgreementWhere } from "@/src/services/tenants/agreement-status";
+import { reservationStatusService } from "@/src/services/tenants/reservation-status-service";
 
 const DOC_TYPE_LABELS: Record<string, string> = {
   AADHAAR: "Aadhaar",
@@ -253,6 +254,7 @@ export async function getTenantPortalProfile(profileId: string) {
     documents,
     required_documents: requiredTypes,
     verification,
+    reservation_status: await reservationStatusService.getReservationStatus(tenant.id),
     move_out: moveOut
       ? {
           id: moveOut.id,
