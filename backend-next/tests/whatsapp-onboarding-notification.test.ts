@@ -26,6 +26,14 @@ vi.mock("@/lib/services/notifications/whatsapp-template-delivery", () => ({
   WhatsAppTemplateDeliveryService: vi.fn(),
 }));
 
+// Mock reservationStatusService
+const mockGetReservationStatus = vi.fn();
+vi.mock("@/src/services/tenants/reservation-status-service", () => ({
+  reservationStatusService: {
+    getReservationStatus: mockGetReservationStatus,
+  },
+}));
+
 describe("buildTenantOnboardingTemplatePayload (pure mapper)", () => {
   it("should return 6 correctly mapped parameters", () => {
     const params = buildTenantOnboardingTemplatePayload({
@@ -94,6 +102,7 @@ describe("ONBOARDING_COMPLETED_TEMPLATE_NAME", () => {
 describe("sendTenantOnboardingNotification", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetReservationStatus.mockResolvedValue({ status: "RESERVED" });
   });
 
   it("should skip if tenant not found", async () => {
@@ -263,5 +272,29 @@ describe("sendTenantOnboardingNotification", () => {
       expect.anything(),
       expect.anything()
     );
+  });
+
+  it("should skip if reservation status is PAYMENT_PENDING", async () => {
+    mockPrisma.tenants.findUnique.mockResolvedValue({
+      id: "t1",
+      status: "ACTIVE",
+      phone_1: "918008046952",
+      owner_id: "o1",
+      hostel_id: "h1",
+      monthly_rent: 8000,
+      joined_on: new Date("2026-06-01"),
+      profiles: { name: "Rahul Kumar" },
+      hostels: { id: "h1", name: "Sri Adithya Hostel", auto_rent_day: 5, owner_id: "o1" },
+      room_allocations: [{ room: { room_no: "G1" } }],
+    });
+
+    mockGetReservationStatus.mockResolvedValue({ status: "PAYMENT_PENDING" });
+
+    const { sendTenantOnboardingNotification } = await import(
+      "@/lib/services/notifications/whatsapp-onboarding-handler"
+    );
+    await sendTenantOnboardingNotification("t1");
+
+    expect(mockDeliverySend).not.toHaveBeenCalled();
   });
 });

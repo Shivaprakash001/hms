@@ -7,6 +7,7 @@ import {
   ONBOARDING_COMPLETED_TEMPLATE_NAME,
 } from "./providers/whatsapp/templates";
 import { whatsAppTemplateDeliveryService } from "./whatsapp-template-delivery";
+import { reservationStatusService } from "@/src/services/tenants/reservation-status-service";
 
 const logger = getLogger("whatsapp.onboarding");
 
@@ -50,6 +51,16 @@ export async function sendTenantOnboardingNotification(tenantId: string): Promis
     logger.warn("whatsapp.onboarding.tenant_not_active", {
       tenant_id: tenantId,
       status: tenant.status,
+    });
+    return;
+  }
+
+  // 1.5 Gate: Ensure the tenant has reserved their bed (financially committed)
+  const resStatus = await reservationStatusService.getReservationStatus(tenantId);
+  if (resStatus.status === "PAYMENT_PENDING") {
+    logger.info("whatsapp.onboarding.postponed_payment_pending", {
+      tenant_id: tenantId,
+      status: resStatus.status,
     });
     return;
   }

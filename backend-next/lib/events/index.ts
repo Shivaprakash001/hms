@@ -122,6 +122,19 @@ eventSystem.on("payment_recorded", async (data) => {
     entityId: data.payment_id,
     metadata: { amount: data.amount, method: data.method, hostel_id: data.hostel_id }
   });
+
+  // Check if this payment transitions the tenant to RESERVED or MOVE_IN_READY
+  if (data.tenant_id) {
+    try {
+      const { sendTenantOnboardingNotification } = await import(
+        "../services/notifications/whatsapp-onboarding-handler"
+      );
+      await sendTenantOnboardingNotification(data.tenant_id);
+    } catch (error) {
+      // Rule 5: WhatsApp failure must never break onboarding or payment recording
+      console.error("[Event] payment_recorded onboarding notification check failed:", error);
+    }
+  }
 });
 
 eventSystem.on("rent_waived", async (data) => {
