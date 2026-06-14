@@ -164,6 +164,7 @@ export class PortfolioPerformanceService {
             SELECT 1
             FROM tenants t
             WHERE t.id = o.tenant_id
+              AND t.status = 'ACTIVE'
           )
         LEFT JOIN pay_agg ON pay_agg.obligation_id = o.id
         GROUP BY r.month_key, r.month_label, h.id, h.name, h.city

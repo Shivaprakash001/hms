@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { invalidateOwnerDashboardCache, invalidatePortfolioCache } from "@/lib/cache/dashboard-cache";
 import type { PrismaClient } from "@prisma/client";
 
 const APPLY = process.argv.includes("--apply");
@@ -283,6 +284,8 @@ async function main() {
   }, { maxWait: 10000, timeout: 120000 });
 
   const { deleted, seeded, after } = result;
+  invalidateOwnerDashboardCache(owner.id);
+  invalidatePortfolioCache(owner.id);
 
   console.log(JSON.stringify({
     mode: "APPLIED",

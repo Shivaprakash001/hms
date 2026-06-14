@@ -43,6 +43,7 @@ async function getOverduePreview(ownerId: string, hostelId: string) {
     WHERE ro.owner_id = ${ownerId}::uuid
       AND ro.hostel_id = ${hostelId}::uuid
       AND ro.status IN ('PENDING', 'PARTIAL')
+      AND t.status = 'ACTIVE'
       AND ro.due_date < CURRENT_DATE
     GROUP BY ro.id, ro.tenant_id, p.name, t.phone_1, p.phone, r.room_no, ro.due_date, ro.amount
     HAVING GREATEST(0, (ro.amount - COALESCE(SUM(pay.amount_paid), 0))) > 0
