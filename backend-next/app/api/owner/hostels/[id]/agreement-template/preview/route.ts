@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSession, apiError } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { AgreementTemplateType } from "@prisma/client";
@@ -70,7 +70,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     const pdfBuffer = await AgreementGenerationService.generatePdfBuffer(mockData);
 
-    return new Response(new Uint8Array(pdfBuffer), {
+    return new NextResponse(pdfBuffer, {
+      status: 200,
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": "inline; filename=agreement-preview.pdf",

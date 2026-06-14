@@ -370,7 +370,7 @@ export function AgreementSettingsSection({ hostelId }: Props) {
   const generatePdfPreview = async () => {
     setLoadingPdf(true);
     try {
-      const blob = await ownerService.getAgreementTemplatePreview(hostelId, {
+      const responseData = await ownerService.getAgreementTemplatePreview(hostelId, {
         type: templateType,
         title: local.title,
         owner_name: local.owner_name,
@@ -379,7 +379,10 @@ export function AgreementSettingsSection({ hostelId }: Props) {
         rules_content: local.hostel_rules,
       });
 
-      const url = URL.createObjectURL(blob);
+      // Wrap the response in a Blob explicitly setting type to application/pdf.
+      // This guarantees the browser's native viewer handles it correctly as a PDF document.
+      const pdfBlob = new Blob([responseData], { type: "application/pdf" });
+      const url = URL.createObjectURL(pdfBlob);
       
       if (pdfBlobUrl) {
         URL.revokeObjectURL(pdfBlobUrl);
@@ -501,7 +504,7 @@ export function AgreementSettingsSection({ hostelId }: Props) {
 
         {/* Structured Categories Editor */}
         <div className="border-t border-border pt-5 space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                 Structured Rules Categories
@@ -513,7 +516,7 @@ export function AgreementSettingsSection({ hostelId }: Props) {
             <button
               type="button"
               onClick={addCategory}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary hover:bg-secondary/80 border border-border text-xs font-semibold rounded-lg shadow-sm transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary hover:bg-secondary/80 border border-border text-xs font-semibold rounded-lg shadow-sm transition-all sm:self-auto self-start"
             >
               <Plus className="w-3.5 h-3.5" /> Add Category
             </button>
@@ -766,7 +769,7 @@ export function AgreementSettingsSection({ hostelId }: Props) {
 
         {/* Live Agreement Document Preview */}
         <div className="border-t border-border pt-5 space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                 Live Agreement Template Preview
@@ -777,7 +780,7 @@ export function AgreementSettingsSection({ hostelId }: Props) {
             </div>
             
             {/* Preview Toggle Tabs */}
-            <div className="flex gap-2 p-1 bg-secondary/50 border border-border/80 rounded-xl text-[11px] font-semibold shrink-0">
+            <div className="flex gap-2 p-1 bg-secondary/50 border border-border/80 rounded-xl text-[11px] font-semibold shrink-0 sm:self-auto self-start">
               <button
                 type="button"
                 onClick={() => setPreviewTab("html")}
@@ -827,7 +830,7 @@ export function AgreementSettingsSection({ hostelId }: Props) {
               <h5 className="font-bold text-[11px] uppercase tracking-wider text-slate-800 mt-3 mb-1">
                 1. Room & Financial Summary
               </h5>
-              <div className="bg-white rounded-lg p-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] border border-border">
+              <div className="bg-white rounded-lg p-3 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-[11px] border border-border">
                 <div>
                   <span className="text-muted-foreground">Assigned Room:</span>{" "}
                   <strong className="text-slate-800">(Room No.)</strong>
@@ -901,7 +904,7 @@ export function AgreementSettingsSection({ hostelId }: Props) {
                 </>
               )}
 
-              <div className="pt-4 border-t border-dashed border-border/80 flex items-center justify-between gap-4">
+              <div className="pt-4 border-t border-dashed border-border/80 flex items-center justify-between gap-2">
                 <div className="space-y-1">
                   <span className="text-[10px] text-muted-foreground block uppercase font-medium">Tenant Signature</span>
                   <div className="w-32 h-12 border border-dashed border-border rounded-lg bg-white flex items-center justify-center text-[10px] text-muted-foreground">
@@ -931,13 +934,32 @@ export function AgreementSettingsSection({ hostelId }: Props) {
               </p>
             </div>
           ) : (
-            <div className="rounded-xl border border-border bg-slate-100 p-2 overflow-hidden shadow-inner flex flex-col items-center justify-center">
+            <div className="rounded-xl border border-border bg-slate-100 p-2 overflow-hidden shadow-inner flex flex-col items-center justify-center w-full">
               {pdfBlobUrl ? (
-                <iframe
-                  src={`${pdfBlobUrl}#toolbar=0&navpanes=0`}
-                  className="w-full h-[550px] rounded-lg border border-border bg-white"
-                  title="PDF Live Preview"
-                />
+                <div className="w-full flex flex-col gap-2">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs text-amber-800 dark:text-amber-300">
+                    <span>If the PDF preview does not load below, you can open it directly.</span>
+                    <a
+                      href={pdfBlobUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-bold underline hover:text-amber-950 dark:hover:text-amber-100 shrink-0"
+                    >
+                      Open PDF in New Tab
+                    </a>
+                  </div>
+                  <object
+                    data={`${pdfBlobUrl}#toolbar=0&navpanes=0`}
+                    type="application/pdf"
+                    className="w-full h-[550px] rounded-lg border border-border bg-white"
+                  >
+                    <iframe
+                      src={`${pdfBlobUrl}#toolbar=0&navpanes=0`}
+                      className="w-full h-full rounded-lg border-0"
+                      title="PDF Live Preview"
+                    />
+                  </object>
+                </div>
               ) : (
                 <div className="py-20 text-center">
                   <RotateCw className="w-8 h-8 text-accent animate-spin mx-auto mb-3" />
