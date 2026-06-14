@@ -5,9 +5,11 @@ import {
   Search, SlidersHorizontal, Building2, ArrowRight,
   CheckCircle, IndianRupee, TrendingUp, Users, Phone, Bell,
   LogOut, UserCheck, Settings, X, ChevronRight, Activity, Plus,
+  Banknote,
 } from 'lucide-react';
 import { useAuth } from '@context/AuthContext';
 import { portfolioService } from '@features/dashboard/api';
+import { agreementService } from '@features/agreements/api';
 import { queryKeys } from '@lib/queryKeys';
 import { HostelPerformanceCard } from '@/app/components/portfolio/HostelPerformanceCard';
 import type { FilterOptions } from '@/app/components/modals/FilterModal';
@@ -74,6 +76,12 @@ export function PortfolioView() {
     gcTime: 10 * 60 * 1000,
   });
 
+  const { data: renewalQueue } = useQuery({
+    queryKey: ['agreements', 'renewal-queue', 'portfolio', 'all'],
+    queryFn: () => agreementService.getRenewalQueue({ filter: 'all' }),
+    staleTime: 60_000,
+  });
+
   const portfolio = data?.portfolio ?? {};
   const monthlyTrends = data?.monthly_trends ?? [];
   const rankings = data?.hostel_rankings ?? [];
@@ -120,6 +128,7 @@ export function PortfolioView() {
   const vacantBeds = Number(portfolio.vacant_beds ?? 0);
   const moveOutOpen = Number(portfolio.move_out_open ?? 0);
   const pendingInvites = Number(portfolio.pending_invites ?? 0);
+  const renewalCounts = renewalQueue?.counts || {};
 
   // Priority card: Overdue → Move-Out → Vacancies → Pending Activations → Due Soon
   const priorityState = isOverdue ? 'overdue'
@@ -224,6 +233,27 @@ export function PortfolioView() {
                 <button type="button" onClick={() => navigate('/alerts')}
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-destructive px-4 py-3 text-sm font-semibold text-destructive-foreground active:scale-[0.98]">
                   Collect rent <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
+            </section>
+          )}
+
+          {Number(renewalCounts.total || 0) > 0 && (
+            <section className="rounded-2xl border border-amber-200 bg-card p-4 shadow-sm">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-amber-600">Agreement renewals</p>
+                  <p className="mt-1 text-2xl font-bold text-foreground">{Number(renewalCounts.total || 0)} need review</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {Number(renewalCounts.expiring || 0)} expiring · {Number(renewalCounts.expired || 0)} expired · {Number(renewalCounts.overdue || 0)} overdue · {Number(renewalCounts.move_out || 0)} move-out conflicts
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate('/agreements/renewals')}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-accent px-4 py-3 text-sm font-semibold text-accent-foreground active:scale-[0.98]"
+                >
+                  Open queue <ArrowRight className="h-4 w-4" />
                 </button>
               </div>
             </section>
@@ -396,6 +426,77 @@ export function PortfolioView() {
               </div>
             </section>
           )}
+
+          {/* Collections Bar representation */}
+          {(() => {
+            const received = totalRevenue;
+            const pending = totalDue;
+            const total = received + pending;
+            const receivedPct = total > 0 ? (received / total) * 100 : 0;
+            const pendingPct = total > 0 ? (pending / total) * 100 : 0;
+            const fmtFull = (val: number) => `₹${Number(val || 0).toLocaleString('en-IN')}`;
+
+            return (
+              <section className="rounded-2xl border border-border bg-card p-4 space-y-4 shadow-sm">
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                      <Banknote className="w-4 h-4" />
+                    </div>
+                    <span className="text-sm font-bold text-foreground">Collection</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 border border-border bg-background rounded-full text-xs font-semibold text-muted-foreground select-none cursor-pointer">
+                    <span>{monthLabel}</span>
+                    <span className="text-[10px] opacity-70">▼</span>
+                  </div>
+                </div>
+
+                {/* Stacked progress bar */}
+                <div className="w-full flex h-4 rounded-full overflow-hidden bg-secondary/30 gap-0.5">
+                  {receivedPct > 0 && (
+                    <div
+                      style={{ width: `${receivedPct}%` }}
+                      className="bg-emerald-500 rounded-l transition-all duration-500"
+                      title={`Received: ${receivedPct.toFixed(1)}%`}
+                    />
+                  )}
+                  {pendingPct > 0 && (
+                    <div
+                      style={{ width: `${pendingPct}%` }}
+                      className="bg-rose-500 rounded-r transition-all duration-500"
+                      title={`Pending: ${pendingPct.toFixed(1)}%`}
+                    />
+                  )}
+                </div>
+
+                {/* Legend & Details */}
+                <div className="space-y-3 pt-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" />
+                      <span className="text-muted-foreground">Pending</span>
+                    </div>
+                    <span className="font-bold text-rose-500">{fmtFull(pending)}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+                      <span className="text-muted-foreground">Received</span>
+                    </div>
+                    <span className="font-bold text-emerald-500">{fmtFull(received)}</span>
+                  </div>
+                </div>
+
+                {/* Divider & Total */}
+                <div className="border-t border-dashed border-border pt-3.5 flex items-center justify-between text-sm font-semibold">
+                  <span className="text-muted-foreground">Total collection</span>
+                  <span className="text-foreground font-bold">{fmtFull(total)}</span>
+                </div>
+              </section>
+            );
+          })()}
 
           {/* Business Health Trend — always visible */}
           <section className="rounded-xl border border-border bg-card p-4">
