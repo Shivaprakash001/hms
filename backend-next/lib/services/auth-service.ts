@@ -436,6 +436,16 @@ export class AuthService {
     };
   }
 
+  /**
+   * 🔒 BOOTSTRAP-ONLY: Create a new owner account.
+   *
+   * This method is restricted to initial system setup. In production,
+   * it requires the ALLOW_OWNER_BOOTSTRAP environment variable to be set.
+   * This prevents accidental invocation from any future route or service.
+   *
+   * HMS is a single-owner system. After initial setup, no new owners
+   * should be created through any code path.
+   */
   async registerOwner(data: {
     email:    string;
     password: string;
@@ -444,6 +454,15 @@ export class AuthService {
 
     role?:    string;
   }) {
+    // Defence-in-depth: block owner creation unless explicitly allowed.
+    if (!process.env.ALLOW_OWNER_BOOTSTRAP) {
+      console.error("[auth.registerOwner] BLOCKED: Owner creation attempted without ALLOW_OWNER_BOOTSTRAP flag");
+      await eventLog.log("OWNER_CREATION_BLOCKED", null, {
+        email: data.email,
+        reason: "BOOTSTRAP_FLAG_NOT_SET",
+      });
+      throw new Error("FORBIDDEN: Owner registration is disabled. HMS is a single-owner system.");
+    }
     const normalizedEmail = data.email.trim().toLowerCase();
 
     // 1. Check for existing profile
@@ -666,40 +685,50 @@ export class AuthService {
     const { email, name } = await userRes.json();
     const normalizedEmail = email.trim().toLowerCase();
 
-    // 3. Find or Create Profile
-    let profile = await prisma.profile.findUnique({
+    // 3. Lookup existing profile — NEVER auto-create accounts.
+    //    Google OAuth is restricted to existing OWNER accounts only.
+    //    Tenants authenticate via email/password or phone/password.
+    const profile = await prisma.profile.findUnique({
       where: { email: normalizedEmail },
       include: { tenants: true }
     });
 
     if (!profile) {
-      // Create new profile for first-time Google login (default to OWNER/ADMIN for now as per Python)
-      const newProfileId = crypto.randomUUID();
-      profile = await prisma.profile.create({
-        data: {
-          id: newProfileId,
-          email: normalizedEmail,
-          name: name || "User",
-          role: "OWNER",
-          is_active: true,
-          owner_id: newProfileId,
-        },
-        include: { tenants: true }
+      await eventLog.log("AUTH_GOOGLE_REJECTED", null, {
+        email: normalizedEmail,
+        reason: "NO_EXISTING_ACCOUNT",
+        ip_address: meta.ipAddress || null,
+        user_agent: meta.userAgent || null,
       });
-
-
+      throw new Error("UNAUTHORIZED: No account found for this email. Please sign in with email and password, or contact your hostel administrator.");
     }
 
     if (!profile.is_active) {
+      await eventLog.log("AUTH_GOOGLE_REJECTED", profile.owner_id, {
+        email: normalizedEmail,
+        profile_id: profile.id,
+        reason: "ACCOUNT_DISABLED",
+        ip_address: meta.ipAddress || null,
+        user_agent: meta.userAgent || null,
+      });
       throw new Error("FORBIDDEN: Account is disabled");
+    }
+
+    // Google OAuth is restricted to OWNER accounts.
+    // Tenants must use email/password or phone/password login.
+    if (profile.role === "TENANT") {
+      await eventLog.log("AUTH_GOOGLE_REJECTED", profile.owner_id, {
+        email: normalizedEmail,
+        profile_id: profile.id,
+        reason: "TENANT_GOOGLE_NOT_ALLOWED",
+        ip_address: meta.ipAddress || null,
+        user_agent: meta.userAgent || null,
+      });
+      throw new Error("UNAUTHORIZED: Google sign-in is not available for tenant accounts. Please sign in with your email and password.");
     }
 
     let tenantId = profile.tenants?.id || null;
     let tenantProfileCompleted = profile.tenants ? profile.tenants.profile_completed : profile.is_profile_completed;
-
-    if (profile.role === "TENANT" && profile.tenants?.status === "INVITED") {
-      throw new Error("FORBIDDEN: Account not activated. Please check your email.");
-    }
 
     let effectiveOwnerId = profile.owner_id;
     if (profile.role === "OWNER" && (!effectiveOwnerId || effectiveOwnerId.trim() === "")) {
