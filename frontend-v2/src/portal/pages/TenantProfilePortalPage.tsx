@@ -279,6 +279,7 @@ export function TenantProfilePortalPage() {
   const verification = data.verification ?? {};
   const moveOut = data.move_out;
   const isStudent = String(t?.profile_type ?? 'STUDENT').toUpperCase() === 'STUDENT';
+  const resStatus = data?.reservation_status?.status ?? data?.tenant?.reservation_status?.status ?? 'PAYMENT_PENDING';
 
   const profileFields = [
     { label: 'Full name', value: p.name },
@@ -414,8 +415,17 @@ export function TenantProfilePortalPage() {
               >
                 {String(p.name ?? t.name ?? 'Your Profile')}
               </h1>
-              <div className="mt-1.5">
-                <TenantStatusBadge status={String(t.status)} size="sm" />
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {t.status === 'ACTIVE' ? (
+                  <>
+                    <span className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 uppercase tracking-wide">
+                      Account Active
+                    </span>
+                    <TenantStatusBadge status={resStatus} size="sm" />
+                  </>
+                ) : (
+                  <TenantStatusBadge status={String(t.status)} size="sm" />
+                )}
               </div>
             </div>
           </div>
@@ -570,10 +580,7 @@ export function TenantProfilePortalPage() {
                     : 'Pending'
               }
             />
-            <div className="pt-2">
-              <TenantStatusBadge status={String(t.status)} size="sm" />
-            </div>
-            <ProfileRow label="Joined" value={fmtDate(t.joined_on)} />
+            {/* Account Status details moved to Admission Status section */}
             <ProfileRow label="Profile type" value={t.profile_type} />
           </>
         )}
@@ -899,40 +906,83 @@ export function TenantProfilePortalPage() {
         )}
       </ProfileSection>
 
-      {/* 6 — Hostel */}
-      <ProfileSection title="Hostel information" readOnly>
+      {/* SECTION A: Admission Status */}
+      <ProfileSection title="Admission Status" readOnly>
+        <ProfileRow label="Account Status" value={t.status === 'ACTIVE' ? 'Active' : t.status ?? 'Active'} />
+        <ProfileRow 
+          label="Reservation Status" 
+          value={
+            resStatus === 'PAYMENT_PENDING' ? (
+              <span className="text-amber-600 dark:text-amber-400 font-semibold">Payment Pending</span>
+            ) : resStatus === 'RESERVED' ? (
+              <span className="text-blue-600 dark:text-blue-400 font-semibold">Reserved</span>
+            ) : (
+              <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Move-in Ready</span>
+            )
+          } 
+        />
+        <ProfileRow label="Admission Date" value={fmtDate(t.joined_on)} />
+      </ProfileSection>
+
+      {/* SECTION B: Room Offer */}
+      <ProfileSection title="Room Offer" readOnly>
         {hostel ? (
           <>
-            <ProfileRow label="Hostel" value={hostel.name} />
-            <ProfileRow label="Room" value={room?.room_no ?? 'Assignment pending'} />
-            <ProfileRow label="Floor" value={room ? (room.floor ?? '—') : 'Assignment pending'} />
-            <ProfileRow label="Joined" value={fmtDate(t.joined_on)} />
-            <ProfileRow label="Billing start" value={fmtDate(t.billing_start_date)} />
-            <ProfileRow label="Monthly rent" value={fmt(Number(t.monthly_rent ?? 0))} />
-            <ProfileRow label="Maintenance" value={fmt(Number(t.maintenance_charge ?? 0))} />
-            <ProfileRow label="Security deposit" value={fmt(Number(data.advance?.security_deposit ?? t.advance_deposit ?? 0))} />
-            {Number(data.advance?.available_rent_advance ?? 0) > 0 && (
-              <ProfileRow label="Future rent credit" value={fmt(Number(data.advance?.available_rent_advance))} />
-            )}
+            <ProfileRow label="Assigned Room" value={room?.room_no ?? 'Assignment pending'} />
+            <ProfileRow label="Floor" value={room ? (room.floor ?? 'G') : 'Assignment pending'} />
+            <ProfileRow 
+              label="Reservation Status" 
+              value={
+                resStatus === 'PAYMENT_PENDING' ? (
+                  <span className="text-amber-600 dark:text-amber-400 font-semibold">Payment Pending</span>
+                ) : resStatus === 'RESERVED' ? (
+                  <span className="text-blue-600 dark:text-blue-400 font-semibold">Reserved</span>
+                ) : (
+                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Move-in Ready</span>
+                )
+              }
+            />
           </>
         ) : (
-          <p className="text-sm text-muted-foreground">Hostel details will appear once you are assigned.</p>
+          <p className="text-sm text-muted-foreground">Room details will appear once assigned.</p>
         )}
       </ProfileSection>
 
-      {/* 7 — Room */}
-      <ProfileSection id="room" title="Room details" readOnly>
-        {room ? (
-          <>
-            <ProfileRow label="WiFi network" value={room.wifi_name} />
-            <ProfileRow label="WiFi password" value={room.wifi_password ? '••••••••' : '—'} />
-            <ProfileRow label="Capacity" value={`${room.current_occupancy ?? '—'} / ${room.capacity}`} />
-            <ProfileRow label="Room notes" value={room.notes} />
-          </>
-        ) : (
-          <p className="text-sm text-muted-foreground">Room assignment pending from hostel management.</p>
-        )}
-      </ProfileSection>
+      {/* SECTION C: Residency Information (Visible ONLY after RESERVED or MOVE_IN_READY) */}
+      {(resStatus === 'RESERVED' || resStatus === 'MOVE_IN_READY') && (
+        <>
+          <ProfileSection title="Residency Information" readOnly>
+            {hostel ? (
+              <>
+                <ProfileRow label="Hostel" value={hostel.name} />
+                <ProfileRow label="Joined" value={fmtDate(t.joined_on)} />
+                <ProfileRow label="Billing start" value={fmtDate(t.billing_start_date)} />
+                <ProfileRow label="Monthly rent" value={fmt(Number(t.monthly_rent ?? 0))} />
+                <ProfileRow label="Maintenance" value={fmt(Number(t.maintenance_charge ?? 0))} />
+                <ProfileRow label="Security deposit" value={fmt(Number(data.advance?.security_deposit ?? t.advance_deposit ?? 0))} />
+                {Number(data.advance?.available_rent_advance ?? 0) > 0 && (
+                  <ProfileRow label="Future rent credit" value={fmt(Number(data.advance?.available_rent_advance))} />
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">Residency details pending.</p>
+            )}
+          </ProfileSection>
+
+          <ProfileSection id="room" title="Room details" readOnly>
+            {room ? (
+              <>
+                <ProfileRow label="WiFi network" value={room.wifi_name} />
+                <ProfileRow label="WiFi password" value={room.wifi_password ? '••••••••' : '—'} />
+                <ProfileRow label="Capacity" value={`${room.current_occupancy ?? '—'} / ${room.capacity}`} />
+                <ProfileRow label="Room notes" value={room.notes} />
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">Room details pending.</p>
+            )}
+          </ProfileSection>
+        </>
+      )}
 
       {/* 8 — Documents */}
       <ProfileSection id="documents" title="Documents & verification">
@@ -1195,28 +1245,30 @@ export function TenantProfilePortalPage() {
         )}
       </ProfileSection>
 
-      {/* 10 — Move-out */}
-      <ProfileSection title="Move-out status" readOnly>
-        {moveOut ? (
-          <>
-            <ProfileRow label="Status" value={String(moveOut.status).replace(/_/g, ' ')} />
-            <ProfileRow label="Planned exit" value={fmtDate(moveOut.planned_exit_date)} />
-            <Link to="/tenant/move-out" className="text-sm font-semibold text-accent mt-2 inline-block">
-              View full move-out timeline →
-            </Link>
-          </>
-        ) : (
-          <>
-            <p className="text-sm text-muted-foreground">No active move-out request.</p>
-            <Link
-              to="/tenant/move-out"
-              className="mt-3 inline-block text-sm font-semibold text-accent"
-            >
-              Request move-out →
-            </Link>
-          </>
-        )}
-      </ProfileSection>
+      {/* Move-out section is now rendered inside SECTION C */}
+      {(resStatus === 'RESERVED' || resStatus === 'MOVE_IN_READY') && (
+        <ProfileSection title="Move-out status" readOnly>
+          {moveOut ? (
+            <>
+              <ProfileRow label="Status" value={String(moveOut.status).replace(/_/g, ' ')} />
+              <ProfileRow label="Planned exit" value={fmtDate(moveOut.planned_exit_date)} />
+              <Link to="/tenant/move-out" className="text-sm font-semibold text-accent mt-2 inline-block">
+                View full move-out timeline →
+              </Link>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">No active move-out request.</p>
+              <Link
+                to="/tenant/move-out"
+                className="mt-3 inline-block text-sm font-semibold text-accent"
+              >
+                Request move-out →
+              </Link>
+            </>
+          )}
+        </ProfileSection>
+      )}
 
       {/* 11 — Logout */}
       <button

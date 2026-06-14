@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { useTenantDashboard } from '@features/tenant-portal/hooks/useTenantDashboard';
 import { tenantPortalApi } from '@features/tenant-portal/api';
 import { TenantPriorityStrip } from '@/portal/components/TenantPriorityStrip';
+import { TenantReservationCard } from '@/platforms/tenant/components/TenantReservationCard';
 import { TenantPaymentModal } from '@/portal/components/TenantPaymentModal';
 import { TenantPaymentDetailModal } from '@/domains/payments/components/TenantPaymentDetailModal';
 import { RentObligationList } from '@features/tenants/components/financial/RentObligationList';
@@ -33,7 +34,8 @@ const canSelectTimelineItem = (item: any) => item.state === 'upcoming' && timeli
 export function TenantFinancialsPage() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { dues, payments, advance, isLoading } = useTenantDashboard();
+  const { profile, dues, payments, advance, isLoading } = useTenantDashboard();
+  const resStatus = profile?.reservation_status?.status ?? 'PAYMENT_PENDING';
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedProjectedIds, setSelectedProjectedIds] = useState<string[]>([]);
   const [showPayModal, setShowPayModal] = useState(false);
@@ -203,7 +205,15 @@ export function TenantFinancialsPage() {
     <div className="space-y-5">
       <h1 className="text-xl font-bold text-foreground">Financials</h1>
 
+      {resStatus === 'PAYMENT_PENDING' && profile?.reservation_status && (
+        <TenantReservationCard reservationStatus={profile.reservation_status} />
+      )}
+
       <TenantPriorityStrip dues={dues} payments={payments} />
+
+      {resStatus !== 'PAYMENT_PENDING' && profile?.reservation_status && (
+        <TenantReservationCard reservationStatus={profile.reservation_status} />
+      )}
 
       <section className="rounded-xl border border-border bg-card p-4 space-y-4">
         <div className="flex items-start justify-between gap-3">
