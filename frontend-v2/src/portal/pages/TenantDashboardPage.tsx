@@ -1,10 +1,12 @@
 import { Link } from 'react-router-dom';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Phone, Mail, Loader2, Bell, Download, FileCheck2, Send, CalendarDays,
   CheckCircle2, XCircle, ShieldAlert, Smartphone, MessageSquare, BedDouble, User,
   Building2, Settings, IndianRupee, LogOut, CheckCircle, AlertTriangle, AlertCircle,
   Heart, Sparkles, MapPin
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useTenantDashboard } from '@features/tenant-portal/hooks/useTenantDashboard';
 import { TenantPriorityStrip } from '@/portal/components/TenantPriorityStrip';
 import { TenantScorePanel } from '@/portal/components/TenantScorePanel';
@@ -13,11 +15,13 @@ import { TenantAnnouncements } from '@/portal/components/TenantAnnouncements';
 import { TenantDocumentStatus, hasRequiredDocuments } from '@/portal/components/TenantDocumentStatus';
 import { TenantStatusBadge } from '@features/tenants/components/badges/TenantStatusBadge';
 import { tenantService } from '@features/tenants/api';
+import { agreementService } from '@features/agreements/api';
 import { IdleRender } from '@/shared/performance';
 
 const fmt = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
 
 export function TenantDashboardPage() {
+  const queryClient = useQueryClient();
   const {
     profile,
     dues,
@@ -27,6 +31,7 @@ export function TenantDashboardPage() {
     moveOut,
     notifications,
     documents,
+    agreementRenewal,
   } = useTenantDashboard();
 
   const prof = profile?.profile as Record<string, unknown> | undefined;
@@ -42,6 +47,16 @@ export function TenantDashboardPage() {
   const profileDocs = (profile?.documents ?? documents) as unknown[] | undefined;
   const profileType = String(tenant?.profile_type ?? profile?.profile_type ?? 'STUDENT');
   const advanceBalance = Number(advance?.balance ?? 0);
+  const renewalMutation = useMutation({
+    mutationFn: (agreementId: string) => agreementService.createRenewalDraft(agreementId),
+    onSuccess: () => {
+      toast.success('Renewal draft created');
+      queryClient.invalidateQueries({ queryKey: ['tenant', 'me', 'agreement-renewal'] });
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.error?.message || 'Unable to create renewal draft');
+    },
+  });
 
   return (
     <div className="space-y-5">
@@ -179,6 +194,12 @@ export function TenantDashboardPage() {
         </Link>
       )}
 
+      <TenantRenewalCard
+        renewal={agreementRenewal as Record<string, unknown> | undefined}
+        isCreating={renewalMutation.isPending}
+        onRenew={(agreementId) => renewalMutation.mutate(agreementId)}
+      />
+
       {/* My Stay Section */}
       <section className="space-y-3">
         <h3 className="text-sm font-bold text-foreground">My Stay</h3>
@@ -304,6 +325,76 @@ export function TenantDashboardPage() {
         </button>
       )}
     </div>
+  );
+}
+
+function TenantRenewalCard({
+  renewal,
+  isCreating,
+  onRenew,
+}: {
+  renewal?: Record<string, unknown>;
+  isCreating: boolean;
+  onRenew: (agreementId: string) => void;
+}) {
+  const state = String(renewal?.decision_state || 'CURRENT');
+  const agreement = renewal?.current_agreement as Record<string, unknown> | undefined;
+  const agreementId = agreement?.id ? String(agreement.id) : '';
+  const daysUntilExpiry = renewal?.days_until_expiry != null ? Number(renewal.days_until_expiry) : null;
+  const daysOverdue = Number(renewal?.days_overdue || 0);
+  const renewalAvailable = Boolean(renewal?.renewal_available);
+  const draft = renewal?.renewal_draft as Record<string, unknown> | undefined;
+
+  if (!renewal || state === 'CURRENT') return null;
+
+  const isCritical = state === 'RENEWAL_OVERDUE_CRITICAL' || state === 'EXPIRED_AND_RENT_OVERDUE';
+  const isMoveOut = state === 'MOVE_OUT_IN_PROGRESS';
+  const title = isMoveOut
+    ? 'Move-out in progress'
+    : state === 'EXPIRING_SOON' || (Array.isArray(renewal?.states) && (renewal.states as unknown[]).includes('EXPIRING_SOON'))
+      ? `Agreement expires in ${daysUntilExpiry ?? 0} days`
+      : isCritical
+        ? 'Agreement renewal is overdue'
+        : 'Agreement expired';
+  const message = isMoveOut
+    ? 'Renewal is paused while your move-out request is active.'
+    : state === 'EXPIRING_SOON' || (Array.isArray(renewal?.states) && (renewal.states as unknown[]).includes('EXPIRING_SOON'))
+      ? 'Choose whether you want to renew your stay agreement or plan a move-out.'
+      : `Rent and occupancy continue. Please renew or request move-out${daysOverdue ? ` (${daysOverdue} days overdue)` : ''}.`;
+
+  return (
+    <section className={`rounded-2xl border p-4 shadow-sm ${isCritical ? 'border-rose-200 bg-rose-50' : 'border-amber-200 bg-amber-50'}`}>
+      <div className="flex items-start gap-3">
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isCritical ? 'bg-rose-500/10 text-rose-600' : 'bg-amber-500/10 text-amber-700'}`}>
+          {isCritical ? <ShieldAlert className="w-5 h-5" /> : <CalendarDays className="w-5 h-5" />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className={`text-sm font-bold ${isCritical ? 'text-rose-900' : 'text-amber-900'}`}>{title}</p>
+          <p className={`mt-1 text-xs leading-relaxed ${isCritical ? 'text-rose-700' : 'text-amber-700'}`}>{message}</p>
+          {draft?.id && (
+            <p className="mt-2 text-xs font-semibold text-emerald-700">Renewal draft is ready for signing.</p>
+          )}
+        </div>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          disabled={!renewalAvailable || !agreementId || isCreating || Boolean(draft?.id)}
+          onClick={() => onRenew(agreementId)}
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-accent px-3 py-2.5 text-xs font-bold text-accent-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isCreating ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+          {draft?.id ? 'Draft Ready' : 'Renew Agreement'}
+        </button>
+        <Link
+          to="/tenant/move-out"
+          className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5 text-xs font-bold text-foreground"
+        >
+          Move Out
+          <ArrowRight className="h-4 w-4" />
+        </Link>
+      </div>
+    </section>
   );
 }
 

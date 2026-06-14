@@ -8,6 +8,28 @@ import { ActivationSchema } from "@/lib/validators";
 import { activationWorkflowService } from "@/src/services/tenants/activation-workflow-service";
 import { withOnboardingMetrics } from "@/lib/onboarding-metrics";
 
+const FINANCIAL_ERROR_CODES = new Set([
+  "DEPOSIT_OUTSTANDING",
+  "MAINTENANCE_OUTSTANDING",
+  "ONBOARDING_FINANCIALS_INCOMPLETE",
+]);
+
+function normalizeActivationError(error: any, fallback: string) {
+  if (error?.code && FINANCIAL_ERROR_CODES.has(String(error.code))) {
+    return {
+      code: String(error.code),
+      message: String(error.message || fallback),
+      status: Number(error.status || 409),
+      details: error.details,
+    };
+  }
+
+  const rawMessage = String(error?.message || fallback);
+  const [maybeCode, ...rest] = rawMessage.split(":");
+  const normalizedCode = rest.length > 0 ? maybeCode?.trim() : "ACTIVATION_ERROR";
+  const normalizedMessage = rest.length > 0 ? rest.join(":").trim() : rawMessage;
+  return { code: normalizedCode, message: normalizedMessage, status: undefined, details: undefined };
+}
 
 /**
  * 🔐 Tenant Activation
@@ -32,10 +54,7 @@ export async function POST(req: NextRequest) {
     const result = await invitationService.activateTenant(token, password);
     return withOnboardingMetrics(apiResponse(result, 200), { startedAt, payload: result });
   } catch (error: any) {
-    const rawMessage = String(error?.message || "Failed to activate account");
-    const [maybeCode, ...rest] = rawMessage.split(":");
-    const normalizedCode = maybeCode?.trim();
-    const normalizedMessage = rest.length > 0 ? rest.join(":").trim() : rawMessage;
+    const normalized = normalizeActivationError(error, "Failed to activate account");
 
     const statusMap: Record<string, number> = {
       INVALID: 400,
@@ -43,12 +62,15 @@ export async function POST(req: NextRequest) {
       BAD_REQUEST: 400,
       NOT_FOUND: 404,
       INTERNAL_ERROR: 500,
+      DEPOSIT_OUTSTANDING: 409,
+      MAINTENANCE_OUTSTANDING: 409,
+      ONBOARDING_FINANCIALS_INCOMPLETE: 409,
     };
 
-    const status = statusMap[normalizedCode] || 500;
-    return withOnboardingMetrics(apiError(normalizedMessage, normalizedCode || "ACTIVATION_ERROR", status), {
+    const status = normalized.status || statusMap[normalized.code] || 500;
+    return withOnboardingMetrics(apiError(normalized.message, normalized.code || "ACTIVATION_ERROR", status, normalized.details), {
       startedAt,
-      payload: { code: normalizedCode, message: normalizedMessage },
+      payload: { code: normalized.code, message: normalized.message, details: normalized.details },
     });
   }
 }
@@ -72,10 +94,7 @@ export async function PATCH(req: NextRequest) {
     });
     return withOnboardingMetrics(apiResponse(result, 200), { startedAt, payload: result });
   } catch (error: any) {
-    const rawMessage = String(error?.message || "Failed to update activation workflow");
-    const [maybeCode, ...rest] = rawMessage.split(":");
-    const normalizedCode = rest.length > 0 ? maybeCode?.trim() : "ACTIVATION_ERROR";
-    const normalizedMessage = rest.length > 0 ? rest.join(":").trim() : rawMessage;
+    const normalized = normalizeActivationError(error, "Failed to update activation workflow");
 
     const statusMap: Record<string, number> = {
       INVALID: 410,
@@ -87,12 +106,15 @@ export async function PATCH(req: NextRequest) {
       BAD_REQUEST: 400,
       NOT_FOUND: 404,
       INTERNAL_ERROR: 500,
+      DEPOSIT_OUTSTANDING: 409,
+      MAINTENANCE_OUTSTANDING: 409,
+      ONBOARDING_FINANCIALS_INCOMPLETE: 409,
     };
 
-    const status = statusMap[normalizedCode] || 500;
-    return withOnboardingMetrics(apiError(normalizedMessage, normalizedCode || "ACTIVATION_ERROR", status), {
+    const status = normalized.status || statusMap[normalized.code] || 500;
+    return withOnboardingMetrics(apiError(normalized.message, normalized.code || "ACTIVATION_ERROR", status, normalized.details), {
       startedAt,
-      payload: { code: normalizedCode, message: normalizedMessage },
+      payload: { code: normalized.code, message: normalized.message, details: normalized.details },
     });
   }
 }

@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { backendUrl } from "@/lib/config/domains";
-import { signedAgreementStatusWhere } from "@/src/services/tenants/agreement-status";
+import { currentAgreementWhere } from "@/src/services/tenants/agreement-status";
 
 const requiredDocumentTypes = (profileType?: string | null) => {
   const type = String(profileType || "STUDENT").toUpperCase();
@@ -73,7 +73,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     });
 
     const agreements = await prisma.agreement.findMany({
-      where: { tenant_id: id, status: signedAgreementStatusWhere() },
+      where: { tenant_id: id, status: currentAgreementWhere() },
       orderBy: { generated_at: "desc" },
     });
 

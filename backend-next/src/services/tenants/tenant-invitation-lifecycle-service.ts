@@ -8,6 +8,7 @@ import { eventLog } from "../../../lib/services/event-log-service";
 import { hostelBillingPreferencesService, type MaintenanceType } from "../../../lib/services/hostel-billing-preferences-service";
 import { roomCapacityService } from "../../../lib/services/room-capacity-service";
 import { onboardingFinancialsService } from "../payments/onboarding-financials-service";
+import { assertActivationFinancialReady } from "./activation-financial-enforcement-service";
 
 type InvitationStatus = "PENDING" | "OPENED" | "ACTIVATION_STARTED" | "ACTIVATED" | "EXPIRED" | "CANCELLED";
 type ReservationReleaseReason = "ACTIVATED" | "EXPIRED" | "CANCELLED" | "TRANSFERRED";
@@ -655,6 +656,8 @@ export class TenantInvitationLifecycleService {
 
   async completeActivation(invitation: any, tenant: any, profile: any, paymentFrequency?: string, password?: string) {
     const completedAt = new Date();
+    await assertActivationFinancialReady(tenant.id);
+
     await prisma.$transaction(async (tx: any) => {
       const reservation = await tx.tenant_invitation_reservations.findFirst({
         where: { invitation_id: invitation.id, tenant_id: tenant.id, status: "ACTIVE" },

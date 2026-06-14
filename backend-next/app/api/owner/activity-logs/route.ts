@@ -139,7 +139,8 @@ export async function GET(req: NextRequest) {
       dbMoveOuts,
       dbInvitations,
       dbDocuments,
-      dbActivityLogs
+      dbActivityLogs,
+      dbSystemEvents
     ] = await Promise.all([
       // Payments
       prisma.payments.findMany({
@@ -201,6 +202,14 @@ export async function GET(req: NextRequest) {
           entity_type: { in: ['HOSTEL_POLICY', 'RENT'] }
         },
         orderBy: { timestamp: 'desc' },
+        take: 200
+      }),
+      prisma.systemEventLog.findMany({
+        where: {
+          owner_id: scope.owner_id,
+          event_type: { in: ['AGREEMENT_RENEWED'] }
+        },
+        orderBy: { created_at: 'desc' },
         take: 200
       })
     ]);
@@ -495,6 +504,33 @@ export async function GET(req: NextRequest) {
             title: meta.title || 'N/A',
             owner_signature_url: meta.owner_signature_url || 'N/A',
             hostel_id: meta.hostel_id || 'N/A'
+          }
+        });
+      }
+    });
+
+    // Map Agreement system events
+    dbSystemEvents.forEach((log: any) => {
+      const meta = (log.metadata as any) || {};
+      if (log.event_type === 'AGREEMENT_RENEWED') {
+        const fromVersion = meta.previous_agreement_version || meta.old_agreement_version || meta.from_version;
+        const toVersion = meta.agreement_version || meta.new_agreement_version || meta.to_version;
+        const versionText = fromVersion && toVersion ? `Version ${fromVersion} -> ${toVersion}` : 'Renewal signed';
+        events.push({
+          id: `agreement-renewed-${log.id}`,
+          category: 'Documents',
+          title: 'Agreement renewed',
+          subtitle: versionText,
+          timestamp: log.created_at,
+          badgeColor: 'emerald',
+          actor: { name: meta.signed_by || 'Tenant', email: '' },
+          metadata: {
+            log_id: log.id,
+            tenant_id: log.tenant_id || meta.tenant_id || 'N/A',
+            old_agreement_id: meta.old_agreement_id || 'N/A',
+            new_agreement_id: meta.new_agreement_id || 'N/A',
+            renewed_at: meta.renewed_at || log.created_at,
+            pdf_generated: Boolean(meta.pdf_generated),
           }
         });
       }

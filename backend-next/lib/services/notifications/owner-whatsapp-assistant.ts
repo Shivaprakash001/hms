@@ -22,6 +22,8 @@ import { tenantInvitationLifecycleService } from "@/src/services/tenants/tenant-
 import { roomCapacityService } from "@/lib/services/room-capacity-service";
 import { hostelBillingPreferencesService } from "@/lib/services/hostel-billing-preferences-service";
 import { MoveOutReason } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import { CURRENT_AGREEMENT_STATUSES } from "@/src/services/tenants/agreement-status";
 
 const logger = getLogger("owner.whatsapp-assistant");
 
@@ -2280,6 +2282,7 @@ export class OwnerWhatsAppAssistantService {
       JOIN hostels h ON h.id = a.hostel_id
       WHERE a.tenant_id = ${tenantId}::uuid
         AND h.owner_id = ${ownerId}::uuid
+        AND a.status::text IN (${Prisma.join([...CURRENT_AGREEMENT_STATUSES])})
       ORDER BY a.generated_at DESC
       LIMIT 1
     `;

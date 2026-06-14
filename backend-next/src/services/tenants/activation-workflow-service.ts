@@ -17,8 +17,14 @@ import { eventLog } from "../../../lib/services/event-log-service";
 import { eventSystem } from "../../../lib/events";
 import { tenantInvitationLifecycleService } from "./tenant-invitation-lifecycle-service";
 import { AgreementGenerationService } from "./agreement-generation-service";
-import { isSignedAgreementStatus, signedAgreementStatusWhere } from "./agreement-status";
+import { currentAgreementWhere, isCurrentAgreementStatus, isSignedAgreementStatus } from "./agreement-status";
 import { authOtpService } from "../../../lib/services/auth/auth-otp-service";
+import { assertActivationFinancialReady } from "./activation-financial-enforcement-service";
+import { getActivationFinancialStatus } from "./activation-financial-status-service";
+import {
+  assertAgreementLifecycleComplete,
+  buildOnboardingAgreementLifecycle,
+} from "./agreement-lifecycle-completeness";
 
 type ActivationStep = "ACCOUNT" | "RULES" | "AGREEMENT" | "PROFILE" | "ACTIVATE";
 type ResolvedInvitation = { profile: any | null; tenant: any; invitation?: any | null; token: string; source?: string };
@@ -459,8 +465,19 @@ export class ActivationWorkflowService {
     }
 
     // Ensure we have an active agreement (either DRAFT or SIGNED)
-    let activeAgreement = (tenant.agreements || []).find((a: any) => a.status === "DRAFT" || isSignedAgreementStatus(a.status));
+    let activeAgreement = (tenant.agreements || []).find((a: any) => a.status === "DRAFT" || isCurrentAgreementStatus(a.status));
     if (!activeAgreement) {
+      const lifecycle = buildOnboardingAgreementLifecycle({
+        joiningDate: tenant.joined_on,
+        billingStartDate: tenant.billing_start_date,
+        monthlyRent: tenant.monthly_rent,
+        roomBaseRent: room?.base_rent,
+        advanceDeposit: tenant.advance_deposit,
+        maintenanceCharge: tenant.maintenance_charge,
+        maintenanceType: tenant.maintenance_type,
+        paymentFrequency: tenant.payment_frequency,
+      });
+
       activeAgreement = await prisma.agreement.create({
         data: {
           id: crypto.randomUUID(),
@@ -468,15 +485,19 @@ export class ActivationWorkflowService {
           hostel_id: tenant.hostel_id,
           template_id: activeTemplate.id,
           status: "DRAFT",
+          ...lifecycle,
           content_snapshot: {
             hostel_name: hostel.name,
             room_number: room?.room_no ?? "N/A",
-            monthly_rent: Number(tenant.monthly_rent ?? room?.base_rent ?? 0),
-            advance_deposit: Number(tenant.advance_deposit ?? 0),
-            maintenance_charge: Number(tenant.maintenance_charge ?? 0),
-            maintenance_type: tenant.maintenance_type || "MONTHLY",
-            joining_date: dateOnly(tenant.joined_on || new Date()),
-            payment_frequency: tenant.payment_frequency || "MONTHLY",
+            monthly_rent: Number(lifecycle.contract_rent ?? 0),
+            advance_deposit: Number(lifecycle.contract_security_deposit ?? 0),
+            maintenance_charge: Number(lifecycle.contract_maintenance ?? 0),
+            maintenance_type: lifecycle.contract_maintenance_type,
+            joining_date: dateOnly(lifecycle.agreement_start_date),
+            agreement_start_date: dateOnly(lifecycle.agreement_start_date),
+            agreement_end_date: dateOnly(lifecycle.agreement_end_date),
+            agreement_duration_months: lifecycle.agreement_duration_months,
+            payment_frequency: lifecycle.contract_payment_frequency,
             tenant_name: profile?.name || invitation?.name || "Tenant",
             owner_name: activeTemplate.owner_name,
             custom_rules: activeTemplate.custom_rules || "",
@@ -489,6 +510,7 @@ export class ActivationWorkflowService {
     }
 
     const state = this.computeState(profile, tenant, ruleVersion);
+    const activationFinancialStatus = await getActivationFinancialStatus(tenant.id);
     const requiredDocumentTypes = this.requiredDocumentTypes(tenant.profile_type);
     const requiredDocuments = (tenant.identification_documents || []).filter((doc: any) =>
       requiredDocumentTypes.includes(doc.doc_type)
@@ -524,6 +546,7 @@ export class ActivationWorkflowService {
         emergency_verified: emergencyVerifiedRecord ? true : false,
       },
       activation_state: state,
+      activation_financial_status: activationFinancialStatus,
       current_step: state.current_step,
       completed_steps: state.completed_steps,
       blocked_steps: state.blocked_steps,
@@ -762,7 +785,7 @@ export class ActivationWorkflowService {
     });
     if (!draft) {
       draft = await prisma.agreement.findFirst({
-        where: { tenant_id: tenant.id, status: signedAgreementStatusWhere() },
+        where: { tenant_id: tenant.id, status: currentAgreementWhere() },
         orderBy: { generated_at: "desc" },
       });
     }
@@ -770,11 +793,25 @@ export class ActivationWorkflowService {
 
     const ruleVersion = await this.getActiveRuleVersion(tenant.hostel_id);
     const now = new Date();
+    const activeAllocation = tenant.room_allocations?.[0] || null;
+    const room = activeAllocation?.room || null;
+    const lifecycle = buildOnboardingAgreementLifecycle({
+      joiningDate: tenant.joined_on,
+      billingStartDate: tenant.billing_start_date,
+      monthlyRent: tenant.monthly_rent,
+      roomBaseRent: room?.base_rent,
+      advanceDeposit: tenant.advance_deposit,
+      maintenanceCharge: tenant.maintenance_charge,
+      maintenanceType: tenant.maintenance_type,
+      paymentFrequency: tenant.payment_frequency,
+    });
+    assertAgreementLifecycleComplete({ ...draft, ...lifecycle }, { agreementId: draft.id });
 
     const signedAgreement = await prisma.agreement.update({
       where: { id: draft.id },
       data: {
         status: "SIGNED",
+        ...lifecycle,
         signed_at: now,
         tenant_signature_url: hasTenantSignature ? tenantSigUrl : null,
         tenant_signature_name: hasTenantSignature ? tenantSigName : null,
@@ -795,6 +832,15 @@ export class ActivationWorkflowService {
 
         content_snapshot: {
           ...(draft.content_snapshot as any || {}),
+          monthly_rent: Number(lifecycle.contract_rent ?? 0),
+          advance_deposit: Number(lifecycle.contract_security_deposit ?? 0),
+          maintenance_charge: Number(lifecycle.contract_maintenance ?? 0),
+          maintenance_type: lifecycle.contract_maintenance_type,
+          joining_date: dateOnly(lifecycle.agreement_start_date),
+          agreement_start_date: dateOnly(lifecycle.agreement_start_date),
+          agreement_end_date: dateOnly(lifecycle.agreement_end_date),
+          agreement_duration_months: lifecycle.agreement_duration_months,
+          payment_frequency: lifecycle.contract_payment_frequency,
           owner_name: template.owner_name,
           custom_rules: template.custom_rules || "",
           hostel_rules: ruleVersion ? (ruleVersion.content || ruleVersion.content_snapshot || DEFAULT_RULE_CONTENT) : DEFAULT_RULE_CONTENT,
@@ -1156,6 +1202,7 @@ export class ActivationWorkflowService {
       }
 
       this.validateOperationalInviteData(tenantNow);
+      await assertActivationFinancialReady(tenantNow.id);
 
       const completedAt = new Date();
       await prisma.$transaction(async (tx: any) => {

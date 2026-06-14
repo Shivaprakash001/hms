@@ -13,6 +13,7 @@ export const tenantQueryKeys = {
   moveOut: () => ['tenant', 'me', 'move-out'] as const,
   notifications: () => ['tenant', 'me', 'notifications'] as const,
   documents: () => ['tenant', 'me', 'documents'] as const,
+  agreementRenewal: () => ['tenant', 'me', 'agreement-renewal'] as const,
 };
 
 export function useTenantDashboard() {
@@ -93,6 +94,13 @@ export function useTenantDashboard() {
     enabled: loadSecondary,
   });
 
+  const agreementRenewalQ = useQuery({
+    queryKey: tenantQueryKeys.agreementRenewal(),
+    queryFn: () => tenantPortalApi.getAgreementRenewal(),
+    staleTime: 60_000,
+    enabled: loadSecondary,
+  });
+
   const refetchAll = () => {
     profileQ.refetch();
     duesQ.refetch();
@@ -103,6 +111,7 @@ export function useTenantDashboard() {
     moveOutQ.refetch();
     notificationsQ.refetch();
     documentsQ.refetch();
+    agreementRenewalQ.refetch();
   };
 
   return {
@@ -115,6 +124,7 @@ export function useTenantDashboard() {
     moveOut: moveOutQ.data,
     notifications: notificationsQ.data,
     documents: documentsQ.data,
+    agreementRenewal: agreementRenewalQ.data,
     isLoading: criticalLoading,
     refetchAll,
   };

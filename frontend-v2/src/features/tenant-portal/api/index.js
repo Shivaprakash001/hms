@@ -3,6 +3,7 @@ import { tenantService } from '@features/tenants/api';
 import { paymentService } from '@features/payments/api';
 import { notificationService } from '@features/notifications/api';
 import { moveOutService } from '@features/move-out/api';
+import { agreementService } from '@features/agreements/api';
 
 const unwrap = (response) => {
   if (response.data?.success === true && response.data.data !== undefined) {
@@ -56,4 +57,5 @@ export const tenantPortalApi = {
   verifyPayment: (data) => paymentService.verifyPayment(data),
   markNotificationRead: (id) => notificationService.markAsRead(id),
   getMoveOutTimeline: () => moveOutService.getTimeline(),
+  getAgreementRenewal: () => agreementService.getTenantRenewal(),
 };

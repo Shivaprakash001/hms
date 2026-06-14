@@ -162,9 +162,9 @@ export function apiResponse(data: any, status = 200) {
   }, { status });
 }
 
-export function apiError(message: string, code = "ERROR", status = 500) {
+export function apiError(message: string, code = "ERROR", status = 500, details?: any) {
   return NextResponse.json({ 
     success: false,
-    error: { message, code } 
+    error: { message, code, ...(details !== undefined ? { details } : {}) }
   }, { status });
 }

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
 import { backendUrl } from "@/lib/config/domains";
-import { signedAgreementStatusWhere } from "@/src/services/tenants/agreement-status";
+import { currentAgreementWhere } from "@/src/services/tenants/agreement-status";
 
 const requiredDocumentTypes = (profileType?: string | null) => {
   const type = String(profileType || "STUDENT").toUpperCase();
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
           orderBy: { created_at: "desc" },
         },
         agreements: {
-          where: { status: signedAgreementStatusWhere() },
+          where: { status: currentAgreementWhere() },
           orderBy: { generated_at: "desc" },
         },
       },

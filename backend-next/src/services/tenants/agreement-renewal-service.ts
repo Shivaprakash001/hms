@@ -1,0 +1,239 @@
+import { prisma } from "@/lib/db";
+import { randomUUID } from "crypto";
+import {
+  assertAgreementLifecycleComplete,
+  buildRenewalAgreementLifecycle,
+} from "./agreement-lifecycle-completeness";
+import type { RenewalLifecycleInput } from "./agreement-lifecycle-completeness";
+
+const RENEWABLE_AGREEMENT_STATUSES = ["SIGNED", "EXPIRING_SOON", "AGREEMENT_EXPIRED"] as const;
+const BLOCKED_RENEWAL_STATUSES = ["RENEWED", "TERMINATED", "VOID"] as const;
+
+type BlockedRenewalStatus = typeof BLOCKED_RENEWAL_STATUSES[number];
+
+type AgreementRenewalErrorCode =
+  | "AGREEMENT_NOT_FOUND"
+  | "AGREEMENT_NOT_RENEWABLE"
+  | "AGREEMENT_SUCCESSOR_EXISTS"
+  | "MOVE_OUT_IN_PROGRESS"
+  | "AGREEMENT_LIFECYCLE_INCOMPLETE";
+
+type AgreementRenewalDraftResult = {
+  sourceAgreement: any;
+  renewalDraft: any;
+};
+
+function moneyOrNull(value: unknown) {
+  if (value === null || value === undefined) return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function resolveContractSnapshot(sourceAgreement: any) {
+  const snapshot = (sourceAgreement?.content_snapshot || {}) as Record<string, any>;
+  const contractRent = moneyOrNull(sourceAgreement?.contract_rent) ?? moneyOrNull(snapshot.monthly_rent);
+  const contractDeposit = moneyOrNull(sourceAgreement?.contract_security_deposit) ?? moneyOrNull(snapshot.advance_deposit);
+  const contractMaintenance = moneyOrNull(sourceAgreement?.contract_maintenance) ?? moneyOrNull(snapshot.maintenance_charge);
+  const contractMaintenanceType = sourceAgreement?.contract_maintenance_type ?? snapshot.maintenance_type ?? null;
+  const contractPaymentFrequency = sourceAgreement?.contract_payment_frequency ?? snapshot.payment_frequency ?? null;
+
+  return {
+    contentSnapshot: {
+      ...snapshot,
+      ...(contractRent !== null ? { monthly_rent: contractRent } : {}),
+      ...(contractDeposit !== null ? { advance_deposit: contractDeposit } : {}),
+      ...(contractMaintenance !== null ? { maintenance_charge: contractMaintenance } : {}),
+      ...(contractMaintenanceType ? { maintenance_type: contractMaintenanceType } : {}),
+      ...(contractPaymentFrequency ? { payment_frequency: contractPaymentFrequency } : {}),
+      renewed_from_agreement_id: sourceAgreement.id,
+      previous_agreement_version: sourceAgreement.agreement_version || 1,
+    },
+    contractRent,
+    contractDeposit,
+    contractMaintenance,
+    contractMaintenanceType,
+    contractPaymentFrequency,
+  };
+}
+
+export class AgreementRenewalError extends Error {
+  code: AgreementRenewalErrorCode;
+  status = 409;
+  details?: Record<string, unknown>;
+
+  constructor(code: AgreementRenewalErrorCode, message: string, details?: Record<string, unknown>) {
+    super(message);
+    this.name = "AgreementRenewalError";
+    this.code = code;
+    this.details = details;
+  }
+}
+
+export class AgreementRenewalService {
+  constructor(private readonly db = prisma) {}
+
+  async createRenewalDraft(
+    sourceAgreementId: string,
+    lifecycleInput: RenewalLifecycleInput = {}
+  ): Promise<AgreementRenewalDraftResult> {
+    return this.db.$transaction(async (tx: any) => {
+      await tx.$queryRaw`SELECT id FROM "Agreement" WHERE id = ${sourceAgreementId}::uuid FOR UPDATE`;
+
+      const sourceAgreement = await tx.agreement.findUnique({
+        where: { id: sourceAgreementId },
+        include: {
+          tenant: {
+            select: {
+              id: true,
+              status: true,
+              owner_id: true,
+              hostel_id: true,
+            },
+          },
+          renewed_to_agreement: true,
+          renewed_agreements: {
+            where: { status: { notIn: ["VOID", "TERMINATED"] } },
+            orderBy: { generated_at: "desc" },
+            take: 1,
+          },
+        },
+      });
+
+      if (!sourceAgreement) {
+        throw new AgreementRenewalError("AGREEMENT_NOT_FOUND", "Agreement not found", { sourceAgreementId });
+      }
+
+      this.assertRenewableStatus(sourceAgreement.status, sourceAgreement.id);
+
+      const existingSuccessor = sourceAgreement.renewed_to_agreement || sourceAgreement.renewed_agreements?.[0] || null;
+      if (existingSuccessor) {
+        throw new AgreementRenewalError(
+          "AGREEMENT_SUCCESSOR_EXISTS",
+          "A renewal agreement already exists for this agreement",
+          {
+            sourceAgreementId: sourceAgreement.id,
+            successorAgreementId: existingSuccessor.id,
+            successorStatus: existingSuccessor.status,
+          }
+        );
+      }
+
+      const activeMoveOut = await tx.move_out_requests.findFirst({
+        where: {
+          tenant_id: sourceAgreement.tenant_id,
+          status: { notIn: ["COMPLETED", "REJECTED"] },
+        },
+        select: { id: true, status: true },
+        orderBy: { created_at: "desc" },
+      });
+
+      if (activeMoveOut) {
+        throw new AgreementRenewalError(
+          "MOVE_OUT_IN_PROGRESS",
+          "Move-out already in progress. Cancel move-out before renewing.",
+          {
+            sourceAgreementId: sourceAgreement.id,
+            tenantId: sourceAgreement.tenant_id,
+            moveOutRequestId: activeMoveOut.id,
+            moveOutStatus: activeMoveOut.status,
+          }
+        );
+      }
+
+      const contract = resolveContractSnapshot(sourceAgreement);
+      const lifecycle = buildRenewalAgreementLifecycle(lifecycleInput);
+      const nextVersion = Number(sourceAgreement.agreement_version || 1) + 1;
+      const renewalLifecycleCandidate = {
+        ...lifecycle,
+        contract_rent: contract.contractRent,
+        contract_security_deposit: contract.contractDeposit,
+        contract_maintenance: contract.contractMaintenance,
+        contract_maintenance_type: contract.contractMaintenanceType,
+        contract_payment_frequency: contract.contractPaymentFrequency,
+      };
+
+      try {
+        assertAgreementLifecycleComplete(renewalLifecycleCandidate, { agreementId: sourceAgreement.id });
+      } catch (error: any) {
+        throw new AgreementRenewalError(
+          "AGREEMENT_LIFECYCLE_INCOMPLETE",
+          error?.message || "Agreement lifecycle metadata is incomplete",
+          error?.details || { sourceAgreementId: sourceAgreement.id }
+        );
+      }
+
+      const renewalDraft = await tx.agreement.create({
+        data: {
+          id: randomUUID(),
+          tenant_id: sourceAgreement.tenant_id,
+          hostel_id: sourceAgreement.hostel_id,
+          template_id: sourceAgreement.template_id,
+          renewed_from_agreement_id: sourceAgreement.id,
+          status: "DRAFT",
+          agreement_version: nextVersion,
+          agreement_start_date: lifecycle.agreement_start_date,
+          agreement_end_date: lifecycle.agreement_end_date,
+          agreement_duration_months: lifecycle.agreement_duration_months,
+          contract_rent: contract.contractRent,
+          contract_security_deposit: contract.contractDeposit,
+          contract_maintenance: contract.contractMaintenance,
+          contract_maintenance_type: contract.contractMaintenanceType,
+          contract_payment_frequency: contract.contractPaymentFrequency,
+          content_snapshot: {
+            ...contract.contentSnapshot,
+            agreement_start_date: lifecycle.agreement_start_date?.toISOString().slice(0, 10),
+            agreement_end_date: lifecycle.agreement_end_date?.toISOString().slice(0, 10),
+            agreement_duration_months: lifecycle.agreement_duration_months,
+          },
+        },
+      });
+
+      const sourceUpdate = await tx.agreement.updateMany({
+        where: {
+          id: sourceAgreement.id,
+          renewed_to_agreement_id: null,
+        },
+        data: {
+          renewed_to_agreement_id: renewalDraft.id,
+        },
+      });
+
+      if (sourceUpdate.count !== 1) {
+        throw new AgreementRenewalError(
+          "AGREEMENT_SUCCESSOR_EXISTS",
+          "A renewal agreement already exists for this agreement",
+          { sourceAgreementId: sourceAgreement.id }
+        );
+      }
+
+      return {
+        sourceAgreement: {
+          ...sourceAgreement,
+          renewed_to_agreement_id: renewalDraft.id,
+        },
+        renewalDraft,
+      };
+    });
+  }
+
+  private assertRenewableStatus(status: string, agreementId: string) {
+    if ((RENEWABLE_AGREEMENT_STATUSES as readonly string[]).includes(status)) return;
+
+    const blocked = (BLOCKED_RENEWAL_STATUSES as readonly string[]).includes(status);
+    const message = blocked
+      ? `Agreement status ${status as BlockedRenewalStatus} cannot be renewed`
+      : `Agreement status ${status} is not eligible for renewal`;
+
+    throw new AgreementRenewalError("AGREEMENT_NOT_RENEWABLE", message, {
+      agreementId,
+      status,
+      allowedStatuses: [...RENEWABLE_AGREEMENT_STATUSES],
+    });
+  }
+}
+
+export const agreementRenewalService = new AgreementRenewalService();
+
+export async function createAgreementRenewalDraft(sourceAgreementId: string, lifecycleInput: RenewalLifecycleInput) {
+  return agreementRenewalService.createRenewalDraft(sourceAgreementId, lifecycleInput);
+}
