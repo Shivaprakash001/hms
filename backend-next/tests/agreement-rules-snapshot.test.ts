@@ -1,0 +1,318 @@
+import { describe, expect, it, vi, beforeEach } from "vitest";
+import { ActivationWorkflowService } from "@/src/services/tenants/activation-workflow-service";
+import { AgreementRenewalSigningService } from "@/src/services/tenants/agreement-renewal-signing-service";
+import { AgreementGenerationService } from "@/src/services/tenants/agreement-generation-service";
+import { prisma } from "@/lib/db";
+
+// Mock the database client
+vi.mock("@/lib/db", () => {
+  const mockPrisma = {
+    tenants: {
+      update: vi.fn().mockResolvedValue({}),
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
+    },
+    profile: {
+      update: vi.fn(),
+      findUnique: vi.fn(),
+    },
+    tenant_invitations: {
+      findUnique: vi.fn(),
+      update: vi.fn(),
+    },
+    ruleVersion: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
+    },
+    agreementTemplate: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
+    },
+    agreement: {
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+    },
+    move_out_requests: {
+      findFirst: vi.fn().mockResolvedValue(null),
+    },
+    roomAllocation: {
+      count: vi.fn().mockResolvedValue(0),
+    },
+    $transaction: vi.fn((cb) => cb(mockPrisma)),
+    $queryRaw: vi.fn(),
+    $connect: vi.fn(),
+    $disconnect: vi.fn(),
+  };
+  return { prisma: mockPrisma };
+});
+
+vi.mock("@/lib/services/event-log-service", () => ({
+  eventLog: {
+    log: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
+vi.mock("axios", () => ({
+  default: {
+    get: vi.fn().mockRejectedValue(new Error("Network disabled in tests")),
+  },
+}));
+
+vi.mock("@/src/services/tenants/activation-financial-status-service", () => ({
+  getActivationFinancialStatus: vi.fn().mockResolvedValue({
+    isReady: true,
+    totalPaid: 10000,
+    totalRequired: 10000,
+    payments: [],
+  }),
+}));
+
+describe("Residency Agreement Rules Snapshot Mechanism", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe("ActivationWorkflowService - signAgreement", () => {
+    it("should store the rules_snapshot, rule_version_id, and rule_version_number during agreement signing", async () => {
+      const service = new ActivationWorkflowService();
+
+      const mockRuleVersion = {
+        id: "rule-v2-uuid",
+        version: "v2.0",
+        content: {
+          categories: [
+            {
+              title: "Category 1",
+              highlights: ["hl1"],
+              rules: ["rule1"],
+            },
+          ],
+        },
+      };
+
+      const mockTemplate = {
+        id: "template-1",
+        owner_name: "Hostel Owner",
+        owner_signature_url: "https://sig.com",
+        custom_rules: "Custom rule 1",
+      };
+
+      const mockAgreement = {
+        id: "agreement-1",
+        hostel_id: "hostel-1",
+        status: "DRAFT",
+        content_snapshot: {},
+        contract_rent: 5000,
+        contract_security_deposit: 10000,
+        contract_maintenance: 1000,
+        contract_maintenance_type: "ONE_TIME",
+        contract_payment_frequency: "MONTHLY",
+        agreement_start_date: new Date(),
+        agreement_end_date: new Date(),
+        agreement_duration_months: 12,
+        tenant: null as any,
+        hostel: { name: "Test Hostel" },
+        template: mockTemplate,
+      };
+
+      const mockTenant: any = {
+        id: "tenant-1",
+        hostel_id: "hostel-1",
+        status: "INVITED",
+        phone_1: "1234567890",
+        rule_acceptances: [{ rule_version_id: "rule-v2-uuid" }],
+        agreements: [mockAgreement],
+        hostels: { name: "Test Hostel", rent_cycle: "MONTHLY", auto_rent_day: 1, preferences: {} },
+        joined_on: new Date(),
+        billing_start_date: new Date(),
+        monthly_rent: 5000,
+        advance_deposit: 10000,
+        maintenance_charge: 1000,
+        maintenance_type: "ONE_TIME",
+        payment_frequency: "MONTHLY",
+        room_allocations: [],
+      };
+
+      mockAgreement.tenant = mockTenant;
+
+      const mockProfile = { id: "profile-1", name: "Tenant User", phone: "1234567890" };
+      const mockInvitation = { id: "invite-1", email: "tenant@example.com", phone: "1234567890", name: "Tenant User" };
+
+      // Setup resolve invitation mocks
+      vi.spyOn(service as any, "resolveInvitation").mockResolvedValue({
+        profile: mockProfile,
+        tenant: mockTenant,
+        invitation: mockInvitation,
+      });
+
+      vi.mocked(prisma.tenants.findUnique).mockResolvedValue(mockTenant as any);
+      vi.mocked(prisma.ruleVersion.findFirst).mockResolvedValue(mockRuleVersion as any);
+      vi.mocked(prisma.agreementTemplate.findFirst).mockResolvedValue(mockTemplate as any);
+      vi.mocked(prisma.agreement.findFirst).mockResolvedValue(mockAgreement as any);
+      vi.mocked(prisma.agreement.findUnique).mockResolvedValue(mockAgreement as any);
+      vi.mocked(prisma.agreement.update).mockResolvedValue({ id: "agreement-1" } as any);
+
+      // Mutate step AGREEMENT
+      await service.mutate(
+        "test-token",
+        "AGREEMENT",
+        {
+          tenant_signature_name: "Tenant User",
+          tenant_signature_url: "https://sig-url.com",
+        },
+        { ip: "127.0.0.1", userAgent: "Mozilla" }
+      );
+
+      // Verify that prisma.agreement.update was called with the rule snapshot fields
+      expect(prisma.agreement.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: "agreement-1" },
+          data: expect.objectContaining({
+            rules_snapshot: mockRuleVersion.content,
+            rule_version_id: mockRuleVersion.id,
+            rule_version_number: mockRuleVersion.version,
+          }),
+        })
+      );
+    });
+  });
+
+  describe("AgreementRenewalSigningService - signRenewalAgreement", () => {
+    it("should store the rules_snapshot and update content_snapshot on renewal agreement signing", async () => {
+      const mockRuleVersion = {
+        id: "rule-renewal-uuid",
+        version: "v3.0",
+        content: {
+          categories: [{ title: "Renewal Rules", highlights: [], rules: ["rule-renew"] }],
+        },
+      };
+
+      const mockPredecessor = {
+        id: "predecessor-1",
+        status: "SIGNED",
+        renewed_to_agreement_id: "renewal-1",
+      };
+
+      const mockTemplate = {
+        id: "template-1",
+        owner_name: "Owner Name",
+        owner_signature_url: "https://sig.com",
+      };
+
+      const mockRenewalAgreement = {
+        id: "renewal-1",
+        tenant_id: "tenant-1",
+        hostel_id: "hostel-1",
+        status: "DRAFT",
+        renewed_from_agreement_id: "predecessor-1",
+        renewed_from_agreement: mockPredecessor,
+        agreement_start_date: new Date(),
+        agreement_end_date: new Date(),
+        agreement_duration_months: 12,
+        contract_rent: 6000,
+        contract_security_deposit: 12000,
+        contract_maintenance: 2000,
+        contract_maintenance_type: "ONE_TIME",
+        contract_payment_frequency: "MONTHLY",
+        template: mockTemplate,
+        tenant: {
+          id: "tenant-1",
+          owner_id: "owner-1",
+          hostel_id: "hostel-1",
+        },
+      };
+
+      vi.mocked(prisma.agreement.findUnique).mockResolvedValue(mockRenewalAgreement as any);
+      vi.mocked(prisma.ruleVersion.findFirst).mockResolvedValue(mockRuleVersion as any);
+      vi.mocked(prisma.agreement.updateMany).mockResolvedValue({ count: 1 });
+
+      const pdfGenerator = { generateAndUploadPdf: vi.fn().mockResolvedValue("https://cdn.example.com/renewal.pdf") };
+      const renewalService = new AgreementRenewalSigningService(prisma, pdfGenerator as any, { log: vi.fn() } as any);
+
+      await renewalService.signRenewalAgreement({
+        renewalAgreementId: "renewal-1",
+        tenantSignature: { signature_url: "sig-url", signature_name: "Tenant Name" },
+        signedBy: "TENANT",
+      });
+
+      // Verify updateMany was called to update status to SIGNED with the rule fields
+      expect(prisma.agreement.updateMany).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          where: { id: "renewal-1", status: "DRAFT", renewed_from_agreement_id: "predecessor-1" },
+          data: expect.objectContaining({
+            rules_snapshot: mockRuleVersion.content,
+            rule_version_id: mockRuleVersion.id,
+            rule_version_number: mockRuleVersion.version,
+            content_snapshot: expect.objectContaining({
+              hostel_rules: mockRuleVersion.content,
+            }),
+          }),
+        })
+      );
+    });
+  });
+
+  describe("AgreementGenerationService - getAgreementRenderData", () => {
+    it("should prioritize agreement.rules_snapshot over content_snapshot.hostel_rules", async () => {
+      const rulesSnapshot = { categories: [{ title: "Snapshot Rules", highlights: [], rules: [] }] };
+      const fallbackRules = { categories: [{ title: "Fallback Rules", highlights: [], rules: [] }] };
+
+      const mockAgreement = {
+        id: "agreement-1",
+        hostel_id: "hostel-1",
+        rules_snapshot: rulesSnapshot,
+        content_snapshot: {
+          hostel_rules: fallbackRules,
+          tenant_name: "John Doe",
+        },
+        tenant: {
+          joined_on: new Date(),
+          room_allocations: [],
+        },
+        hostel: {
+          name: "Test Hostel",
+        },
+        template: {
+          owner_name: "Owner",
+        },
+      };
+
+      vi.mocked(prisma.agreement.findUnique).mockResolvedValue(mockAgreement as any);
+
+      const renderData = await AgreementGenerationService.getAgreementRenderData("agreement-1");
+      expect(renderData.hostelRules).toEqual(rulesSnapshot);
+    });
+
+    it("should fall back to content_snapshot.hostel_rules when rules_snapshot is missing", async () => {
+      const fallbackRules = { categories: [{ title: "Fallback Rules", highlights: [], rules: [] }] };
+
+      const mockAgreement = {
+        id: "agreement-1",
+        hostel_id: "hostel-1",
+        rules_snapshot: null,
+        content_snapshot: {
+          hostel_rules: fallbackRules,
+          tenant_name: "John Doe",
+        },
+        tenant: {
+          joined_on: new Date(),
+          room_allocations: [],
+        },
+        hostel: {
+          name: "Test Hostel",
+        },
+        template: {
+          owner_name: "Owner",
+        },
+      };
+
+      vi.mocked(prisma.agreement.findUnique).mockResolvedValue(mockAgreement as any);
+
+      const renderData = await AgreementGenerationService.getAgreementRenderData("agreement-1");
+      expect(renderData.hostelRules).toEqual(fallbackRules);
+    });
+  });
+});

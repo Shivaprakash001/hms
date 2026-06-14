@@ -1909,6 +1909,9 @@ model Agreement {
   status                  AgreementStatus @default(DRAFT)
   content_snapshot        Json            // Resolved snapshot of everything (hostel, rent, deposit, joining date, tenant info, custom rules)
   pdf_url                 String?         // URL to stored PDF document in Supabase
+  rules_snapshot          Json?
+  rule_version_id         String?           @db.Uuid
+  rule_version_number     String?
   agreement_version       Int             @default(1)
   agreement_start_date    DateTime?       @db.Date
   agreement_end_date      DateTime?       @db.Date

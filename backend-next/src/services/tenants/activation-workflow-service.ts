@@ -486,6 +486,9 @@ export class ActivationWorkflowService {
           template_id: activeTemplate.id,
           status: "DRAFT",
           ...lifecycle,
+          rules_snapshot: ruleVersion ? (ruleVersion.content || ruleVersion.content_snapshot || DEFAULT_RULE_CONTENT) : DEFAULT_RULE_CONTENT,
+          rule_version_id: ruleVersion?.id || null,
+          rule_version_number: ruleVersion?.version || null,
           content_snapshot: {
             hostel_name: hostel.name,
             room_number: room?.room_no ?? "N/A",
@@ -829,6 +832,10 @@ export class ActivationWorkflowService {
         owner_signature_url: template.owner_signature_url,
         owner_signature_name: template.owner_name,
         owner_signed_at: now,
+
+        rules_snapshot: ruleVersion ? (ruleVersion.content || ruleVersion.content_snapshot || DEFAULT_RULE_CONTENT) : DEFAULT_RULE_CONTENT,
+        rule_version_id: ruleVersion?.id || null,
+        rule_version_number: ruleVersion?.version || null,
 
         content_snapshot: {
           ...(draft.content_snapshot as any || {}),

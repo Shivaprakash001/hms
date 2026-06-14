@@ -107,6 +107,14 @@ function createDb(options: {
       create: vi.fn(),
       createMany: vi.fn(),
     },
+    ruleVersion: {
+      findFirst: vi.fn(async () => ({
+        id: "rule-version-1",
+        version: "v1.0",
+        content: { categories: [] },
+        content_snapshot: { categories: [] },
+      })),
+    },
     move_out_requests: {
       findFirst: vi.fn().mockResolvedValue(options.activeMoveOut || null),
       create: vi.fn(),

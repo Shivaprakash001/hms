@@ -248,7 +248,7 @@ export class AgreementGenerationService {
       },
       orderBy: { created_at: "desc" },
     });
-    const hostelRules = snapshot.hostel_rules || (ruleVersion
+    const hostelRules = (agreement.rules_snapshot as any) || snapshot.hostel_rules || (ruleVersion
       ? (ruleVersion.content as any || ruleVersion.content_snapshot as any || DEFAULT_RULE_CONTENT)
       : DEFAULT_RULE_CONTENT);
 
@@ -501,7 +501,7 @@ export class AgreementGenerationService {
       "Monthly rent is payable in advance as per the agreed rent cycle. Late payments may attract fees or lead to suspension of access.",
       "The security deposit is refundable upon vacating the premises, subject to clearance of all pending dues and room inspection for damages.",
       "Notice Period: Either party must provide at least 30 days written notice prior to terminating this agreement.",
-      "Hostel Rules Compliance: The Lessee explicitly agrees to comply fully with, follow, and be bound by each and every rule, policy, and regulation of the hostel (including fee refund rules, discipline policies, late fee obligations, and property damage liabilities). Any breach of these rules constitutes a violation of this residency agreement and may result in immediate termination of stay.",
+      "Hostel Rules Compliance: The Lessee explicitly agrees to comply fully with, follow, and be bound by each and every rule, policy, and regulation of the hostel as set forth in the hostel rules snapshot incorporated herein. The Lessee acknowledges that the specific rule version accepted during account activation is legally binding and forms an integral part of this residency agreement.",
     ];
 
     standardRules.forEach((rule, idx) => {
@@ -522,7 +522,7 @@ export class AgreementGenerationService {
 
     // 4. Hostel Rules & Regulations Section
     if (data.hostelRules && data.hostelRules.categories) {
-      checkPageBreak(60);
+      checkPageBreak(80);
       currentY -= 10;
       page.drawText(sanitizeText("HOSTEL RULES & REGULATIONS"), {
         x: margin,
@@ -531,7 +531,22 @@ export class AgreementGenerationService {
         font: fontBold,
         color: COLORS.textPrimary,
       });
-      currentY -= 20;
+      currentY -= 16;
+
+      const descText = "This agreement incorporates by reference the following rules accepted by the tenant during account activation.";
+      const descWrapped = wrapText(descText, contentWidth, fontItalic, 9);
+      checkPageBreak(descWrapped.length * 12 + 10);
+      descWrapped.forEach((line) => {
+        page.drawText(sanitizeText(line), {
+          x: margin,
+          y: currentY,
+          size: 9,
+          font: fontItalic,
+          color: COLORS.textMuted,
+        });
+        currentY -= 12;
+      });
+      currentY -= 10;
 
       data.hostelRules.categories.forEach((cat: any) => {
         // Category Title

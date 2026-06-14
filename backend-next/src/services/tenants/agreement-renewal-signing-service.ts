@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { eventLog } from "@/lib/services/event-log-service";
-import { AgreementGenerationService } from "./agreement-generation-service";
+import { AgreementGenerationService, DEFAULT_RULE_CONTENT } from "./agreement-generation-service";
 import { AGREEMENT_ACTIVITY_EVENTS, isCurrentAgreementStatus } from "./agreement-status";
 import { assertAgreementLifecycleComplete } from "./agreement-lifecycle-completeness";
 
@@ -195,6 +195,21 @@ export class AgreementRenewalSigningService {
         });
       }
 
+      // Fetch active rule version
+      const ruleVersion = await tx.ruleVersion.findFirst({
+        where: {
+          hostel_id: renewalAgreement.tenant.hostel_id,
+          OR: [{ is_active: true }, { active: true }],
+        },
+        orderBy: { created_at: "desc" },
+      });
+
+      const rulesSnapshot = ruleVersion
+        ? (ruleVersion.content || ruleVersion.content_snapshot || DEFAULT_RULE_CONTENT)
+        : DEFAULT_RULE_CONTENT;
+      const ruleVersionId = ruleVersion?.id || null;
+      const ruleVersionNumber = ruleVersion?.version || null;
+
       const renewalUpdate = await tx.agreement.updateMany({
         where: {
           id: renewalAgreement.id,
@@ -218,6 +233,13 @@ export class AgreementRenewalSigningService {
           owner_signature_url: renewalAgreement.template?.owner_signature_url || null,
           owner_signature_name: renewalAgreement.template?.owner_name || null,
           owner_signed_at: now,
+          rules_snapshot: rulesSnapshot,
+          rule_version_id: ruleVersionId,
+          rule_version_number: ruleVersionNumber,
+          content_snapshot: {
+            ...(renewalAgreement.content_snapshot as any || {}),
+            hostel_rules: rulesSnapshot,
+          },
         },
       });
       if (renewalUpdate.count !== 1) {
