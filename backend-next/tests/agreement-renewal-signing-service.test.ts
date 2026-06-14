@@ -107,13 +107,46 @@ function createDb(options: {
       create: vi.fn(),
       createMany: vi.fn(),
     },
-    ruleVersion: {
+    agreementTemplate: {
       findFirst: vi.fn(async () => ({
-        id: "rule-version-1",
+        id: "template-1",
+        version: "v1",
+        title: "Standard Tenant Agreement",
+        owner_name: "Owner One",
+        rules_content: { categories: [] },
+        custom_rules: "",
+        type: "RENEWAL",
+        status: "PUBLISHED",
+        version_number: 1,
+        is_active: true,
+      })),
+      create: vi.fn(async () => ({
+        id: "template-1",
+        version: "v1",
+        title: "Standard Tenant Agreement",
+        owner_name: "Owner One",
+        rules_content: { categories: [] },
+        custom_rules: "",
+        type: "RENEWAL",
+        status: "PUBLISHED",
+        version_number: 1,
+        is_active: true,
+      })),
+    },
+    ruleVersion: {
+      findUnique: vi.fn(async () => ({
+        id: "template-1",
         version: "v1.0",
         content: { categories: [] },
         content_snapshot: { categories: [] },
       })),
+      findFirst: vi.fn(async () => ({
+        id: "template-1",
+        version: "v1.0",
+        content: { categories: [] },
+        content_snapshot: { categories: [] },
+      })),
+      create: vi.fn(),
     },
     move_out_requests: {
       findFirst: vi.fn().mockResolvedValue(options.activeMoveOut || null),

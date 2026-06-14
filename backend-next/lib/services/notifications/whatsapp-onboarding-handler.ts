@@ -5,6 +5,8 @@ import { normalizeWhatsAppPhone } from "./providers/whatsapp/meta-provider";
 import {
   buildTenantOnboardingTemplatePayload,
   ONBOARDING_COMPLETED_TEMPLATE_NAME,
+  PAYMENT_PENDING_TEMPLATE_NAME,
+  buildTenantPaymentPendingTemplatePayload,
 } from "./providers/whatsapp/templates";
 import { whatsAppTemplateDeliveryService } from "./whatsapp-template-delivery";
 import { reservationStatusService } from "@/src/services/tenants/reservation-status-service";
@@ -12,16 +14,17 @@ import { reservationStatusService } from "@/src/services/tenants/reservation-sta
 const logger = getLogger("whatsapp.onboarding");
 
 /**
- * Handles the tenant_onboarding_completed event.
+ * Handles the tenant onboarding activation/completed events.
  *
  * Architecture:
  *   Load tenant context from DB
  *     ↓
- *   buildTenantOnboardingTemplatePayload(...)  ← pure mapper
+ *   Check ReservationStatusService to branch
  *     ↓
- *   WhatsAppTemplateDeliveryService.send(...)  ← idempotent
- *     ↓
- *   eventLog audit
+ *   If PAYMENT_PENDING:
+ *     Send account_activated_payment_pending_v1 (idempotency key: tenant_activation_pending:{tenantId})
+ *   If RESERVED / MOVE_IN_READY:
+ *     Send tenant_onboarding_completed_v1 (idempotency key: tenant_onboarding_completed:{tenantId})
  *
  * Rule 5: WhatsApp failure must never break onboarding.
  * Rule 6: All data loaded from database, never from request.
@@ -55,16 +58,6 @@ export async function sendTenantOnboardingNotification(tenantId: string): Promis
     return;
   }
 
-  // 1.5 Gate: Ensure the tenant has reserved their bed (financially committed)
-  const resStatus = await reservationStatusService.getReservationStatus(tenantId);
-  if (resStatus.status === "PAYMENT_PENDING") {
-    logger.info("whatsapp.onboarding.postponed_payment_pending", {
-      tenant_id: tenantId,
-      status: resStatus.status,
-    });
-    return;
-  }
-
   // 2. Resolve phone number
   const rawPhone = tenant.phone_1 || tenant.profiles?.phone;
   if (!rawPhone) {
@@ -90,17 +83,68 @@ export async function sendTenantOnboardingNotification(tenantId: string): Promis
     return;
   }
 
-  // 3. Resolve allocation and room
-  const allocation = tenant.room_allocations?.[0];
-  const room = allocation?.room;
   const hostel = tenant.hostels;
-
   if (!hostel) {
     logger.warn("whatsapp.onboarding.no_hostel", { tenant_id: tenantId });
     return;
   }
 
-  // 4. Build template payload (pure mapper — no DB queries)
+  // 3. Gate & Route based on Reservation Status
+  const resStatus = await reservationStatusService.getReservationStatus(tenantId);
+
+  if (resStatus.status === "PAYMENT_PENDING") {
+    const bodyParameters = buildTenantPaymentPendingTemplatePayload({
+      tenantName: tenant.profiles?.name || "Resident",
+    });
+
+    const idempotencyKey = `tenant_activation_pending:${tenantId}`;
+
+    try {
+      const result = await whatsAppTemplateDeliveryService.send({
+        phone: normalizedPhone,
+        templateName: PAYMENT_PENDING_TEMPLATE_NAME,
+        bodyParameters,
+        idempotencyKey,
+        tenantId,
+        hostelId: hostel.id,
+        ownerId: tenant.owner_id || undefined,
+        languageCode: "en",
+      });
+
+      if (result.skipped) {
+        logger.info("whatsapp.onboarding.pending.skipped", {
+          tenant_id: tenantId,
+          reason: "duplicate_or_invalid_phone",
+        });
+        return;
+      }
+
+      await eventLog.log("tenant_activation_pending_whatsapp_sent", tenant.owner_id, {
+        tenant_id: tenantId,
+        hostel_id: hostel.id,
+        provider_message_id: result.providerMessageId,
+        log_id: result.logId,
+      }, tenantId);
+    } catch (error: any) {
+      logger.error("whatsapp.onboarding.pending.send_failed", {
+        tenant_id: tenantId,
+        error: String(error?.message || error),
+      });
+
+      await eventLog.log("tenant_activation_pending_whatsapp_failed", tenant.owner_id, {
+        tenant_id: tenantId,
+        hostel_id: hostel.id,
+        error: String(error?.message || error).slice(0, 500),
+      }, tenantId).catch(() => {});
+    }
+    return;
+  }
+
+  // If status is RESERVED or MOVE_IN_READY:
+  const allocation = tenant.room_allocations?.[0];
+  const room = allocation?.room;
+
+  // Build template payload (pure mapper)
   const bodyParameters = buildTenantOnboardingTemplatePayload({
     tenantName: tenant.profiles?.name || "Resident",
     hostelName: hostel.name,
@@ -110,7 +154,6 @@ export async function sendTenantOnboardingNotification(tenantId: string): Promis
     rentDueDay: hostel.auto_rent_day || 1,
   });
 
-  // 5. Send via generic delivery service (idempotent)
   const idempotencyKey = `tenant_onboarding_completed:${tenantId}`;
 
   try {
@@ -133,7 +176,7 @@ export async function sendTenantOnboardingNotification(tenantId: string): Promis
       return;
     }
 
-    // 6. Audit log — success
+    // Audit log — success
     await eventLog.log("tenant_onboarding_whatsapp_sent", tenant.owner_id, {
       tenant_id: tenantId,
       hostel_id: hostel.id,
@@ -141,7 +184,7 @@ export async function sendTenantOnboardingNotification(tenantId: string): Promis
       log_id: result.logId,
     }, tenantId);
   } catch (error: any) {
-    // 6. Audit log — failure (Rule 5: never break onboarding)
+    // Audit log — failure (Rule 5: never break onboarding)
     logger.error("whatsapp.onboarding.send_failed", {
       tenant_id: tenantId,
       error: String(error?.message || error),

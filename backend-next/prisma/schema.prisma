@@ -759,6 +759,7 @@ model profile {
   bulk_import_batches_bulk_import_batches_uploaded_byToprofiles     bulk_import_batches[] @relation("bulk_import_batches_uploaded_byToprofiles")
   expenses                                                          expenses[]
   rule_versions                                                     RuleVersion[]
+  published_templates                                               AgreementTemplate[]   @relation("TemplatePublisher")
   hostels                                                           hostels[]
   notifications                                                     notifications[]
   bulk_import_batches_profiles_import_batch_idTobulk_import_batches bulk_import_batches?  @relation("profiles_import_batch_idTobulk_import_batches", fields: [import_batch_id], references: [id])
@@ -1872,6 +1873,18 @@ model TenantPolicyAcceptance {
   @@index([hostel_id])
 }
 
+enum AgreementTemplateType {
+  RESIDENCY
+  RENEWAL
+  MOVE_OUT
+}
+
+enum TemplateStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
 enum AgreementStatus {
   DRAFT
   SIGNED
@@ -1883,19 +1896,28 @@ enum AgreementStatus {
 }
 
 model AgreementTemplate {
-  id                  String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  hostel_id           String      @db.Uuid
-  version             String      // e.g. "2026-v1"
-  title               String      @default("Standard Tenant Agreement")
-  custom_rules        String?     // Optional custom rules or additions
-  owner_name          String      // Owner/Authorized Signatory Name
-  owner_signature_url String?     // URL to signature stamp image (Supabase Storage)
-  is_active           Boolean     @default(true)
-  created_at          DateTime    @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime?   @db.Timestamptz(6)
+  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  hostel_id           String                @db.Uuid
+  version             String                // e.g. "2026-v1"
+  title               String                @default("Standard Tenant Agreement")
+  custom_rules        String?               // Optional custom rules or additions
+  owner_name          String                // Owner/Authorized Signatory Name
+  owner_signature_url String?               // URL to signature stamp image (Supabase Storage)
+  is_active           Boolean               @default(true)
+  created_at          DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime?             @db.Timestamptz(6)
+  rules_content       Json?                 // JSON storing the parsed categories (highlights and rules)
+  
+  type                AgreementTemplateType @default(RESIDENCY)
+  status              TemplateStatus        @default(DRAFT)
+  version_number      Int                   @default(1)
+  effective_from      DateTime              @default(now()) @db.Timestamptz(6)
+  published_at        DateTime?             @db.Timestamptz(6)
+  published_by_id     String?               @db.Uuid
 
-  hostel              hostels     @relation(fields: [hostel_id], references: [id], onDelete: Cascade)
+  hostel              hostels               @relation(fields: [hostel_id], references: [id], onDelete: Cascade)
   agreements          Agreement[]
+  published_by        profile?              @relation("TemplatePublisher", fields: [published_by_id], references: [id])
 
   @@unique([hostel_id, version])
   @@index([hostel_id])

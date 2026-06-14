@@ -54,7 +54,9 @@ export type MetaWhatsAppErrorBody = {
 export type WhatsAppProviderConfig = {
   accessToken: string;
   phoneNumberId: string;
+  businessAccountId?: string;
   baseUrl: string;
   timeoutMs: number;
   maxRetries: number;
 };
+

@@ -126,6 +126,15 @@ eventSystem.on("payment_recorded", async (data) => {
   // Check if this payment transitions the tenant to RESERVED or MOVE_IN_READY
   if (data.tenant_id) {
     try {
+      const { tenantInvitationLifecycleService } = await import(
+        "../../src/services/tenants/tenant-invitation-lifecycle-service"
+      );
+      await tenantInvitationLifecycleService.allocateOnboardingTenantIfFinanciallyReady(data.tenant_id);
+    } catch (error) {
+      console.error("[Event] payment_recorded automatic allocation failed:", error);
+    }
+
+    try {
       const { sendTenantOnboardingNotification } = await import(
         "../services/notifications/whatsapp-onboarding-handler"
       );
@@ -133,6 +142,28 @@ eventSystem.on("payment_recorded", async (data) => {
     } catch (error) {
       // Rule 5: WhatsApp failure must never break onboarding or payment recording
       console.error("[Event] payment_recorded onboarding notification check failed:", error);
+    }
+  }
+});
+
+eventSystem.on("advance_credited", async (data) => {
+  if (data.tenant_id) {
+    try {
+      const { tenantInvitationLifecycleService } = await import(
+        "../../src/services/tenants/tenant-invitation-lifecycle-service"
+      );
+      await tenantInvitationLifecycleService.allocateOnboardingTenantIfFinanciallyReady(data.tenant_id);
+    } catch (error) {
+      console.error("[Event] advance_credited automatic allocation failed:", error);
+    }
+
+    try {
+      const { sendTenantOnboardingNotification } = await import(
+        "../services/notifications/whatsapp-onboarding-handler"
+      );
+      await sendTenantOnboardingNotification(data.tenant_id);
+    } catch (error) {
+      console.error("[Event] advance_credited onboarding notification check failed:", error);
     }
   }
 });

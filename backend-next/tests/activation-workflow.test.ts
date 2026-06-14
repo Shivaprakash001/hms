@@ -27,12 +27,37 @@ vi.mock("@/lib/db", () => {
       update: vi.fn(),
     },
     ruleVersion: {
-      findFirst: vi.fn(),
-      create: vi.fn(),
+      findFirst: vi.fn().mockResolvedValue({ id: "template-1", title: "Rules", content: {} } as any),
+      findUnique: vi.fn().mockResolvedValue({ id: "template-1", title: "Rules", content: {} } as any),
+      create: vi.fn().mockResolvedValue({ id: "template-1", title: "Rules", content: {} } as any),
     },
     agreementTemplate: {
-      findFirst: vi.fn(),
-      create: vi.fn(),
+      findFirst: vi.fn().mockResolvedValue({
+        id: "template-1",
+        version: "v1",
+        title: "Agreement",
+        custom_rules: [],
+        owner_name: "Owner",
+        owner_signature_url: "http://sig.com",
+        rules_content: { categories: [] },
+        type: "RESIDENCY",
+        status: "PUBLISHED",
+        version_number: 1,
+        is_active: true,
+      } as any),
+      create: vi.fn().mockResolvedValue({
+        id: "template-1",
+        version: "v1",
+        title: "Agreement",
+        custom_rules: [],
+        owner_name: "Owner",
+        owner_signature_url: "http://sig.com",
+        rules_content: { categories: [] },
+        type: "RESIDENCY",
+        status: "PUBLISHED",
+        version_number: 1,
+        is_active: true,
+      } as any),
     },
     agreement: {
       findFirst: vi.fn(),
@@ -43,10 +68,18 @@ vi.mock("@/lib/db", () => {
       count: vi.fn(),
     },
     tenant_advance_ledger: {
-      aggregate: vi.fn().mockResolvedValue({ _sum: { amount: 5000 } }),
+      aggregate: vi.fn().mockImplementation((args) => {
+        if (args?.where?.reference_type === "PAYMENT") {
+          return Promise.resolve({ _sum: { amount: 0 } });
+        }
+        return Promise.resolve({ _sum: { amount: 5000 } });
+      }),
     },
     rent_obligations: {
       findMany: vi.fn().mockResolvedValue([]),
+    },
+    payments: {
+      aggregate: vi.fn().mockResolvedValue({ _sum: { amount_paid: 0 } }),
     },
     phoneVerificationOtp: {
       findFirst: vi.fn().mockResolvedValue({ status: "VERIFIED" }),

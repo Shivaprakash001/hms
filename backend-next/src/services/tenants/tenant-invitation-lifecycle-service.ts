@@ -8,6 +8,7 @@ import { eventLog } from "../../../lib/services/event-log-service";
 import { hostelBillingPreferencesService, type MaintenanceType } from "../../../lib/services/hostel-billing-preferences-service";
 import { roomCapacityService } from "../../../lib/services/room-capacity-service";
 import { onboardingFinancialsService } from "../payments/onboarding-financials-service";
+import { reservationStatusService } from "./reservation-status-service";
 
 type InvitationStatus = "PENDING" | "OPENED" | "ACTIVATION_STARTED" | "ACTIVATED" | "EXPIRED" | "CANCELLED";
 type ReservationReleaseReason = "ACTIVATED" | "EXPIRED" | "CANCELLED" | "TRANSFERRED";
@@ -665,22 +666,25 @@ export class TenantInvitationLifecycleService {
       });
       if (!reservation) throw new Error("INVALID_TRANSITION: Active room reservation is missing");
 
-      await tx.$executeRaw`SELECT id FROM rooms WHERE id = ${reservation.room_id}::uuid FOR UPDATE`;
-      const capacity = await this.getRoomCapacitySnapshot(tx, reservation.room_id);
-      if (capacity.occupied >= Number(capacity.room.capacity || 0)) {
-        throw new Error("CAPACITY_EXCEEDED: Reserved room no longer has available capacity");
-      }
+      const resStatus = await reservationStatusService.getReservationStatus(tenant.id);
+      if (resStatus.status !== "PAYMENT_PENDING") {
+        await tx.$executeRaw`SELECT id FROM rooms WHERE id = ${reservation.room_id}::uuid FOR UPDATE`;
+        const capacity = await this.getRoomCapacitySnapshot(tx, reservation.room_id);
+        if (capacity.occupied >= Number(capacity.room.capacity || 0)) {
+          throw new Error("CAPACITY_EXCEEDED: Reserved room no longer has available capacity");
+        }
 
-      await tx.roomAllocation.create({
-        data: {
-          id: crypto.randomUUID(),
-          tenant_id: tenant.id,
-          room_id: reservation.room_id,
-          hostel_id: reservation.hostel_id,
-          start_date: tenant.joined_on || startOfToday(),
-          is_active: true,
-        },
-      });
+        await tx.roomAllocation.create({
+          data: {
+            id: crypto.randomUUID(),
+            tenant_id: tenant.id,
+            room_id: reservation.room_id,
+            hostel_id: reservation.hostel_id,
+            start_date: tenant.joined_on || startOfToday(),
+            is_active: true,
+          },
+        });
+      }
 
       await tx.tenant_invitation_reservations.update({
         where: { id: reservation.id },
@@ -790,6 +794,59 @@ export class TenantInvitationLifecycleService {
       tenant: profile.tenants,
       token,
     };
+  }
+
+  async allocateOnboardingTenantIfFinanciallyReady(tenantId: string) {
+    const tenant = await prisma.tenants.findUnique({
+      where: { id: tenantId },
+      include: {
+        room_allocations: {
+          where: { is_active: true, end_date: null },
+        },
+      },
+    });
+
+    if (!tenant || tenant.status !== "ACTIVE") return;
+    if (tenant.room_allocations.length > 0) return; // Already allocated
+
+    // Check if financially ready (status !== "PAYMENT_PENDING")
+    const resStatus = await reservationStatusService.getReservationStatus(tenantId);
+    if (resStatus.status === "PAYMENT_PENDING") return;
+
+    // Find the latest invitation (to know which room and hostel they were invited to)
+    const invitation = await prisma.tenant_invitations.findFirst({
+      where: { tenant_id: tenantId },
+      orderBy: { created_at: "desc" },
+    });
+    if (!invitation || !invitation.room_id) return;
+
+    // Allocate!
+    await prisma.$transaction(async (tx) => {
+      // Re-verify under lock
+      const existing = await tx.roomAllocation.findFirst({
+        where: { tenant_id: tenantId, is_active: true, end_date: null },
+      });
+      if (existing) return;
+
+      await tx.$executeRaw`SELECT id FROM rooms WHERE id = ${invitation.room_id}::uuid FOR UPDATE`;
+      const capacity = await this.getRoomCapacitySnapshot(tx, invitation.room_id);
+      if (capacity.occupied >= Number(capacity.room.capacity || 0)) {
+        throw new Error("CAPACITY_EXCEEDED: Reserved room no longer has available capacity");
+      }
+
+      await tx.roomAllocation.create({
+        data: {
+          id: crypto.randomUUID(),
+          tenant_id: tenantId,
+          room_id: invitation.room_id,
+          hostel_id: invitation.hostel_id,
+          start_date: tenant.joined_on || startOfToday(),
+          is_active: true,
+        },
+      });
+
+      console.log(`[Lifecycle] Automatically allocated tenant ${tenantId} to room ${invitation.room_id} after transition to ${resStatus.status}`);
+    });
   }
 }
 

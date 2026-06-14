@@ -22,6 +22,7 @@ vi.mock("@/lib/db", () => {
     },
     ruleVersion: {
       findFirst: vi.fn(),
+      findUnique: vi.fn(),
       create: vi.fn(),
     },
     agreementTemplate: {
@@ -150,6 +151,7 @@ describe("Residency Agreement Rules Snapshot Mechanism", () => {
 
       vi.mocked(prisma.tenants.findUnique).mockResolvedValue(mockTenant as any);
       vi.mocked(prisma.ruleVersion.findFirst).mockResolvedValue(mockRuleVersion as any);
+      vi.mocked(prisma.ruleVersion.findUnique).mockResolvedValue(mockRuleVersion as any);
       vi.mocked(prisma.agreementTemplate.findFirst).mockResolvedValue(mockTemplate as any);
       vi.mocked(prisma.agreement.findFirst).mockResolvedValue(mockAgreement as any);
       vi.mocked(prisma.agreement.findUnique).mockResolvedValue(mockAgreement as any);
@@ -200,6 +202,12 @@ describe("Residency Agreement Rules Snapshot Mechanism", () => {
         id: "template-1",
         owner_name: "Owner Name",
         owner_signature_url: "https://sig.com",
+        hostel_id: "hostel-1",
+        status: "PUBLISHED",
+        type: "RENEWAL",
+        rules_content: mockRuleVersion.content,
+        version_number: 3,
+        version: "v3.0",
       };
 
       const mockRenewalAgreement = {
@@ -226,7 +234,9 @@ describe("Residency Agreement Rules Snapshot Mechanism", () => {
       };
 
       vi.mocked(prisma.agreement.findUnique).mockResolvedValue(mockRenewalAgreement as any);
+      vi.mocked(prisma.agreementTemplate.findFirst).mockResolvedValue(mockTemplate as any);
       vi.mocked(prisma.ruleVersion.findFirst).mockResolvedValue(mockRuleVersion as any);
+      vi.mocked(prisma.ruleVersion.findUnique).mockResolvedValue(mockRuleVersion as any);
       vi.mocked(prisma.agreement.updateMany).mockResolvedValue({ count: 1 });
 
       const pdfGenerator = { generateAndUploadPdf: vi.fn().mockResolvedValue("https://cdn.example.com/renewal.pdf") };
@@ -313,6 +323,141 @@ describe("Residency Agreement Rules Snapshot Mechanism", () => {
 
       const renderData = await AgreementGenerationService.getAgreementRenderData("agreement-1");
       expect(renderData.hostelRules).toEqual(fallbackRules);
+    });
+
+    it("regression: should preserve snapshot integrity and ignore subsequent template updates", async () => {
+      // Mock an existing signed agreement containing a frozen rules snapshot
+      const historicalRules = { categories: [{ title: "Historical Rules Version 1", highlights: [], rules: ["rule-old"] }] };
+      const updatedTemplateRules = { categories: [{ title: "Updated Rules Version 2", highlights: [], rules: ["rule-new"] }] };
+
+      const mockAgreement = {
+        id: "agreement-1",
+        hostel_id: "hostel-1",
+        rules_snapshot: historicalRules,
+        content_snapshot: {
+          hostel_rules: historicalRules,
+          tenant_name: "Jane Doe",
+        },
+        tenant: {
+          joined_on: new Date(),
+          room_allocations: [],
+        },
+        hostel: {
+          name: "Test Hostel",
+        },
+        template: {
+          id: "template-1",
+          owner_name: "Owner",
+          // The template in database has been updated to Version 2
+          rules_content: updatedTemplateRules,
+        },
+      };
+
+      vi.mocked(prisma.agreement.findUnique).mockResolvedValue(mockAgreement as any);
+
+      // Render data must yield the historical snapshot rules, NOT the updated database template rules
+      const renderData = await AgreementGenerationService.getAgreementRenderData("agreement-1");
+      expect(renderData.hostelRules).toEqual(historicalRules);
+      expect(renderData.hostelRules).not.toEqual(updatedTemplateRules);
+    });
+  });
+
+  describe("Onboarding Version Race Conditions", () => {
+    it("should gracefully handle version race conditions by auto-accepting and signing the latest version", async () => {
+      const service = new ActivationWorkflowService();
+
+      const oldRuleVersion = { id: "rule-v1-uuid", version: "v1.0" };
+      const newRuleVersion = {
+        id: "rule-v2-uuid",
+        version: "v2.0",
+        content: { categories: [{ title: "New Version 2 Rules", highlights: [], rules: [] }] },
+      };
+
+      const mockTemplate = {
+        id: "template-1",
+        owner_name: "Hostel Owner",
+        owner_signature_url: "https://sig.com",
+        custom_rules: "Custom rule 1",
+      };
+
+      const mockAgreement = {
+        id: "agreement-1",
+        hostel_id: "hostel-1",
+        status: "DRAFT",
+        content_snapshot: {},
+        contract_rent: 5000,
+        contract_security_deposit: 10000,
+        contract_maintenance: 1000,
+        contract_maintenance_type: "ONE_TIME",
+        contract_payment_frequency: "MONTHLY",
+        agreement_start_date: new Date(),
+        agreement_end_date: new Date(),
+        agreement_duration_months: 12,
+        tenant: null as any,
+        hostel: { name: "Test Hostel" },
+        template: mockTemplate,
+      };
+
+      const mockTenant: any = {
+        id: "tenant-1",
+        hostel_id: "hostel-1",
+        status: "INVITED",
+        phone_1: "1234567890",
+        // Tenant accepted Version 1 rules originally
+        rule_acceptances: [{ rule_version_id: "rule-v1-uuid" }],
+        agreements: [mockAgreement],
+        hostels: { name: "Test Hostel", rent_cycle: "MONTHLY", auto_rent_day: 1, preferences: {} },
+        joined_on: new Date(),
+        billing_start_date: new Date(),
+        monthly_rent: 5000,
+        advance_deposit: 10000,
+        maintenance_charge: 1000,
+        maintenance_type: "ONE_TIME",
+        payment_frequency: "MONTHLY",
+        room_allocations: [],
+      };
+
+      mockAgreement.tenant = mockTenant;
+
+      const mockProfile = { id: "profile-1", name: "Tenant User", phone: "1234567890", mobile_verified: true };
+      const mockInvitation = { id: "invite-1", email: "tenant@example.com", phone: "1234567890", name: "Tenant User" };
+
+      vi.spyOn(service as any, "resolveInvitation").mockResolvedValue({
+        profile: mockProfile,
+        tenant: mockTenant,
+        invitation: mockInvitation,
+      });
+
+      vi.mocked(prisma.tenants.findUnique).mockResolvedValue(mockTenant as any);
+      vi.mocked(prisma.agreementTemplate.findFirst).mockResolvedValue(mockTemplate as any);
+      vi.mocked(prisma.agreement.findFirst).mockResolvedValue(mockAgreement as any);
+      vi.mocked(prisma.agreement.update).mockResolvedValue({ id: "agreement-1" } as any);
+      
+      // Simulate that the active rule version is now Version 2 (published after tenant accepted Version 1)
+      vi.spyOn(service as any, "getActiveRuleVersion").mockResolvedValue(newRuleVersion);
+
+      // Call mutate to sign the agreement
+      await service.mutate(
+        "test-token",
+        "AGREEMENT",
+        {
+          tenant_signature_name: "Tenant User",
+          tenant_signature_url: "https://sig-url.com",
+        },
+        { ip: "127.0.0.1", userAgent: "Mozilla" }
+      );
+
+      // Verify that the agreement was updated with the latest rules version (v2.0)
+      expect(prisma.agreement.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: "agreement-1" },
+          data: expect.objectContaining({
+            rule_version_id: newRuleVersion.id,
+            rule_version_number: newRuleVersion.version,
+            rules_snapshot: newRuleVersion.content,
+          }),
+        })
+      );
     });
   });
 });

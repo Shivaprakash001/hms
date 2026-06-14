@@ -44,6 +44,10 @@ type ReservationRow = {
 export class WhatsAppTemplateDeliveryService {
   constructor(private readonly provider = new MetaWhatsAppProvider()) {}
 
+  async verifyTemplateHealth(templateName: string): Promise<{ exists: boolean; status?: string }> {
+    return this.provider.getTemplateStatus(templateName);
+  }
+
   async send(input: WhatsAppTemplateDeliveryInput): Promise<WhatsAppTemplateDeliveryResult> {
     let normalizedPhone: string;
     try {

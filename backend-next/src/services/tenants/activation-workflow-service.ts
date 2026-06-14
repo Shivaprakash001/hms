@@ -36,99 +36,14 @@ const REQUIRED_ACKNOWLEDGEMENTS = [
   "hostel_rules",
 ] as const;
 
-const DEFAULT_RULE_CONTENT = {
-  categories: [
-    {
-      id: "payments",
-      title: "1. Fee Structure & Payment Policy",
-      severity: "important",
-      icon: "receipt",
-      highlights: [
-        "Hostel fee is applicable only for the academic year period of 12 months.",
-        "Hostel fees once paid are strictly non-refundable and non-adjustable under any circumstances.",
-        "If GST becomes applicable as per government regulations, additional GST charges will be added to the hostel fee."
-      ],
-      rules: [
-        "Students are required to pay 3 months hostel fee in advance at the time of joining.",
-        "Any delay in fee payment will attract a late fee of ₹50 per day."
-      ],
-    },
-    {
-      id: "facilities",
-      title: "2. Accommodation & Hostel Facilities",
-      severity: "standard",
-      icon: "wifi",
-      highlights: [
-        "The hostel management is responsible only for providing Accommodation, Breakfast, Lunch, and Dinner.",
-        "Facilities such as Internet/Wi-Fi, Washing machines, and Hot water are provided free of cost and may face occasional interruptions or maintenance delays.",
-        "Hostel premises will remain closed during major college holidays and festival vacations (Semester Holidays, Dussehra, Sankranthi, etc.). Students must vacate during these periods."
-      ],
-      rules: [
-        "Complaints regarding internet or washing machine issues may take up to 10 days for resolution.",
-        "Hostel rooms may be reshuffled under unavoidable or operational circumstances. Allocation of the same room throughout the year is not guaranteed.",
-        "Visitors who wish to stay in the hostel must pay ₹500 per day, subject to management approval."
-      ],
-    },
-    {
-      id: "discipline",
-      title: "3. Discipline & Conduct",
-      severity: "critical",
-      icon: "shield",
-      highlights: [
-        "Smoking, alcohol consumption, illegal activities, violence, or misconduct inside the hostel premises are strictly prohibited.",
-        "Ragging in any form is strictly prohibited. Involved students will be immediately removed without any fee refund."
-      ],
-      rules: [
-        "Students must maintain proper discipline and respectful behavior inside the hostel premises at all times.",
-        "Outsiders, friends, parents, or visitors are not allowed inside hostel rooms. Visitors may wait only in the office area or front lobby.",
-        "Hostel gate closes strictly at 9:30 PM every day.",
-        "Students leaving the hostel premises must inform the management through WhatsApp message as proof and record.",
-        "Food is not allowed inside hostel rooms. Students must use the dining hall for meals."
-      ],
-    },
-    {
-      id: "safety",
-      title: "4. Safety & Responsibility",
-      severity: "important",
-      icon: "lock",
-      highlights: [
-        "Students are fully responsible for their personal belongings (Mobile phones, Laptops, Gold, Cash, Certificates, etc.).",
-        "Use of electrical appliances such as iron boxes, water heaters, micro-ovens, or inflammable items is strictly prohibited inside rooms."
-      ],
-      rules: [
-        "The hostel management is not responsible for theft, loss, damage, injuries, accidents, personal disputes, or matters occurring outside hostel responsibility.",
-        "Students found using prohibited appliances will be charged a fine of ₹1000.",
-        "Any damage caused to hostel property (beds, mattresses, lockers, furniture, fittings, etc.) must be repaired or compensated by the student(s) responsible."
-      ],
-    },
-    {
-      id: "vacating",
-      title: "5. Vacating & Maintenance Charges",
-      severity: "important",
-      icon: "door-open",
-      highlights: [
-        "No refund will be provided for early vacating under any circumstances."
-      ],
-      rules: [
-        "If a student vacates the hostel during the academic year, hostel charges will be recalculated at ₹12,000 per month for the occupied duration.",
-        "Students vacating the hostel during the academic year must additionally pay ₹1400 as maintenance charges."
-      ],
-    },
-    {
-      id: "rights",
-      title: "6. Management Rights",
-      severity: "standard",
-      icon: "shield",
-      highlights: [
-        "Decisions made by hostel management regarding hostel administration, discipline, and accommodation shall be final and binding."
-      ],
-      rules: [
-        "The hostel management reserves the full right to discontinue hostel accommodation for any student involved in misconduct, indiscipline, rule violations, or behavior affecting hostel operations."
-      ],
-    }
-  ],
-  acknowledgements: REQUIRED_ACKNOWLEDGEMENTS,
-};
+import {
+  DEFAULT_RULES_TEMPLATE,
+  getActiveTemplateAndSyncRuleVersion,
+  interpolateRulesContent
+} from "../../utils/default-rules";
+
+const DEFAULT_RULE_CONTENT = DEFAULT_RULES_TEMPLATE;
+
 
 function dateOnly(value?: Date | string | null) {
   if (!value) return null;
@@ -251,27 +166,20 @@ export class ActivationWorkflowService {
   }
 
   private async getActiveRuleVersion(hostelId: string) {
-    const existing = await prisma.ruleVersion.findFirst({
-      where: {
-        hostel_id: hostelId,
-        OR: [{ is_active: true }, { active: true }],
-      },
-      orderBy: { created_at: "desc" },
+    const template = await getActiveTemplateAndSyncRuleVersion(prisma, hostelId, "RESIDENCY");
+    const ruleVersion = await prisma.ruleVersion.findUnique({
+      where: { id: template.id },
     });
-    if (existing) return existing;
-
-    const version = `default-${new Date().toISOString().slice(0, 10)}`;
-    return prisma.ruleVersion.create({
-      data: {
-        hostel_id: hostelId,
-        version,
-        title: "Standard Hostel Rules",
-        content: DEFAULT_RULE_CONTENT,
-        content_snapshot: DEFAULT_RULE_CONTENT,
-        is_active: true,
-        active: true,
-      },
-    });
+    return ruleVersion || {
+      id: template.id,
+      hostel_id: hostelId,
+      version: `v${template.version_number}`,
+      title: template.title,
+      content: template.rules_content || DEFAULT_RULES_TEMPLATE,
+      content_snapshot: template.rules_content || DEFAULT_RULES_TEMPLATE,
+      is_active: true,
+      active: true,
+    };
   }
 
   private rulePayload(ruleVersion: any) {
@@ -343,10 +251,10 @@ export class ActivationWorkflowService {
       },
       acceptance: latestAcceptance
         ? {
-            accepted_at: latestAcceptance.accepted_at,
-            rules_version: latestAcceptance.rules_version,
-            rule_version_id: latestAcceptance.rule_version_id,
-          }
+          accepted_at: latestAcceptance.accepted_at,
+          rules_version: latestAcceptance.rules_version,
+          rule_version_id: latestAcceptance.rule_version_id,
+        }
         : null,
       progress_percent: Math.round((completedSteps.length / 5) * 100),
       activation_started_at: startedAt,
@@ -439,8 +347,8 @@ export class ActivationWorkflowService {
     const room = activeAllocation?.room || activeReservation?.room || invitation?.room || null;
     const roommateCount = room
       ? await prisma.roomAllocation.count({
-          where: { room_id: room.id, is_active: true, end_date: null, tenant_id: { not: tenant.id } },
-        })
+        where: { room_id: room.id, is_active: true, end_date: null, tenant_id: { not: tenant.id } },
+      })
       : 0;
 
     // Ensure we have an active template for this hostel.
@@ -477,6 +385,17 @@ export class ActivationWorkflowService {
         paymentFrequency: tenant.payment_frequency,
       });
 
+      const variables = {
+        TENANT_NAME: profile?.name || invitation?.name || "Tenant",
+        ROOM_NUMBER: room?.room_no ?? "N/A",
+        MONTHLY_RENT: Number(lifecycle.contract_rent ?? 0),
+        SECURITY_DEPOSIT_AMOUNT: Number(lifecycle.contract_security_deposit ?? 0),
+        MAINTENANCE_CHARGE_AMOUNT: Number(lifecycle.contract_maintenance ?? 0),
+        HOSTEL_NAME: hostel.name,
+        OWNER_NAME: activeTemplate.owner_name,
+        JOINING_DATE: dateOnly(lifecycle.agreement_start_date) || "",
+      };
+
       activeAgreement = await prisma.agreement.create({
         data: {
           id: crypto.randomUUID(),
@@ -489,21 +408,28 @@ export class ActivationWorkflowService {
           rule_version_id: ruleVersion?.id || null,
           rule_version_number: ruleVersion?.version || null,
           content_snapshot: {
+            template_id: activeTemplate.id,
+            template_version_number: activeTemplate.version_number,
+            template_published_at: activeTemplate.published_at,
+            template_name: activeTemplate.title,
+            template_type: activeTemplate.type,
             hostel_name: hostel.name,
             room_number: room?.room_no ?? "N/A",
-            monthly_rent: Number(lifecycle.contract_rent ?? 0),
-            advance_deposit: Number(lifecycle.contract_security_deposit ?? 0),
-            maintenance_charge: Number(lifecycle.contract_maintenance ?? 0),
+            monthly_rent: variables.MONTHLY_RENT,
+            advance_deposit: variables.SECURITY_DEPOSIT_AMOUNT,
+            maintenance_charge: variables.MAINTENANCE_CHARGE_AMOUNT,
             maintenance_type: lifecycle.contract_maintenance_type,
-            joining_date: dateOnly(lifecycle.agreement_start_date),
+            joining_date: variables.JOINING_DATE,
             agreement_start_date: dateOnly(lifecycle.agreement_start_date),
             agreement_end_date: dateOnly(lifecycle.agreement_end_date),
             agreement_duration_months: lifecycle.agreement_duration_months,
             payment_frequency: lifecycle.contract_payment_frequency,
-            tenant_name: profile?.name || invitation?.name || "Tenant",
+            tenant_name: variables.TENANT_NAME,
             owner_name: activeTemplate.owner_name,
             custom_rules: activeTemplate.custom_rules || "",
-            hostel_rules: ruleVersion ? (ruleVersion.content || ruleVersion.content_snapshot || DEFAULT_RULE_CONTENT) : DEFAULT_RULE_CONTENT,
+            raw_rules: activeTemplate.rules_content || DEFAULT_RULES_TEMPLATE,
+            interpolated_rules: interpolateRulesContent(activeTemplate.rules_content || DEFAULT_RULES_TEMPLATE, variables),
+            hostel_rules: interpolateRulesContent(activeTemplate.rules_content || DEFAULT_RULES_TEMPLATE, variables),
           }
         },
       });
@@ -523,22 +449,22 @@ export class ActivationWorkflowService {
 
     const guardianVerifiedRecord = gPhone
       ? await prisma.phoneVerificationOtp.findFirst({
-          where: {
-            phone: gPhone,
-            purpose: "ParentVerify",
-            status: "VERIFIED",
-          },
-        })
+        where: {
+          phone: gPhone,
+          purpose: "ParentVerify",
+          status: "VERIFIED",
+        },
+      })
       : null;
 
     const emergencyVerifiedRecord = ePhone
       ? await prisma.phoneVerificationOtp.findFirst({
-          where: {
-            phone: ePhone,
-            purpose: "EmergencyVerification",
-            status: "VERIFIED",
-          },
-        })
+        where: {
+          phone: ePhone,
+          purpose: "EmergencyVerification",
+          status: "VERIFIED",
+        },
+      })
       : null;
 
     return {
@@ -775,11 +701,7 @@ export class ActivationWorkflowService {
       throw new Error("VALIDATION_ERROR: At least one signature is required. Add tenant or parent/guardian signature.");
     }
 
-    const template = await prisma.agreementTemplate.findFirst({
-      where: { hostel_id: tenant.hostel_id, is_active: true },
-      orderBy: { created_at: "desc" },
-    });
-    if (!template) throw new Error("INTERNAL_ERROR: No active agreement template found");
+    const template = await getActiveTemplateAndSyncRuleVersion(prisma, tenant.hostel_id, "RESIDENCY");
 
     let draft = await prisma.agreement.findFirst({
       where: { tenant_id: tenant.id, status: "DRAFT" },
@@ -808,6 +730,17 @@ export class ActivationWorkflowService {
       paymentFrequency: tenant.payment_frequency,
     });
     assertAgreementLifecycleComplete({ ...draft, ...lifecycle }, { agreementId: draft.id });
+
+    const variables = {
+      TENANT_NAME: profile?.name || tenant.name || "Tenant",
+      ROOM_NUMBER: room?.room_no ?? "N/A",
+      MONTHLY_RENT: Number(lifecycle.contract_rent ?? 0),
+      SECURITY_DEPOSIT_AMOUNT: Number(lifecycle.contract_security_deposit ?? 0),
+      MAINTENANCE_CHARGE_AMOUNT: Number(lifecycle.contract_maintenance ?? 0),
+      HOSTEL_NAME: tenant.hostels?.name || "Hostel",
+      OWNER_NAME: template.owner_name,
+      JOINING_DATE: dateOnly(lifecycle.agreement_start_date) || "",
+    };
 
     const signedAgreement = await prisma.agreement.update({
       where: { id: draft.id },
@@ -838,18 +771,26 @@ export class ActivationWorkflowService {
 
         content_snapshot: {
           ...(draft.content_snapshot as any || {}),
-          monthly_rent: Number(lifecycle.contract_rent ?? 0),
-          advance_deposit: Number(lifecycle.contract_security_deposit ?? 0),
-          maintenance_charge: Number(lifecycle.contract_maintenance ?? 0),
+          template_id: template.id,
+          template_version_number: template.version_number,
+          template_published_at: template.published_at,
+          template_name: template.title,
+          template_type: template.type,
+          monthly_rent: variables.MONTHLY_RENT,
+          advance_deposit: variables.SECURITY_DEPOSIT_AMOUNT,
+          maintenance_charge: variables.MAINTENANCE_CHARGE_AMOUNT,
           maintenance_type: lifecycle.contract_maintenance_type,
-          joining_date: dateOnly(lifecycle.agreement_start_date),
+          joining_date: variables.JOINING_DATE,
           agreement_start_date: dateOnly(lifecycle.agreement_start_date),
           agreement_end_date: dateOnly(lifecycle.agreement_end_date),
           agreement_duration_months: lifecycle.agreement_duration_months,
           payment_frequency: lifecycle.contract_payment_frequency,
+          tenant_name: variables.TENANT_NAME,
           owner_name: template.owner_name,
           custom_rules: template.custom_rules || "",
-          hostel_rules: ruleVersion ? (ruleVersion.content || ruleVersion.content_snapshot || DEFAULT_RULE_CONTENT) : DEFAULT_RULE_CONTENT,
+          raw_rules: template.rules_content || DEFAULT_RULES_TEMPLATE,
+          interpolated_rules: interpolateRulesContent(template.rules_content || DEFAULT_RULES_TEMPLATE, variables, true),
+          hostel_rules: interpolateRulesContent(template.rules_content || DEFAULT_RULES_TEMPLATE, variables, true),
         },
       },
     });
@@ -882,10 +823,10 @@ export class ActivationWorkflowService {
     const confirmPassword = String(data?.confirm_password || data?.confirmPassword || "");
 
     const primaryPhone = normalizeIndianPhone(
-      data?.phone || 
-      data?.primary_phone || 
-      tenant?.phone_1 || 
-      profile?.phone || 
+      data?.phone ||
+      data?.primary_phone ||
+      tenant?.phone_1 ||
+      profile?.phone ||
       invitation?.phone
     );
     if (!primaryPhone) throw new Error("VALIDATION_ERROR: Valid primary phone is required");
@@ -939,8 +880,8 @@ export class ActivationWorkflowService {
       throw new Error("VALIDATION_ERROR: An account with this email address already exists. Please use a different email address.");
     }
 
-    const profileUpdate: any = { 
-      phone: primaryPhone, 
+    const profileUpdate: any = {
+      phone: primaryPhone,
       email: normalizedEmail,
       mobile_verified: true,
       phone_verified: true,
@@ -996,7 +937,7 @@ export class ActivationWorkflowService {
     if (!tenant.photo_url && !data?.photo_url) throw new Error("VALIDATION_ERROR: Profile photo is required");
 
     const profileType = data?.profile_type ? String(data.profile_type).toUpperCase() : tenant.profile_type || "STUDENT";
-    
+
     if (profileType === "STUDENT") {
       if (!data?.guardian_name?.trim()) throw new Error("VALIDATION_ERROR: Parent/Guardian name is required for students");
       if (!data?.guardian_relation) throw new Error("VALIDATION_ERROR: Parent/Guardian relationship is required for students");
@@ -1006,12 +947,12 @@ export class ActivationWorkflowService {
     const currentGuardianPhone = tenant.phone_2 || tenant.guardian_phone;
     const isGuardianVerified = guardianPhone
       ? await prisma.phoneVerificationOtp.findFirst({
-          where: {
-            phone: safeNormalizeWhatsApp(guardianPhone),
-            purpose: "ParentVerify",
-            status: "VERIFIED",
-          },
-        })
+        where: {
+          phone: safeNormalizeWhatsApp(guardianPhone),
+          purpose: "ParentVerify",
+          status: "VERIFIED",
+        },
+      })
       : null;
 
     if (guardianPhone && !isGuardianVerified) {

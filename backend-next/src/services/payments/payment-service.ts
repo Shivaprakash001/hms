@@ -217,6 +217,19 @@ export class PaymentService {
       data: { status: newStatus }
     });
 
+    if (obligation.obligation_type === "ADVANCE") {
+      await tenantAdvanceService.creditIdempotentInTx(tx, {
+        tenantId: obligation.tenant_id,
+        ownerId: obligation.owner_id || "",
+        createdBy: data.offlineRecordedBy || obligation.owner_id || "SYSTEM",
+        amount: data.amountPaid,
+        referenceId: payment.id,
+        referenceType: "PAYMENT",
+        reason: "DEPOSIT",
+        notes: data.offlineNote || `Security deposit payment credited (Payment: ${payment.id})`,
+      });
+    }
+
     return { payment, newStatus, tenantId: obligation.tenant_id, ownerId: obligation.owner_id, hostelId: obligation.hostel_id };
   }
 
@@ -1925,6 +1938,15 @@ export class PaymentService {
         logger.error("Failed to notify owner on successful advance payment finalization:", notificationErr);
       }
 
+      await eventSystem.trigger("advance_credited", {
+        tenant_id: attempt.tenant_id,
+        owner_id: attempt.owner_id,
+        hostel_id: attempt.hostel_id,
+        amount: Number(attempt.amount),
+        reason: "TOPUP",
+        entry_id: null,
+      });
+
       return finalizedAdvance;
     }
 
@@ -1984,6 +2006,15 @@ export class PaymentService {
         amount: Number(attempt.amount),
         tenant_id: attempt.tenant_id,
         gateway_txn_id: gatewayTxnId || null,
+      });
+
+      await eventSystem.trigger("advance_credited", {
+        tenant_id: attempt.tenant_id,
+        owner_id: attempt.owner_id,
+        hostel_id: attempt.hostel_id,
+        amount: Number(attempt.amount),
+        reason: "DEPOSIT",
+        entry_id: null,
       });
 
       return finalizedDeposit;

@@ -1,6 +1,8 @@
 import { prisma } from "../../../lib/db";
 import { getLogger } from "../../../lib/logger";
 
+import { getActiveTemplateAndSyncRuleVersion } from "../../utils/default-rules";
+
 const logger = getLogger("tenant-onboarding-service");
 
 export class TenantOnboardingService {
@@ -29,21 +31,12 @@ export class TenantOnboardingService {
       throw new Error("Digital signature is required.");
     }
 
-    // Determine latest rule version
-    let ruleVersion = await prisma.ruleVersion.findFirst({
-      where: { hostel_id: tenant.hostel_id, active: true },
-      orderBy: { created_at: 'desc' }
+    const activeTemplate = await getActiveTemplateAndSyncRuleVersion(prisma, tenant.hostel_id, "RESIDENCY");
+    const ruleVersion = await prisma.ruleVersion.findUnique({
+      where: { id: activeTemplate.id }
     });
-
     if (!ruleVersion) {
-      // If no explicit rules exist for this hostel, we create a default initial version to keep compliance intact
-      ruleVersion = await prisma.ruleVersion.create({
-        data: {
-          hostel_id: tenant.hostel_id,
-          version: "v1-default",
-          content_snapshot: { message: "Standard Hostel Rules Acknowledged" },
-        }
-      });
+      throw new Error("INTERNAL_ERROR: Failed to resolve linked RuleVersion for active template");
     }
 
     await prisma.$transaction(async (tx) => {

@@ -102,8 +102,8 @@ export const ownerService = {
         const response = await api.post(`/owner/billing/frequency-requests/${requestId}/decision`, { action, rejection_reason });
         return response.data?.data ?? response.data;
     },
-    getAgreementTemplate: async (hostelId) => {
-        const response = await api.get(`/owner/hostels/${hostelId}/agreement-template`);
+    getAgreementTemplate: async (hostelId, type = "RESIDENCY") => {
+        const response = await api.get(`/owner/hostels/${hostelId}/agreement-template`, { params: { type } });
         return response.data;
     },
     updateAgreementTemplate: async (hostelId, data) => {
@@ -115,6 +115,12 @@ export const ownerService = {
         formData.append('file', file);
         const response = await api.post(`/owner/hostels/${hostelId}/agreement-template/signature`, formData, {
             headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        return response.data;
+    },
+    getAgreementTemplatePreview: async (hostelId, data) => {
+        const response = await api.post(`/owner/hostels/${hostelId}/agreement-template/preview`, data, {
+            responseType: 'blob'
         });
         return response.data;
     }

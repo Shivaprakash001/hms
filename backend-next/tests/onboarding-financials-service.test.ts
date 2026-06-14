@@ -36,6 +36,7 @@ describe("OnboardingFinancialsService", () => {
       owner_id: "owner-1",
       hostel_id: "hostel-1",
       status: "INVITED",
+      advance_deposit: 0,
     } as any);
     vi.mocked(prisma.rent_obligations.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.rent_obligations.create).mockResolvedValue({ id: "obligation-1" } as any);
@@ -81,7 +82,7 @@ describe("OnboardingFinancialsService", () => {
     expect(result).toEqual({
       createdObligations: [],
       skipped: true,
-      reason: "NO_MAINTENANCE_REQUIRED",
+      reason: "NO_FINANCIALS_REQUIRED",
     });
     expect(prisma.rent_obligations.create).not.toHaveBeenCalled();
   });
@@ -101,26 +102,44 @@ describe("OnboardingFinancialsService", () => {
     expect(result).toEqual({
       createdObligations: [],
       skipped: true,
-      reason: "MAINTENANCE_EXISTS",
+      reason: "OBLIGATIONS_EXIST",
     });
     expect(prisma.rent_obligations.create).not.toHaveBeenCalled();
   });
 
-  it("does not create deposit obligations", async () => {
-    await service.initializeOnboardingFinancials(prisma as any, {
+  it("creates deposit obligations when advance_deposit is configured", async () => {
+    vi.mocked(prisma.tenants.findUnique).mockResolvedValue({
+      id: "tenant-1",
+      owner_id: "owner-1",
+      hostel_id: "hostel-1",
+      status: "INVITED",
+      advance_deposit: 5000,
+    } as any);
+
+    const result = await service.initializeOnboardingFinancials(prisma as any, {
       tenantId: "tenant-1",
       ownerId: "owner-1",
       hostelId: "hostel-1",
       joiningDate,
-      maintenanceCharge: 1500,
-      maintenanceType: "MONTHLY",
+      maintenanceCharge: 0,
+      maintenanceType: "NONE",
     });
 
-    expect(prisma.rent_obligations.create).not.toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ obligation_type: "ADVANCE" }),
-      })
-    );
+    expect(result).toEqual({ createdObligations: ["ADVANCE"], skipped: false });
+    expect(prisma.rent_obligations.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        tenant_id: "tenant-1",
+        allocation_id: null,
+        owner_id: "owner-1",
+        hostel_id: "hostel-1",
+        amount: 5000,
+        total_amount: 5000,
+        due_date: joiningDate,
+        status: "PENDING",
+        obligation_type: "ADVANCE",
+        installment_label: "Security Deposit",
+      }),
+    });
   });
 
   it("leaves existing non-invited tenants unchanged", async () => {

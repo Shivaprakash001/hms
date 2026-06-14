@@ -63,7 +63,7 @@ vi.mock("@/lib/metrics", () => ({
   incrementPayment: vi.fn(),
   incrementWebhook: vi.fn(),
 }));
-vi.mock("@/lib/events", () => ({ eventSystem: {} }));
+vi.mock("@/lib/events", () => ({ eventSystem: { trigger: vi.fn() } }));
 vi.mock("@/lib/services/email-service", () => ({ EmailService: vi.fn() }));
 vi.mock("@/src/services/payments/provider-factory", () => ({ PaymentProviderFactory: {} }));
 vi.mock("../src/services/payments/provider-factory", () => ({ PaymentProviderFactory: {} }));

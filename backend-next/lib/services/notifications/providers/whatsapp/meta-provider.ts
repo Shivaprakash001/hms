@@ -24,12 +24,14 @@ const LEGACY_MISSING_INVITATION_TEMPLATE = "hms_tenant_invite_v2";
 function configFromEnv(): WhatsAppProviderConfig {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
+  const businessAccountId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
   if (!accessToken) throw new WhatsAppConfigError("WHATSAPP_ACCESS_TOKEN or WHATSAPP_TOKEN is not configured");
   if (!phoneNumberId) throw new WhatsAppConfigError("WHATSAPP_PHONE_NUMBER_ID or PHONE_NUMBER_ID is not configured");
 
   return {
     accessToken,
     phoneNumberId,
+    businessAccountId,
     baseUrl: (process.env.WHATSAPP_API || DEFAULT_BASE_URL).replace(/\/$/, ""),
     timeoutMs: Number(process.env.WHATSAPP_TIMEOUT_MS || DEFAULT_TIMEOUT_MS),
     maxRetries: Number(process.env.WHATSAPP_MAX_RETRIES || DEFAULT_MAX_RETRIES),
@@ -674,6 +676,73 @@ export class MetaWhatsAppProvider {
       retryable: false,
       attempts: this.config.maxRetries + 1,
     });
+  }
+
+  async getTemplateStatus(templateName: string): Promise<{ exists: boolean; status?: string }> {
+    if (!this.config.businessAccountId) {
+      logger.warn("whatsapp.template_health.missing_business_account_id", { templateName });
+      return { exists: false };
+    }
+    const url = `${this.config.baseUrl}/${this.config.businessAccountId}/message_templates?name=${encodeURIComponent(templateName)}`;
+    try {
+      const res = await this.get(url) as any;
+      if (res && Array.isArray(res.data) && res.data.length > 0) {
+        const match = res.data.find((t: any) => t.name === templateName);
+        if (match) {
+          return { exists: true, status: match.status };
+        }
+      }
+      return { exists: false };
+    } catch (error: any) {
+      logger.error("whatsapp.template_health.fetch_failed", {
+        templateName,
+        error: error.message || String(error),
+      });
+      return { exists: false };
+    }
+  }
+
+  private async get(url: string): Promise<unknown> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
+
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${this.config.accessToken}`,
+        },
+        signal: controller.signal,
+      });
+
+      const rawText = await response.text();
+      const parsed = rawText ? safeJson(rawText) : {};
+      if (response.ok) return parsed;
+
+      const metaBody = parsed as MetaWhatsAppErrorBody;
+      const code = providerCode(metaBody);
+      const message = metaBody.error?.message || `WhatsApp API returned ${response.status}`;
+      throw new WhatsAppProviderError({
+        message,
+        code: "WHATSAPP_PROVIDER_ERROR",
+        providerCode: code,
+        retryable: isRetryableStatus(response.status),
+        status: response.status,
+        attempts: 1,
+        raw: parsed,
+      });
+    } catch (error: any) {
+      if (error instanceof WhatsAppProviderError) throw error;
+      const isAbort = error?.name === "AbortError";
+      throw new WhatsAppProviderError({
+        message: isAbort ? "WhatsApp request timed out" : "WhatsApp network request failed",
+        code: isAbort ? "WHATSAPP_TIMEOUT" : "WHATSAPP_NETWORK_ERROR",
+        retryable: true,
+        attempts: 1,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 }
 

@@ -37,7 +37,7 @@ export class ActivationFinancialStatusService {
     });
     if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
 
-    const [depositCredits, maintenanceObligations] = await Promise.all([
+    const [depositCredits, maintenanceObligations, paidAdvanceObligations, ledgerDepositPayments] = await Promise.all([
       prisma.tenant_advance_ledger.aggregate({
         where: {
           tenant_id: id,
@@ -58,10 +58,36 @@ export class ActivationFinancialStatusService {
           },
         },
       }),
+      prisma.payments.aggregate({
+        where: {
+          tenant_id: id,
+          obligation: {
+            obligation_type: "ADVANCE",
+          },
+        },
+        _sum: {
+          amount_paid: true,
+        },
+      }),
+      prisma.tenant_advance_ledger.aggregate({
+        where: {
+          tenant_id: id,
+          type: "CREDIT",
+          reason: "DEPOSIT",
+          reference_type: "PAYMENT",
+        },
+        _sum: {
+          amount: true,
+        },
+      }),
     ]);
 
     const requiredDeposit = money(tenant.advance_deposit);
-    const paidDeposit = money(depositCredits._sum.amount);
+    const paidAdvanceObligationSum = Number(paidAdvanceObligations?._sum?.amount_paid || 0);
+    const ledgerDepositPaymentsSum = Number(ledgerDepositPayments?._sum?.amount || 0);
+    const paidAdvanceObligationSumOutsideLedger = Math.max(0, paidAdvanceObligationSum - ledgerDepositPaymentsSum);
+
+    const paidDeposit = money(Number(depositCredits._sum.amount || 0) + paidAdvanceObligationSumOutsideLedger);
     const depositOutstanding = outstanding(requiredDeposit, paidDeposit);
 
     const maintenanceType = String(tenant.maintenance_type || "MONTHLY").toUpperCase();

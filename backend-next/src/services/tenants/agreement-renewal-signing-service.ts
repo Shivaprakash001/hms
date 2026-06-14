@@ -3,6 +3,7 @@ import { eventLog } from "@/lib/services/event-log-service";
 import { AgreementGenerationService, DEFAULT_RULE_CONTENT } from "./agreement-generation-service";
 import { AGREEMENT_ACTIVITY_EVENTS, isCurrentAgreementStatus } from "./agreement-status";
 import { assertAgreementLifecycleComplete } from "./agreement-lifecycle-completeness";
+import { getActiveTemplateAndSyncRuleVersion, DEFAULT_RULES_TEMPLATE, interpolateRulesContent } from "../../utils/default-rules";
 
 type AgreementRenewalSigningErrorCode =
   | "RENEWAL_AGREEMENT_NOT_FOUND"
@@ -100,6 +101,16 @@ export class AgreementRenewalSigningService {
               id: true,
               owner_id: true,
               hostel_id: true,
+              profiles: {
+                select: {
+                  name: true,
+                },
+              },
+              hostels: {
+                select: {
+                  name: true,
+                },
+              },
             },
           },
           renewed_from_agreement: true,
@@ -195,20 +206,35 @@ export class AgreementRenewalSigningService {
         });
       }
 
-      // Fetch active rule version
-      const ruleVersion = await tx.ruleVersion.findFirst({
-        where: {
-          hostel_id: renewalAgreement.tenant.hostel_id,
-          OR: [{ is_active: true }, { active: true }],
-        },
-        orderBy: { created_at: "desc" },
+      // Fetch active template and sync rule version
+      const template = await getActiveTemplateAndSyncRuleVersion(tx, renewalAgreement.tenant.hostel_id, "RENEWAL");
+      const ruleVersion = await tx.ruleVersion.findUnique({
+        where: { id: template.id },
       });
 
+      const roomNo = (renewalAgreement.content_snapshot as any)?.room_number || "N/A";
+      const tenantName = renewalAgreement.tenant.profiles?.name || "Tenant";
+
+      const variables = {
+        TENANT_NAME: tenantName,
+        ROOM_NUMBER: roomNo,
+        MONTHLY_RENT: Number(renewalAgreement.contract_rent ?? 0),
+        SECURITY_DEPOSIT_AMOUNT: Number(renewalAgreement.contract_security_deposit ?? 0),
+        MAINTENANCE_CHARGE_AMOUNT: Number(renewalAgreement.contract_maintenance ?? 0),
+        HOSTEL_NAME: renewalAgreement.tenant.hostels?.name || "Hostel",
+        OWNER_NAME: template.owner_name,
+        JOINING_DATE: (renewalAgreement.content_snapshot as any)?.joining_date || "",
+      };
+
+      const rawRules = template.rules_content || DEFAULT_RULES_TEMPLATE;
+      const interpolatedRules = interpolateRulesContent(rawRules, variables, true);
+
       const rulesSnapshot = ruleVersion
-        ? (ruleVersion.content || ruleVersion.content_snapshot || DEFAULT_RULE_CONTENT)
-        : DEFAULT_RULE_CONTENT;
-      const ruleVersionId = ruleVersion?.id || null;
-      const ruleVersionNumber = ruleVersion?.version || null;
+        ? (ruleVersion.content || ruleVersion.content_snapshot || rawRules)
+        : rawRules;
+
+      const ruleVersionId = ruleVersion?.id || template.id;
+      const ruleVersionNumber = ruleVersion?.version || `v${template.version_number}`;
 
       const renewalUpdate = await tx.agreement.updateMany({
         where: {
@@ -230,15 +256,22 @@ export class AgreementRenewalSigningService {
           guardian_signed_at: hasGuardianSignature ? now : null,
           guardian_ip: hasGuardianSignature ? input.metadata?.ip || null : null,
           guardian_user_agent: hasGuardianSignature ? input.metadata?.userAgent || null : null,
-          owner_signature_url: renewalAgreement.template?.owner_signature_url || null,
-          owner_signature_name: renewalAgreement.template?.owner_name || null,
+          owner_signature_url: template.owner_signature_url || renewalAgreement.template?.owner_signature_url || null,
+          owner_signature_name: template.owner_name || renewalAgreement.template?.owner_name || null,
           owner_signed_at: now,
           rules_snapshot: rulesSnapshot,
           rule_version_id: ruleVersionId,
           rule_version_number: ruleVersionNumber,
           content_snapshot: {
             ...(renewalAgreement.content_snapshot as any || {}),
-            hostel_rules: rulesSnapshot,
+            template_id: template.id,
+            template_version_number: template.version_number,
+            template_published_at: template.published_at,
+            template_name: template.title,
+            template_type: template.type,
+            raw_rules: rawRules,
+            interpolated_rules: interpolatedRules,
+            hostel_rules: interpolatedRules,
           },
         },
       });

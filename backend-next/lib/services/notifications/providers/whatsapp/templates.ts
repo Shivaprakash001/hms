@@ -1,4 +1,4 @@
-import { formatDate, formatMonthYear } from "@/lib/format";
+import { formatDate, formatMonthYear, formatShortDate } from "@/lib/format";
 import type { HostelPreferences } from "@/lib/preferences";
 
 export enum WhatsAppRentReminderTemplate {
@@ -129,3 +129,74 @@ export function buildTenantOnboardingTemplatePayload(input: TenantOnboardingTemp
 
   return params;
 }
+
+// ─── Tenant Account Activated Payment Pending Template ────────
+
+export const PAYMENT_PENDING_TEMPLATE_NAME = "account_activated_payment_pending_v1";
+
+export type TenantPaymentPendingTemplateInput = {
+  tenantName: string;
+};
+
+/**
+ * Pure mapper — builds WhatsApp template body parameters.
+ *
+ * Template variables:
+ *   {{1}} → Tenant Name
+ */
+export function buildTenantPaymentPendingTemplatePayload(input: TenantPaymentPendingTemplateInput): string[] {
+  return [input.tenantName || "Resident"];
+}
+
+// ─── Agreement Renewal Templates ──────────────────────────────
+
+export const AGREEMENT_RENEWAL_REMINDER_TEMPLATE_NAME = "agreement_renewal_reminder_v1";
+export const AGREEMENT_RENEWAL_OVERDUE_TEMPLATE_NAME = "agreement_renewal_overdue_v1";
+export const OWNER_RENEWAL_ALERT_TEMPLATE_NAME = "owner_renewal_alert_v1";
+
+export type AgreementRenewalReminderInput = {
+  tenantName: string;
+  expiryDate: Date | string;
+  status: string;
+};
+
+export function buildAgreementRenewalReminderPayload(input: AgreementRenewalReminderInput): string[] {
+  return [
+    input.tenantName || "Resident",
+    formatShortDate(input.expiryDate),
+    input.status || "Expiring Soon",
+  ];
+}
+
+export type AgreementRenewalOverdueInput = {
+  tenantName: string;
+  expiredOn: Date | string;
+  status: string;
+};
+
+export function buildAgreementRenewalOverduePayload(input: AgreementRenewalOverdueInput): string[] {
+  return [
+    input.tenantName || "Resident",
+    formatShortDate(input.expiredOn),
+    input.status || "Expired",
+  ];
+}
+
+export type OwnerRenewalAlertInput = {
+  tenantName: string;
+  roomNo: string;
+  status: string;
+  expiryDate: Date | string;
+  tenantPhone: string;
+};
+
+export function buildOwnerRenewalAlertPayload(input: OwnerRenewalAlertInput): string[] {
+  return [
+    input.tenantName || "Tenant",
+    input.roomNo || "N/A",
+    input.status || "Attention Required",
+    formatShortDate(input.expiryDate),
+    input.tenantPhone || "N/A",
+  ];
+}
+

@@ -62,17 +62,23 @@ export class TenantAdvanceService {
       return e.type === "CREDIT" ? acc + amt : acc - amt;
     }, 0);
 
+    const ledgerDepositPayments = entries.reduce((acc: number, entry: any) => {
+      if (entry.type !== "CREDIT" || entry.reason !== "DEPOSIT" || entry.reference_type !== "PAYMENT") return acc;
+      return acc + Number(entry.amount || 0);
+    }, 0);
+
     const configuredSecurityDeposit = Number(tenant.advance_deposit || 0);
     const paidAdvanceObligationSum = Number(paidAdvanceObligations?._sum?.amount_paid || 0);
+    const paidAdvanceObligationSumOutsideLedger = Math.max(0, paidAdvanceObligationSum - ledgerDepositPayments);
     const ledgerDepositCredits = this._sumLedgerCreditsByReason(entries, "DEPOSIT");
     const ledgerSecurityDeposit = this._calculateLedgerSecurityDeposit({
       ledgerBalance: balance,
       configuredSecurityDeposit,
-      paidAdvanceObligationSum,
+      paidAdvanceObligationSum: paidAdvanceObligationSumOutsideLedger,
       ledgerDepositCredits,
     });
     const availableRentAdvance = Math.max(0, balance - ledgerSecurityDeposit);
-    const paidSecurityDeposit = Math.min(configuredSecurityDeposit, ledgerSecurityDeposit + paidAdvanceObligationSum);
+    const paidSecurityDeposit = Math.min(configuredSecurityDeposit, ledgerSecurityDeposit + paidAdvanceObligationSumOutsideLedger);
 
     return {
       tenant_id: tenantId,
@@ -136,7 +142,22 @@ export class TenantAdvanceService {
       const balanceAfterApply = await this._computeBalance(tx, tenantId);
 
       logger.info("advance.credit", { tenant_id: tenantId, reason, amount, new_balance: balanceAfterApply, entry_id: entry.id });
-      return { entry, balance: balanceAfterApply };
+      return { entry, balance: balanceAfterApply, hostelId: tenant.hostel_id };
+    }).then(async (res) => {
+      try {
+        const { eventSystem } = await import("@/lib/events");
+        await eventSystem.trigger("advance_credited", {
+          tenant_id: tenantId,
+          owner_id: ownerId,
+          hostel_id: res.hostelId,
+          amount,
+          reason,
+          entry_id: res.entry.id,
+        });
+      } catch (err) {
+        logger.error("advance.credit.event_failed", { tenant_id: tenantId, err });
+      }
+      return { entry: res.entry, balance: res.balance };
     });
   }
 
@@ -570,7 +591,7 @@ export class TenantAdvanceService {
   }
 
   private async _computeAdvanceAvailabilityInTx(tx: Prisma.TransactionClient, tenantId: string) {
-    const [tenant, paidAdvanceObligations, depositCredits, ledgerBalance] = await Promise.all([
+    const [tenant, paidAdvanceObligations, depositCredits, ledgerBalance, ledgerDepositPayments] = await Promise.all([
       tx.tenants.findUniqueOrThrow({
         where: { id: tenantId },
         select: { advance_deposit: true },
@@ -597,12 +618,27 @@ export class TenantAdvanceService {
         },
       }),
       this._computeBalance(tx, tenantId),
+      tx.tenant_advance_ledger.aggregate({
+        where: {
+          tenant_id: tenantId,
+          type: "CREDIT",
+          reason: "DEPOSIT",
+          reference_type: "PAYMENT",
+        },
+        _sum: {
+          amount: true,
+        },
+      }),
     ]);
+
+    const paidAdvanceObligationSum = Number(paidAdvanceObligations?._sum?.amount_paid || 0);
+    const ledgerDepositPaymentsSum = Number(ledgerDepositPayments?._sum?.amount || 0);
+    const paidAdvanceObligationSumOutsideLedger = Math.max(0, paidAdvanceObligationSum - ledgerDepositPaymentsSum);
 
     const ledgerSecurityDeposit = this._calculateLedgerSecurityDeposit({
       ledgerBalance,
       configuredSecurityDeposit: Number(tenant.advance_deposit || 0),
-      paidAdvanceObligationSum: Number(paidAdvanceObligations?._sum?.amount_paid || 0),
+      paidAdvanceObligationSum: paidAdvanceObligationSumOutsideLedger,
       ledgerDepositCredits: Number(depositCredits?._sum?.amount || 0),
     });
 

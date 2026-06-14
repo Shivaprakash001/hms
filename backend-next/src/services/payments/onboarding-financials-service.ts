@@ -47,7 +47,7 @@ export class OnboardingFinancialsService {
 
     const tenant = await tx.tenants.findUnique({
       where: { id: tenantId },
-      select: { id: true, owner_id: true, hostel_id: true, status: true },
+      select: { id: true, owner_id: true, hostel_id: true, status: true, advance_deposit: true },
     });
     if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
     if (tenant.owner_id !== ownerId || tenant.hostel_id !== hostelId) {
@@ -56,52 +56,102 @@ export class OnboardingFinancialsService {
     if (tenant.status !== "INVITED") {
       return { createdObligations: [], skipped: true, reason: "TENANT_NOT_INVITED" };
     }
-    if (maintenanceType === "NONE" || maintenanceCharge <= 0) {
-      return { createdObligations: [], skipped: true, reason: "NO_MAINTENANCE_REQUIRED" };
+
+    const advanceDeposit = money(tenant.advance_deposit);
+    const hasMaintenance = maintenanceType !== "NONE" && maintenanceCharge > 0;
+    const hasAdvance = advanceDeposit > 0;
+
+    if (!hasMaintenance && !hasAdvance) {
+      return { createdObligations: [], skipped: true, reason: "NO_FINANCIALS_REQUIRED" };
     }
 
     await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId}::uuid FOR UPDATE`;
 
     const rentMonth = rentMonthFor(joiningDate);
-    const existing = await tx.rent_obligations.findFirst({
-      where: {
-        tenant_id: tenantId,
-        rent_month: rentMonth,
-        obligation_type: "MAINTENANCE",
-        is_superseded: false,
-      },
-      select: { id: true },
-    });
-    if (existing) {
-      return { createdObligations: [], skipped: true, reason: "MAINTENANCE_EXISTS" };
+    const createdObligations: string[] = [];
+
+    // Check & Create Maintenance Obligation
+    if (hasMaintenance) {
+      const existingMaintenance = await tx.rent_obligations.findFirst({
+        where: {
+          tenant_id: tenantId,
+          rent_month: rentMonth,
+          obligation_type: "MAINTENANCE",
+          is_superseded: false,
+        },
+        select: { id: true },
+      });
+      if (!existingMaintenance) {
+        await tx.rent_obligations.create({
+          data: {
+            tenant_id: tenantId,
+            allocation_id: null,
+            owner_id: ownerId,
+            hostel_id: hostelId,
+            rent_month: rentMonth,
+            amount: maintenanceCharge,
+            total_amount: maintenanceCharge,
+            due_date: joiningDate,
+            status: "PENDING",
+            obligation_type: "MAINTENANCE",
+            billing_period_start: joiningDate,
+            billing_period_end: joiningDate,
+            installment_label: "Onboarding maintenance",
+          },
+        });
+        createdObligations.push("MAINTENANCE");
+        logger.info("onboarding.maintenance_obligation_created", {
+          tenant_id: tenantId,
+          hostel_id: hostelId,
+          amount: maintenanceCharge,
+        });
+      }
     }
 
-    await tx.rent_obligations.create({
-      data: {
-        tenant_id: tenantId,
-        allocation_id: null,
-        owner_id: ownerId,
-        hostel_id: hostelId,
-        rent_month: rentMonth,
-        amount: maintenanceCharge,
-        total_amount: maintenanceCharge,
-        due_date: joiningDate,
-        status: "PENDING",
-        obligation_type: "MAINTENANCE",
-        billing_period_start: joiningDate,
-        billing_period_end: joiningDate,
-        installment_label: "Onboarding maintenance",
-      },
-    });
+    // Check & Create Advance (Security Deposit) Obligation
+    if (hasAdvance) {
+      const existingAdvance = await tx.rent_obligations.findFirst({
+        where: {
+          tenant_id: tenantId,
+          rent_month: rentMonth,
+          obligation_type: "ADVANCE",
+          is_superseded: false,
+        },
+        select: { id: true },
+      });
+      if (!existingAdvance) {
+        await tx.rent_obligations.create({
+          data: {
+            tenant_id: tenantId,
+            allocation_id: null,
+            owner_id: ownerId,
+            hostel_id: hostelId,
+            rent_month: rentMonth,
+            amount: advanceDeposit,
+            total_amount: advanceDeposit,
+            due_date: joiningDate,
+            status: "PENDING",
+            obligation_type: "ADVANCE",
+            billing_period_start: joiningDate,
+            billing_period_end: joiningDate,
+            installment_label: "Security Deposit",
+          },
+        });
+        createdObligations.push("ADVANCE");
+        logger.info("onboarding.advance_obligation_created", {
+          tenant_id: tenantId,
+          hostel_id: hostelId,
+          amount: advanceDeposit,
+        });
+      }
+    }
 
-    logger.info("onboarding.maintenance_obligation_created", {
-      tenant_id: tenantId,
-      hostel_id: hostelId,
-      amount: maintenanceCharge,
-      maintenance_type: maintenanceType,
-    });
-
-    return { createdObligations: ["MAINTENANCE"], skipped: false };
+    const skipped = createdObligations.length === 0;
+    return {
+      createdObligations,
+      skipped,
+      ...(skipped ? { reason: "OBLIGATIONS_EXIST" } : {}),
+    };
   }
 }
 

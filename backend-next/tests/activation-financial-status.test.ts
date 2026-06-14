@@ -8,10 +8,18 @@ vi.mock("@/lib/db", () => {
       findUnique: vi.fn(),
     },
     tenant_advance_ledger: {
-      aggregate: vi.fn(),
+      aggregate: vi.fn().mockImplementation((args) => {
+        if (args?.where?.reference_type === "PAYMENT") {
+          return Promise.resolve({ _sum: { amount: 0 } });
+        }
+        return Promise.resolve({ _sum: { amount: 0 } });
+      }),
     },
     rent_obligations: {
       findMany: vi.fn(),
+    },
+    payments: {
+      aggregate: vi.fn().mockResolvedValue({ _sum: { amount_paid: 0 } }),
     },
   };
   return { prisma: mockPrisma };

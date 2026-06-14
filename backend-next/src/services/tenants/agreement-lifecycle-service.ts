@@ -3,6 +3,7 @@ import { invalidateHostelDashboardCache, invalidateOwnerDashboardCache } from "@
 import { eventLog } from "@/lib/services/event-log-service";
 import { notificationService } from "@/lib/services/notification-service";
 import { AGREEMENT_ACTIVITY_EVENTS, AGREEMENT_LIFECYCLE_MANAGED_STATUSES } from "./agreement-status";
+import { agreementRenewalNotificationService } from "./agreement-renewal-notification-service";
 
 type AgreementLifecycleSummary = {
   checked: number;
@@ -56,20 +57,71 @@ export class AgreementLifecycleService {
     const touchedOwnerIds = new Set<string>();
     const touchedHostelIds = new Set<string>();
 
+    // Verify template health and write drift alerts if needed
+    if (process.env.OTP_PROVIDER === "whatsapp") {
+      try {
+        const healthResults = await agreementRenewalNotificationService.checkTemplatesHealth();
+        for (const item of healthResults) {
+          if (!item.exists || item.status !== "APPROVED") {
+            await eventLog.log("TEMPLATE_DRIFT_ALERT", null, {
+              templateName: item.name,
+              exists: item.exists,
+              status: item.status,
+              error: `Meta template '${item.name}' is missing or not APPROVED (current status: ${item.status || "UNKNOWN"}).`,
+            });
+            console.error(`[TEMPLATE_DRIFT_ALERT] Meta template '${item.name}' is missing or not APPROVED (current status: ${item.status || "UNKNOWN"}).`);
+          }
+        }
+      } catch (err: any) {
+        console.error("[TEMPLATE_DRIFT_ALERT] Failed to run WhatsApp template health check:", err);
+      }
+    }
+
     const agreements = await prisma.agreement.findMany({
       where: {
         status: { in: [...AGREEMENT_LIFECYCLE_MANAGED_STATUSES] },
       },
       include: {
-        tenant: {
-          select: {
-            id: true,
-            owner_id: true,
-            profile_id: true,
-            profiles: { select: { name: true } },
+        hostel: {
+          include: {
+            profiles: {
+              select: {
+                name: true,
+                phone: true,
+              },
+            },
           },
         },
-        hostel: { select: { id: true, name: true, owner_id: true } },
+        renewed_to_agreement: true,
+        renewed_agreements: {
+          where: { status: { notIn: ["VOID", "TERMINATED"] } },
+          orderBy: { generated_at: "desc" },
+          take: 1,
+        },
+        tenant: {
+          include: {
+            profiles: {
+              select: {
+                name: true,
+                phone: true,
+              },
+            },
+            room_allocations: {
+              where: { is_active: true, end_date: null },
+              include: { room: { select: { id: true, room_no: true } } },
+              take: 1,
+            },
+            move_out_requests: {
+              orderBy: { created_at: "desc" },
+              take: 3,
+            },
+            rent_obligations: {
+              where: { status: { in: ["PENDING", "PARTIAL"] }, is_superseded: false },
+              orderBy: { due_date: "asc" },
+              take: 20,
+            },
+          },
+        },
       },
       orderBy: { agreement_end_date: "asc" },
     });
@@ -113,6 +165,7 @@ export class AgreementLifecycleService {
           });
           if (update.count > 0) {
             summary.marked_expired++;
+            agreement.status = "AGREEMENT_EXPIRED";
             await eventLog.log(AGREEMENT_ACTIVITY_EVENTS.EXPIRED, ownerId, baseMetadata, agreement.tenant_id);
           }
           const notifyUpdate = await prisma.agreement.updateMany({
@@ -135,67 +188,70 @@ export class AgreementLifecycleService {
             );
             summary.expiry_notifications++;
           }
-          continue;
-        }
+        } else {
+          if (daysLeft <= 30) {
+            if (agreement.status === "SIGNED") {
+              const update = await prisma.agreement.updateMany({
+                where: { id: agreement.id, status: "SIGNED" },
+                data: { status: "EXPIRING_SOON" },
+              });
+              if (update.count > 0) {
+                summary.marked_expiring++;
+                agreement.status = "EXPIRING_SOON";
+                await eventLog.log(AGREEMENT_ACTIVITY_EVENTS.EXPIRING, ownerId, baseMetadata, agreement.tenant_id);
+              }
+            }
 
-        if (daysLeft <= 30) {
-          if (agreement.status === "SIGNED") {
-            const update = await prisma.agreement.updateMany({
-              where: { id: agreement.id, status: "SIGNED" },
-              data: { status: "EXPIRING_SOON" },
-            });
-            if (update.count > 0) {
-              summary.marked_expiring++;
-              await eventLog.log(AGREEMENT_ACTIVITY_EVENTS.EXPIRING, ownerId, baseMetadata, agreement.tenant_id);
+            if (daysLeft > 15) {
+              const notifyUpdate = await prisma.agreement.updateMany({
+                where: {
+                  id: agreement.id,
+                  expiry_notified_30d_at: null,
+                },
+                data: { expiry_notified_30d_at: new Date() },
+              });
+              if (notifyUpdate.count > 0) {
+                await this.notifyTenant(
+                  tenantProfileId,
+                  "Agreement expiring soon",
+                  `Your hostel agreement expires on ${formatDate(endDate)}. Please renew before expiry.`
+                );
+                await this.notifyOwner(
+                  ownerNotificationId,
+                  "Agreement expiring soon",
+                  `${tenantName}'s agreement expires on ${formatDate(endDate)}.`
+                );
+                summary.reminders_30d++;
+              }
             }
           }
 
-          if (daysLeft > 15) {
+          if (daysLeft <= 15) {
             const notifyUpdate = await prisma.agreement.updateMany({
               where: {
                 id: agreement.id,
-                expiry_notified_30d_at: null,
+                expiry_notified_15d_at: null,
               },
-              data: { expiry_notified_30d_at: new Date() },
+              data: { expiry_notified_15d_at: new Date() },
             });
             if (notifyUpdate.count > 0) {
               await this.notifyTenant(
                 tenantProfileId,
-                "Agreement expiring soon",
-                `Your hostel agreement expires on ${formatDate(endDate)}. Please renew before expiry.`
+                "Agreement renewal reminder",
+                `Your hostel agreement expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"} on ${formatDate(endDate)}.`
               );
               await this.notifyOwner(
                 ownerNotificationId,
-                "Agreement expiring soon",
-                `${tenantName}'s agreement expires on ${formatDate(endDate)}.`
+                "Agreement renewal reminder",
+                `${tenantName}'s agreement expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"}.`
               );
-              summary.reminders_30d++;
+              summary.reminders_15d++;
             }
           }
         }
 
-        if (daysLeft <= 15) {
-          const notifyUpdate = await prisma.agreement.updateMany({
-            where: {
-              id: agreement.id,
-              expiry_notified_15d_at: null,
-            },
-            data: { expiry_notified_15d_at: new Date() },
-          });
-          if (notifyUpdate.count > 0) {
-            await this.notifyTenant(
-              tenantProfileId,
-              "Agreement renewal reminder",
-              `Your hostel agreement expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"} on ${formatDate(endDate)}.`
-            );
-            await this.notifyOwner(
-              ownerNotificationId,
-              "Agreement renewal reminder",
-              `${tenantName}'s agreement expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"}.`
-            );
-            summary.reminders_15d++;
-          }
-        }
+        // TRIGGER WHATSAPP NOTIFICATIONS
+        await agreementRenewalNotificationService.processRenewalNotifications(agreement, today);
       } catch (error: any) {
         summary.failed++;
         summary.errors.push(`${agreement.id}: ${error?.message || String(error)}`);

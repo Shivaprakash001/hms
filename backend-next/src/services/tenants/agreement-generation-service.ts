@@ -7,7 +7,7 @@ function formatAgreementDate(dateInput: Date | string | null | undefined): strin
   if (!dateInput) return "N/A";
   const date = new Date(dateInput);
   if (isNaN(date.getTime())) return "N/A";
-  
+
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const day = String(date.getDate()).padStart(2, "0");
   const month = months[date.getMonth()];
@@ -19,7 +19,7 @@ function formatAgreementDateTime(dateInput: Date | string | null | undefined): s
   if (!dateInput) return "N/A";
   const date = new Date(dateInput);
   if (isNaN(date.getTime())) return "N/A";
-  
+
   const dateStr = formatAgreementDate(date);
   const hours = String(date.getHours()).padStart(2, "0");
   const minutes = String(date.getMinutes()).padStart(2, "0");
@@ -27,98 +27,10 @@ function formatAgreementDateTime(dateInput: Date | string | null | undefined): s
 }
 
 
-export const DEFAULT_RULE_CONTENT = {
-  categories: [
-    {
-      id: "payments",
-      title: "1. Fee Structure & Payment Policy",
-      severity: "important",
-      icon: "receipt",
-      highlights: [
-        "Hostel fee is applicable only for the academic year period of 12 months.",
-        "Hostel fees once paid are strictly non-refundable and non-adjustable under any circumstances.",
-        "If GST becomes applicable as per government regulations, additional GST charges will be added to the hostel fee."
-      ],
-      rules: [
-        "Students are required to pay 3 months hostel fee in advance at the time of joining.",
-        "Any delay in fee payment will attract a late fee of ₹50 per day."
-      ],
-    },
-    {
-      id: "facilities",
-      title: "2. Accommodation & Hostel Facilities",
-      severity: "standard",
-      icon: "wifi",
-      highlights: [
-        "The hostel management is responsible only for providing Accommodation, Breakfast, Lunch, and Dinner.",
-        "Facilities such as Internet/Wi-Fi, Washing machines, and Hot water are provided free of cost and may face occasional interruptions or maintenance delays.",
-        "Hostel premises will remain closed during major college holidays and festival vacations (Semester Holidays, Dussehra, Sankranthi, etc.). Students must vacate during these periods."
-      ],
-      rules: [
-        "Complaints regarding internet or washing machine issues may take up to 10 days for resolution.",
-        "Hostel rooms may be reshuffled under unavoidable or operational circumstances. Allocation of the same room throughout the year is not guaranteed.",
-        "Visitors who wish to stay in the hostel must pay ₹500 per day, subject to management approval."
-      ],
-    },
-    {
-      id: "discipline",
-      title: "3. Discipline & Conduct",
-      severity: "critical",
-      icon: "shield",
-      highlights: [
-        "Smoking, alcohol consumption, illegal activities, violence, or misconduct inside the hostel premises are strictly prohibited.",
-        "Ragging in any form is strictly prohibited. Involved students will be immediately removed without any fee refund."
-      ],
-      rules: [
-        "Students must maintain proper discipline and respectful behavior inside the hostel premises at all times.",
-        "Outsiders, friends, parents, or visitors are not allowed inside hostel rooms. Visitors may wait only in the office area or front lobby.",
-        "Hostel gate closes strictly at 9:30 PM every day.",
-        "Students leaving the hostel premises must inform the management through WhatsApp message as proof and record.",
-        "Food is not allowed inside hostel rooms. Students must use the dining hall for meals."
-      ],
-    },
-    {
-      id: "safety",
-      title: "4. Safety & Responsibility",
-      severity: "important",
-      icon: "lock",
-      highlights: [
-        "Students are fully responsible for their personal belongings (Mobile phones, Laptops, Gold, Cash, Certificates, etc.).",
-        "Use of electrical appliances such as iron boxes, water heaters, micro-ovens, or inflammable items is strictly prohibited inside rooms."
-      ],
-      rules: [
-        "The hostel management is not responsible for theft, loss, damage, injuries, accidents, personal disputes, or matters occurring outside hostel responsibility.",
-        "Students found using prohibited appliances will be charged a fine of ₹1000.",
-        "Any damage caused to hostel property (beds, mattresses, lockers, furniture, fittings, etc.) must be repaired or compensated by the student(s) responsible."
-      ],
-    },
-    {
-      id: "vacating",
-      title: "5. Vacating & Maintenance Charges",
-      severity: "important",
-      icon: "door-open",
-      highlights: [
-        "No refund will be provided for early vacating under any circumstances."
-      ],
-      rules: [
-        "If a student vacates the hostel during the academic year, hostel charges will be recalculated at ₹12,000 per month for the occupied duration.",
-        "Students vacating the hostel during the academic year must additionally pay ₹1400 as maintenance charges."
-      ],
-    },
-    {
-      id: "rights",
-      title: "6. Management Rights",
-      severity: "standard",
-      icon: "shield",
-      highlights: [
-        "Decisions made by hostel management regarding hostel administration, discipline, and accommodation shall be final and binding."
-      ],
-      rules: [
-        "The hostel management reserves the full right to discontinue hostel accommodation for any student involved in misconduct, indiscipline, rule violations, or behavior affecting hostel operations."
-      ],
-    }
-  ]
-};
+import { DEFAULT_RULES_TEMPLATE } from "../../utils/default-rules";
+
+export const DEFAULT_RULE_CONTENT = DEFAULT_RULES_TEMPLATE;
+
 
 
 export interface AgreementData {
@@ -139,7 +51,7 @@ export interface AgreementData {
   paymentFrequency: string;
   customRules?: string | null;
   hostelRules?: any;
-  
+
   tenantSignatureUrl?: string | null;
   tenantSignatureName?: string | null;
   tenantSignedAt?: Date | string | null;
@@ -160,7 +72,7 @@ export interface AgreementData {
 function sanitizeText(str: string | null | undefined): string {
   if (!str) return "";
   let s = str.replace(/₹/g, "Rs. ");
-  s = s.replace(/[^\x00-\xFF]/g, ""); 
+  s = s.replace(/[^\x00-\xFF]/g, "");
   return s.trim();
 }
 
@@ -241,16 +153,11 @@ export class AgreementGenerationService {
     const joiningDate = snapshot.joining_date || tenant.joined_on || new Date();
     const formattedJoiningDate = formatAgreementDate(joiningDate);
 
-    const ruleVersion = await prisma.ruleVersion.findFirst({
-      where: {
-        hostel_id: agreement.hostel_id,
-        OR: [{ is_active: true }, { active: true }],
-      },
-      orderBy: { created_at: "desc" },
-    });
-    const hostelRules = (agreement.rules_snapshot as any) || snapshot.hostel_rules || (ruleVersion
-      ? (ruleVersion.content as any || ruleVersion.content_snapshot as any || DEFAULT_RULE_CONTENT)
-      : DEFAULT_RULE_CONTENT);
+    const hostelRules = (agreement.rules_snapshot as any) ||
+      snapshot.interpolated_rules ||
+      snapshot.hostel_rules ||
+      template?.rules_content ||
+      DEFAULT_RULE_CONTENT;
 
     return {
       hostelName: snapshot.hostel_name || hostel.name,
@@ -270,7 +177,7 @@ export class AgreementGenerationService {
       paymentFrequency: snapshot.payment_frequency || tenant.payment_frequency || "MONTHLY",
       customRules: snapshot.custom_rules || template.custom_rules,
       hostelRules,
-      
+
       tenantSignatureUrl: agreement.tenant_signature_url,
       tenantSignatureName: agreement.tenant_signature_name,
       tenantSignedAt: agreement.tenant_signed_at,
@@ -293,7 +200,34 @@ export class AgreementGenerationService {
    */
   static async generateAndUploadPdf(agreementId: string): Promise<string> {
     const data = await this.getAgreementRenderData(agreementId);
-    
+    const pdfBuffer = await this.generatePdfBuffer(data);
+
+    // Upload PDF to ImageKit
+    const uploadRes = await imagekit.files.upload({
+      file: pdfBuffer.toString("base64"),
+      fileName: `agreement_${agreementId}.pdf`,
+      folder: `/agreements`,
+      useUniqueFileName: true,
+      tags: ["AGREEMENT", agreementId],
+    });
+
+    if (!uploadRes?.url) {
+      throw new Error("Failed to upload agreement PDF to storage provider");
+    }
+
+    // Update agreement with PDF URL
+    await prisma.agreement.update({
+      where: { id: agreementId },
+      data: { pdf_url: uploadRes.url },
+    });
+
+    return uploadRes.url;
+  }
+
+  /**
+   * Generates the PDF buffer directly from the provided AgreementData snapshots.
+   */
+  static async generatePdfBuffer(data: AgreementData): Promise<Buffer> {
     const pdfDoc = await PDFDocument.create();
     const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -788,7 +722,7 @@ export class AgreementGenerationService {
 
     // Draw Names & Metadata
     const metaY = sigYStart - 55;
-    
+
     // Tenant details
     page.drawText(sanitizeText(`Name: ${hasTenantSigner ? (data.tenantSignatureName || data.tenantName) : "N/A"}`), {
       x: margin,
@@ -871,26 +805,6 @@ export class AgreementGenerationService {
     });
 
     const pdfBytes = await pdfDoc.save();
-    
-    // Upload PDF to ImageKit
-    const uploadRes = await imagekit.files.upload({
-      file: Buffer.from(pdfBytes).toString("base64"),
-      fileName: `agreement_${agreementId}.pdf`,
-      folder: `/agreements`,
-      useUniqueFileName: true,
-      tags: ["AGREEMENT", agreementId],
-    });
-
-    if (!uploadRes?.url) {
-      throw new Error("Failed to upload agreement PDF to storage provider");
-    }
-
-    // Update agreement with PDF URL
-    await prisma.agreement.update({
-      where: { id: agreementId },
-      data: { pdf_url: uploadRes.url },
-    });
-
-    return uploadRes.url;
+    return Buffer.from(pdfBytes);
   }
 }

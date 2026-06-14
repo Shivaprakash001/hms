@@ -18,6 +18,7 @@
     "audit:r4-readiness": "DOTENV_CONFIG_PATH=../.env node -r dotenv/config ./node_modules/.bin/tsx scripts/audit-r4-readiness.ts",
     "chaos:payments": "DOTENV_CONFIG_PATH=../.env node -r dotenv/config ./node_modules/.bin/tsx scripts/payment-chaos-simulation.ts",
     "repair:financial-dirty-data": "DOTENV_CONFIG_PATH=../.env node -r dotenv/config ./node_modules/.bin/tsx scripts/payment-dirty-data-repair.ts",
+    "repair:advance-obligations": "DOTENV_CONFIG_PATH=../.env node -r dotenv/config ./node_modules/.bin/tsx scripts/repair-advance-obligations.ts",
     "reset:production:keep-owner": "DOTENV_CONFIG_PATH=../.env node -r dotenv/config ./node_modules/.bin/tsx scripts/production-reset-keep-owner.ts",
     "postinstall": "DOTENV_CONFIG_PATH=../.env node -r dotenv/config ./node_modules/prisma/build/index.js generate",
     "seed": "tsx prisma/seed.ts",
