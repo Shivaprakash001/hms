@@ -14,7 +14,9 @@ import {
   Clock, 
   Layers,
   Sparkles,
-  UserCheck
+  UserCheck,
+  AlertCircle,
+  BedDouble
 } from 'lucide-react';
 import { tenantService } from '@features/tenants/api';
 
@@ -78,6 +80,7 @@ export function TenantRoomPage() {
   }
 
   // Fallbacks: check both endpoints
+  const resStatus = profile?.reservation_status?.status ?? 'PAYMENT_PENDING';
   const profileRoom = profile?.room;
   const room = (roomData?.room ?? profileRoom) as Record<string, any> | undefined;
   const roommates = (roomData?.roommates ?? []) as { name?: string }[];
@@ -128,10 +131,22 @@ export function TenantRoomPage() {
     <div className="space-y-6 max-w-md mx-auto px-4 pb-12">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-foreground">Room & Hostel</h1>
-        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-          <UserCheck className="w-3.5 h-3.5" />
-          Checked In
-        </span>
+        {resStatus === 'PAYMENT_PENDING' ? (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+            <AlertCircle className="w-3.5 h-3.5" />
+            Payment Pending
+          </span>
+        ) : resStatus === 'RESERVED' ? (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+            <BedDouble className="w-3.5 h-3.5" />
+            Reserved
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+            <UserCheck className="w-3.5 h-3.5" />
+            Move-in Ready
+          </span>
+        )}
       </div>
 
       {/* Hero Smart Card */}
@@ -144,7 +159,9 @@ export function TenantRoomPage() {
 
         <div className="relative flex justify-between items-start">
           <div>
-            <span className="text-xs uppercase tracking-wider text-blue-100 font-semibold">Active Assignment</span>
+            <span className="text-xs uppercase tracking-wider text-blue-100 font-semibold">
+              {resStatus === 'PAYMENT_PENDING' ? 'Pending Assignment' : resStatus === 'RESERVED' ? 'Reserved' : 'Active Assignment'}
+            </span>
             <h2 className="text-4xl font-extrabold mt-1 tracking-tight">Room {String(room.room_no)}</h2>
           </div>
           <div className="bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/20 text-xs font-medium flex items-center gap-1.5">
@@ -154,94 +171,99 @@ export function TenantRoomPage() {
         </div>
 
         {/* Dynamic Bed Occupancy Visualizer */}
-        <div className="mt-8 relative z-10">
-          <div className="text-xs text-blue-100/90 font-medium mb-3 flex justify-between items-center">
-            <span>Beds Occupancy Grid</span>
-            <span>{occupiedCount} of {capacity} Occupied</span>
+        {resStatus !== 'PAYMENT_PENDING' && (
+          <div className="mt-8 relative z-10">
+            <div className="text-xs text-blue-100/90 font-medium mb-3 flex justify-between items-center">
+              <span>Beds Occupancy Grid</span>
+              <span>{occupiedCount} of {capacity} Occupied</span>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {Array.from({ length: capacity }).map((_, idx) => {
+                const isMe = idx === 0;
+                const isOccupied = idx < occupiedCount;
+                return (
+                  <div 
+                    key={idx}
+                    className={`h-10 rounded-lg flex flex-col items-center justify-center text-[10px] font-semibold border transition-all ${
+                      isMe 
+                        ? 'bg-white text-[#243A72] border-white shadow-md'
+                        : isOccupied 
+                          ? 'bg-white/25 border-white/20 text-white' 
+                          : 'border-white/30 border-dashed bg-transparent text-white/50'
+                    }`}
+                  >
+                    <span className="leading-tight">{isMe ? 'You' : isOccupied ? 'Occupied' : 'Vacant'}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-          <div className="grid grid-cols-4 gap-2">
-            {Array.from({ length: capacity }).map((_, idx) => {
-              const isMe = idx === 0;
-              const isOccupied = idx < occupiedCount;
+        )}
+      </section>
+
+      {/* Roommates Card */}
+      {resStatus !== 'PAYMENT_PENDING' && (
+        <section className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+              <Users className="w-4 h-4 text-[#243A72]" />
+              Roommates ({roommates.length})
+            </h3>
+            {vacantCount > 0 && (
+              <span className="text-xs font-medium text-[#243A72] bg-[#243A72]/5 px-2 py-0.5 rounded-md">
+                {vacantCount} vacant bed{vacantCount > 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+
+          <div className="divide-y divide-border/60">
+            {/* Main User Row */}
+            <div className="flex items-center gap-3 pb-3">
+              <div className="h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold border bg-[#243A72]/10 text-[#243A72] border-[#243A72]/20">
+                ME
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground">You</p>
+                <p className="text-xs text-[#243A72] font-medium">Bed A (Primary)</p>
+              </div>
+            </div>
+
+            {/* Other Roommates Rows */}
+            {roommates.map((r, i) => {
+              const name = String(r.name ?? 'Occupied Bed');
+              const initials = name.split(' ').map((n) => n[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || 'RM';
+              const isLast = i === roommates.length - 1 && vacantCount === 0;
               return (
-                <div 
-                  key={idx}
-                  className={`h-10 rounded-lg flex flex-col items-center justify-center text-[10px] font-semibold border transition-all ${
-                    isMe 
-                      ? 'bg-white text-[#243A72] border-white shadow-md'
-                      : isOccupied 
-                        ? 'bg-white/25 border-white/20 text-white' 
-                        : 'border-white/30 border-dashed bg-transparent text-white/50'
-                  }`}
-                >
-                  <span className="leading-tight">{isMe ? 'You' : isOccupied ? 'Occupied' : 'Vacant'}</span>
+                <div key={i} className={`flex items-center gap-3 py-3 ${isLast ? 'pb-0' : ''}`}>
+                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground border border-border">
+                    {initials}
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">{name}</p>
+                    <p className="text-xs text-muted-foreground">Roommate</p>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Vacant Beds Placeholders */}
+            {Array.from({ length: vacantCount }).map((_, i) => {
+              const isLast = i === vacantCount - 1;
+              return (
+                <div key={`vacant-${i}`} className={`flex items-center gap-3 py-3 border-dashed ${isLast ? 'pb-0' : ''}`}>
+                  <div className="h-10 w-10 rounded-full flex items-center justify-center border border-dashed border-border/80 text-muted-foreground/40 bg-muted/20">
+                    +
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground/60">Vacant Bed</p>
+                    <p className="text-xs text-muted-foreground/40">Available for assignment</p>
+                  </div>
                 </div>
               );
             })}
           </div>
-        </div>
-      </section>
-
-      {/* Roommates Card */}
-      <section className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-            <Users className="w-4 h-4 text-[#243A72]" />
-            Roommates ({roommates.length})
-          </h3>
-          {vacantCount > 0 && (
-            <span className="text-xs font-medium text-[#243A72] bg-[#243A72]/5 px-2 py-0.5 rounded-md">
-              {vacantCount} vacant bed{vacantCount > 1 ? 's' : ''}
-            </span>
-          )}
-        </div>
-
-        <div className="divide-y divide-border/60">
-          {/* Main User Row */}
-          <div className="flex items-center gap-3 pb-3">
-            <div className="h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold border bg-[#243A72]/10 text-[#243A72] border-[#243A72]/20">
-              ME
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-foreground">You</p>
-              <p className="text-xs text-muted-foreground">Primary Resident</p>
-            </div>
-          </div>
-
-          {/* Roommates Rows */}
-          {roommates.map((r, i) => {
-            const name = r.name || 'Unknown Roommate';
-            const isLast = i === roommates.length - 1;
-            return (
-              <div key={i} className={`flex items-center gap-3 py-3 ${isLast && vacantCount === 0 ? 'pb-0' : ''}`}>
-                <div className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold border ${getAvatarBg(name)}`}>
-                  {getInitials(name)}
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-foreground">{name}</p>
-                  <p className="text-xs text-muted-foreground">Roommate</p>
-                </div>
-              </div>
-            );
-          })}
-
-          {/* Vacant Beds Placeholders */}
-          {Array.from({ length: vacantCount }).map((_, i) => {
-            const isLast = i === vacantCount - 1;
-            return (
-              <div key={`vacant-${i}`} className={`flex items-center gap-3 py-3 border-dashed ${isLast ? 'pb-0' : ''}`}>
-                <div className="h-10 w-10 rounded-full flex items-center justify-center border border-dashed border-border/80 text-muted-foreground/40 bg-muted/20">
-                  +
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground/60">Vacant Bed</p>
-                  <p className="text-xs text-muted-foreground/40">Available for assignment</p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* WiFi Credentials Card */}
       {(wifiName || wifiPassword) && (

@@ -11,6 +11,7 @@ import { useTenantDashboard } from '@features/tenant-portal/hooks/useTenantDashb
 import { TenantPriorityStrip } from '@/portal/components/TenantPriorityStrip';
 import { TenantScorePanel } from '@/portal/components/TenantScorePanel';
 import { TenantActionCenter } from '@/portal/components/TenantActionCenter';
+import { OnboardingProgressTracker } from '@/platforms/tenant/components/OnboardingProgressTracker';
 import { TenantAnnouncements } from '@/portal/components/TenantAnnouncements';
 import { TenantDocumentStatus, hasRequiredDocuments } from '@/portal/components/TenantDocumentStatus';
 import { TenantStatusBadge } from '@features/tenants/components/badges/TenantStatusBadge';
@@ -39,7 +40,9 @@ export function TenantDashboardPage() {
   const hostel = profile?.hostel as Record<string, unknown> | undefined;
   const ownerContact = profile?.owner_contact as Record<string, unknown> | undefined;
   const name = String(prof?.name ?? 'Tenant');
+  const resStatus = profile?.reservation_status?.status ?? 'PAYMENT_PENDING';
   const status = String(tenant?.status ?? profile?.status ?? 'ACTIVE');
+  const displayStatus = status === 'ACTIVE' ? resStatus : status;
   const roomNo = profile?.room?.room_no ?? profile?.room_no ?? null;
   const hostelName = String(hostel?.name ?? 'Sri Adithya Hostels');
   const hostelLogo = String(hostel?.logo_url ?? '');
@@ -120,10 +123,14 @@ export function TenantDashboardPage() {
                 )}
               </div>
             </div>
-            <TenantStatusBadge status={status} size="md" />
+            <TenantStatusBadge status={displayStatus} size="md" />
           </div>
         </div>
       </header>
+
+      {profile && status !== 'FORMER_TENANT' && (
+        <OnboardingProgressTracker profile={profile} />
+      )}
 
 
       {status === 'FORMER_TENANT' && (
@@ -207,7 +214,7 @@ export function TenantDashboardPage() {
       {/* My Stay Section */}
       <section className="space-y-3">
         <h3 className="text-sm font-bold text-foreground">My Stay</h3>
-        <div className="grid grid-cols-2 gap-3">
+        <div className={`grid gap-3 ${resStatus !== 'PAYMENT_PENDING' ? 'grid-cols-2' : 'grid-cols-1'}`}>
           {/* Current Room Card */}
           <div className="rounded-2xl border border-border bg-card p-4">
             <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Current Room</p>
@@ -218,34 +225,38 @@ export function TenantDashboardPage() {
           </div>
 
           {/* Move Out Card */}
-          <Link
-            to="/tenant/move-out"
-            className="rounded-2xl border border-border bg-card p-4 hover:border-accent/40 hover:shadow-sm transition-all flex flex-col justify-between"
-          >
-            <div>
-              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Move Out</p>
-              <p className="mt-2 text-lg font-extrabold text-foreground truncate">
+          {resStatus !== 'PAYMENT_PENDING' && (
+            <Link
+              to="/tenant/move-out"
+              className="rounded-2xl border border-border bg-card p-4 hover:border-accent/40 hover:shadow-sm transition-all flex flex-col justify-between"
+            >
+              <div>
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Move Out</p>
+                <p className="mt-2 text-lg font-extrabold text-foreground truncate">
+                  {moveOut && typeof moveOut === 'object' && moveOut.status
+                    ? moveOut.status === 'COMPLETED'
+                      ? 'Stay Completed'
+                      : String(moveOut.status).replace(/_/g, ' ')
+                    : 'Request Exit'}
+                </p>
+              </div>
+              <p className="text-[10px] text-accent mt-2 font-semibold">
                 {moveOut && typeof moveOut === 'object' && moveOut.status
                   ? moveOut.status === 'COMPLETED'
-                    ? 'Stay Completed'
-                    : String(moveOut.status).replace(/_/g, ' ')
-                  : 'Request Exit'}
+                    ? 'Share Feedback →'
+                    : 'Track Status →'
+                  : 'Plan Departure →'}
               </p>
-            </div>
-            <p className="text-[10px] text-accent mt-2 font-semibold">
-              {moveOut && typeof moveOut === 'object' && moveOut.status
-                ? moveOut.status === 'COMPLETED'
-                  ? 'Share Feedback →'
-                  : 'Track Status →'
-                : 'Plan Departure →'}
-            </p>
-          </Link>
+            </Link>
+          )}
         </div>
       </section>
 
-      <IdleRender>
-        <TenantScorePanel score={score} />
-      </IdleRender>
+      {resStatus !== 'PAYMENT_PENDING' && (
+        <IdleRender>
+          <TenantScorePanel score={score} />
+        </IdleRender>
+      )}
 
       <IdleRender>
         {advance && (
@@ -316,7 +327,7 @@ export function TenantDashboardPage() {
           }
         />
 
-        <TenantActionCenter />
+        <TenantActionCenter resStatus={resStatus} />
       </IdleRender>
 
       {status === 'LEFT' && (

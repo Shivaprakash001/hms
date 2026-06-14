@@ -8,12 +8,16 @@ const actions = [
   { to: '/tenant/profile', icon: User, label: 'My profile', desc: 'Contact & records' },
 ];
 
-export function TenantActionCenter() {
+export function TenantActionCenter({ resStatus }: { resStatus?: string }) {
+  const filteredActions = actions.filter(
+    (action) => action.to !== '/tenant/move-out' || resStatus !== 'PAYMENT_PENDING'
+  );
+
   return (
     <section>
       <h2 className="text-sm font-semibold text-foreground mb-3">Quick actions</h2>
       <div className="grid grid-cols-2 gap-2">
-        {actions.map(({ to, icon: Icon, label, desc }) => (
+        {filteredActions.map(({ to, icon: Icon, label, desc }) => (
           <Link
             key={to}
             to={to}

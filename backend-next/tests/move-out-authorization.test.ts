@@ -75,6 +75,13 @@ const prismaMock = {
   $transaction: vi.fn(async (fn: any) => fn(prismaMock)),
 };
 
+const mockGetReservationStatus = vi.fn(async (tenantId: string) => ({ status: "RESERVED" }));
+vi.mock("../src/services/tenants/reservation-status-service", () => ({
+  reservationStatusService: {
+    getReservationStatus: mockGetReservationStatus,
+  },
+}));
+
 vi.mock("../lib/db", () => ({ prisma: prismaMock }));
 vi.mock("../lib/services/move-out-notifications", () => ({ notifyMoveOutTransition: vi.fn() }));
 vi.mock("../src/services/payments/financial-service", () => ({ financialService: {} }));
@@ -151,6 +158,23 @@ describe("MoveOutService service-layer authorization", () => {
       reason: "OTHER" as any,
       plannedExitDate: "2026-07-01",
     })).rejects.toThrow("FORBIDDEN:");
+
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("blocks Tenant A from creating a move-out request when reservation status is PAYMENT_PENDING", async () => {
+    mockGetReservationStatus.mockResolvedValueOnce({ status: "PAYMENT_PENDING" });
+
+    await expect(moveOutService.createRequest({
+      tenantId: "tenant-a",
+      hostelId: "hostel-a",
+      ownerId: "owner-a",
+      initiatedBy: "profile-a",
+      initiatedByRole: "TENANT",
+      actor: tenantA,
+      reason: "OTHER" as any,
+      plannedExitDate: "2026-07-01",
+    })).rejects.toThrow("FORBIDDEN: Move-out requests are not allowed");
 
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
   });

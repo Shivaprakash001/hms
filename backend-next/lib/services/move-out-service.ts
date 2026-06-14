@@ -4,6 +4,7 @@ type Tx = Prisma.TransactionClient;
 import { getLogger } from "../logger";
 import { financialService } from "../../src/services/payments/financial-service";
 import { tenantAdvanceService } from "../../src/services/payments/tenant-advance-service";
+import { reservationStatusService } from "../../src/services/tenants/reservation-status-service";
 import { assertTransition, assertCapability, checkCapability, getTenantSteps } from "./move-out-state-machine";
 import {
   notifyMoveOutDisputeRaised,
@@ -231,6 +232,11 @@ export class MoveOutService {
       }
     } else if (role !== "ADMIN") {
       this.forbidden("create this move-out request");
+    }
+
+    const resStatusInfo = await reservationStatusService.getReservationStatus(tenantId);
+    if (resStatusInfo.status === "PAYMENT_PENDING") {
+      throw new Error("FORBIDDEN: Move-out requests are not allowed for tenants with PAYMENT_PENDING reservation status.");
     }
 
     if (tenant.status !== "ACTIVE") throw new Error(`VALIDATION: Only ACTIVE tenants can request move-out. Current: ${tenant.status}`);

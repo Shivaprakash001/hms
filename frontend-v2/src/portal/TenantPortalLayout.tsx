@@ -1,5 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { Building2, Home, IndianRupee, DoorOpen, User } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { tenantService } from '@features/tenants/api';
 
 const nav = [
   { to: '/tenant/dashboard', icon: Home, label: 'Home' },
@@ -10,6 +12,14 @@ const nav = [
 ];
 
 export function TenantPortalLayout() {
+  const { data: profile } = useQuery({
+    queryKey: ['tenant', 'me', 'profile'],
+    queryFn: () => tenantService.getMyProfile(),
+    staleTime: 60_000,
+  });
+
+  const resStatus = profile?.reservation_status?.status ?? 'PAYMENT_PENDING';
+  const filteredNav = nav.filter(({ to }) => to !== '/tenant/move-out' || resStatus !== 'PAYMENT_PENDING');
   return (
     <div className="min-h-screen bg-background pb-[calc(4rem+env(safe-area-inset-bottom))]">
       <main className="max-w-lg mx-auto px-4 py-5">
@@ -21,7 +31,7 @@ export function TenantPortalLayout() {
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
         <div className="flex justify-around h-16 max-w-lg mx-auto items-stretch">
-          {nav.map(({ to, icon: Icon, label }) => (
+          {filteredNav.map(({ to, icon: Icon, label }) => (
             <NavLink key={to} to={to} className="flex-1">
               {({ isActive }) => (
                 <div
