@@ -3,16 +3,19 @@ import { prisma } from "../../../lib/db";
 import { imagekit } from "../../../lib/imagekit";
 import axios from "axios";
 
+const IST_TIMEZONE = "Asia/Kolkata";
+
 function formatAgreementDate(dateInput: Date | string | null | undefined): string {
   if (!dateInput) return "N/A";
   const date = new Date(dateInput);
   if (isNaN(date.getTime())) return "N/A";
 
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = months[date.getMonth()];
-  const year = date.getFullYear();
-  return `${day} ${month} ${year}`;
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: IST_TIMEZONE,
+  });
 }
 
 function formatAgreementDateTime(dateInput: Date | string | null | undefined): string {
@@ -20,10 +23,15 @@ function formatAgreementDateTime(dateInput: Date | string | null | undefined): s
   const date = new Date(dateInput);
   if (isNaN(date.getTime())) return "N/A";
 
-  const dateStr = formatAgreementDate(date);
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  return `${dateStr} ${hours}:${minutes}`;
+  return date.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: IST_TIMEZONE,
+  });
 }
 
 
@@ -380,7 +388,7 @@ export class AgreementGenerationService {
 
     const gridItems = [
       { label: "Room Allocated", value: data.roomNo || "N/A" },
-      { label: "Joining Date", value: String(data.joiningDate) },
+      { label: "Joining Date", value: formatAgreementDate(data.joiningDate) },
       { label: "Monthly Rent", value: `Rs. ${data.monthlyRent.toLocaleString("en-IN")}` },
       { label: "Payment Frequency", value: data.paymentFrequency },
       { label: "Security Deposit", value: `Rs. ${data.advanceDeposit.toLocaleString("en-IN")}` },

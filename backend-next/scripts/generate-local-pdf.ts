@@ -189,7 +189,7 @@ async function main() {
 
   const gridItems = [
     { label: "Room Allocated", value: data.roomNo || "N/A" },
-    { label: "Joining Date", value: String(data.joiningDate) },
+    { label: "Joining Date", value: new Date(data.joiningDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }) },
     { label: "Monthly Rent", value: `Rs. ${data.monthlyRent.toLocaleString("en-IN")}` },
     { label: "Payment Frequency", value: data.paymentFrequency },
     { label: "Security Deposit", value: `Rs. ${data.advanceDeposit.toLocaleString("en-IN")}` },
