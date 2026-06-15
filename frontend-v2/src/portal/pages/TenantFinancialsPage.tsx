@@ -176,7 +176,7 @@ export function TenantFinancialsPage() {
     setIsTestingPayment(true);
     try {
       const res = await paymentService.createTestIntent({ amount: 1 });
-      const intent = res.data ?? res;
+      const intent = res.attempt ?? res.data?.attempt ?? res.data ?? res;
       
       if (!intent || !intent.provider) {
         throw new Error('Invalid response structure from test-intent endpoint.');
