@@ -12,12 +12,12 @@ import {
   Clock, 
   AlertTriangle, 
   Check, 
-  Sparkles, 
   ChevronDown, 
   ChevronUp, 
   Shield, 
   ArrowRight,
-  HelpCircle
+  HelpCircle,
+  Wallet
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -48,6 +48,7 @@ interface FinancialState {
   requestedFrequency: string;
   requestReason: string;
   historyExpanded: boolean;
+  timelineExpanded: boolean;
 }
 
 const initialFinancialState: FinancialState = {
@@ -59,6 +60,7 @@ const initialFinancialState: FinancialState = {
   requestedFrequency: 'QUARTERLY',
   requestReason: '',
   historyExpanded: false,
+  timelineExpanded: false,
 };
 
 type FinancialAction =
@@ -72,6 +74,7 @@ type FinancialAction =
   | { type: 'SET_REQUESTED_FREQUENCY'; payload: string }
   | { type: 'SET_REQUEST_REASON'; payload: string }
   | { type: 'SET_HISTORY_EXPANDED'; payload: boolean }
+  | { type: 'SET_TIMELINE_EXPANDED'; payload: boolean }
   | { type: 'PREPAY_INSTALLMENT'; payload: { id: string } }
   | { type: 'PAY_CURRENT_INSTALLMENT'; payload: { ids: string[] } }
   | { type: 'RECORD_PAYMENT_SUCCESS' }
@@ -106,6 +109,8 @@ function financialReducer(state: FinancialState, action: FinancialAction): Finan
       return { ...state, requestedFrequency: action.payload };
     case 'SET_REQUEST_REASON':
       return { ...state, requestReason: action.payload };
+    case 'SET_TIMELINE_EXPANDED':
+      return { ...state, timelineExpanded: action.payload };
     case 'SET_HISTORY_EXPANDED':
       return { ...state, historyExpanded: action.payload };
     case 'PREPAY_INSTALLMENT':
@@ -457,11 +462,13 @@ export function TenantFinancialsPage() {
     const upcomingList = installments.filter(inst => inst.status === 'PROJECTED' || inst.status === 'PENDING');
     const nextInstallment = upcomingList[0];
     let nextInstallmentText = 'No upcoming installments';
+    let nextInstallmentDays = -1;
     
     if (nextInstallment) {
       const diffTime = new Date(nextInstallment.due_date).getTime() - today.getTime();
       const daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
-      nextInstallmentText = `Next Installment: ${fmt(nextInstallment.total_amount)} Due: ${fmtDate(nextInstallment.due_date)} (${daysRemaining} days remaining)`;
+      nextInstallmentText = `Next: ${fmt(nextInstallment.total_amount)} · Due ${fmtDate(nextInstallment.due_date)}`;
+      nextInstallmentDays = daysRemaining;
     }
 
     return {
@@ -470,8 +477,9 @@ export function TenantFinancialsPage() {
       amountLabel: 'Balance Due',
       amount: 0,
       subtext: nextInstallmentText,
-      bgClass: 'bg-gradient-to-br from-[#1B2D5B] via-[#243A72] to-[#059669] text-white shadow-lg shadow-blue-900/20',
+      bgClass: 'text-white shadow-lg shadow-blue-900/20',
       icon: ShieldCheck,
+      nextDays: nextInstallmentDays,
     };
   }, [installments]);
 
@@ -582,20 +590,22 @@ export function TenantFinancialsPage() {
       
       {/* HEADER */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Money Screen</h1>
-        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-accent/10 text-accent text-xs font-semibold">
+        <h1 style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: '18px', color: '#1A1A1A' }}>Financials</h1>
+        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold" style={{ backgroundColor: '#1B2D5B', color: '#FFFFFF' }}>
           <Shield className="w-3.5 h-3.5" />
           <span>Sri Adithya Hostels</span>
         </div>
       </div>
 
       {/* SECTION 1 – FINANCIAL HEALTH HERO CARD */}
-      <div className={`rounded-2xl p-6 ${financialHealth.bgClass} flex flex-col justify-between min-h-[160px] relative overflow-hidden transition-all duration-300`}>
+      <div className={`rounded-2xl p-6 ${financialHealth.bgClass} flex flex-col justify-between min-h-[160px] relative overflow-hidden transition-all duration-300`} style={financialHealth.state === 'GREEN' ? { background: 'linear-gradient(135deg, #1B2D5B 0%, #162347 100%)' } : undefined}>
+        {/* Saffron left accent bar */}
+        <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: '#F07B1D', boxShadow: '0 0 8px rgba(240,123,29,0.4)' }}></div>
         <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-2xl transform translate-x-10 -translate-y-10"></div>
         <div className="flex justify-between items-start">
           <div className="space-y-1">
             <span className="text-xs uppercase tracking-wider font-semibold opacity-75">Financial Status</span>
-            <h2 className="text-2xl font-extrabold tracking-tight">{financialHealth.title}</h2>
+            <h2 style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: '20px' }} className="tracking-tight text-white">{financialHealth.title}</h2>
           </div>
           <HealthIcon className="w-10 h-10 opacity-90 p-1.5 bg-white/10 rounded-xl backdrop-blur-md" />
         </div>
@@ -606,9 +616,34 @@ export function TenantFinancialsPage() {
               <span className="text-2xl font-black">{fmt(financialHealth.amount)}</span>
             </div>
           )}
-          <p className="text-sm font-medium opacity-90 flex items-center gap-1.5">
-            {financialHealth.subtext}
-          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-medium opacity-90 text-white">
+              {financialHealth.subtext}
+            </p>
+            {financialHealth.state === 'GREEN' && (financialHealth as any).nextDays >= 0 && (() => {
+              const days = (financialHealth as any).nextDays;
+              let pillColor = '#FBB040';
+              if (days < 7) pillColor = '#C62828';
+              else if (days <= 14) pillColor = '#F07B1D';
+              return (
+                <span
+                  style={{
+                    backgroundColor: `${pillColor}33`,
+                    border: `1px solid ${pillColor}`,
+                    color: pillColor,
+                    fontFamily: 'Poppins, sans-serif',
+                    fontWeight: 600,
+                    fontSize: '12px',
+                    borderRadius: '20px',
+                    padding: '2px 10px',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  ⏱ {days} days left
+                </span>
+              );
+            })()}
+          </div>
         </div>
       </div>
 
@@ -616,8 +651,8 @@ export function TenantFinancialsPage() {
       {resStatus === 'PAYMENT_PENDING' && profile?.reservation_status && (
         <TenantReservationCard reservationStatus={profile.reservation_status} />
       )}
-
       {/* SECTION 2 – BILLING CONTRACT SUMMARY */}
+      <span style={{ display: 'block', fontSize: '12px', fontFamily: 'Poppins, sans-serif', fontWeight: 600, color: '#6B6B6B', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '8px', marginBottom: '8px' }}>BILLING</span>
       <section className="rounded-2xl border border-border bg-card p-5 shadow-sm space-y-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center">
@@ -631,16 +666,30 @@ export function TenantFinancialsPage() {
         <div className="grid grid-cols-2 gap-4 pt-2 text-sm">
           <div className="space-y-0.5">
             <span className="text-xs text-muted-foreground block font-medium">Billing Plan</span>
-            <span className="font-bold text-foreground">
+            <span
+              style={{
+                backgroundColor: '#EEF2FF',
+                color: '#1B2D5B',
+                borderRadius: '6px',
+                padding: '4px 10px',
+                fontFamily: 'Poppins, sans-serif',
+                fontWeight: 600,
+                fontSize: '11px',
+                textTransform: 'uppercase',
+                display: 'inline-block',
+              }}
+            >
               {String(billingContext.data?.active_frequency ?? 'MONTHLY').replaceAll('_', ' ')}
             </span>
           </div>
-          <div className="space-y-0.5">
-            <span className="text-xs text-muted-foreground block font-medium">Monthly Rent</span>
-            <span className="font-bold text-foreground">
-              {fmt(Number(profile?.monthly_rent ?? 0))}
-            </span>
-          </div>
+          {Number(profile?.monthly_rent ?? 0) > 0 && (
+            <div className="space-y-0.5">
+              <span className="text-xs text-muted-foreground block font-medium">Monthly Rent</span>
+              <span className="font-bold text-foreground">
+                {fmt(Number(profile?.monthly_rent ?? 0))}
+              </span>
+            </div>
+          )}
           <div className="space-y-0.5 col-span-2">
             <span className="text-xs text-muted-foreground block font-medium">Current Billing Cycle</span>
             <span className="font-medium text-foreground">
@@ -657,16 +706,16 @@ export function TenantFinancialsPage() {
         <section className="rounded-2xl border border-border bg-card p-6 shadow-sm relative overflow-hidden space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <span className="text-xs font-semibold text-accent uppercase tracking-wider">Current Installment</span>
+              <span style={{ fontSize: '11px', fontFamily: 'Poppins, sans-serif', fontWeight: 600, color: '#F07B1D', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Current Installment</span>
               <h3 className="text-lg font-bold text-foreground mt-0.5">{currentInstallment.label}</h3>
             </div>
             <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
               currentInstallment.status === 'PAID' 
-                ? 'bg-emerald-100 text-emerald-800' 
+                ? 'text-white' 
                 : currentInstallment.status === 'PARTIAL' 
                 ? 'bg-amber-100 text-amber-800' 
                 : 'bg-red-100 text-red-800'
-            }`}>
+            }`} style={currentInstallment.status === 'PAID' ? { backgroundColor: '#2E7D32', borderRadius: '20px', padding: '4px 12px' } : { borderRadius: '20px', padding: '4px 12px' }}>
               {currentInstallment.status}
             </span>
           </div>
@@ -693,9 +742,9 @@ export function TenantFinancialsPage() {
               <span>{fmt(currentInstallment.total_amount)}</span>
             </div>
             {currentInstallment.paid > 0 && (
-              <div className="flex justify-between items-center text-emerald-600 font-semibold text-sm">
-                <span>Paid So Far</span>
-                <span>-{fmt(currentInstallment.paid)}</span>
+              <div className="flex justify-between items-center font-semibold text-sm" style={{ color: '#2E7D32' }}>
+                <span>Total Paid</span>
+                <span className="flex items-center gap-1"><Check className="w-3.5 h-3.5" />{fmt(currentInstallment.paid)}</span>
               </div>
             )}
             {currentInstallment.covered_by_advance > 0 && (
@@ -726,24 +775,25 @@ export function TenantFinancialsPage() {
       )}
 
       {/* SECTION 4 – UPCOMING FINANCIAL FORECAST */}
+      <span style={{ display: 'block', fontSize: '12px', fontFamily: 'Poppins, sans-serif', fontWeight: 600, color: '#6B6B6B', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '24px', marginBottom: '8px' }}>UPCOMING PAYMENTS</span>
       {forecastInstallments.length > 0 && (
-        <section className="rounded-2xl border border-dashed border-border bg-card/40 p-5 shadow-sm space-y-4">
+        <section className="rounded-2xl border bg-card p-5 shadow-sm space-y-4" style={{ borderColor: '#E8E4DC', borderLeftWidth: '3px', borderLeftColor: '#F07B1D' }}>
           <div className="flex items-center gap-2">
-            <CalendarDays className="w-4 h-4 text-accent" />
-            <h2 className="text-sm font-semibold text-foreground">Financial Forecast</h2>
+            <CalendarDays className="w-4 h-4" style={{ color: '#F07B1D' }} />
+            <h2 style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: '15px', color: '#1A1A1A' }}>Financial Forecast</h2>
           </div>
           <div className="grid grid-cols-1 gap-3">
             {forecastInstallments.map((inst, index) => (
-              <div key={inst.period_start} className="flex justify-between items-center bg-card p-3 rounded-xl border border-border">
+              <div key={inst.period_start} className="flex justify-between items-center bg-card p-3 rounded-xl border" style={{ borderColor: '#E8E4DC' }}>
                 <div className="space-y-0.5">
-                  <span className="text-xs text-muted-foreground font-medium block">
+                  <span style={{ fontSize: '12px', color: '#6B6B6B', fontFamily: 'Poppins, sans-serif' }} className="block font-medium">
                     {index === 0 ? 'Next Installment' : 'Following Installment'}
                   </span>
-                  <span className="text-sm font-bold text-foreground">{inst.label}</span>
+                  <span style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: '14px', color: '#1A1A1A' }}>{inst.label}</span>
                 </div>
                 <div className="text-right space-y-0.5">
-                  <span className="text-sm font-bold text-accent block">{fmt(inst.total_amount)}</span>
-                  <span className="text-xs text-muted-foreground block font-medium">Due {fmtDate(inst.due_date)}</span>
+                  <span style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, fontSize: '18px', color: '#F07B1D' }} className="block">{fmt(inst.total_amount)}</span>
+                  <span style={{ fontSize: '12px', color: '#6B6B6B', fontFamily: 'Poppins, sans-serif' }} className="block">Due {fmtDate(inst.due_date)}</span>
                 </div>
               </div>
             ))}
@@ -752,15 +802,26 @@ export function TenantFinancialsPage() {
       )}
 
       {/* SECTION 5 – INSTALLMENT TIMELINE */}
-      {installments.length > 0 && (
+      {installments.length > 0 && (() => {
+        const currentIdx = installments.findIndex((inst) => inst.isCurrent);
+        const visibleInstallments = (() => {
+          // Show current + next 2 forecasted by default
+          const current = installments.filter(i => i.isCurrent || i.state === 'paid' || i.state === 'covered');
+          const upcoming = installments.filter(i => !i.isCurrent && i.state !== 'paid' && i.state !== 'covered');
+          if (state.timelineExpanded) return installments;
+          return [...current, ...upcoming.slice(0, 2)];
+        })();
+        const hiddenCount = installments.length - visibleInstallments.length;
+        
+        return (
         <section className="rounded-2xl border border-border bg-card p-5 shadow-sm space-y-5">
           <div className="flex items-center gap-2">
-            <CalendarDays className="w-4 h-4 text-accent" />
-            <h2 className="text-sm font-semibold text-foreground">Installment Timeline</h2>
+            <CalendarDays className="w-4 h-4" style={{ color: '#F07B1D' }} />
+            <h2 style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: '15px', color: '#1A1A1A' }}>Installment Timeline</h2>
           </div>
 
           <div className="relative border-l border-border pl-6 ml-2 space-y-8">
-            {installments.map((inst) => {
+            {visibleInstallments.map((inst) => {
               // Determine status indicator node
               let nodeContent = (
                 <div className="absolute left-[-5px] top-1 w-2.5 h-2.5 rounded-full bg-muted-foreground/30 border border-card" />
@@ -768,7 +829,7 @@ export function TenantFinancialsPage() {
               
               if (inst.state === 'paid' || inst.state === 'covered') {
                 nodeContent = (
-                  <div className="absolute left-[-11px] top-0 w-[22px] h-[22px] rounded-full bg-emerald-500 text-white flex items-center justify-center border-4 border-card shadow-sm shadow-emerald-500/10">
+                  <div className="absolute left-[-11px] top-0 w-[22px] h-[22px] rounded-full text-white flex items-center justify-center border-4 border-card shadow-sm" style={{ backgroundColor: '#2E7D32' }}>
                     <Check className="w-3 h-3 stroke-[3]" />
                   </div>
                 );
@@ -783,7 +844,7 @@ export function TenantFinancialsPage() {
                 );
               } else if (inst.state === 'overdue') {
                 nodeContent = (
-                  <div className="absolute left-[-11px] top-0 w-[22px] h-[22px] rounded-full bg-red-500 text-white flex items-center justify-center border-4 border-card shadow-sm shadow-red-500/10">
+                  <div className="absolute left-[-11px] top-0 w-[22px] h-[22px] rounded-full text-white flex items-center justify-center border-4 border-card shadow-sm" style={{ backgroundColor: '#C62828' }}>
                     <AlertTriangle className="w-3 h-3 stroke-[2.5]" />
                   </div>
                 );
@@ -795,29 +856,33 @@ export function TenantFinancialsPage() {
                   
                   <div className={`p-4 rounded-xl border transition-all duration-200 ${
                     inst.isCurrent 
-                      ? 'border-accent bg-accent/5 ring-1 ring-accent shadow-sm' 
+                      ? 'bg-accent/5 ring-1 ring-accent shadow-sm' 
                       : inst.state === 'paid' || inst.state === 'covered'
-                      ? 'border-emerald-100 bg-emerald-50/20'
-                      : 'border-border bg-card'
-                  }`}>
+                      ? 'bg-emerald-50/20'
+                      : 'bg-card'
+                  }`} style={{
+                    borderColor: inst.isCurrent ? '#F07B1D' : inst.state === 'paid' || inst.state === 'covered' ? '#E8E4DC' : '#E8E4DC',
+                    borderWidth: inst.isCurrent ? '1.5px' : '1px',
+                    ...(inst.isCurrent && inst.state === 'paid' ? { borderColor: '#2E7D32', borderWidth: '1.5px' } : {})
+                  }}>
                     <div className="flex justify-between items-start gap-2">
                       <div>
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <h4 className="text-sm font-bold text-foreground">{inst.label}</h4>
                           {inst.isCurrent && (
-                            <span className="px-2 py-0.5 rounded-full bg-accent/10 text-accent text-[9px] font-extrabold uppercase tracking-wide">
+                            <span style={{ backgroundColor: '#2E7D32', color: '#FFFFFF', borderRadius: '20px', padding: '2px 8px', fontSize: '9px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                               Current Cycle
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-muted-foreground mt-1">
+                        <p className="text-xs mt-1" style={{ color: '#6B6B6B', fontStyle: inst.status === 'PROJECTED' ? 'italic' : 'normal' }}>
                           {inst.status === 'PROJECTED' ? 'Forecasted' : inst.status === 'PAID' ? 'Fully Paid' : `Due ${fmtDate(inst.due_date)}`}
                         </p>
                       </div>
                       <div className="text-right">
                         <span className="text-sm font-extrabold text-foreground">{fmt(inst.total_amount)}</span>
                         {inst.covered_by_advance > 0 && (
-                          <span className="text-[10px] text-emerald-600 block font-semibold mt-0.5">
+                          <span className="text-[10px] block font-semibold mt-0.5" style={{ color: '#2E7D32' }}>
                             {fmt(inst.covered_by_advance)} credit applied
                           </span>
                         )}
@@ -838,7 +903,7 @@ export function TenantFinancialsPage() {
                           </div>
                         )}
                         {inst.late_fee_amount > 0 && (
-                          <div className="flex justify-between text-red-500 font-semibold">
+                          <div className="flex justify-between font-semibold" style={{ color: '#C62828' }}>
                             <span>Late Fees:</span>
                             <span>{fmt(inst.late_fee_amount)}</span>
                           </div>
@@ -846,13 +911,14 @@ export function TenantFinancialsPage() {
                       </div>
                     )}
 
-                    {/* Prepayment Action Button (Clean prepay UX without checkboxes) */}
+                    {/* Prepayment Action Button */}
                     {inst.status === 'PROJECTED' && inst.remaining > 0 && (
                       <div className="mt-3 pt-2 border-t border-border flex justify-end">
                         <button
                           type="button"
                           onClick={() => handlePrepay(inst)}
-                          className="px-3.5 py-1.5 rounded-lg border border-accent/30 text-accent hover:bg-accent hover:text-accent-foreground font-semibold text-xs transition-colors cursor-pointer"
+                          style={{ border: '1.5px solid #F07B1D', color: '#F07B1D', borderRadius: '8px', fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: '13px', padding: '8px 16px' }}
+                          className="hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer"
                         >
                           Prepay Installment
                         </button>
@@ -863,8 +929,19 @@ export function TenantFinancialsPage() {
               );
             })}
           </div>
+          {hiddenCount > 0 && (
+            <button
+              type="button"
+              onClick={() => dispatch({ type: 'SET_TIMELINE_EXPANDED', payload: !state.timelineExpanded })}
+              style={{ color: '#6B6B6B', fontFamily: 'Poppins, sans-serif', fontSize: '13px', fontWeight: 500 }}
+              className="w-full text-center py-2 cursor-pointer hover:underline"
+            >
+              {state.timelineExpanded ? 'Show less' : `${hiddenCount} more forecasted month${hiddenCount === 1 ? '' : 's'} ›`}
+            </button>
+          )}
         </section>
-      )}
+        );
+      })()}
 
       {/* SECTION 6 – BILLING CONTRACT CHANGE REQUEST / STATUS */}
       <section className="rounded-2xl border border-border bg-card p-5 shadow-sm space-y-4">
@@ -873,8 +950,8 @@ export function TenantFinancialsPage() {
             <CalendarDays className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-sm font-semibold text-foreground font-bold">Contract Change Request</h2>
-            <p className="text-xs text-muted-foreground">Request plan upgrade or downgrade</p>
+            <h2 style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: '15px', color: '#1A1A1A' }}>Change Billing Cycle</h2>
+            <p className="text-xs" style={{ color: '#6B6B6B' }}>Prefer quarterly or annual payments? Request here.</p>
           </div>
         </div>
 
@@ -902,22 +979,28 @@ export function TenantFinancialsPage() {
         ) : (
           allowedFrequencies.length > 0 && (
             <div className="grid grid-cols-1 gap-3">
-              <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-3">
-                <select
-                  value={state.requestedFrequency}
-                  onChange={(e) => dispatch({ type: 'SET_REQUESTED_FREQUENCY', payload: e.target.value })}
-                  className="px-3 py-3 rounded-xl border border-border bg-background text-sm"
-                >
-                  {allowedFrequencies.map((frequency: string) => (
-                    <option key={frequency} value={frequency}>{frequency.replaceAll('_', ' ')}</option>
-                  ))}
-                </select>
-                <input
-                  value={state.requestReason}
-                  onChange={(e) => dispatch({ type: 'SET_REQUEST_REASON', payload: e.target.value })}
-                  placeholder="Reason, e.g. parent salary cycle"
-                  className="px-3 py-3 rounded-xl border border-border bg-background text-sm"
-                />
+              <div className="grid grid-cols-1 gap-3">
+                <div>
+                  <label style={{ fontSize: '12px', color: '#6B6B6B', fontFamily: 'Poppins, sans-serif', fontWeight: 500, display: 'block', marginBottom: '4px' }}>New Billing Preference</label>
+                  <select
+                    value={state.requestedFrequency}
+                    onChange={(e) => dispatch({ type: 'SET_REQUESTED_FREQUENCY', payload: e.target.value })}
+                    className="w-full px-3 py-3 rounded-xl border border-border bg-background text-sm"
+                  >
+                    {allowedFrequencies.map((frequency: string) => (
+                      <option key={frequency} value={frequency}>{frequency.replaceAll('_', ' ')}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '12px', color: '#6B6B6B', fontFamily: 'Poppins, sans-serif', fontWeight: 500, display: 'block', marginBottom: '4px' }}>Reason (optional)</label>
+                  <input
+                    value={state.requestReason}
+                    onChange={(e) => dispatch({ type: 'SET_REQUEST_REASON', payload: e.target.value })}
+                    placeholder="e.g. parent salary cycle"
+                    className="w-full px-3 py-3 rounded-xl border border-border bg-background text-sm"
+                  />
+                </div>
               </div>
               <button
                 type="button"
@@ -926,7 +1009,7 @@ export function TenantFinancialsPage() {
                 className="flex items-center justify-center gap-2 w-full py-3.5 rounded-xl bg-accent text-accent-foreground font-bold text-sm disabled:opacity-50 cursor-pointer"
               >
                 {frequencyMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                Request Change
+                Submit Request
               </button>
             </div>
           )
@@ -934,74 +1017,75 @@ export function TenantFinancialsPage() {
       </section>
 
       {/* SECTION 7 – SECURITY DEPOSIT (TRUST CARD) */}
-      <section className="rounded-2xl border border-border bg-card p-5 shadow-sm space-y-4">
+      <span style={{ display: 'block', fontSize: '12px', fontFamily: 'Poppins, sans-serif', fontWeight: 600, color: '#6B6B6B', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '24px', marginBottom: '8px' }}>DEPOSIT & CREDITS</span>
+      <section className="rounded-2xl border bg-card p-5 shadow-sm space-y-4" style={{ borderColor: '#E8E4DC' }}>
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#F0FBF0', color: '#2E7D32' }}>
               <Shield className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-foreground">Security Deposit</h2>
-              <p className="text-xs text-muted-foreground font-medium">Secured deposit for move-in agreement</p>
+              <h2 style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: '15px', color: '#1A1A1A' }}>Security Deposit</h2>
+              <p className="text-xs font-medium" style={{ color: '#6B6B6B' }}>Secured deposit for move-in agreement</p>
             </div>
           </div>
-          <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold">
+          <span style={{ backgroundColor: '#F0FBF0', color: '#2E7D32', border: '1px solid #2E7D32', borderRadius: '20px', padding: '4px 12px', fontSize: '11px', fontWeight: 700 }}>
             FULLY SECURED
           </span>
         </div>
 
         <div className="grid grid-cols-2 gap-4 pt-2 text-sm">
           <div>
-            <span className="text-xs text-muted-foreground block font-medium">Required</span>
+            <span className="text-xs block font-medium" style={{ color: '#6B6B6B' }}>Required</span>
             <span className="font-extrabold text-foreground">{fmt(Number((advance as any)?.security_deposit ?? 0))}</span>
           </div>
           <div className="text-right">
-            <span className="text-xs text-muted-foreground block font-medium">Held by Hostel</span>
-            <span className="font-extrabold text-emerald-600">{fmt(Number((advance as any)?.security_deposit_paid ?? 0))}</span>
+            <span className="text-xs block font-medium" style={{ color: '#6B6B6B' }}>Held by Hostel</span>
+            <span className="font-extrabold" style={{ color: '#2E7D32' }}>{fmt(Number((advance as any)?.security_deposit_paid ?? 0))}</span>
           </div>
         </div>
 
         {/* Deposit Progress bar */}
         {Number((advance as any)?.security_deposit ?? 0) > 0 && (
-          <div className="w-full bg-muted/60 h-2.5 rounded-full overflow-hidden mt-2">
+          <div className="w-full overflow-hidden mt-2" style={{ backgroundColor: '#E8E4DC', height: '8px', borderRadius: '4px' }}>
             <div 
-              className="bg-emerald-500 h-full rounded-full transition-all duration-300"
-              style={{ width: `${Math.min(100, (Number((advance as any)?.security_deposit_paid ?? 0) / Number((advance as any)?.security_deposit ?? 1)) * 100)}%` }}
+              style={{ backgroundColor: '#2E7D32', height: '100%', borderRadius: '4px', transition: 'width 0.3s', width: `${Math.min(100, (Number((advance as any)?.security_deposit_paid ?? 0) / Number((advance as any)?.security_deposit ?? 1)) * 100)}%` }}
             ></div>
           </div>
         )}
 
-        <div className="rounded-xl bg-emerald-50/50 border border-emerald-100/80 p-3 flex items-center gap-2 text-emerald-800 text-xs font-semibold">
-          <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-600" />
+        <div className="rounded-xl p-3 flex items-center gap-2 text-xs font-semibold" style={{ backgroundColor: '#F0FBF0', color: '#2E7D32' }}>
+          <ShieldCheck className="w-4 h-4 shrink-0" style={{ color: '#2E7D32' }} />
           <span>Refundable after move-out settlement</span>
         </div>
       </section>
 
       {/* SECTION 8 – FUTURE RENT CREDIT CARD */}
-      <section className="rounded-2xl border border-border bg-card p-5 shadow-sm space-y-4">
+      <section className="rounded-2xl border bg-card p-5 shadow-sm space-y-4" style={{ borderColor: '#E8E4DC' }}>
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-600 flex items-center justify-center">
-            <Sparkles className="w-5 h-5" />
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#FFF3E6', color: '#F07B1D' }}>
+            <Wallet className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-sm font-semibold text-foreground">Future Rent Credit</h2>
-            <p className="text-xs text-muted-foreground font-medium">Prepaid balances applied automatically</p>
+            <h2 style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: '15px', color: '#1A1A1A' }}>Future Rent Credit</h2>
+            <p className="text-xs font-medium" style={{ color: '#6B6B6B' }}>Prepaid balances applied automatically</p>
           </div>
         </div>
 
         <div className="pt-1">
-          <span className="text-xs text-muted-foreground font-medium block">Available Credit</span>
-          <span className="text-3xl font-black text-purple-600 tracking-tight block mt-0.5">
+          <span className="text-xs font-medium block" style={{ color: '#6B6B6B' }}>Available Credit</span>
+          <span className="text-3xl font-black tracking-tight block mt-0.5" style={{ color: Number((advance as any)?.available_rent_advance ?? 0) > 0 ? '#F07B1D' : '#1B2D5B' }}>
             {fmt(Number((advance as any)?.available_rent_advance ?? 0))}
           </span>
         </div>
 
-        <p className="text-xs text-muted-foreground font-medium leading-relaxed bg-purple-50/40 p-3 rounded-xl border border-purple-100/50">
+        <p className="text-xs font-medium leading-relaxed p-3 rounded-xl" style={{ backgroundColor: '#FFFDF5', color: '#6B6B6B', border: '1px solid #E8E4DC' }}>
           Automatically applied to future rent installments.
         </p>
       </section>
 
       {/* SECTION 9 – PAYMENT HISTORY (COLLAPSIBLE) */}
+      <span style={{ display: 'block', fontSize: '12px', fontFamily: 'Poppins, sans-serif', fontWeight: 600, color: '#6B6B6B', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '24px', marginBottom: '8px' }}>HISTORY & SETTINGS</span>
       <section className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
         <button
           type="button"
@@ -1009,12 +1093,12 @@ export function TenantFinancialsPage() {
           className="flex items-center justify-between w-full p-5 hover:bg-muted/5 transition-colors text-left"
         >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-accent/10 text-accent flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center" style={{ color: '#F07B1D' }}>
               <CalendarDays className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-foreground">Payment History</h2>
-              <p className="text-xs text-muted-foreground">View and download invoices</p>
+              <h2 style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, fontSize: '14px', color: '#1A1A1A' }}>Payment History ({allPayments.length})</h2>
+              <p className="text-xs" style={{ color: '#6B6B6B' }}>View and download invoices</p>
             </div>
           </div>
           {state.historyExpanded ? (
@@ -1037,9 +1121,11 @@ export function TenantFinancialsPage() {
                 className="flex items-center justify-between p-4 bg-card text-sm cursor-pointer hover:bg-muted/10 transition-colors"
               >
                 <div>
-                  <p className="font-extrabold text-foreground">{fmt(Number(p.amount ?? 0))}</p>
-                  <p className="text-xs font-bold text-muted-foreground mt-0.5">{p.label}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
+                  <p style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: '15px', color: '#1A1A1A' }}>{fmt(Number(p.amount ?? 0))}</p>
+                  <p className="flex items-center gap-1 mt-0.5" style={{ fontSize: '13px', color: '#2E7D32', fontWeight: 600 }}>
+                    <span style={{ fontSize: '8px' }}>●</span> {p.label}
+                  </p>
+                  <p className="mt-0.5" style={{ fontSize: '12px', color: '#6B6B6B' }}>
                     {p.date ? fmtDate(p.date) : '—'} · {p.method}
                   </p>
                 </div>
@@ -1050,7 +1136,8 @@ export function TenantFinancialsPage() {
                       e.stopPropagation();
                       handleReceipt(String(p.receipt_payment_id));
                     }}
-                    className="p-2 rounded-lg text-accent hover:bg-accent/10 transition-colors cursor-pointer"
+                    className="p-2 rounded-lg hover:bg-accent/10 transition-colors cursor-pointer"
+                    style={{ color: '#F07B1D' }}
                     aria-label="Download receipt"
                   >
                     <Download className="w-4 h-4" />
@@ -1062,9 +1149,10 @@ export function TenantFinancialsPage() {
               <button
                 type="button"
                 onClick={() => dispatch({ type: 'SET_HISTORY_EXPANDED', payload: true })}
-                className="w-full py-3 text-center text-xs font-semibold text-accent hover:bg-muted/5 transition-colors border-t border-border cursor-pointer flex items-center justify-center gap-1"
+                className="w-full py-3 text-center font-semibold hover:bg-muted/5 transition-colors border-t border-border cursor-pointer flex items-center justify-center gap-1"
+                style={{ color: '#F07B1D', fontSize: '13px', fontFamily: 'Poppins, sans-serif' }}
               >
-                <span>View All ({allPayments.length})</span>
+                <span>View all {allPayments.length} payments</span>
                 <ArrowRight className="w-3 h-3" />
               </button>
             )}
