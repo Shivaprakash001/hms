@@ -1860,7 +1860,7 @@ export class PaymentService {
     // ──────────────────────────────────────────────────────────────
     // 💎 ADVANCE PATH: Gateway-driven future rent credit, no obligation linkage
     // ──────────────────────────────────────────────────────────────
-    if ((attempt as any).payment_domain === PAYMENT_DOMAIN.RENT_COLLECTION && (attempt as any).flow_type === PAYMENT_FLOW.ADVANCE) {
+    if ((attempt as any).payment_domain === PAYMENT_DOMAIN.RENT_COLLECTION && ((attempt as any).flow_type === PAYMENT_FLOW.FUTURE_RENT_CREDIT || (attempt as any).flow_type === "ADVANCE")) {
       if (!attempt.tenant_id) {
         throw new Error("INTERNAL: ADVANCE payment attempt is missing tenant_id");
       }
@@ -1953,7 +1953,7 @@ export class PaymentService {
     // ──────────────────────────────────────────────────────────────
     // 🧾 DEPOSIT PATH: Gateway-driven onboarding security deposit
     // ──────────────────────────────────────────────────────────────
-    if ((attempt as any).payment_domain === PAYMENT_DOMAIN.RENT_COLLECTION && (attempt as any).flow_type === PAYMENT_FLOW.DEPOSIT) {
+    if ((attempt as any).payment_domain === PAYMENT_DOMAIN.RENT_COLLECTION && ((attempt as any).flow_type === PAYMENT_FLOW.SECURITY_DEPOSIT || (attempt as any).flow_type === "DEPOSIT")) {
       if (!attempt.tenant_id) {
         throw new Error("INTERNAL: DEPOSIT payment attempt is missing tenant_id");
       }
@@ -1967,7 +1967,7 @@ export class PaymentService {
           referenceId: attempt.id,
           referenceType: "PAYMENT_ATTEMPT",
           createdBy: attempt.owner_id,
-          reason: "DEPOSIT",
+          reason: "SECURITY_DEPOSIT_COLLECTED",
           notes: "Gateway security deposit payment credited",
         });
         return this.updateAttemptStatus(tx, {

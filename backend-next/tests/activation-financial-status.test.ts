@@ -7,7 +7,7 @@ vi.mock("@/lib/db", () => {
     tenants: {
       findUnique: vi.fn(),
     },
-    tenant_advance_ledger: {
+    tenant_financial_ledger: {
       aggregate: vi.fn().mockImplementation((args) => {
         if (args?.where?.reference_type === "PAYMENT") {
           return Promise.resolve({ _sum: { amount: 0 } });
@@ -36,19 +36,19 @@ describe("ActivationFinancialStatusService", () => {
   it("uses tenant.advance_deposit and CREDIT/DEPOSIT ledger entries for deposit readiness", async () => {
     vi.mocked(prisma.tenants.findUnique).mockResolvedValue({
       id: "tenant-1",
-      advance_deposit: 10000,
+      security_deposit: 10000,
       maintenance_charge: 1500,
       maintenance_type: "ONE_TIME",
     } as any);
-    vi.mocked(prisma.tenant_advance_ledger.aggregate).mockResolvedValue({ _sum: { amount: 7000 } } as any);
+    vi.mocked(prisma.tenant_financial_ledger.aggregate).mockResolvedValue({ _sum: { amount: 7000 } } as any);
     vi.mocked(prisma.rent_obligations.findMany).mockResolvedValue([
       { payments: [{ amount_paid: 1500 }] },
     ] as any);
 
     const status = await service.getActivationFinancialStatus("tenant-1");
 
-    expect(prisma.tenant_advance_ledger.aggregate).toHaveBeenCalledWith({
-      where: { tenant_id: "tenant-1", type: "CREDIT", reason: "DEPOSIT" },
+    expect(prisma.tenant_financial_ledger.aggregate).toHaveBeenCalledWith({
+      where: { tenant_id: "tenant-1", type: "CREDIT", reason: "SECURITY_DEPOSIT_COLLECTED" },
       _sum: { amount: true },
     });
     expect(status).toEqual({
@@ -67,11 +67,11 @@ describe("ActivationFinancialStatusService", () => {
   it("does not count TOPUP/future rent credit toward deposit readiness", async () => {
     vi.mocked(prisma.tenants.findUnique).mockResolvedValue({
       id: "tenant-1",
-      advance_deposit: 10000,
+      security_deposit: 10000,
       maintenance_charge: 0,
       maintenance_type: "NONE",
     } as any);
-    vi.mocked(prisma.tenant_advance_ledger.aggregate).mockResolvedValue({ _sum: { amount: 0 } } as any);
+    vi.mocked(prisma.tenant_financial_ledger.aggregate).mockResolvedValue({ _sum: { amount: 0 } } as any);
     vi.mocked(prisma.rent_obligations.findMany).mockResolvedValue([] as any);
 
     const status = await service.getActivationFinancialStatus("tenant-1");
@@ -84,11 +84,11 @@ describe("ActivationFinancialStatusService", () => {
   it("counts maintenance payments only from existing non-superseded MAINTENANCE obligations", async () => {
     vi.mocked(prisma.tenants.findUnique).mockResolvedValue({
       id: "tenant-1",
-      advance_deposit: 0,
+      security_deposit: 0,
       maintenance_charge: 2500,
       maintenance_type: "MONTHLY",
     } as any);
-    vi.mocked(prisma.tenant_advance_ledger.aggregate).mockResolvedValue({ _sum: { amount: 0 } } as any);
+    vi.mocked(prisma.tenant_financial_ledger.aggregate).mockResolvedValue({ _sum: { amount: 0 } } as any);
     vi.mocked(prisma.rent_obligations.findMany).mockResolvedValue([
       { payments: [{ amount_paid: 1000 }, { amount_paid: 500 }] },
     ] as any);
@@ -108,11 +108,11 @@ describe("ActivationFinancialStatusService", () => {
   it("exposes modern invitation maintenance gap safely when no maintenance obligation exists", async () => {
     vi.mocked(prisma.tenants.findUnique).mockResolvedValue({
       id: "tenant-1",
-      advance_deposit: 0,
+      security_deposit: 0,
       maintenance_charge: 1200,
       maintenance_type: "ONE_TIME",
     } as any);
-    vi.mocked(prisma.tenant_advance_ledger.aggregate).mockResolvedValue({ _sum: { amount: 0 } } as any);
+    vi.mocked(prisma.tenant_financial_ledger.aggregate).mockResolvedValue({ _sum: { amount: 0 } } as any);
     vi.mocked(prisma.rent_obligations.findMany).mockResolvedValue([] as any);
 
     const status = await service.getActivationFinancialStatus("tenant-1");
@@ -126,11 +126,11 @@ describe("ActivationFinancialStatusService", () => {
   it("returns ready when deposit and maintenance are both cleared", async () => {
     vi.mocked(prisma.tenants.findUnique).mockResolvedValue({
       id: "tenant-1",
-      advance_deposit: 10000,
+      security_deposit: 10000,
       maintenance_charge: 1500,
       maintenance_type: "ONE_TIME",
     } as any);
-    vi.mocked(prisma.tenant_advance_ledger.aggregate).mockResolvedValue({ _sum: { amount: 12000 } } as any);
+    vi.mocked(prisma.tenant_financial_ledger.aggregate).mockResolvedValue({ _sum: { amount: 12000 } } as any);
     vi.mocked(prisma.rent_obligations.findMany).mockResolvedValue([
       { payments: [{ amount_paid: 1500 }] },
     ] as any);

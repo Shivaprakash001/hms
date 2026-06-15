@@ -42,7 +42,7 @@ export class ActivationFinancialStatusService {
         where: {
           tenant_id: id,
           type: "CREDIT",
-          reason: { in: ["DEPOSIT", "SECURITY_DEPOSIT_COLLECTED"] } as any,
+          reason: "SECURITY_DEPOSIT_COLLECTED",
         },
         _sum: { amount: true },
       }),
@@ -73,7 +73,7 @@ export class ActivationFinancialStatusService {
         where: {
           tenant_id: id,
           type: "CREDIT",
-          reason: { in: ["DEPOSIT", "SECURITY_DEPOSIT_COLLECTED"] } as any,
+          reason: "SECURITY_DEPOSIT_COLLECTED",
           reference_type: "PAYMENT",
         },
         _sum: {

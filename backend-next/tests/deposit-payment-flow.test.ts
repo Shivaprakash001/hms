@@ -7,6 +7,10 @@ const mocks = vi.hoisted(() => {
     paymentAttempt: {
       update: vi.fn(),
     },
+    payment_attempt_obligations: {
+      findMany: vi.fn(async () => []),
+      createMany: vi.fn(async () => ({ count: 0 })),
+    },
   };
 
   return {
@@ -15,6 +19,9 @@ const mocks = vi.hoisted(() => {
       paymentAttempt: {
         findUnique: vi.fn(),
         updateMany: vi.fn(),
+      },
+      payment_attempt_obligations: {
+        findMany: vi.fn(async () => []),
       },
       $transaction: vi.fn(async (callback: any) => callback(tx)),
     },

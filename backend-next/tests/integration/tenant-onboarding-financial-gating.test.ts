@@ -100,7 +100,7 @@ describe('Tenant Onboarding Financial Gating Integration', () => {
       where: { tenant_id: tenantId },
     });
     expect(obligations.length).toBe(2);
-    const depositObligation = obligations.find((o: any) => o.obligation_type === 'ADVANCE');
+    const depositObligation = obligations.find((o: any) => o.obligation_type === 'SECURITY_DEPOSIT');
     const maintenanceObligation = obligations.find((o: any) => o.obligation_type === 'MAINTENANCE');
     expect(depositObligation).toBeTruthy();
     expect(maintenanceObligation).toBeTruthy();
