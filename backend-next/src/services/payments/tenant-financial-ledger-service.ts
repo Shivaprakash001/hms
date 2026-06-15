@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { getLogger } from "@/lib/logger";
-import { getTenantOperationalContext } from "@/lib/hostel-context";
+
 import { randomUUID } from "crypto";
 
 const logger = getLogger("tenant.financial-ledger");
@@ -114,7 +114,7 @@ export class TenantFinancialLedgerService {
 
     if (amount <= 0) throw new Error("BAD_REQUEST: Amount must be positive");
     await this._assertOwnership(tenantId, ownerId);
-    await this._assertFinancialLedgerEnabled(ownerId, tenantId);
+
 
     return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const tenant = await tx.tenants.findUniqueOrThrow({
@@ -150,7 +150,7 @@ export class TenantFinancialLedgerService {
     }).then(async (res) => {
       try {
         const { eventSystem } = await import("@/lib/events");
-        await eventSystem.trigger("advance_credited", {
+        await eventSystem.trigger("financial_ledger_credited", {
           tenant_id: tenantId,
           owner_id: ownerId,
           hostel_id: res.hostelId,
@@ -264,7 +264,7 @@ export class TenantFinancialLedgerService {
 
     if (amount <= 0) throw new Error("BAD_REQUEST: Amount must be positive");
     await this._assertOwnership(tenantId, ownerId);
-    await this._assertFinancialLedgerEnabled(ownerId, tenantId);
+
 
     // For REFUND: the entry is created with refund_status = PENDING.
     // Balance decreases immediately (intent recorded), but the physical money may not have
@@ -354,7 +354,7 @@ export class TenantFinancialLedgerService {
 
     if (amount <= 0) throw new Error("BAD_REQUEST: Amount must be positive");
     await this._assertOwnership(tenantId, ownerId);
-    await this._assertFinancialLedgerEnabled(ownerId, tenantId);
+
 
     return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       return this.adjustAgainstObligationInTx(tx, params);
@@ -544,19 +544,7 @@ export class TenantFinancialLedgerService {
     if (tenant.owner_id !== ownerId) throw new Error("FORBIDDEN: Tenant does not belong to this owner");
   }
 
-  private async _assertFinancialLedgerEnabled(ownerId: string, tenantId?: string) {
-    if (!tenantId) {
-      throw new Error("HOSTEL_CONTEXT_REQUIRED: tenantId is required to resolve advance preferences");
-    }
-    const tenant = await prisma.tenants.findUnique({
-      where: { id: tenantId },
-      select: { hostel_id: true },
-    });
-    const { prefs } = await getTenantOperationalContext(tenantId, ownerId, tenant?.hostel_id);
-    if (!prefs.advance_enabled) {
-      throw new Error("BAD_REQUEST: Advance/deposit feature is not enabled for this hostel. Enable it in Settings → Preferences.");
-    }
-  }
+
 
   /**
    * Compute the current balance from all ledger entries.

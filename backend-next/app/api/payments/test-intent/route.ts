@@ -10,6 +10,8 @@ import { paymentService } from "@/src/services/payments/payment-service";
 import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
 import { apiError } from "@/lib/utils/api-utils";
 
+import { getActivePaymentProvider } from "@/src/services/payments/payment-env";
+
 function startOfTodayUtc() {
   const now = new Date();
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -32,8 +34,16 @@ export async function POST(req: Request) {
     if (!Number.isFinite(amount) || amount < 1 || amount > 100) {
       return apiError("Test payment amount must be between ₹1 and ₹100", "VALIDATION_ERROR", 400);
     }
-    if (!process.env.PHONEPE_CLIENT_ID || !process.env.PHONEPE_CLIENT_SECRET) {
-      return apiError("Sri Adithya Hostels PhonePe credentials are not configured", "CONFIG_ERROR", 422);
+
+    const activeProvider = getActivePaymentProvider();
+    if (activeProvider === "RAZORPAY") {
+      if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+        return apiError("Sri Adithya Hostels Razorpay credentials are not configured", "CONFIG_ERROR", 422);
+      }
+    } else {
+      if (!process.env.PHONEPE_CLIENT_ID || !process.env.PHONEPE_CLIENT_SECRET) {
+        return apiError("Sri Adithya Hostels PhonePe credentials are not configured", "CONFIG_ERROR", 422);
+      }
     }
 
     const ownerId = user.id;

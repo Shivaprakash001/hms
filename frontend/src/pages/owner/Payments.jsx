@@ -29,6 +29,8 @@ const statusStyles = {
   partial: 'bg-sky-50 text-sky-700 border-sky-100',
   overdue: 'bg-rose-50 text-rose-700 border-rose-100',
   waived: 'bg-slate-100 text-slate-700 border-slate-200',
+  pending_verification: 'bg-violet-50 text-violet-700 border-violet-100 animate-pulse',
+  processing: 'bg-blue-50 text-blue-700 border-blue-100 animate-pulse',
 };
 
 function normalizeRentPreview(previewData) {
@@ -127,7 +129,12 @@ function MetricCard({ icon: Icon, title, amount, explanation, trend, tone = 'sla
 }
 
 function StatusPill({ status, label }) {
-  return <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${statusStyles[status] || statusStyles.pending}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{label || status}</span>;
+  const prettyLabels = {
+    pending_verification: 'Verifying',
+    processing: 'Processing',
+  };
+  const displayLabel = label || prettyLabels[status] || status;
+  return <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${statusStyles[status] || statusStyles.pending}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{displayLabel}</span>;
 }
 
 function AmountLine({ label, amount, helper, strong = false }) {

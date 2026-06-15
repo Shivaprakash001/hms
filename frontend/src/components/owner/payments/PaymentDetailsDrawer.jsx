@@ -139,8 +139,31 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
         }
     };
 
+    const {
+        paymentAttemptProvider,
+        paymentAttemptGatewayTxnId,
+        paymentAttemptStatus,
+        paymentAttemptSettledAt,
+        paymentAttemptConfirmedAt,
+        paymentAttemptCreatedAt
+    } = payment;
+
+    const getStatusInfo = (status) => {
+        const s = String(status || '').toLowerCase();
+        if (s === 'paid') return { label: 'PAID', textClass: 'text-emerald-700', badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30', dotClass: 'bg-emerald-400' };
+        if (s === 'pending_verification') return { label: 'VERIFYING', textClass: 'text-violet-700 animate-pulse', badgeClass: 'bg-violet-500/20 text-violet-300 border-violet-500/30 animate-pulse', dotClass: 'bg-violet-400' };
+        if (s === 'processing') return { label: 'PROCESSING', textClass: 'text-blue-700 animate-pulse', badgeClass: 'bg-blue-500/20 text-blue-300 border-blue-500/30 animate-pulse', dotClass: 'bg-blue-400' };
+        if (s === 'overdue') return { label: 'OVERDUE', textClass: 'text-rose-700', badgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/30', dotClass: 'bg-rose-400' };
+        if (s === 'partial') return { label: 'PARTIAL', textClass: 'text-sky-700', badgeClass: 'bg-sky-500/20 text-sky-300 border-sky-500/30', dotClass: 'bg-sky-400' };
+        if (s === 'waived') return { label: 'WAIVED', textClass: 'text-slate-700', badgeClass: 'bg-slate-500/20 text-slate-300 border-slate-500/30', dotClass: 'bg-slate-400' };
+        return { label: 'PENDING', textClass: 'text-amber-700', badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/30', dotClass: 'bg-amber-400' };
+    };
+
+    const statusInfo = getStatusInfo(payment.status);
+
     const paymentMethodLabel = (() => {
-        const base = labelMethod(payment.method);
+        const providerName = paymentAttemptProvider ? (paymentAttemptProvider.charAt(0) + paymentAttemptProvider.slice(1).toLowerCase()) : null;
+        const base = payment.method ? labelMethod(payment.method) : (providerName || 'Online');
         const app = labelPreferredApp(payment.preferred_app);
         return app ? `${base} (${app})` : base;
     })();
@@ -149,6 +172,9 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
 
     const createdDate = payment.createdAt || payment.date;
     const paidDate = payment.paymentDate || payment.date;
+    const isCompleted = payment.status === 'paid';
+    const isVerifying = payment.status === 'pending_verification' || payment.status === 'processing';
+
     const timeline = [
         {
             label: 'Monthly Stay Created',
@@ -156,14 +182,23 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
             complete: Boolean(createdDate)
         },
         {
-            label: payment.method === 'UPI' ? 'PhonePe Checkout' : 'Collection Captured',
-            value: payment.status === 'paid' ? formatDate(paidDate, preferences, 'Not available') : 'Awaiting payment',
-            complete: payment.status === 'paid'
+            label: payment.method === 'UPI' || paymentAttemptProvider ? `${paymentAttemptProvider || 'Online'} Checkout` : 'Collection Captured',
+            value: isCompleted
+                ? formatDate(paidDate, preferences, 'Not available')
+                : isVerifying
+                ? 'Initiated, awaiting confirmation'
+                : 'Awaiting payment',
+            complete: isCompleted || isVerifying
         },
         {
             label: 'Payment Verified',
-            value: payment.status === 'paid' ? 'Marked paid' : 'Pending verification',
-            complete: payment.status === 'paid'
+            value: isCompleted
+                ? 'Marked paid'
+                : isVerifying
+                ? 'Verification in progress'
+                : 'Pending verification',
+            complete: isCompleted,
+            warning: isVerifying
         },
         {
             label: 'Receipt Generated',
@@ -224,12 +259,11 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                     <div className="mt-2 text-4xl font-bold tracking-tight">{formatCurrency(dueAmount, preferences)}</div>
                                     <p className="mt-2 text-sm text-slate-400">Monthly Stay for {formatMonthYear(payment.month || payment.cycle || payment.date, preferences, 'Not available')}</p>
                                     <div className="mt-5 flex flex-wrap items-center gap-2">
-                                        <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold ${payment.status === 'paid' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
-                                            }`}>
-                                            <span className={`h-2 w-2 rounded-full ${payment.status === 'paid' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                                            {(typeof payment.status === 'string' && payment.status.length > 0 ? payment.status.toUpperCase() : 'PENDING')}
+                                        <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold ${statusInfo.badgeClass}`}>
+                                            <span className={`h-2 w-2 rounded-full ${statusInfo.dotClass}`} />
+                                            {statusInfo.label}
                                         </span>
-                                        {payment.method ? (
+                                        {payment.method || paymentAttemptProvider ? (
                                             <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-slate-200">
                                                 {paymentMethodLabel}
                                             </span>
@@ -239,11 +273,32 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
 
                                 <SectionCard title="Collection Summary">
                                     <DetailRow label="Amount To Collect" value={formatCurrency(dueAmount, preferences)} icon={DollarSign} />
-                                    <DetailRow label="Status" value={payment.status?.toUpperCase() || 'PENDING'} icon={CheckCircle} valueClassName={payment.status === 'paid' ? 'text-emerald-700' : 'text-amber-700'} />
+                                    <DetailRow label="Status" value={statusInfo.label} icon={CheckCircle} valueClassName={statusInfo.textClass} />
                                     <DetailRow label="Payment Method" value={paymentMethodLabel} icon={CreditCard} />
                                     <DetailRow label="Transaction ID" value={payment.transactionId || payment.reference_number || payment.id} icon={Receipt} />
                                     <DetailRow label="Payment Date" value={formatDate(payment.paymentDate || payment.date, preferences, 'Not available')} icon={Calendar} />
                                 </SectionCard>
+
+                                {paymentAttemptProvider && (
+                                    <SectionCard title="Online Settlement Info">
+                                        <DetailRow label="Payment Provider" value={paymentAttemptProvider} icon={Landmark} />
+                                        {paymentAttemptGatewayTxnId && (
+                                            <DetailRow label="Gateway ID" value={paymentAttemptGatewayTxnId} icon={Receipt} />
+                                        )}
+                                        <DetailRow 
+                                            label="Settlement Status" 
+                                            value={paymentAttemptStatus?.toUpperCase() || 'UNKNOWN'} 
+                                            icon={CheckCircle} 
+                                            valueClassName={paymentAttemptStatus === 'SUCCESS' ? 'text-emerald-700' : 'text-amber-700'} 
+                                        />
+                                        {paymentAttemptSettledAt && (
+                                            <DetailRow label="Settled At" value={formatDate(paymentAttemptSettledAt, preferences, 'Not available')} icon={Calendar} />
+                                        )}
+                                        {paymentAttemptConfirmedAt && (
+                                            <DetailRow label="Confirmed At" value={formatDate(paymentAttemptConfirmedAt, preferences, 'Not available')} icon={Calendar} />
+                                        )}
+                                    </SectionCard>
+                                )}
 
                                 <SectionCard title="Monthly Stay Details">
                                     <DetailRow label="Monthly Stay" value={formatCurrency(monthlyStayAmount, preferences)} icon={DollarSign} />
@@ -296,7 +351,9 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                         {timeline.map((event, index) => (
                                             <div key={event.label} className="flex gap-3">
                                                 <div className="flex flex-col items-center">
-                                                    <div className={`mt-1 h-3 w-3 rounded-full ${event.complete ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                                                    <div className={`mt-1 h-3 w-3 rounded-full ${
+                                                        event.complete ? 'bg-emerald-500' : event.warning ? 'bg-violet-500 animate-pulse' : 'bg-slate-300'
+                                                    }`} />
                                                     {index < timeline.length - 1 ? <div className="mt-1 h-10 w-px bg-slate-200" /> : null}
                                                 </div>
                                                 <div className="pb-2">
@@ -328,7 +385,7 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                         Download Receipt
                                     </button>
                                 </div>
-                                {payment.status !== 'paid' && dueAmount > 0 && payment.status !== 'waived' && (
+                                {payment.status !== 'paid' && payment.status !== 'pending_verification' && payment.status !== 'processing' && dueAmount > 0 && payment.status !== 'waived' && (
                                     <button
                                         onClick={() => onStartOnlinePayment?.(payment)}
                                         className="mb-4 w-full py-3.5 bg-ops-accent/10 border border-ops-accent/200 text-ops-accent rounded-xl font-bold hover:bg-ops-accent/15 transition-all flex items-center justify-center gap-2"
@@ -403,7 +460,26 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                     )}
                                 </AnimatePresence>
 
-                                {payment.status !== 'paid' ? (
+                                {payment.status === 'paid' ? (
+                                    <div className="text-center p-3 bg-emerald-50 text-emerald-600 rounded-xl font-medium border border-emerald-100 flex items-center justify-center gap-2">
+                                        <CheckCircle size={18} />
+                                        Collection Completed
+                                    </div>
+                                ) : payment.status === 'pending_verification' || payment.status === 'processing' ? (
+                                    <div className="space-y-4">
+                                        <div className="p-4 rounded-xl bg-violet-50 border border-violet-100 flex items-start gap-3 text-xs text-violet-800">
+                                            <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                                            <div>
+                                                <p className="font-bold">Payment verification in progress</p>
+                                                <p className="mt-0.5 text-violet-600">The tenant has initiated an online payment attempt. HMS is awaiting confirmation from the payment gateway webhook. Offline records are temporarily locked to prevent double settlement.</p>
+                                            </div>
+                                        </div>
+                                        <div className="text-center p-3.5 bg-violet-50 text-violet-700 rounded-xl font-bold border border-violet-100 flex items-center justify-center gap-2 animate-pulse">
+                                            <Loader2 size={18} className="animate-spin text-violet-600" />
+                                            Online Verification In Progress
+                                        </div>
+                                    </div>
+                                ) : (
                                     showForm ? (
                                         <div className="space-y-3">
                                             <div className="flex items-center gap-2 rounded-xl bg-ops-accent/10 border border-ops-accent/100 px-3 py-2 text-xs text-ops-accent font-medium">
@@ -483,11 +559,6 @@ const PaymentDetailsDrawer = ({ isOpen, onClose, payment, hostelId, onMarkPaid, 
                                             Record Offline Collection
                                         </button>
                                     )
-                                ) : (
-                                    <div className="text-center p-3 bg-emerald-50 text-emerald-600 rounded-xl font-medium border border-emerald-100 flex items-center justify-center gap-2">
-                                        <CheckCircle size={18} />
-                                        Collection Completed
-                                    </div>
                                 )}
                             </div>
                         </div>

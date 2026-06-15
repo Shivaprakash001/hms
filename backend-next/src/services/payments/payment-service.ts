@@ -1257,7 +1257,7 @@ export class PaymentService {
 
     const providerContext = await getProviderContext({
       paymentDomain: PAYMENT_DOMAIN.RENT_COLLECTION,
-      flowType: PAYMENT_FLOW.ADVANCE,
+      flowType: PAYMENT_FLOW.FUTURE_RENT_CREDIT,
       operationalOwnerId: ownerId,
       financialOwnerId: ownerId,
       hostelId,
@@ -1274,7 +1274,7 @@ export class PaymentService {
       const existing = await tx.paymentAttempt.findFirst({
         where: {
           tenant_id: tenantId,
-          payment_type: "ADVANCE",
+          payment_type: { in: ["FUTURE_RENT_CREDIT", "ADVANCE"] },
           status: { in: ["CREATED", "PENDING"] },
         },
         orderBy: { created_at: "desc" },
@@ -1312,7 +1312,7 @@ export class PaymentService {
           merchant_transaction_id: merchantTxnId,
           amount,
           status: "CREATED",
-          payment_type: "ADVANCE",
+          payment_type: "FUTURE_RENT_CREDIT",
           hostel_id: hostelId,
           payment_domain: providerContext.payment_domain,
           scope_type: providerContext.scope_type,
@@ -1432,7 +1432,7 @@ export class PaymentService {
 
     const providerContext = await getProviderContext({
       paymentDomain: PAYMENT_DOMAIN.RENT_COLLECTION,
-      flowType: PAYMENT_FLOW.DEPOSIT,
+      flowType: PAYMENT_FLOW.SECURITY_DEPOSIT,
       operationalOwnerId: ownerId,
       financialOwnerId: ownerId,
       hostelId,
@@ -1448,7 +1448,7 @@ export class PaymentService {
       const existing = await tx.paymentAttempt.findFirst({
         where: {
           tenant_id: tenantId,
-          payment_type: "DEPOSIT",
+          payment_type: { in: ["SECURITY_DEPOSIT", "DEPOSIT"] },
           status: { in: ["CREATED", "PENDING"] },
         },
         orderBy: { created_at: "desc" },
@@ -1486,7 +1486,7 @@ export class PaymentService {
           merchant_transaction_id: merchantTxnId,
           amount,
           status: "CREATED",
-          payment_type: "DEPOSIT",
+          payment_type: "SECURITY_DEPOSIT",
           hostel_id: hostelId,
           payment_domain: providerContext.payment_domain,
           scope_type: providerContext.scope_type,
@@ -2714,9 +2714,18 @@ export class PaymentService {
           latest.reference_number AS latest_reference_number,
           latest.created_at AS latest_created_at,
           latest.payment_date AS latest_payment_date,
+          latest_attempt.provider AS latest_attempt_provider,
+          latest_attempt.provider_order_id AS latest_attempt_provider_order_id,
+          latest_attempt.provider_transaction_id AS latest_attempt_provider_transaction_id,
+          latest_attempt.status AS latest_attempt_status,
+          latest_attempt.confirmed_at AS latest_attempt_confirmed_at,
+          latest_attempt.settled_at AS latest_attempt_settled_at,
+          latest_attempt.created_at AS latest_attempt_created_at,
           CASE
             WHEN o.status::text = 'WAIVED' THEN 'waived'
             WHEN o.status::text = 'PAID' OR o.total_amount::float - COALESCE(pay.total_paid, 0) <= 0 THEN 'paid'
+            WHEN latest_attempt.status::text = 'PENDING_VERIFICATION' THEN 'pending_verification'
+            WHEN latest_attempt.status::text = 'PROCESSING' THEN 'processing'
             WHEN o.due_date < ${todayUTC}::date THEN 'overdue'
             WHEN o.status::text = 'PARTIAL' THEN 'partial'
             ELSE 'pending'
@@ -2743,6 +2752,21 @@ export class PaymentService {
           ORDER BY p.payment_date DESC, p.created_at DESC
           LIMIT 1
         ) latest ON true
+        LEFT JOIN LATERAL (
+          SELECT
+            pa.provider,
+            pa.provider_order_id,
+            pa.provider_transaction_id,
+            pa.status::text AS status,
+            pa.confirmed_at,
+            pa.settled_at,
+            pa.created_at
+          FROM payment_attempts pa
+          LEFT JOIN payment_attempt_obligations pao ON pao.payment_attempt_id = pa.id
+          WHERE pa.obligation_id = o.id OR pao.obligation_id = o.id
+          ORDER BY pa.created_at DESC
+          LIMIT 1
+        ) latest_attempt ON true
         WHERE o.owner_id = ${ownerId}::uuid
           AND o.hostel_id = ${hostelId}::uuid
           ${tenantFilter}
@@ -2764,7 +2788,7 @@ export class PaymentService {
         SELECT
           COUNT(*)::int AS total,
           COALESCE(SUM(paid_amount), 0)::float AS total_collected,
-          COUNT(*) FILTER (WHERE computed_status IN ('pending', 'partial', 'overdue'))::int AS pending_rows,
+          COUNT(*) FILTER (WHERE computed_status IN ('pending', 'partial', 'overdue', 'pending_verification', 'processing'))::int AS pending_rows,
           COUNT(*) FILTER (WHERE computed_status = 'overdue')::int AS overdue_rows
         FROM filtered
       ),
@@ -2812,10 +2836,17 @@ export class PaymentService {
           'paymentDate', p.payment_date,
           'createdAt', p.created_at,
           'method', p.payment_method,
-          'status', 'paid'
+          'status', 'paid',
+          'paymentAttemptProvider', pa.provider,
+          'paymentAttemptGatewayTxnId', COALESCE(pa.provider_transaction_id, pa.provider_order_id),
+          'paymentAttemptStatus', pa.status,
+          'paymentAttemptSettledAt', pa.settled_at,
+          'paymentAttemptConfirmedAt', pa.confirmed_at,
+          'paymentAttemptCreatedAt', pa.created_at
         ) ORDER BY p.payment_date DESC, p.created_at DESC), '[]'::jsonb) AS rows
         FROM filtered f
         JOIN payments p ON p.obligation_id = f.id
+        LEFT JOIN payment_attempts pa ON p.payment_attempt_id = pa.id
         ${filters?.method ? Prisma.sql`WHERE p.payment_method = ${filters.method}` : Prisma.empty}
       ),
       page_rows AS (
@@ -2851,7 +2882,13 @@ export class PaymentService {
           'payment_date', latest_payment_date,
           'isReceiptAvailable', latest_payment_id IS NOT NULL,
           'entityType', 'ledger',
-          'amount', CASE WHEN balance > 0 THEN balance ELSE COALESCE(NULLIF(paid_amount, 0), rent_amount) END
+          'amount', CASE WHEN balance > 0 THEN balance ELSE COALESCE(NULLIF(paid_amount, 0), rent_amount) END,
+          'paymentAttemptProvider', latest_attempt_provider,
+          'paymentAttemptGatewayTxnId', COALESCE(latest_attempt_provider_transaction_id, latest_attempt_provider_order_id),
+          'paymentAttemptStatus', latest_attempt_status,
+          'paymentAttemptSettledAt', latest_attempt_settled_at,
+          'paymentAttemptConfirmedAt', latest_attempt_confirmed_at,
+          'paymentAttemptCreatedAt', latest_attempt_created_at
         ) ORDER BY rent_month DESC NULLS LAST, due_date DESC NULLS LAST), '[]'::jsonb) AS rows
         FROM paged
       )
@@ -3254,7 +3291,7 @@ export class PaymentService {
       where: {
         status: "SUCCESS",
         OR: [{ payment_domain: PAYMENT_DOMAIN.RENT_COLLECTION }, { payment_domain: null }],
-        flow_type: { notIn: [PAYMENT_FLOW.ADDON, PAYMENT_FLOW.SUBSCRIPTION, PAYMENT_FLOW.ADVANCE, PAYMENT_FLOW.DEPOSIT] },
+        flow_type: { notIn: [PAYMENT_FLOW.ADDON, PAYMENT_FLOW.SUBSCRIPTION, PAYMENT_FLOW.ADVANCE, PAYMENT_FLOW.DEPOSIT, PAYMENT_FLOW.FUTURE_RENT_CREDIT, PAYMENT_FLOW.SECURITY_DEPOSIT] },
         ...ownerFilter,
         ...hostelFilter,
         ...domainFilter,

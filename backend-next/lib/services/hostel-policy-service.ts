@@ -512,6 +512,20 @@ export function toCompatibilityPreferences(policy: HostelPolicy): Record<string,
 }
 
 export function compatibilityPreferencesToPolicyPatch(data: Record<string, any>): Record<string, any> {
+  const depositPatch: Record<string, any> = {};
+  if (data.advance_enabled !== undefined) depositPatch.enabled = data.advance_enabled;
+  if (data.advance_amount_default !== undefined) depositPatch.default_amount = data.advance_amount_default;
+  if (data.advance_refundable !== undefined) depositPatch.refundable = data.advance_refundable;
+  if (data.reservation_policy !== undefined) depositPatch.reservation_policy = data.reservation_policy;
+  if (data.minimum_reservation_deposit !== undefined) depositPatch.minimum_reservation_deposit = data.minimum_reservation_deposit;
+
+  if (data.billing_defaults !== undefined) {
+    const defaultAmount = data.billing_defaults.security_deposit ?? data.billing_defaults.advance_deposit;
+    if (defaultAmount !== undefined) {
+      depositPatch.default_amount = defaultAmount;
+    }
+  }
+
   return {
     billing: {
       ...(data.rent_cycle !== undefined && { rent_cycle: data.rent_cycle }),
@@ -524,8 +538,8 @@ export function compatibilityPreferencesToPolicyPatch(data: Record<string, any>)
           ...(data.max_late_fee !== undefined && { max_amount: data.max_late_fee }),
         },
       }),
+      ...(Object.keys(depositPatch).length > 0 && { deposit: depositPatch }),
       ...(data.billing_defaults !== undefined && {
-        deposit: { default_amount: data.billing_defaults.security_deposit ?? data.billing_defaults.advance_deposit },
         maintenance: { type: data.billing_defaults.maintenance_type, amount: data.billing_defaults.maintenance_charge },
         invite_defaults: {
           auto_fill_room_rent: data.billing_defaults.auto_fill_room_rent,

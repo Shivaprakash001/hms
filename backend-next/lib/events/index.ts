@@ -146,7 +146,10 @@ eventSystem.on("payment_recorded", async (data) => {
   }
 });
 
-eventSystem.on("advance_credited", async (data) => {
+// Canonical event name for ledger credits (security deposit or future rent credit).
+// The old "advance_credited" name is kept as an alias for backward compatibility
+// with payment-service finalization paths that still fire it.
+const handleLedgerCredited = async (data: any) => {
   if (data.tenant_id) {
     try {
       const { tenantInvitationLifecycleService } = await import(
@@ -154,7 +157,7 @@ eventSystem.on("advance_credited", async (data) => {
       );
       await tenantInvitationLifecycleService.allocateOnboardingTenantIfFinanciallyReady(data.tenant_id);
     } catch (error) {
-      console.error("[Event] advance_credited automatic allocation failed:", error);
+      console.error("[Event] financial_ledger_credited automatic allocation failed:", error);
     }
 
     try {
@@ -163,10 +166,12 @@ eventSystem.on("advance_credited", async (data) => {
       );
       await sendTenantOnboardingNotification(data.tenant_id);
     } catch (error) {
-      console.error("[Event] advance_credited onboarding notification check failed:", error);
+      console.error("[Event] financial_ledger_credited onboarding notification check failed:", error);
     }
   }
-});
+};
+eventSystem.on("financial_ledger_credited", handleLedgerCredited);
+eventSystem.on("advance_credited", handleLedgerCredited); // backward compat alias
 
 eventSystem.on("rent_waived", async (data) => {
   await activityService.log({
