@@ -80,6 +80,7 @@ describe("RazorpayProvider", () => {
             tenant_name: "John Doe",
             tenant_email: "john@example.com",
             tenant_phone: "919999999999",
+            tenant_id: "",
           },
         },
         {
@@ -173,6 +174,7 @@ describe("RazorpayProvider", () => {
               id: "order_mock123",
               status: "paid",
               amount: 50000,
+              receipt: "txn_receipt_001",
             },
           } as any);
         }

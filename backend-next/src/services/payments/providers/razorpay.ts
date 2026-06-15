@@ -28,6 +28,7 @@ export class RazorpayProvider extends PaymentProvider {
         tenant_name: data.tenant_name || "",
         tenant_email: data.tenant_email || "",
         tenant_phone: data.tenant_phone || "",
+        tenant_id: data.metadata?.tenant_id || data.tenant_id || "",
       },
     };
 
@@ -90,6 +91,8 @@ export class RazorpayProvider extends PaymentProvider {
     const rawStatus = order.status || payment.status || "created";
     const status = statusMap[String(rawStatus).toLowerCase()] || "PENDING";
 
+    const tenantId = order.notes?.tenant_id || payment.notes?.tenant_id || data.notes?.tenant_id || null;
+
     return {
       merchant_txn_id: order.receipt || payment.notes?.merchant_txn_id || payment.notes?.merchant_transaction_id || data.notes?.merchant_txn_id,
       gateway_txn_id: payment.id || order.id,
@@ -101,6 +104,7 @@ export class RazorpayProvider extends PaymentProvider {
       provider_state: rawStatus,
       verification_state: signature ? "SIGNED" : "UNVERIFIED",
       raw_event: data,
+      tenant_id: tenantId,
     };
   }
 
@@ -121,6 +125,10 @@ export class RazorpayProvider extends PaymentProvider {
 
     const orderResponse = await axios.get(`${this.baseUrl}/v1/orders/${orderId}`, this.auth);
     const orderData = orderResponse.data;
+
+    if (orderData.receipt !== merchant_txn_id) {
+      throw new Error(`SECURITY_ERROR: Fetched Razorpay order receipt ${orderData.receipt} does not match expected merchant_txn_id ${merchant_txn_id}`);
+    }
 
     const paymentsResponse = await axios.get(`${this.baseUrl}/v1/orders/${orderId}/payments`, this.auth);
     const paymentsData = paymentsResponse.data;
@@ -146,6 +154,8 @@ export class RazorpayProvider extends PaymentProvider {
       canonicalStatus = "SUCCESS";
     }
 
+    const tenantId = orderData.notes?.tenant_id || latestPayment?.notes?.tenant_id || null;
+
     return {
       status: canonicalStatus,
       gateway_txn_id: orderId,
@@ -158,6 +168,7 @@ export class RazorpayProvider extends PaymentProvider {
         order: orderData,
         payments: paymentsData,
       },
+      tenant_id: tenantId,
     };
   }
 }

@@ -163,6 +163,7 @@ export interface WebhookVerificationResult {
   /** Provider-reported event timestamp, if available. */
   event_at?: Date | null;
   raw_event: any;
+  tenant_id?: string | null;
 }
 
 export interface FetchStatusResult {
@@ -178,6 +179,7 @@ export interface FetchStatusResult {
   /** Provider-reported completion/settlement timestamp, if available. */
   completed_at?: Date | null;
   raw_status: any;
+  tenant_id?: string | null;
 }
 
 /**

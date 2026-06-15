@@ -2201,10 +2201,10 @@ export class PaymentService {
     const lockResult = await prisma.paymentAttempt.updateMany({
       where: { 
         id: attempt.id, 
-        status: { in: ["PENDING", "CREATED"] } 
+        status: { in: ["PENDING", "CREATED", "PENDING_VERIFICATION"] } 
       },
       data: { 
-        status: "PENDING_VERIFICATION",
+        status: "PROCESSING",
         updated_at: new Date()
       }
     });
@@ -2228,7 +2228,7 @@ export class PaymentService {
     await paymentStatusEventService.appendOutsideTransaction({
       attemptId: attempt.id,
       fromStatus: attempt.status,
-      toStatus: "PENDING_VERIFICATION",
+      toStatus: "PROCESSING",
       source: "WEBHOOK",
       reason: "webhook claimed attempt for provider source-of-truth verification",
       operationalOwnerId: attempt.owner_id,
@@ -2251,115 +2251,143 @@ export class PaymentService {
       hasVerifyHeader: Boolean(headers?.["x-verify"] || headers?.["X-VERIFY"]),
     });
 
-    const { instance } = await this.getProviderInstanceForAttempt(attempt, "payment webhook verification");
-    
-    // 1. Initial parsing of the webhook payload
-    const verification = await instance.verifyWebhook(headers, body);
-    
-    if (verification.merchant_txn_id !== attempt.merchant_txn_id) {
-       throw new Error(`SECURITY_ERROR: Webhook merchantTxnId ${verification.merchant_txn_id} does not match DB ${attempt.merchant_txn_id}`);
-    }
-
-    // 2. CRITICAL SECURITY: Never trust webhook payload blindly.
-    // Call out to the payment provider to fetch the absolute source of truth status.
-    let sourceOfTruth;
     try {
-      sourceOfTruth = await instance.fetchStatus(attempt.merchant_txn_id, verification.gateway_txn_id || undefined);
-    } catch (e) {
-      // SRE FIX: If the provider API is down, save the raw webhook payload so we don't lose the event data
-      // even though we are returning 500 and expecting a retry.
+      const { instance } = await this.getProviderInstanceForAttempt(attempt, "payment webhook verification");
+      
+      // 1. Initial parsing of the webhook payload
+      const verification = await instance.verifyWebhook(headers, body);
+      
+      if (verification.merchant_txn_id !== attempt.merchant_txn_id) {
+         throw new Error(`SECURITY_ERROR: Webhook merchantTxnId ${verification.merchant_txn_id} does not match DB ${attempt.merchant_txn_id}`);
+      }
+
+      // Razorpay strict metadata checks
+      if (providerStr === "RAZORPAY") {
+        const attemptOrderId = attempt.provider_order_id || attempt.gateway_txn_id;
+        const webhookOrderId = verification.provider_order_id || verification.gateway_txn_id;
+        if (attemptOrderId && attemptOrderId !== webhookOrderId) {
+          throw new Error(`SECURITY_ERROR: Webhook order_id ${webhookOrderId} does not match DB ${attemptOrderId}`);
+        }
+
+        if (verification.amount !== undefined && verification.amount !== null && Math.round(Number(verification.amount) * 100) !== Math.round(Number(attempt.amount) * 100)) {
+          throw new Error(`SECURITY_ERROR: Webhook amount ${verification.amount} does not match DB ${attempt.amount}`);
+        }
+
+        const webhookTenantId = verification.tenant_id;
+        if (webhookTenantId && webhookTenantId !== attempt.tenant_id) {
+          throw new Error(`SECURITY_ERROR: Webhook tenant_id ${webhookTenantId} does not match DB ${attempt.tenant_id}`);
+        }
+      }
+
+      // 2. CRITICAL SECURITY: Never trust webhook payload blindly.
+      // Call out to the payment provider to fetch the absolute source of truth status.
+      let sourceOfTruth;
+      try {
+        sourceOfTruth = await instance.fetchStatus(attempt.merchant_txn_id, verification.gateway_txn_id || undefined);
+      } catch (e) {
+        // SRE FIX: If the provider API is down, save the raw webhook payload so we don't lose the event data
+        // even though we are returning 500 and expecting a retry.
+        await prisma.paymentAttempt.update({
+          where: { id: attempt.id },
+          data: { raw_webhook_payload: verification.raw_event }
+        });
+        throw e;
+      }
+      await paymentProviderVerificationSnapshotService.record({
+        provider: providerStr,
+        source: "WEBHOOK",
+        attempt,
+        webhookEventId: context?.webhookEventId || null,
+        providerTransactionId: sourceOfTruth.provider_transaction_id || verification.provider_transaction_id || null,
+        providerOrderId: sourceOfTruth.provider_order_id || verification.provider_order_id || sourceOfTruth.gateway_txn_id || verification.gateway_txn_id || null,
+        providerReferenceId: sourceOfTruth.provider_reference_id || verification.provider_reference_id || null,
+        providerStatus: (sourceOfTruth as any).provider_status || sourceOfTruth.status,
+        normalizedStatus: sourceOfTruth.status,
+        amount: verification.amount ?? null,
+        rawResponse: sourceOfTruth.raw_status,
+      });
+      
+      if (sourceOfTruth.status === "PENDING" && verification.status === "SUCCESS") {
+        throw new Error(`SECURITY_ERROR: Webhook claimed SUCCESS but Provider API claims PENDING for ${attempt.merchant_txn_id}`);
+      }
+
+      const finalStatus = sourceOfTruth.status !== "PENDING" ? sourceOfTruth.status : verification.status;
+
       await prisma.paymentAttempt.update({
         where: { id: attempt.id },
-        data: { raw_webhook_payload: verification.raw_event }
+        data: {
+          provider_transaction_id: sourceOfTruth.provider_transaction_id || verification.provider_transaction_id || null,
+          provider_order_id: sourceOfTruth.provider_order_id || verification.provider_order_id || sourceOfTruth.gateway_txn_id || verification.gateway_txn_id || null,
+          provider_reference_id: sourceOfTruth.provider_reference_id || verification.provider_reference_id || sourceOfTruth.provider_transaction_id || verification.provider_transaction_id || sourceOfTruth.gateway_txn_id || verification.gateway_txn_id || null,
+        } as any,
+      }).catch(async (error: any) => {
+        if (String(error?.message || error).includes("Unique")) {
+          await paymentOperationalAnomalyService.create({
+            anomalyType: "DUPLICATE_PROVIDER_REFERENCE",
+            severity: "HIGH",
+            paymentDomain: (attempt as any).payment_domain,
+            flowType: (attempt as any).flow_type,
+            paymentAttemptId: attempt.id,
+            webhookEventId: context?.webhookEventId || null,
+            operationalOwnerId: attempt.owner_id,
+            financialOwnerId: attempt.owner_id,
+            hostelId: attempt.hostel_id,
+            metadata: { provider: providerStr },
+          });
+        }
       });
-      throw e;
-    }
-    await paymentProviderVerificationSnapshotService.record({
-      provider: providerStr,
-      source: "WEBHOOK",
-      attempt,
-      webhookEventId: context?.webhookEventId || null,
-      providerTransactionId: sourceOfTruth.provider_transaction_id || verification.provider_transaction_id || null,
-      providerOrderId: sourceOfTruth.provider_order_id || verification.provider_order_id || sourceOfTruth.gateway_txn_id || verification.gateway_txn_id || null,
-      providerReferenceId: sourceOfTruth.provider_reference_id || verification.provider_reference_id || null,
-      providerStatus: (sourceOfTruth as any).provider_status || sourceOfTruth.status,
-      normalizedStatus: sourceOfTruth.status,
-      amount: verification.amount ?? null,
-      rawResponse: sourceOfTruth.raw_status,
-    });
-    
-    if (sourceOfTruth.status === "PENDING" && verification.status === "SUCCESS") {
-      throw new Error(`SECURITY_ERROR: Webhook claimed SUCCESS but Provider API claims PENDING for ${attempt.merchant_txn_id}`);
-    }
 
-    const finalStatus = sourceOfTruth.status !== "PENDING" ? sourceOfTruth.status : verification.status;
+      if (finalStatus === "SUCCESS") {
+        const expectedPaise = Math.round(Number(attempt.amount) * 100);
+        const receivedPaise =
+          verification.amount == null ? null : Math.round(Number(verification.amount) * 100);
 
-    await prisma.paymentAttempt.update({
-      where: { id: attempt.id },
-      data: {
-        provider_transaction_id: sourceOfTruth.provider_transaction_id || verification.provider_transaction_id || null,
-        provider_order_id: sourceOfTruth.provider_order_id || verification.provider_order_id || sourceOfTruth.gateway_txn_id || verification.gateway_txn_id || null,
-        provider_reference_id: sourceOfTruth.provider_reference_id || verification.provider_reference_id || sourceOfTruth.provider_transaction_id || verification.provider_transaction_id || sourceOfTruth.gateway_txn_id || verification.gateway_txn_id || null,
-      } as any,
-    }).catch(async (error: any) => {
-      if (String(error?.message || error).includes("Unique")) {
-        await paymentOperationalAnomalyService.create({
-          anomalyType: "DUPLICATE_PROVIDER_REFERENCE",
-          severity: "HIGH",
-          paymentDomain: (attempt as any).payment_domain,
-          flowType: (attempt as any).flow_type,
-          paymentAttemptId: attempt.id,
-          webhookEventId: context?.webhookEventId || null,
-          operationalOwnerId: attempt.owner_id,
-          financialOwnerId: attempt.owner_id,
-          hostelId: attempt.hostel_id,
-          metadata: { provider: providerStr },
-        });
+        // Only reject if amount IS present and doesn't match
+        if (receivedPaise !== null && receivedPaise !== expectedPaise) {
+          logger.error("payments.webhook.amount_mismatch", {
+            ...requestMeta,
+            attemptId: attempt.id,
+            merchantTxnId: attempt.merchant_txn_id,
+            expectedAmount: Number(attempt.amount),
+            receivedAmount: verification.amount ?? null,
+          });
+          throw new Error("BAD_REQUEST: Webhook amount does not match payment attempt");
+        }
       }
-    });
 
-    if (finalStatus === "SUCCESS") {
-      const expectedPaise = Math.round(Number(attempt.amount) * 100);
-      const receivedPaise =
-        verification.amount == null ? null : Math.round(Number(verification.amount) * 100);
-
-      // Only reject if amount IS present and doesn't match — PhonePe webhooks sometimes
-      // omit amount, and throwing on null would silently kill all webhook processing.
-      if (receivedPaise !== null && receivedPaise !== expectedPaise) {
-        logger.error("payments.webhook.amount_mismatch", {
-          ...requestMeta,
-          attemptId: attempt.id,
-          merchantTxnId: attempt.merchant_txn_id,
-          expectedAmount: Number(attempt.amount),
-          receivedAmount: verification.amount ?? null,
-        });
-        throw new Error("BAD_REQUEST: Webhook amount does not match payment attempt");
+      logger.info("payments.webhook.verified", {
+        ...requestMeta,
+        attemptId: attempt.id,
+        merchantTxnId: attempt.merchant_txn_id,
+        status: verification.status,
+      });
+      
+      const result = await this.finalizePaymentAttempt(
+        attempt.id,
+        finalStatus,
+        sourceOfTruth.gateway_txn_id || verification.gateway_txn_id || undefined,
+        verification.raw_event,
+        context
+      );
+      incrementWebhook(true);
+      if (result?.status === "SUCCESS") incrementPayment("success");
+      if (context?.webhookEventId) {
+        await paymentWebhookEventService.markProcessed(context.webhookEventId, {
+          attempt_id: attempt.id,
+          final_status: result?.status || finalStatus,
+        }).catch(() => {});
       }
+      return result;
+    } catch (webhookError) {
+      // Revert status from PROCESSING back to what it was (attempt.status) so retries are allowed
+      await prisma.paymentAttempt.updateMany({
+        where: { id: attempt.id, status: "PROCESSING" },
+        data: { status: attempt.status, updated_at: new Date() }
+      }).catch((e) => {
+        logger.warn("payments.webhook.revert_failed", { attemptId: attempt.id, error: String(e) });
+      });
+      throw webhookError;
     }
-
-    logger.info("payments.webhook.verified", {
-      ...requestMeta,
-      attemptId: attempt.id,
-      merchantTxnId: attempt.merchant_txn_id,
-      status: verification.status,
-    });
-    
-    const result = await this.finalizePaymentAttempt(
-      attempt.id,
-      finalStatus,
-      sourceOfTruth.gateway_txn_id || verification.gateway_txn_id || undefined,
-      verification.raw_event,
-      context
-    );
-    incrementWebhook(true);
-    if (result?.status === "SUCCESS") incrementPayment("success");
-    if (context?.webhookEventId) {
-      await paymentWebhookEventService.markProcessed(context.webhookEventId, {
-        attempt_id: attempt.id,
-        final_status: result?.status || finalStatus,
-      }).catch(() => {});
-    }
-    return result;
   }
 
   async verifyPaymentStatus(params: {
@@ -2443,12 +2471,10 @@ export class PaymentService {
 
     const { instance, config } = await this.getProviderInstanceForAttempt(attempt, "payment attempt verification");
 
-    let resolvedGatewayTxnId = gatewayTxnId || (attempt as any).provider_order_id || attempt.gateway_txn_id || undefined;
-
-    if (attempt.provider === "RAZORPAY" && params.razorpay_signature) {
+    if (attempt.provider === "RAZORPAY") {
       const { razorpay_payment_id, razorpay_order_id, razorpay_signature } = params;
-      if (!razorpay_payment_id || !razorpay_order_id) {
-        throw new Error("BAD_REQUEST: Missing razorpay_payment_id or razorpay_order_id for signature verification");
+      if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
+        throw new Error("BAD_REQUEST: Missing razorpay_payment_id, razorpay_order_id, or razorpay_signature for signature verification");
       }
       const keySecret = config?.key_secret;
       if (!keySecret) {
@@ -2472,8 +2498,46 @@ export class PaymentService {
         razorpay_payment_id,
         razorpay_order_id,
       });
-      resolvedGatewayTxnId = razorpay_payment_id;
+
+      // REPLAY PROTECTION: verify that the razorpay_order_id matches the attempt's stored gateway transaction/order ID
+      const attemptOrderId = (attempt as any).provider_order_id || attempt.gateway_txn_id;
+      if (attemptOrderId && attemptOrderId !== razorpay_order_id) {
+        throw new Error("SECURITY_ERROR: razorpay_order_id mismatch");
+      }
+
+      if (["CREATED", "PENDING"].includes(attempt.status)) {
+        const updatedAttempt = await this.updateAttemptStatusOutsideTx({
+          attemptId: attempt.id,
+          fromStatus: attempt.status,
+          toStatus: "PENDING_VERIFICATION",
+          source: "VERIFY",
+          reason: "client signature verified, waiting for webhook",
+          operationalOwnerId: attempt.owner_id,
+          financialOwnerId: this.isPlatformBillingAttempt(attempt) ? this.hmsFinancialOwnerId() : attempt.owner_id,
+          hostelId: this.isPlatformBillingAttempt(attempt) ? null : attempt.hostel_id,
+          data: {
+            provider_transaction_id: razorpay_payment_id,
+            provider_order_id: razorpay_order_id,
+            gateway_txn_id: razorpay_order_id,
+            updated_at: new Date(),
+          }
+        });
+
+        return {
+          attempt: updatedAttempt,
+          status: "PENDING_VERIFICATION",
+          source: "provider",
+        };
+      }
+
+      return {
+        attempt,
+        status: attempt.status,
+        source: "provider",
+      };
     }
+
+    let resolvedGatewayTxnId = gatewayTxnId || (attempt as any).provider_order_id || attempt.gateway_txn_id || undefined;
 
     let fetched;
 

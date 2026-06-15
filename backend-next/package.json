@@ -22,7 +22,8 @@
     "reset:production:keep-owner": "DOTENV_CONFIG_PATH=../.env node -r dotenv/config ./node_modules/.bin/tsx scripts/production-reset-keep-owner.ts",
     "postinstall": "DOTENV_CONFIG_PATH=../.env node -r dotenv/config ./node_modules/prisma/build/index.js generate",
     "seed": "tsx prisma/seed.ts",
-    "reconcile:allocations": "tsx scripts/reconcile-allocations.ts"
+    "reconcile:allocations": "tsx scripts/reconcile-allocations.ts",
+    "reconcile:payments": "DOTENV_CONFIG_PATH=../.env node -r dotenv/config ./node_modules/.bin/tsx scripts/reconcile-payments.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
