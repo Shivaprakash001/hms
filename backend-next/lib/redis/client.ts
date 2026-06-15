@@ -25,7 +25,11 @@ export function getRedisClient() {
     return null;
   }
 
-  redisClient = new Redis({ url, token });
+  redisClient = new Redis({
+    url,
+    token,
+    signal: () => AbortSignal.timeout(1000), // Fail fast after 1 second
+  });
   return redisClient;
 }
 

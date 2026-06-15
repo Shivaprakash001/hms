@@ -26,7 +26,11 @@ function getEdgeRedisClient() {
 
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-  edgeRedisClient = url && token ? new Redis({ url, token }) : null;
+  edgeRedisClient = url && token ? new Redis({
+    url,
+    token,
+    signal: () => AbortSignal.timeout(1000), // Fail fast after 1 second
+  }) : null;
   return edgeRedisClient;
 }
 

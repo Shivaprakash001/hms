@@ -74,7 +74,7 @@ export class BillingTimelineService {
       where: {
         tenant_id: tenantId,
         type: "CREDIT",
-        reason: { in: ["TOPUP", "FUTURE_RENT_CREDIT_TOPUP"] } as any,
+        reason: "FUTURE_RENT_CREDIT_TOPUP",
       },
       orderBy: { created_at: "desc" },
       take: 20,
