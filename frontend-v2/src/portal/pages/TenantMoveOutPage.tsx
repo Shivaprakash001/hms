@@ -330,7 +330,7 @@ export function TenantMoveOutPage() {
 
   // --- Active Request Flow ---
   if (active && request && typeof request === 'object') {
-    const paidDeposit = Number(settlement?.security_deposit_amount ?? advance?.balance ?? 0);
+    const paidDeposit = Number(settlement?.security_deposit_amount ?? advance?.security_deposit_paid ?? 0);
     const extraAdvance = Number(settlement?.advance_balance ?? 0);
     const pendingRent = Number(settlement?.pending_rent_dues ?? dues?.rent_due ?? dues?.total_due ?? 0);
     const lateFees = Number(settlement?.pending_late_fees ?? 0);
