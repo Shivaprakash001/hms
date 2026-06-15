@@ -27,11 +27,25 @@ import { TenantReservationCard } from '@/platforms/tenant/components/TenantReser
 import { TenantPaymentModal } from '@/portal/components/TenantPaymentModal';
 import { TenantPaymentDetailModal } from '@/domains/payments/components/TenantPaymentDetailModal';
 import { buildPayableObligations } from '@/portal/utils/payableObligations';
+import { paymentService } from '@features/payments/api';
 
 const fmt = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
 const fmtDate = (d?: string | Date) => {
   if (!d) return '—';
   return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+};
+const loadRazorpayScript = (): Promise<boolean> => {
+  return new Promise((resolve) => {
+    if ((window as any).Razorpay) {
+      resolve(true);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
 };
 const timelineAmount = (item: any) => {
   if (item.type === 'PAYMENT' || item.type === 'ADVANCE_CREDIT') return Number(item.amount ?? 0);
@@ -155,6 +169,81 @@ export function TenantFinancialsPage() {
   const resStatus = profile?.reservation_status?.status ?? 'PAYMENT_PENDING';
   
   const [state, dispatch] = useReducer(financialReducer, initialFinancialState);
+  const [isTestingPayment, setIsTestingPayment] = useState(false);
+  const isDevelopment = import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname.includes('127.0.0.1');
+
+  const handleTestPayment = async () => {
+    setIsTestingPayment(true);
+    try {
+      const res = await paymentService.createTestIntent({ amount: 1 });
+      const intent = res.data ?? res;
+      
+      if (!intent || !intent.provider) {
+        throw new Error('Invalid response structure from test-intent endpoint.');
+      }
+
+      if (intent.provider === 'RAZORPAY') {
+        const loaded = await loadRazorpayScript();
+        if (!loaded) {
+          toast.error('Failed to load Razorpay SDK');
+          setIsTestingPayment(false);
+          return;
+        }
+
+        const options = {
+          key: intent.raw_response?.key_id,
+          amount: intent.raw_response?.amount,
+          currency: intent.raw_response?.currency || 'INR',
+          name: 'Sri Adithya Hostels (Test)',
+          description: '1 Rs Test Payment',
+          order_id: intent.gateway_txn_id,
+          handler: async (response: any) => {
+            setIsTestingPayment(true);
+            try {
+              const verifyResult = await tenantPortalApi.verifyPayment({
+                attempt_id: intent.id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_signature: response.razorpay_signature,
+              });
+
+              toast.success('Test payment successful!');
+              queryClient.invalidateQueries({ queryKey: ['tenant'] });
+            } catch (err: any) {
+              toast.error(err?.response?.data?.error?.message || err?.message || 'Verification failed');
+            } finally {
+              setIsTestingPayment(false);
+            }
+          },
+          prefill: {
+            name: intent.raw_response?.notes?.tenant_name || '',
+            email: intent.raw_response?.notes?.tenant_email || '',
+            contact: intent.raw_response?.notes?.tenant_phone || '',
+          },
+          theme: {
+            color: '#F07B1D',
+          },
+          modal: {
+            ondismiss: () => {
+              setIsTestingPayment(false);
+            },
+          },
+        };
+
+        const rzp = new (window as any).Razorpay(options);
+        rzp.open();
+      } else if (intent.checkout_url) {
+        window.location.href = intent.checkout_url;
+      } else {
+        toast.error('Unknown payment provider: ' + intent.provider);
+        setIsTestingPayment(false);
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.response?.data?.error?.message || err?.message || 'Failed to initiate test payment');
+      setIsTestingPayment(false);
+    }
+  };
 
   const billingContext = useQuery({
     queryKey: ['tenant', 'billing-frequency'],
@@ -1083,6 +1172,38 @@ export function TenantFinancialsPage() {
           Automatically applied to future rent installments.
         </p>
       </section>
+
+      {/* DEVELOPMENT / TEST PAYMENT SECTION */}
+      {isDevelopment && (
+        <section className="rounded-2xl border bg-card p-5 shadow-sm space-y-4" style={{ borderColor: '#F59E0B', backgroundColor: '#FFFDF5' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#FEF3C7', color: '#D97706' }}>
+              <CreditCard className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: '15px', color: '#78350F' }}>Sandbox Test Payment</h2>
+              <p className="text-xs font-medium" style={{ color: '#92400E' }}>Verify payment flows securely with a ₹1 test order.</p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            disabled={isTestingPayment}
+            onClick={handleTestPayment}
+            className="w-full text-white py-3.5 rounded-xl font-semibold text-sm active:scale-95 transition-transform disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer font-poppins"
+            style={{ backgroundColor: '#D97706', color: '#FFFFFF', border: 'none' }}
+          >
+            {isTestingPayment ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Initiating payment...
+              </>
+            ) : (
+              'Pay ₹1 Test Payment (Razorpay/PhonePe)'
+            )}
+          </button>
+        </section>
+      )}
 
       {/* SECTION 9 – PAYMENT HISTORY (COLLAPSIBLE) */}
       <span style={{ display: 'block', fontSize: '12px', fontFamily: 'Poppins, sans-serif', fontWeight: 600, color: '#6B6B6B', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '24px', marginBottom: '8px' }}>HISTORY & SETTINGS</span>

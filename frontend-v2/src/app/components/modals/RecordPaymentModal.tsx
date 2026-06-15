@@ -179,7 +179,7 @@ export function RecordPaymentModal({ onClose, hostelId, initialDueId = '', initi
           `Payment mode: ${payload.paymentMethod}`,
           `Payment date: ${payload.paymentDate}`,
         ].filter(Boolean).join(' · ');
-        const response = await api.post(`/tenants/${payload.tenantId}/advance`, {
+        const response = await api.post(`/tenants/${payload.tenantId}/financial-ledger`, {
           action: 'credit',
           reason: 'TOPUP',
           amount: payload.amountPaid,

@@ -15,7 +15,10 @@ export async function GET(req: NextRequest) {
   const scope = resolveOwnerScope(session);
   const { searchParams } = new URL(req.url);
 
-  const hostelId = searchParams.get("hostelId") || undefined;
+  const hostelIdParam = searchParams.get("hostelId") || undefined;
+  const isUuid = hostelIdParam && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(hostelIdParam);
+  const hostelId = isUuid ? hostelIdParam : undefined;
+
   const categoryFilter = searchParams.get("category") || undefined; // 'Payments' | 'Expenses' | 'Occupancy' | 'Documents' | 'Admissions' | 'Move Outs' | 'Billing' | 'Settings'
   const search = searchParams.get("search") || undefined;
   const limit = Math.max(1, Math.min(100, parseInt(searchParams.get("limit") || "50")));
@@ -670,10 +673,6 @@ export async function GET(req: NextRequest) {
         is_active: true
       },
       include: {
-        disputes: {
-          where: { status: { in: ['OPEN', 'UNDER_REVIEW'] } },
-          orderBy: { created_at: 'desc' }
-        },
         tenant: {
           include: {
             profiles: { select: { name: true, phone: true } },

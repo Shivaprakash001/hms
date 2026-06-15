@@ -5,7 +5,7 @@ import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { dashboardService } from "@/lib/services/dashboard-service";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
-import { requireHostelBelongsToOwner, resolveOwnerOrAdminScopeForHostel } from "@/lib/security/scoped-query";
+import { requireHostelBelongsToOwner, resolveHostelContext } from "@/lib/security/scoped-query";
 import { getCachedDashboard, setDashboardCache } from "@/lib/cache/dashboard-cache";
 import { redisKeys } from "@/lib/redis/keys";
 
@@ -22,19 +22,19 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const hostelId = req.nextUrl.searchParams.get("hostelId") || undefined;
-    const ownerId = await resolveOwnerOrAdminScopeForHostel(session, hostelId);
+    const hostelIdParam = req.nextUrl.searchParams.get("hostelId") || undefined;
+    const { ownerId, hostelId } = await resolveHostelContext(session, hostelIdParam);
     
     console.log(`[dashboard.stats] Fetching stats for owner ${ownerId}, hostel ${hostelId}`);
     
-    const cacheKey = redisKeys.dashboard.statsShell(ownerId, hostelId!);
+    const cacheKey = redisKeys.dashboard.statsShell(ownerId, hostelId);
     const cached = await getCachedDashboard(cacheKey);
     if (cached) return apiResponse(cached);
 
-    const stats = await dashboardService.getOwnerStatsShell(ownerId, hostelId!);
+    const stats = await dashboardService.getOwnerStatsShell(ownerId, hostelId);
     await setDashboardCache(cacheKey, stats, 45, [
       redisKeys.tag.ownerDashboard(ownerId),
-      redisKeys.tag.hostelDashboard(hostelId!),
+      redisKeys.tag.hostelDashboard(hostelId),
     ]);
     return apiResponse(stats);
   } catch (error: any) {

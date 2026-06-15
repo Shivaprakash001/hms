@@ -20,17 +20,24 @@ function startOfTodayUtc() {
 export async function POST(req: Request) {
   try {
     const user = await authService.getCurrentUser(req);
-    if (!user || !["OWNER", "ADMIN"].includes(user.role)) {
+    if (!user) {
+      return apiError("Unauthorized", "UNAUTHORIZED", 401);
+    }
+
+    const isTenant = user.role === "TENANT";
+    const isOwnerOrAdmin = ["OWNER", "ADMIN"].includes(user.role);
+
+    if (isTenant && process.env.NODE_ENV === "production") {
+      return apiError("Test payment is restricted to administrative roles in production", "FORBIDDEN", 403);
+    }
+
+    if (!isTenant && !isOwnerOrAdmin) {
       return apiError("Unauthorized", "UNAUTHORIZED", 401);
     }
 
     const body = await req.json().catch(() => ({}));
-    const tenantId = String(body.tenant_id || body.tenantId || "");
-    const hostelId = String(body.hostelId || body.hostel_id || "");
     const amount = Number(body.amount ?? 1);
 
-    if (!tenantId) return apiError("tenant_id is required", "VALIDATION_ERROR", 400);
-    if (!hostelId) return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
     if (!Number.isFinite(amount) || amount < 1 || amount > 100) {
       return apiError("Test payment amount must be between ₹1 and ₹100", "VALIDATION_ERROR", 400);
     }
@@ -46,28 +53,60 @@ export async function POST(req: Request) {
       }
     }
 
-    const ownerId = user.id;
-    await requireHostelBelongsToOwner(ownerId, hostelId);
+    let tenantId = "";
+    let hostelId = "";
+    let ownerId = "";
+    let tenant: any = null;
 
-    const tenant = await prisma.tenants.findUnique({
-      where: { id: tenantId },
-      select: {
-        id: true,
-        owner_id: true,
-        hostel_id: true,
-        profiles: { select: { name: true, email: true } },
-        room_allocations: {
-          where: { is_active: true, end_date: null },
-          orderBy: { created_at: "desc" },
-          take: 1,
-          select: { id: true, hostel_id: true, room: { select: { room_no: true, hostel_id: true } } },
+    if (isTenant) {
+      tenant = await prisma.tenants.findFirst({
+        where: { profile_id: user.id },
+        select: {
+          id: true,
+          owner_id: true,
+          hostel_id: true,
+          profiles: { select: { name: true, email: true } },
+          room_allocations: {
+            where: { is_active: true, end_date: null },
+            orderBy: { created_at: "desc" },
+            take: 1,
+            select: { id: true, hostel_id: true, room: { select: { room_no: true, hostel_id: true } } },
+          },
         },
-      },
-    });
+      });
+      if (!tenant) return apiError("Tenant not found", "NOT_FOUND", 404);
+      tenantId = tenant.id;
+      hostelId = tenant.hostel_id || "";
+      ownerId = tenant.owner_id || "";
+    } else {
+      tenantId = String(body.tenant_id || body.tenantId || "");
+      hostelId = String(body.hostelId || body.hostel_id || "");
+      ownerId = user.id;
 
-    if (!tenant) return apiError("Tenant not found", "NOT_FOUND", 404);
-    if (tenant.owner_id !== ownerId || tenant.hostel_id !== hostelId) {
-      return apiError("Tenant does not belong to this hostel", "FORBIDDEN", 403);
+      if (!tenantId) return apiError("tenant_id is required", "VALIDATION_ERROR", 400);
+      if (!hostelId) return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
+
+      await requireHostelBelongsToOwner(ownerId, hostelId);
+
+      tenant = await prisma.tenants.findUnique({
+        where: { id: tenantId },
+        select: {
+          id: true,
+          owner_id: true,
+          hostel_id: true,
+          profiles: { select: { name: true, email: true } },
+          room_allocations: {
+            where: { is_active: true, end_date: null },
+            orderBy: { created_at: "desc" },
+            take: 1,
+            select: { id: true, hostel_id: true, room: { select: { room_no: true, hostel_id: true } } },
+          },
+        },
+      });
+      if (!tenant) return apiError("Tenant not found", "NOT_FOUND", 404);
+      if (tenant.owner_id !== ownerId || tenant.hostel_id !== hostelId) {
+        return apiError("Tenant does not belong to this hostel", "FORBIDDEN", 403);
+      }
     }
 
     const allocation = tenant.room_allocations[0] || null;
@@ -105,12 +144,13 @@ export async function POST(req: Request) {
       },
     });
 
-    const attempt = await paymentService.createMultiObligationPaymentIntent(
+    const rawAttempt = await paymentService.createMultiObligationPaymentIntent(
       [obligation.id],
-      ownerId,
-      undefined,
-      { bypassCollectionPolicy: true, source: "OWNER_TEST_PAYMENT" }
+      isTenant ? user.id : ownerId,
+      isTenant ? tenantId : undefined,
+      { bypassCollectionPolicy: true, source: isTenant ? "TENANT_TEST_PAYMENT" : "OWNER_TEST_PAYMENT" }
     );
+    const attempt = (rawAttempt as any).isReused === true ? (rawAttempt as any).attempt : rawAttempt;
 
     return NextResponse.json({
       success: true,

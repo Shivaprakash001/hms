@@ -22,9 +22,9 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const hostelId = searchParams.get("hostelId") || undefined;
-
-    if (!hostelId) {
-      return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
+    const isUuid = hostelId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(hostelId);
+    if (!isUuid) {
+      return apiError("hostelId must be a valid UUID", "HOSTEL_CONTEXT_REQUIRED", 400);
     }
 
     const ownerId = await resolveOwnerOrAdminScopeForHostel(session, hostelId);

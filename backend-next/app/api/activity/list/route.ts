@@ -20,8 +20,9 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const hostelId = searchParams.get("hostelId");
-  if (!hostelId) {
-    return apiError("hostelId query parameter is required", "BAD_REQUEST", 400);
+  const isUuid = hostelId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(hostelId);
+  if (!isUuid) {
+    return apiError("hostelId must be a valid UUID", "BAD_REQUEST", 400);
   }
 
   let ownerId: string;

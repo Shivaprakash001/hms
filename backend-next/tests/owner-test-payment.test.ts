@@ -37,17 +37,16 @@ describe('Owner Test Payment API - /api/payments/test-intent', () => {
     process.env.RAZORPAY_KEY_SECRET = 'rzp_test_secret';
     process.env.RAZORPAY_WEBHOOK_SECRET = 'rzp_webhook_secret';
 
-    const mockOrderResponse = {
+    vi.mocked(axios.post).mockImplementation(async () => ({
       data: {
-        id: 'order_mock123',
+        id: `order_mock_${Math.random().toString(36).substring(2, 10)}`,
         entity: 'order',
         amount: 100,
         currency: 'INR',
         receipt: 'txn_receipt_001',
         status: 'created',
       },
-    };
-    vi.mocked(axios.post).mockResolvedValue(mockOrderResponse);
+    }));
   });
 
   it('should return 401 if unauthorized', async () => {
@@ -111,4 +110,55 @@ describe('Owner Test Payment API - /api/payments/test-intent', () => {
     expect(res.status).toBe(400);
     expect(json.error.message).toContain('Test payment amount must be between ₹1 and ₹100');
   });
-});
+
+  it('should successfully create a ₹1 test payment intent when logged in as a TENANT in non-production environment', async () => {
+    vi.mocked(authService.getCurrentUser).mockResolvedValue({
+      id: tenant.profile_id,
+      role: 'TENANT',
+      email: 'tenant@example.com',
+    } as any);
+
+    const req = new NextRequest('http://localhost/api/payments/test-intent', {
+      method: 'POST',
+      body: JSON.stringify({
+        amount: 1,
+      }),
+    });
+
+    const res = await POST(req);
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(Number(json.obligation.amount)).toBe(1);
+    expect(json.obligation.obligation_type).toBe('EXTRA_CHARGE');
+    expect(Number(json.attempt.amount)).toBe(1);
+  });
+
+  it('should fail to create a test payment intent if logged in as TENANT in production environment', async () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      vi.mocked(authService.getCurrentUser).mockResolvedValue({
+        id: tenant.profile_id,
+        role: 'TENANT',
+        email: 'tenant@example.com',
+      } as any);
+
+      const req = new NextRequest('http://localhost/api/payments/test-intent', {
+        method: 'POST',
+        body: JSON.stringify({
+          amount: 1,
+        }),
+      });
+
+      const res = await POST(req);
+      const json = await res.json();
+
+      expect(res.status).toBe(403);
+      expect(json.error.message).toContain('Test payment is restricted to administrative roles in production');
+    } finally {
+      process.env.NODE_ENV = originalNodeEnv;
+    }
+  });
+}, 30000);

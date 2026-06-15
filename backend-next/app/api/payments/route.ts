@@ -27,7 +27,8 @@ export async function GET(req: NextRequest) {
     const method = searchParams.get("method") || undefined;
     const month = searchParams.get("month") || undefined;
     const hostelId = searchParams.get("hostelId") || undefined;
-    if (!hostelId) return ApiResponse.error(ApiError.badRequest("hostelId is required"));
+    const isUuid = hostelId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(hostelId);
+    if (!isUuid) return ApiResponse.error(ApiError.badRequest("hostelId must be a valid UUID"));
 
     if (session.role === "ADMIN") {
       const hostel = await prisma.hostels.findUnique({
@@ -75,8 +76,9 @@ export async function POST(req: NextRequest) {
     const data = await req.json().catch(() => ({}));
 
     const hostelId: string | undefined = data.hostelId || data.hostel_id;
-    if (!hostelId) {
-      return ApiResponse.error(ApiError.badRequest("hostelId is required"));
+    const isUuid = hostelId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(hostelId);
+    if (!isUuid) {
+      return ApiResponse.error(ApiError.badRequest("hostelId must be a valid UUID"));
     }
 
     let ownerId: string;

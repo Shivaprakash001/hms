@@ -79,10 +79,13 @@ export async function resolveOwnerOrAdminScopeForHostel(session: AuthPayload | n
     throw err;
   }
 
+  const isUuid = hostelId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(hostelId);
+  const cleanHostelId = isUuid ? hostelId : null;
+
   if (session.role === "ADMIN") {
-    if (hostelId) {
+    if (cleanHostelId) {
       const hostel = await prisma.hostels.findUnique({
-        where: { id: hostelId },
+        where: { id: cleanHostelId },
         select: { owner_id: true }
       });
       if (!hostel) {
@@ -116,8 +119,8 @@ export async function resolveOwnerOrAdminScopeForHostel(session: AuthPayload | n
       err.code = "UNAUTHORIZED";
       throw err;
     }
-    if (hostelId) {
-      await requireHostelBelongsToOwner(session.owner_id, hostelId);
+    if (cleanHostelId) {
+      await requireHostelBelongsToOwner(session.owner_id, cleanHostelId);
     }
     return session.owner_id;
   }
@@ -125,6 +128,76 @@ export async function resolveOwnerOrAdminScopeForHostel(session: AuthPayload | n
   const err: any = new Error("FORBIDDEN: Owner or Admin access required");
   err.code = "FORBIDDEN";
   throw err;
+}
+
+export async function resolveHostelContext(
+  session: AuthPayload | null,
+  hostelId?: string | null
+): Promise<{ ownerId: string; hostelId: string }> {
+  if (!session) {
+    const err: any = new Error("UNAUTHORIZED: Authentication required");
+    err.code = "UNAUTHORIZED";
+    throw err;
+  }
+
+  let ownerId: string;
+  if (session.role === "ADMIN") {
+    if (session.owner_id) {
+      ownerId = session.owner_id;
+    } else if (hostelId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(hostelId)) {
+      const hostel = await prisma.hostels.findUnique({
+        where: { id: hostelId },
+        select: { owner_id: true }
+      });
+      if (!hostel) {
+        const err: any = new Error("HOSTEL_NOT_FOUND: Hostel not found");
+        err.code = "HOSTEL_NOT_FOUND";
+        throw err;
+      }
+      ownerId = hostel.owner_id;
+    } else {
+      const err: any = new Error("HOSTEL_CONTEXT_REQUIRED: hostelId is required");
+      err.code = "HOSTEL_CONTEXT_REQUIRED";
+      throw err;
+    }
+  } else if (session.role === "OWNER") {
+    if (!session.owner_id) {
+      const err: any = new Error("UNAUTHORIZED: OWNER token missing owner_id");
+      err.code = "UNAUTHORIZED";
+      throw err;
+    }
+    if (session.owner_id !== session.sub) {
+      const err: any = new Error("UNAUTHORIZED: OWNER token owner_id mismatch");
+      err.code = "UNAUTHORIZED";
+      throw err;
+    }
+    ownerId = session.owner_id;
+  } else {
+    const err: any = new Error("FORBIDDEN: Owner or Admin access required");
+    err.code = "FORBIDDEN";
+    throw err;
+  }
+
+  let resolvedHostelId: string | null = null;
+  const isUuid = hostelId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(hostelId);
+  
+  if (isUuid) {
+    resolvedHostelId = hostelId!;
+    await requireHostelBelongsToOwner(ownerId, resolvedHostelId);
+  } else {
+    const firstHostel = await prisma.hostels.findFirst({
+      where: { owner_id: ownerId, is_active: true },
+      select: { id: true }
+    });
+    if (!firstHostel) {
+      const err: any = new Error("HOSTEL_NOT_FOUND: No active hostels found for this owner");
+      err.code = "HOSTEL_NOT_FOUND";
+      throw err;
+    }
+    resolvedHostelId = firstHostel.id;
+  }
+
+  return { ownerId, hostelId: resolvedHostelId };
 }
 
 export async function assertTenantBelongsToOwner(tenantId: string, ownerId: string) {
