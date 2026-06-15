@@ -27,10 +27,6 @@ export async function POST(req: Request) {
     const isTenant = user.role === "TENANT";
     const isOwnerOrAdmin = ["OWNER", "ADMIN"].includes(user.role);
 
-    if (isTenant && process.env.NODE_ENV === "production") {
-      return apiError("Test payment is restricted to administrative roles in production", "FORBIDDEN", 403);
-    }
-
     if (!isTenant && !isOwnerOrAdmin) {
       return apiError("Unauthorized", "UNAUTHORIZED", 401);
     }

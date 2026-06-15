@@ -1174,7 +1174,7 @@ export function TenantFinancialsPage() {
       </section>
 
       {/* DEVELOPMENT / TEST PAYMENT SECTION */}
-      {isDevelopment && (
+      {true && (
         <section className="rounded-2xl border bg-card p-5 shadow-sm space-y-4" style={{ borderColor: '#F59E0B', backgroundColor: '#FFFDF5' }}>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#FEF3C7', color: '#D97706' }}>
