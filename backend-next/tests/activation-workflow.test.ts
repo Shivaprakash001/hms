@@ -12,7 +12,7 @@ vi.mock("@/lib/db", () => {
       findUnique: vi.fn().mockImplementation((args) => {
         return Promise.resolve({
           id: args?.where?.id || "tenant-1",
-          advance_deposit: 5000,
+          security_deposit: 5000,
           maintenance_charge: 1000,
           maintenance_type: "MONTHLY",
         });
@@ -68,14 +68,6 @@ vi.mock("@/lib/db", () => {
       count: vi.fn(),
     },
     tenant_financial_ledger: {
-      aggregate: vi.fn().mockImplementation((args) => {
-        if (args?.where?.reference_type === "PAYMENT") {
-          return Promise.resolve({ _sum: { amount: 0 } });
-        }
-        return Promise.resolve({ _sum: { amount: 5000 } });
-      }),
-    },
-    tenant_advance_ledger: {
       aggregate: vi.fn().mockImplementation((args) => {
         if (args?.where?.reference_type === "PAYMENT") {
           return Promise.resolve({ _sum: { amount: 0 } });

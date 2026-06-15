@@ -60,7 +60,7 @@ function createDb(overrides: Partial<typeof sourceAgreement> = {}, activeMoveOut
       update: vi.fn(),
       updateMany: vi.fn(),
     },
-    tenant_advance_ledger: {
+    tenant_financial_ledger: {
       create: vi.fn(),
       update: vi.fn(),
       updateMany: vi.fn(),
@@ -225,9 +225,9 @@ describe("AgreementRenewalService", () => {
     expect(tx.rent_obligations.updateMany).not.toHaveBeenCalled();
     expect(tx.tenant_billing_plans.create).not.toHaveBeenCalled();
     expect(tx.tenant_billing_plans.updateMany).not.toHaveBeenCalled();
-    expect(tx.tenant_advance_ledger.create).not.toHaveBeenCalled();
-    expect(tx.tenant_advance_ledger.update).not.toHaveBeenCalled();
-    expect(tx.tenant_advance_ledger.updateMany).not.toHaveBeenCalled();
+    expect(tx.tenant_financial_ledger.create).not.toHaveBeenCalled();
+    expect(tx.tenant_financial_ledger.update).not.toHaveBeenCalled();
+    expect(tx.tenant_financial_ledger.updateMany).not.toHaveBeenCalled();
     expect(tx.move_out_requests_write.create).not.toHaveBeenCalled();
     expect(tx.move_out_requests_write.update).not.toHaveBeenCalled();
     expect(tx.move_out_requests_write.updateMany).not.toHaveBeenCalled();

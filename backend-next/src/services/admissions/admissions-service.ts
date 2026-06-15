@@ -1202,12 +1202,12 @@ export class AdmissionsService {
       const funnelTenantIds = funnelTenants.map((t) => t.id);
 
       const [funnelDepositCredits, funnelMaintenanceObligations] = await Promise.all([
-        prisma.tenant_advance_ledger.groupBy({
+        prisma.tenant_financial_ledger.groupBy({
           by: ["tenant_id"],
           where: {
             tenant_id: { in: funnelTenantIds },
             type: "CREDIT",
-            reason: "DEPOSIT",
+            reason: "SECURITY_DEPOSIT_COLLECTED",
           },
           _sum: { amount: true },
         }),

@@ -143,7 +143,7 @@ export class RoomCapacityService {
       where: {
         tenant_id: { in: tenantIds },
         type: "CREDIT",
-        reason: { in: ["DEPOSIT", "SECURITY_DEPOSIT_COLLECTED"] } as any,
+        reason: "SECURITY_DEPOSIT_COLLECTED",
       },
       _sum: { amount: true },
     });

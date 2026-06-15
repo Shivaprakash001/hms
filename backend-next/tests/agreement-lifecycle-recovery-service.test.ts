@@ -62,7 +62,7 @@ function createDb(recordsInput = [legacyAgreement]) {
     roomAllocation: { update: vi.fn(), updateMany: vi.fn(), create: vi.fn() },
     rent_obligations: { create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     payments: { create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
-    tenant_advance_ledger: { create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+    tenant_financial_ledger: { create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     move_out_requests: { create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   };
 
@@ -246,9 +246,9 @@ describe("AgreementLifecycleRecoveryService", () => {
     expect(db.payments.create).not.toHaveBeenCalled();
     expect(db.payments.update).not.toHaveBeenCalled();
     expect(db.payments.updateMany).not.toHaveBeenCalled();
-    expect(db.tenant_advance_ledger.create).not.toHaveBeenCalled();
-    expect(db.tenant_advance_ledger.update).not.toHaveBeenCalled();
-    expect(db.tenant_advance_ledger.updateMany).not.toHaveBeenCalled();
+    expect(db.tenant_financial_ledger.create).not.toHaveBeenCalled();
+    expect(db.tenant_financial_ledger.update).not.toHaveBeenCalled();
+    expect(db.tenant_financial_ledger.updateMany).not.toHaveBeenCalled();
     expect(db.move_out_requests.create).not.toHaveBeenCalled();
     expect(db.move_out_requests.update).not.toHaveBeenCalled();
     expect(db.move_out_requests.updateMany).not.toHaveBeenCalled();

@@ -174,7 +174,7 @@ function createDb(options: {
       update: vi.fn(),
       updateMany: vi.fn(),
     },
-    tenant_advance_ledger: {
+    tenant_financial_ledger: {
       create: vi.fn(),
       update: vi.fn(),
       updateMany: vi.fn(),
@@ -381,9 +381,9 @@ describe("AgreementRenewalSigningService", () => {
     expect(tx.rent_obligations.createMany).not.toHaveBeenCalled();
     expect(tx.rent_obligations.update).not.toHaveBeenCalled();
     expect(tx.rent_obligations.updateMany).not.toHaveBeenCalled();
-    expect(tx.tenant_advance_ledger.create).not.toHaveBeenCalled();
-    expect(tx.tenant_advance_ledger.update).not.toHaveBeenCalled();
-    expect(tx.tenant_advance_ledger.updateMany).not.toHaveBeenCalled();
+    expect(tx.tenant_financial_ledger.create).not.toHaveBeenCalled();
+    expect(tx.tenant_financial_ledger.update).not.toHaveBeenCalled();
+    expect(tx.tenant_financial_ledger.updateMany).not.toHaveBeenCalled();
     expect(tx.tenant_billing_plans.create).not.toHaveBeenCalled();
     expect(tx.tenant_billing_plans.update).not.toHaveBeenCalled();
     expect(tx.tenant_billing_plans.updateMany).not.toHaveBeenCalled();

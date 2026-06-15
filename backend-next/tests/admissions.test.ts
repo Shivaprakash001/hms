@@ -24,7 +24,7 @@ const { mockPrisma } = vi.hoisted(() => {
       tenants: {
         findMany: vi.fn(),
       },
-      tenant_advance_ledger: {
+      tenant_financial_ledger: {
         groupBy: vi.fn(),
       },
       rent_obligations: {
@@ -86,7 +86,7 @@ describe('AdmissionsService analytical boundaries', () => {
       {
         id: 't-1',
         status: 'INVITED',
-        advance_deposit: 10000,
+        security_deposit: 10000,
         maintenance_charge: 1000,
         maintenance_type: 'ONE_TIME',
         reservation_policy: 'FULL_DEPOSIT',
@@ -95,7 +95,7 @@ describe('AdmissionsService analytical boundaries', () => {
       {
         id: 't-2',
         status: 'ACTIVE',
-        advance_deposit: 10000,
+        security_deposit: 10000,
         maintenance_charge: 1000,
         maintenance_type: 'ONE_TIME',
         reservation_policy: 'FULL_DEPOSIT',
@@ -104,7 +104,7 @@ describe('AdmissionsService analytical boundaries', () => {
       {
         id: 't-3',
         status: 'ACTIVE',
-        advance_deposit: 10000,
+        security_deposit: 10000,
         maintenance_charge: 1000,
         maintenance_type: 'ONE_TIME',
         reservation_policy: 'PARTIAL_DEPOSIT',
@@ -113,7 +113,7 @@ describe('AdmissionsService analytical boundaries', () => {
       {
         id: 't-4',
         status: 'ACTIVE',
-        advance_deposit: 10000,
+        security_deposit: 10000,
         maintenance_charge: 1000,
         maintenance_type: 'ONE_TIME',
         reservation_policy: 'FULL_DEPOSIT',
@@ -125,7 +125,7 @@ describe('AdmissionsService analytical boundaries', () => {
     // t-2: paid 10000
     // t-3: paid 5000
     // t-4: paid 0
-    mockPrisma.tenant_advance_ledger.groupBy.mockResolvedValue([
+    mockPrisma.tenant_financial_ledger.groupBy.mockResolvedValue([
       { tenant_id: 't-2', _sum: { amount: 10000 } },
       { tenant_id: 't-3', _sum: { amount: 5000 } },
     ]);
