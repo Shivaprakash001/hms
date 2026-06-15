@@ -46,6 +46,9 @@ export async function POST(req: Request) {
       attemptId: body?.attempt_id,
       merchantTxnId: body?.merchant_txn_id || body?.merchantTransactionId,
       gatewayTxnId: body?.gateway_txn_id || body?.transactionId || body?.gateway_transaction_id,
+      razorpay_payment_id: body?.razorpay_payment_id,
+      razorpay_order_id: body?.razorpay_order_id,
+      razorpay_signature: body?.razorpay_signature,
     });
 
     return apiResponse({

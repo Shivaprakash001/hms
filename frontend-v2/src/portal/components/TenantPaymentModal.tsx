@@ -21,6 +21,20 @@ import { getApiErrorMessage, type PayableObligation } from '@/portal/utils/payab
 const POLL_INTERVAL_MS = 4000;
 const TERMINAL_STATUSES = ['SUCCESS', 'FAILED', 'EXPIRED', 'CANCELLED', 'PENDING_VERIFICATION'];
 
+const loadRazorpayScript = (): Promise<boolean> => {
+  return new Promise((resolve) => {
+    if ((window as any).Razorpay) {
+      resolve(true);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+};
+
 const fmt = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
 
 const fmtMonth = (cycle?: string) => {
@@ -38,6 +52,8 @@ interface PaymentAttempt {
   qr_payload?: string;
   gateway_txn_id?: string;
   merchant_txn_id?: string;
+  provider?: string;
+  raw_response?: any;
 }
 
 interface Props {
@@ -123,6 +139,65 @@ export function TenantPaymentModal({
         intent = await tenantPortalApi.createPaymentIntent({ obligation_ids: ids });
       }
 
+      if (intent.provider === 'RAZORPAY') {
+        const loaded = await loadRazorpayScript();
+        if (!loaded) {
+          setError('Failed to load payment checkout SDK. Please try again.');
+          setLoading(false);
+          return;
+        }
+
+        const options = {
+          key: intent.raw_response?.key_id,
+          amount: intent.raw_response?.amount,
+          currency: intent.raw_response?.currency || 'INR',
+          name: 'Sri Adithya Hostels',
+          description: 'Secure Checkout',
+          order_id: intent.gateway_txn_id,
+          handler: async (response: any) => {
+            setLoading(true);
+            try {
+              const verifyResult = await tenantPortalApi.verifyPayment({
+                attempt_id: intent.id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_signature: response.razorpay_signature,
+              });
+
+              setAttempt(verifyResult.attempt || verifyResult);
+              const newStatus = verifyResult.status || verifyResult.attempt?.status || 'SUCCESS';
+              setStatus(newStatus);
+              setStep('done');
+              if (newStatus === 'SUCCESS') {
+                onSuccess?.();
+              }
+            } catch (err) {
+              setError(getApiErrorMessage(err));
+              setStep('init');
+            } finally {
+              setLoading(false);
+            }
+          },
+          prefill: {
+            name: intent.raw_response?.notes?.tenant_name || '',
+            email: intent.raw_response?.notes?.tenant_email || '',
+            contact: intent.raw_response?.notes?.tenant_phone || '',
+          },
+          theme: {
+            color: '#F07B1D',
+          },
+          modal: {
+            ondismiss: () => {
+              setLoading(false);
+            },
+          },
+        };
+
+        const rzp = new (window as any).Razorpay(options);
+        rzp.open();
+        return;
+      }
+
       if (intent.checkout_url) {
         window.location.href = intent.checkout_url;
         return;
@@ -183,7 +258,7 @@ export function TenantPaymentModal({
         <DialogHeader className="p-5 border-b border-border bg-muted/30">
           <DialogTitle>{paymentType === 'ADVANCE' ? 'Pay security deposit' : 'Pay rent'}</DialogTitle>
           <p className="text-sm text-muted-foreground">
-            {step === 'init' && 'Review amount and continue to PhonePe'}
+            {step === 'init' && 'Review amount and continue to secure payment'}
             {step === 'pay' && 'Complete payment or enter UPI reference'}
             {step === 'reference' && 'Submit your transaction ID'}
             {step === 'done' && 'Payment update'}
@@ -224,7 +299,7 @@ export function TenantPaymentModal({
               <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 flex gap-3">
                 <Smartphone className="w-5 h-5 text-emerald-600 shrink-0" />
                 <p className="text-sm text-foreground">
-                  Secure checkout via PhonePe. Your payment is recorded in Sri Adithya Hostels once confirmed.
+                  Secure checkout. Your payment is recorded in Sri Adithya Hostels once confirmed.
                 </p>
               </div>
               {error && (
@@ -240,7 +315,7 @@ export function TenantPaymentModal({
                 className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-accent text-accent-foreground font-bold disabled:opacity-50"
               >
                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShieldCheck className="w-5 h-5" />}
-                {loading ? 'Starting checkout…' : 'Continue to PhonePe checkout'}
+                {loading ? 'Starting checkout…' : 'Continue to secure checkout'}
               </button>
             </>
           )}

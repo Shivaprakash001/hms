@@ -23,6 +23,11 @@ import { paymentWebhookEventService } from "@/lib/services/payment-webhook-event
 import { paymentProviderVerificationSnapshotService } from "@/lib/services/payment-provider-verification-snapshot-service";
 import { backendUrl } from "@/lib/config/domains";
 import { activationFinancialStatusService } from "@/src/services/tenants/activation-financial-status-service";
+import { getActivePaymentProvider, validatePaymentEnvironment } from "./payment-env";
+
+// Boot-time validation of payment configuration
+validatePaymentEnvironment();
+
 
 const logger = getLogger("payment.service");
 type MaybeHostelId = string | null;
@@ -2145,14 +2150,21 @@ export class PaymentService {
     const providerStr = providerName.toUpperCase();
     const requestMeta = context?.requestId ? { request_id: context.requestId } : {};
     
-    // Instead of searching top 20 pending attempts, we MUST extract the merchantOrderId directly
-    // since we know it's a PhonePe webhook and the format.
     let merchantOrderId: string | null = null;
     
     try {
       let parsed = body;
       if (typeof body === "string") parsed = JSON.parse(body);
-      merchantOrderId = parsed?.payload?.merchantOrderId || null;
+      if (providerStr === "PHONEPE") {
+        merchantOrderId = parsed?.payload?.merchantOrderId || null;
+      } else if (providerStr === "RAZORPAY") {
+        const pl = parsed?.payload || {};
+        merchantOrderId = pl.order?.entity?.receipt || 
+                          pl.payment?.entity?.notes?.merchant_txn_id || 
+                          pl.payment?.entity?.notes?.merchant_transaction_id || 
+                          parsed?.notes?.merchant_txn_id ||
+                          null;
+      }
     } catch (e) {
       logger.warn("payments.webhook.merchant_order_id_extract_failed", {
         ...requestMeta,
@@ -2357,6 +2369,9 @@ export class PaymentService {
     attemptId?: string;
     merchantTxnId?: string;
     gatewayTxnId?: string;
+    razorpay_payment_id?: string;
+    razorpay_order_id?: string;
+    razorpay_signature?: string;
   }) {
     const { userId, role, tenantId, attemptId, merchantTxnId, gatewayTxnId } = params;
 
@@ -2426,13 +2441,46 @@ export class PaymentService {
       };
     }
 
-    const { instance } = await this.getProviderInstanceForAttempt(attempt, "payment attempt verification");
+    const { instance, config } = await this.getProviderInstanceForAttempt(attempt, "payment attempt verification");
+
+    let resolvedGatewayTxnId = gatewayTxnId || (attempt as any).provider_order_id || attempt.gateway_txn_id || undefined;
+
+    if (attempt.provider === "RAZORPAY" && params.razorpay_signature) {
+      const { razorpay_payment_id, razorpay_order_id, razorpay_signature } = params;
+      if (!razorpay_payment_id || !razorpay_order_id) {
+        throw new Error("BAD_REQUEST: Missing razorpay_payment_id or razorpay_order_id for signature verification");
+      }
+      const keySecret = config?.key_secret;
+      if (!keySecret) {
+        throw new Error("CONFIG_ERROR: Razorpay key_secret not configured");
+      }
+      const expectedSignature = crypto
+        .createHmac("sha256", keySecret)
+        .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+        .digest("hex");
+      if (expectedSignature !== razorpay_signature) {
+        await paymentOperationalAnomalyService.create({
+          anomalyType: "WEBHOOK_SIGNATURE_FAILED",
+          severity: "HIGH",
+          paymentAttemptId: attempt.id,
+          metadata: { reason: "Razorpay client callback signature mismatch", provider: "RAZORPAY" },
+        });
+        throw new Error("SECURITY_ERROR: Invalid Razorpay signature in verify payment");
+      }
+      logger.info("payments.verify.razorpay_signature_verified", {
+        attemptId: attempt.id,
+        razorpay_payment_id,
+        razorpay_order_id,
+      });
+      resolvedGatewayTxnId = razorpay_payment_id;
+    }
+
     let fetched;
 
     try {
       fetched = await instance.fetchStatus(
         (attempt as any).merchant_transaction_id || attempt.merchant_txn_id,
-        gatewayTxnId || (attempt as any).provider_order_id || attempt.gateway_txn_id || undefined
+        resolvedGatewayTxnId
       );
       await paymentProviderVerificationSnapshotService.record({
         provider: attempt.provider,
@@ -2834,6 +2882,16 @@ export class PaymentService {
   }
 
   private getOwnerLevelProviderConfig() {
+    const active = getActivePaymentProvider();
+    if (active === "RAZORPAY") {
+      return {
+        key_id: process.env.RAZORPAY_KEY_ID!,
+        key_secret: process.env.RAZORPAY_KEY_SECRET!,
+        webhook_secret: process.env.RAZORPAY_WEBHOOK_SECRET!,
+        base_url: process.env.RAZORPAY_BASE_URL || "https://api.razorpay.com",
+        callbackUrl: backendUrl("/api/webhooks/payments/razorpay"),
+      };
+    }
     return {
       clientId: process.env.PHONEPE_CLIENT_ID!,
       clientSecret: process.env.PHONEPE_CLIENT_SECRET!,

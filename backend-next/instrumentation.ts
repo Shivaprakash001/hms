@@ -15,5 +15,15 @@ export async function register() {
     } catch (err: any) {
       console.error("[instrumentation] Owner integrity check failed:", err?.message || err);
     }
+    try {
+      const { validatePaymentEnvironment } = await import("./src/services/payments/payment-env");
+      validatePaymentEnvironment();
+    } catch (err: any) {
+      console.error("[instrumentation] Payment provider integrity check failed:", err?.message || err);
+      // Hard crash the server in production when payment settings are invalid
+      if (process.env.NODE_ENV === "production") {
+        process.exit(1);
+      }
+    }
   }
 }

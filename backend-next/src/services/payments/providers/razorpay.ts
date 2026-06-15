@@ -1,6 +1,6 @@
 import axios from "axios";
 import { PaymentProvider, CreateIntentResult, WebhookVerificationResult, FetchStatusResult } from "../provider-base";
-import { generateHMAC, compareDigest } from "../crypto";
+import * as crypto from "crypto";
 
 export class RazorpayProvider extends PaymentProvider {
   private get auth() {
@@ -17,40 +17,39 @@ export class RazorpayProvider extends PaymentProvider {
   }
 
   async createIntent(data: any): Promise<CreateIntentResult> {
-    const expireBy = Math.floor(Date.now() / 1000) + (this.config.expires_in_seconds || 900);
     const payload = {
-      amount: Math.round(data.amount * 100),
+      amount: Math.round(data.amount * 100), // Razorpay amount in paise
       currency: this.config.currency || "INR",
-      accept_partial: false,
-      expire_by: expireBy,
-      reference_id: data.merchant_txn_id,
-      description: this.config.description || "Hostel rent payment",
-      upi_link: true,
-      notify: { sms: false, email: false },
-      notes: data.metadata,
-      customer: {
-        name: data.tenant_name || "Tenant",
-        email: data.tenant_email || "",
-        contact: data.tenant_phone || "",
+      receipt: data.merchant_txn_id,
+      notes: {
+        merchant_txn_id: data.merchant_txn_id,
+        flow_type: this.config.flow_type || "",
+        hostel_id: this.config.hostelId || "",
+        tenant_name: data.tenant_name || "",
+        tenant_email: data.tenant_email || "",
+        tenant_phone: data.tenant_phone || "",
       },
     };
 
-    const response = await axios.post(`${this.baseUrl}/v1/payment_links`, payload, this.auth);
+    const response = await axios.post(`${this.baseUrl}/v1/orders`, payload, this.auth);
     const resData = response.data;
 
-    const upiLink = resData.short_url || resData.upi_link;
     return {
       provider: "RAZORPAY",
       merchant_txn_id: data.merchant_txn_id,
-      checkout_url: upiLink,
-      upi_intent_url: upiLink,
-      qr_payload: resData.upi_qr || resData.qr_code || upiLink,
-      expires_at: new Date(expireBy * 1000),
+      checkout_url: null,
+      upi_intent_url: null,
+      qr_payload: null,
+      expires_at: null,
       gateway_txn_id: resData.id,
       provider_order_id: resData.id,
       provider_transaction_id: null,
       provider_reference_id: resData.id,
-      raw_response: resData,
+      raw_response: {
+        ...resData,
+        // Expose public key_id to the client so Checkout SDK can load it
+        key_id: this.config.key_id,
+      },
     };
   }
 
@@ -58,57 +57,107 @@ export class RazorpayProvider extends PaymentProvider {
     const signature = headers["x-razorpay-signature"];
     const secret = this.config.webhook_secret;
 
-    if (secret && signature) {
-      const expected = generateHMAC(secret, body);
-      if (!compareDigest(signature, expected)) {
-        throw new Error("Invalid Razorpay signature");
-      }
+    let rawBody = body;
+    if (typeof body !== "string" && !Buffer.isBuffer(body)) {
+      rawBody = JSON.stringify(body);
     }
 
-    const data = JSON.parse(body.toString());
+    if (secret && signature) {
+      const shasum = crypto.createHmac("sha256", secret);
+      shasum.update(rawBody);
+      const digest = shasum.digest("hex");
+      if (digest !== signature) {
+        throw new Error("Invalid Razorpay signature");
+      }
+    } else if (secret) {
+      throw new Error("Missing Razorpay signature header");
+    }
+
+    const data = typeof body === "string" || Buffer.isBuffer(body)
+      ? JSON.parse(body.toString())
+      : body;
+
     const pl = data.payload || {};
-    const link = pl.payment_link?.entity || {};
+    const order = pl.order?.entity || {};
     const payment = pl.payment?.entity || {};
 
     const statusMap: any = {
       paid: "SUCCESS",
       captured: "SUCCESS",
-      cancelled: "CANCELLED",
-      expired: "EXPIRED",
       failed: "FAILED",
     };
 
+    const rawStatus = order.status || payment.status || "created";
+    const status = statusMap[String(rawStatus).toLowerCase()] || "PENDING";
+
     return {
-      merchant_txn_id: link.reference_id || payment.notes?.merchant_txn_id,
-      gateway_txn_id: payment.id || link.id,
+      merchant_txn_id: order.receipt || payment.notes?.merchant_txn_id || payment.notes?.merchant_transaction_id || data.notes?.merchant_txn_id,
+      gateway_txn_id: payment.id || order.id,
       provider_transaction_id: payment.id || null,
-      provider_order_id: link.id || null,
-      provider_reference_id: payment.id || link.id || null,
-      status: statusMap[String(link.status || payment.status).toLowerCase()] || "PENDING",
-      amount: (payment.amount || link.amount) / 100,
+      provider_order_id: order.id || payment.order_id || null,
+      provider_reference_id: payment.id || order.id || null,
+      status: status,
+      amount: (payment.amount || order.amount) / 100,
+      provider_state: rawStatus,
+      verification_state: signature ? "SIGNED" : "UNVERIFIED",
       raw_event: data,
     };
   }
 
   async fetchStatus(merchant_txn_id: string, gateway_txn_id?: string): Promise<FetchStatusResult> {
-    if (!gateway_txn_id) throw new Error("Gateway ID required");
-    const response = await axios.get(`${this.baseUrl}/v1/payment_links/${gateway_txn_id}`, this.auth);
-    const data = response.data;
+    if (!gateway_txn_id) {
+      throw new Error("Gateway ID (Order ID or Payment ID) required");
+    }
+
+    let orderId = gateway_txn_id;
+    let paymentId: string | null = null;
+
+    if (gateway_txn_id.startsWith("pay_")) {
+      const payResponse = await axios.get(`${this.baseUrl}/v1/payments/${gateway_txn_id}`, this.auth);
+      const payData = payResponse.data;
+      paymentId = payData.id;
+      orderId = payData.order_id;
+    }
+
+    const orderResponse = await axios.get(`${this.baseUrl}/v1/orders/${orderId}`, this.auth);
+    const orderData = orderResponse.data;
+
+    const paymentsResponse = await axios.get(`${this.baseUrl}/v1/orders/${orderId}/payments`, this.auth);
+    const paymentsData = paymentsResponse.data;
+
+    const paymentList = paymentsData.items || [];
+    const successfulPayment = paymentList.find((p: any) => p.status === "captured" || p.status === "authorized");
+    const latestPayment = successfulPayment || paymentList[0];
+
+    if (latestPayment) {
+      paymentId = latestPayment.id;
+    }
 
     const statusMap: any = {
       paid: "SUCCESS",
-      cancelled: "CANCELLED",
-      expired: "EXPIRED",
       created: "PENDING",
+      attempted: "PENDING",
     };
 
+    const rawStatus = orderData.status;
+    let canonicalStatus = statusMap[String(rawStatus).toLowerCase()] || "PENDING";
+
+    if (canonicalStatus !== "SUCCESS" && latestPayment?.status === "captured") {
+      canonicalStatus = "SUCCESS";
+    }
+
     return {
-      status: statusMap[String(data.status).toLowerCase()] || "PENDING",
-      gateway_txn_id: data.id,
-      provider_order_id: data.id,
-      provider_transaction_id: data.payments?.[0]?.payment_id || null,
-      provider_reference_id: data.payments?.[0]?.payment_id || data.id,
-      raw_status: data,
+      status: canonicalStatus,
+      gateway_txn_id: orderId,
+      provider_order_id: orderId,
+      provider_transaction_id: paymentId,
+      provider_reference_id: paymentId || orderId,
+      provider_state: rawStatus,
+      verification_state: "UNVERIFIED",
+      raw_status: {
+        order: orderData,
+        payments: paymentsData,
+      },
     };
   }
 }
