@@ -36,7 +36,7 @@ describe("OnboardingFinancialsService", () => {
       owner_id: "owner-1",
       hostel_id: "hostel-1",
       status: "INVITED",
-      advance_deposit: 0,
+      security_deposit: 0,
     } as any);
     vi.mocked(prisma.rent_obligations.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.rent_obligations.create).mockResolvedValue({ id: "obligation-1" } as any);
@@ -107,13 +107,13 @@ describe("OnboardingFinancialsService", () => {
     expect(prisma.rent_obligations.create).not.toHaveBeenCalled();
   });
 
-  it("creates deposit obligations when advance_deposit is configured", async () => {
+  it("creates deposit obligations when security_deposit is configured", async () => {
     vi.mocked(prisma.tenants.findUnique).mockResolvedValue({
       id: "tenant-1",
       owner_id: "owner-1",
       hostel_id: "hostel-1",
       status: "INVITED",
-      advance_deposit: 5000,
+      security_deposit: 5000,
     } as any);
 
     const result = await service.initializeOnboardingFinancials(prisma as any, {
@@ -125,7 +125,7 @@ describe("OnboardingFinancialsService", () => {
       maintenanceType: "NONE",
     });
 
-    expect(result).toEqual({ createdObligations: ["ADVANCE"], skipped: false });
+    expect(result).toEqual({ createdObligations: ["SECURITY_DEPOSIT"], skipped: false });
     expect(prisma.rent_obligations.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         tenant_id: "tenant-1",
@@ -136,7 +136,7 @@ describe("OnboardingFinancialsService", () => {
         total_amount: 5000,
         due_date: joiningDate,
         status: "PENDING",
-        obligation_type: "ADVANCE",
+        obligation_type: "SECURITY_DEPOSIT",
         installment_label: "Security Deposit",
       }),
     });

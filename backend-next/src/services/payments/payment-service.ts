@@ -2519,9 +2519,11 @@ export class PaymentService {
       room_no: d.room_allocations?.room?.room_no || "N/A",
       rent_month: d.rent_month,
       due_date: d.due_date,
-      amount: Number(d.amount),
+      amount: Number(d.total_amount || d.amount),
+      late_fee: Number(d.late_fee || 0),
+      obligation_type: d.obligation_type || "RENT",
       status: d.status,
-      outstanding: Math.max(0, Number(d.amount) - (d.payments?.reduce((s: number, p: any) => s + Number(p.amount_paid), 0) || 0))
+      outstanding: Math.max(0, Number(d.total_amount || d.amount) - (d.payments?.reduce((s: number, p: any) => s + Number(p.amount_paid), 0) || 0))
     }));
   }
 
@@ -2583,10 +2585,13 @@ export class PaymentService {
           o.tenant_id,
           o.rent_month,
           o.due_date,
-          o.amount::float AS rent_amount,
+          o.amount::float AS base_rent_amount,
+          o.late_fee::float AS late_fee,
+          o.total_amount::float AS rent_amount,
+          o.obligation_type::text AS obligation_type,
           o.status::text AS status_raw,
           COALESCE(pay.total_paid, 0)::float AS paid_amount,
-          GREATEST(0, o.amount::float - COALESCE(pay.total_paid, 0))::float AS balance,
+          GREATEST(0, o.total_amount::float - COALESCE(pay.total_paid, 0))::float AS balance,
           COALESCE(pay.payment_methods, '[]'::jsonb) AS payment_methods,
           prof.name AS tenant_name,
           prof.phone AS tenant_phone,
@@ -2599,7 +2604,7 @@ export class PaymentService {
           latest.payment_date AS latest_payment_date,
           CASE
             WHEN o.status::text = 'WAIVED' THEN 'waived'
-            WHEN o.status::text = 'PAID' OR o.amount::float - COALESCE(pay.total_paid, 0) <= 0 THEN 'paid'
+            WHEN o.status::text = 'PAID' OR o.total_amount::float - COALESCE(pay.total_paid, 0) <= 0 THEN 'paid'
             WHEN o.due_date < ${todayUTC}::date THEN 'overdue'
             WHEN o.status::text = 'PARTIAL' THEN 'partial'
             ELSE 'pending'
@@ -2654,11 +2659,11 @@ export class PaymentService {
       operational_dues AS (
         SELECT
           COALESCE(SUM(
-            o.amount - COALESCE(pay_agg.total_paid, 0)
+            o.total_amount - COALESCE(pay_agg.total_paid, 0)
           ), 0)::float AS pending_total,
           COALESCE(SUM(
             CASE WHEN o.due_date < ${todayUTC}::date
-              THEN o.amount - COALESCE(pay_agg.total_paid, 0)
+              THEN o.total_amount - COALESCE(pay_agg.total_paid, 0)
               ELSE 0
             END
           ), 0)::float AS overdue_total
@@ -2674,7 +2679,7 @@ export class PaymentService {
           AND o.hostel_id = ${hostelId}::uuid
           AND o.status IN ('PENDING', 'PARTIAL')
           AND t.status = 'ACTIVE'
-          AND o.amount - COALESCE(pay_agg.total_paid, 0) > 0
+          AND o.total_amount - COALESCE(pay_agg.total_paid, 0) > 0
       ),
       active_tenants AS (
         SELECT COUNT(*)::int AS active_tenants
@@ -2715,6 +2720,9 @@ export class PaymentService {
           'month', rent_month,
           'dueDate', due_date,
           'rentAmount', rent_amount,
+          'baseAmount', base_rent_amount,
+          'lateFee', late_fee,
+          'obligationType', obligation_type,
           'paidAmount', paid_amount,
           'amount_paid', paid_amount,
           'balance', balance,

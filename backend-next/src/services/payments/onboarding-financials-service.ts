@@ -47,7 +47,7 @@ export class OnboardingFinancialsService {
 
     const tenant = await tx.tenants.findUnique({
       where: { id: tenantId },
-      select: { id: true, owner_id: true, hostel_id: true, status: true, advance_deposit: true },
+      select: { id: true, owner_id: true, hostel_id: true, status: true, security_deposit: true },
     });
     if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
     if (tenant.owner_id !== ownerId || tenant.hostel_id !== hostelId) {
@@ -57,7 +57,7 @@ export class OnboardingFinancialsService {
       return { createdObligations: [], skipped: true, reason: "TENANT_NOT_INVITED" };
     }
 
-    const advanceDeposit = money(tenant.advance_deposit);
+    const advanceDeposit = money(tenant.security_deposit);
     const hasMaintenance = maintenanceType !== "NONE" && maintenanceCharge > 0;
     const hasAdvance = advanceDeposit > 0;
 
@@ -114,7 +114,7 @@ export class OnboardingFinancialsService {
         where: {
           tenant_id: tenantId,
           rent_month: rentMonth,
-          obligation_type: "ADVANCE",
+          obligation_type: "SECURITY_DEPOSIT",
           is_superseded: false,
         },
         select: { id: true },
@@ -131,14 +131,14 @@ export class OnboardingFinancialsService {
             total_amount: advanceDeposit,
             due_date: joiningDate,
             status: "PENDING",
-            obligation_type: "ADVANCE",
+            obligation_type: "SECURITY_DEPOSIT",
             billing_period_start: joiningDate,
             billing_period_end: joiningDate,
             installment_label: "Security Deposit",
           },
         });
-        createdObligations.push("ADVANCE");
-        logger.info("onboarding.advance_obligation_created", {
+        createdObligations.push("SECURITY_DEPOSIT");
+        logger.info("onboarding.security_deposit_obligation_created", {
           tenant_id: tenantId,
           hostel_id: hostelId,
           amount: advanceDeposit,

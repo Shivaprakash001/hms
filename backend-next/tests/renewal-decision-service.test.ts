@@ -148,7 +148,7 @@ describe("RenewalDecisionService", () => {
     };
     const historyService = new RenewalDecisionService(db as any);
     const history = await historyService.getAgreementHistory({ tenantId: "tenant-1", ownerId: "owner-1" });
-    expect(history.map((row) => row.id)).toEqual(["v2", "v1"]);
+    expect(history.map((row: any) => row.id)).toEqual(["v2", "v1"]);
     expect(history[0].is_current).toBe(true);
     expect(history[1].is_historical).toBe(true);
   });

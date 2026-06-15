@@ -12,10 +12,10 @@ export class BillingRepository {
         SELECT
           o.id,
           o.tenant_id,
-          o.amount::float                              AS amount,
+          o.total_amount::float                        AS amount,
           o.due_date,
           GREATEST(
-            o.amount - COALESCE(pay_agg.total_paid, 0),
+            o.total_amount - COALESCE(pay_agg.total_paid, 0),
             0
           )::float                                     AS remaining
         FROM rent_obligations o
@@ -55,7 +55,7 @@ export class BillingRepository {
       SELECT
         o.tenant_id,
         COALESCE(SUM(
-          GREATEST(o.amount - COALESCE(pay_agg.total_paid, 0), 0)
+          GREATEST(o.total_amount - COALESCE(pay_agg.total_paid, 0), 0)
         ), 0)::float AS outstanding
       FROM rent_obligations o
       JOIN tenants t ON t.id = o.tenant_id
@@ -80,17 +80,17 @@ export class BillingRepository {
     return await prisma.$queryRaw<any[]>`
       SELECT
         COALESCE(SUM(
-          o.amount - COALESCE(pay_agg.total_paid, 0)
+          o.total_amount - COALESCE(pay_agg.total_paid, 0)
         ), 0)::float                                                                  AS pending_total,
         COALESCE(SUM(
           CASE WHEN o.due_date < ${todayUTC}::date
-            THEN o.amount - COALESCE(pay_agg.total_paid, 0)
+            THEN o.total_amount - COALESCE(pay_agg.total_paid, 0)
             ELSE 0
           END
         ), 0)::float                                                                  AS overdue_total,
         COUNT(
           CASE WHEN o.due_date < ${todayUTC}::date
-            AND o.amount - COALESCE(pay_agg.total_paid, 0) > 0
+            AND o.total_amount - COALESCE(pay_agg.total_paid, 0) > 0
           THEN 1 END
         )::int                                                                        AS overdue_count,
         COUNT(DISTINCT t.id)::int                                                     AS unpaid_tenant_count,
@@ -106,7 +106,7 @@ export class BillingRepository {
       ) pay_agg ON pay_agg.obligation_id = o.id
       WHERE o.owner_id    = ${ownerId}::uuid
         AND o.status      IN ('PENDING', 'PARTIAL')
-        AND o.amount - COALESCE(pay_agg.total_paid, 0) > 0
+        AND o.total_amount - COALESCE(pay_agg.total_paid, 0) > 0
         ${hostelFilter}
     `;
   }
@@ -123,7 +123,7 @@ export class BillingRepository {
         SELECT
           o.tenant_id,
           p.name,
-          SUM(o.amount - COALESCE(pay_agg.total_paid, 0))::float AS pending_amount,
+          SUM(o.total_amount - COALESCE(pay_agg.total_paid, 0))::float AS pending_amount,
           MIN(o.due_date)                                         AS earliest_due
         FROM rent_obligations o
         JOIN tenants t ON t.id = o.tenant_id
@@ -136,7 +136,7 @@ export class BillingRepository {
         WHERE o.owner_id = ${ownerId}::uuid
           AND o.status IN ('PENDING', 'PARTIAL')
           AND o.due_date < CURRENT_DATE
-          AND o.amount - COALESCE(pay_agg.total_paid, 0) > 0
+          AND o.total_amount - COALESCE(pay_agg.total_paid, 0) > 0
           ${hostelFilter}
         GROUP BY o.tenant_id, p.name
       )
@@ -172,6 +172,8 @@ export class BillingRepository {
       tenant_name: string | null;
       personal_email: string | null;
       phone: string | null;
+      late_fee: number;
+      total_amount: number;
     }>>`
       SELECT
         o.id                                                AS obligation_id,
@@ -186,8 +188,10 @@ export class BillingRepository {
         o.installment_sequence,
         o.billing_plan_id,
         o.due_date,
-        o.amount::float                                     AS amount,
-        (o.amount - COALESCE(pay_agg.total_paid, 0))::float AS remaining_amount,
+        o.total_amount::float                               AS amount,
+        o.late_fee::float                                   AS late_fee,
+        o.total_amount::float                               AS total_amount,
+        (o.total_amount - COALESCE(pay_agg.total_paid, 0))::float AS remaining_amount,
         p.name                                              AS tenant_name,
         t.personal_email,
         p.phone                                             AS phone
@@ -205,7 +209,7 @@ export class BillingRepository {
         AND o.obligation_type = 'RENT'
         AND o.due_date < ${cutoff}::date
         AND o.is_superseded = false
-        AND o.amount - COALESCE(pay_agg.total_paid, 0) > 0
+        AND o.total_amount - COALESCE(pay_agg.total_paid, 0) > 0
         AND o.owner_id = ${ownerId}::uuid
         AND o.hostel_id = ${hostelId}::uuid
     `;
@@ -218,17 +222,17 @@ export class BillingRepository {
     return await prisma.$queryRaw<any[]>`
       SELECT
         COALESCE(SUM(
-          o.amount - COALESCE(pay_agg.total_paid, 0)
+          o.total_amount - COALESCE(pay_agg.total_paid, 0)
         ), 0)::float                                                                  AS outstanding_total,
         COALESCE(SUM(
           CASE WHEN o.due_date < ${todayUTC}::date
-            THEN o.amount - COALESCE(pay_agg.total_paid, 0)
+            THEN o.total_amount - COALESCE(pay_agg.total_paid, 0)
             ELSE 0
           END
         ), 0)::float                                                                  AS overdue_total,
         COUNT(
           CASE WHEN o.due_date < ${todayUTC}::date
-            AND o.amount - COALESCE(pay_agg.total_paid, 0) > 0
+            AND o.total_amount - COALESCE(pay_agg.total_paid, 0) > 0
           THEN 1 END
         )::int                                                                        AS overdue_count
       FROM rent_obligations o
@@ -240,7 +244,7 @@ export class BillingRepository {
       WHERE o.owner_id = ${ownerId}::uuid
         AND o.hostel_id = ${hostelId}::uuid
         AND o.status   IN ('PENDING', 'PARTIAL')
-        AND o.amount - COALESCE(pay_agg.total_paid, 0) > 0
+        AND o.total_amount - COALESCE(pay_agg.total_paid, 0) > 0
     `;
   }
 

@@ -74,7 +74,7 @@ describe("OTP Verification Pipeline Security Tests", () => {
       success: true,
       providerMessageId: "wamid.1",
       attempts: 1,
-    });
+    } as any);
 
     await authOtpService.sendPhoneOtp({
       phone: "8008046952",
@@ -133,7 +133,7 @@ describe("OTP Verification Pipeline Security Tests", () => {
     };
 
     prisma.phoneVerificationOtp.findFirst.mockResolvedValueOnce(mockRecord);
-    vi.mocked(bcrypt.compare).mockResolvedValueOnce(false); // wrong code entered
+    (bcrypt.compare as any).mockResolvedValueOnce(false); // wrong code entered
 
     await expect(
       authOtpService.verifyPhoneOtp({
@@ -200,10 +200,10 @@ describe("OTP Verification Pipeline Security Tests", () => {
     };
 
     prisma.phoneVerificationOtp.findFirst.mockResolvedValueOnce(mockRecord);
-    vi.mocked(bcrypt.compare).mockResolvedValueOnce(true); // OTP matches
+    (bcrypt.compare as any).mockResolvedValueOnce(true); // OTP matches
 
     // Mock successful transaction outcome (updates status to VERIFIED)
-    prisma.$transaction.mockImplementationOnce(async (callback) => {
+    prisma.$transaction.mockImplementationOnce(async (callback: any) => {
       const txMock = {
         phoneVerificationOtp: {
           updateMany: vi.fn().mockResolvedValue({ count: 1 }), // successfully updated 1 PENDING row
@@ -251,10 +251,10 @@ describe("OTP Verification Pipeline Security Tests", () => {
 
     // Both requests retrieve the active PENDING OTP
     prisma.phoneVerificationOtp.findFirst.mockResolvedValue(mockRecord);
-    vi.mocked(bcrypt.compare).mockResolvedValue(true);
+    (bcrypt.compare as any).mockResolvedValue(true);
 
     // Request A transaction updates the PENDING record successfully
-    prisma.$transaction.mockImplementationOnce(async (callback) => {
+    prisma.$transaction.mockImplementationOnce(async (callback: any) => {
       const txMock = {
         phoneVerificationOtp: {
           updateMany: vi.fn().mockResolvedValue({ count: 1 }),
@@ -267,7 +267,7 @@ describe("OTP Verification Pipeline Security Tests", () => {
     });
 
     // Request B transaction tries to update but finds status is no longer PENDING (count 0)
-    prisma.$transaction.mockImplementationOnce(async (callback) => {
+    prisma.$transaction.mockImplementationOnce(async (callback: any) => {
       const txMock = {
         phoneVerificationOtp: {
           updateMany: vi.fn().mockResolvedValue({ count: 0 }),

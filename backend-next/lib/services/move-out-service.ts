@@ -367,7 +367,7 @@ export class MoveOutService {
     const req = await prisma.move_out_requests.findUnique({ where: { id: requestId }, include: { tenant: true, inspection: true } });
     if (!req) throw new Error("NOT_FOUND: Move-out request not found");
 
-    const configuredSecurityDeposit = Number(req.tenant.advance_deposit || 0);
+    const configuredSecurityDeposit = Number(req.tenant.security_deposit || 0);
     const advBal = await tenantFinancialLedgerService.getBalance(req.tenant_id, req.owner_id);
     const paidAdvanceBalance = Math.max(0, Number(advBal.balance || 0));
 
@@ -376,7 +376,7 @@ export class MoveOutService {
       where: {
         tenant_id: req.tenant_id,
         obligation: {
-          obligation_type: "ADVANCE",
+          obligation_type: { in: ["SECURITY_DEPOSIT", "ADVANCE"] },
         },
       },
       _sum: {
@@ -850,11 +850,11 @@ function applyConfirmedSettlement(
 
 async function getAdvanceBalanceInTx(tx: Tx, tenantId: string): Promise<number> {
   const [credits, debits] = await Promise.all([
-    tx.tenant_advance_ledger.aggregate({
+    tx.tenant_financial_ledger.aggregate({
       where: { tenant_id: tenantId, type: "CREDIT" },
       _sum: { amount: true },
     }),
-    tx.tenant_advance_ledger.aggregate({
+    tx.tenant_financial_ledger.aggregate({
       where: { tenant_id: tenantId, type: "DEBIT" },
       _sum: { amount: true },
     }),
@@ -879,14 +879,14 @@ async function createAdvanceDebitInTx(
   }
 ) {
   if (params.amount <= 0) return;
-  await tx.tenant_advance_ledger.create({
+  await tx.tenant_financial_ledger.create({
     data: {
       id: randomUUID(),
       tenant_id: params.tenantId,
       owner_id: params.ownerId,
       hostel_id: params.hostelId,
       type: "DEBIT",
-      reason: params.reason,
+      reason: params.reason === "DEDUCTION" ? "SECURITY_DEPOSIT_DEDUCTION" : params.reason === "REFUND" ? "SECURITY_DEPOSIT_REFUNDED" : params.reason as any,
       amount: round2(params.amount),
       balance_after: round2(Math.max(0, params.balanceAfter)),
       notes: params.notes,
@@ -907,14 +907,14 @@ async function applyAdvanceSettlementInTx(tx: Tx, settlementId: string, actorId:
       owner_id: true,
       hostel_id: true,
       security_deposit_amount: true,
-      advance_balance: true,
+      future_rent_credit_balance: true,
       net_settlement_amount: true,
       settlement_direction: true,
     },
   });
   if (!settlement) return;
 
-  const existing = await tx.tenant_advance_ledger.findFirst({
+  const existing = await tx.tenant_financial_ledger.findFirst({
     where: {
       reference_id: settlement.id,
       reference_type: { in: ["MOVE_OUT_ADVANCE_DEDUCTION", "MOVE_OUT_ADVANCE_REFUND"] },
@@ -926,7 +926,7 @@ async function applyAdvanceSettlementInTx(tx: Tx, settlementId: string, actorId:
   await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${settlement.tenant_id}::uuid FOR UPDATE`;
 
   const currentBalance = Math.max(0, await getAdvanceBalanceInTx(tx, settlement.tenant_id));
-  const settlementAdvance = round2(Number(settlement.security_deposit_amount || 0) + Number(settlement.advance_balance || 0));
+  const settlementAdvance = round2(Number(settlement.security_deposit_amount || 0) + Number(settlement.future_rent_credit_balance || 0));
   const debitTotal = Math.min(currentBalance, settlementAdvance);
   if (debitTotal <= 0) return;
 
@@ -972,7 +972,7 @@ async function applyAdvanceSettlementInTx(tx: Tx, settlementId: string, actorId:
 
 function snapshotFromPreview(p: any) {
   return {
-    security_deposit_amount: p.security_deposit_amount, advance_balance: p.advance_balance,
+    security_deposit_amount: p.security_deposit_amount, future_rent_credit_balance: p.advance_balance,
     pending_rent_dues: p.pending_rent_dues, pending_late_fees: p.pending_late_fees,
     pending_utility_dues: p.pending_utility_dues, damages_deduction: p.damages_deduction,
     cleaning_deduction: p.cleaning_deduction, missing_items_deduction: p.missing_items_deduction,

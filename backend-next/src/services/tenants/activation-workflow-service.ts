@@ -379,7 +379,7 @@ export class ActivationWorkflowService {
         billingStartDate: tenant.billing_start_date,
         monthlyRent: tenant.monthly_rent,
         roomBaseRent: room?.base_rent,
-        advanceDeposit: tenant.advance_deposit,
+        advanceDeposit: tenant.security_deposit,
         maintenanceCharge: tenant.maintenance_charge,
         maintenanceType: tenant.maintenance_type,
         paymentFrequency: tenant.payment_frequency,
@@ -526,7 +526,7 @@ export class ActivationWorkflowService {
         monthly_rent: numberValue(tenant.monthly_rent ?? room?.base_rent),
         maintenance_charge: numberValue(tenant.maintenance_charge),
         maintenance_type: tenant.maintenance_type,
-        advance_deposit: numberValue(tenant.advance_deposit),
+        advance_deposit: numberValue(tenant.security_deposit),
         billing_start_date: dateOnly(tenant.billing_start_date),
         joining_date: dateOnly(tenant.joined_on),
         payment_due_cycle: hostel.rent_cycle || prefs.rent_cycle || "MONTHLY",
@@ -629,6 +629,20 @@ export class ActivationWorkflowService {
     if (step === "ACTIVATE") {
       await this.activate(profile, tenant, data, invitation);
       const requiredDocumentTypes = this.requiredDocumentTypes(tenant.profile_type);
+
+      // Auto-login: generate session & tokens for the newly activated tenant
+      const { authService } = await import("../../../lib/services/auth-service");
+      const updatedProfile = await prisma.profile.findUnique({
+        where: { id: profile.id },
+        include: { tenants: true },
+      });
+      const sessionResult = updatedProfile ? await authService.createSessionAndTokens(
+        updatedProfile,
+        updatedProfile.tenants?.id || null,
+        updatedProfile.tenants?.profile_completed || false,
+        { ipAddress: context.ip, userAgent: context.userAgent }
+      ) : null;
+
       return {
         activation_state: {
           account_setup_completed: true,
@@ -641,6 +655,7 @@ export class ActivationWorkflowService {
           activation_completed: true,
         },
         redirect_to: "/tenant/dashboard",
+        session: sessionResult,
       };
     }
 
@@ -724,7 +739,7 @@ export class ActivationWorkflowService {
       billingStartDate: tenant.billing_start_date,
       monthlyRent: tenant.monthly_rent,
       roomBaseRent: room?.base_rent,
-      advanceDeposit: tenant.advance_deposit,
+      advanceDeposit: tenant.security_deposit,
       maintenanceCharge: tenant.maintenance_charge,
       maintenanceType: tenant.maintenance_type,
       paymentFrequency: tenant.payment_frequency,
@@ -1213,7 +1228,7 @@ export class ActivationWorkflowService {
 
   private validateOperationalInviteData(tenant: any) {
     const rent = numberValue(tenant.monthly_rent);
-    const advance = numberValue(tenant.advance_deposit);
+    const advance = numberValue(tenant.security_deposit);
     const maintenance = numberValue(tenant.maintenance_charge);
     if (rent <= 0) throw new Error("VALIDATION_ERROR: Monthly rent must be greater than zero");
     if (advance < 0) throw new Error("VALIDATION_ERROR: Advance deposit cannot be negative");

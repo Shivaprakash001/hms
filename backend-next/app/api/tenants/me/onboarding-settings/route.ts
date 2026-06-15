@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
         monthly_rent: true,
         joined_on: true,
         billing_start_date: true,
-        advance_deposit: true,
+        security_deposit: true,
         maintenance_charge: true,
         maintenance_type: true,
         phone_1: true,
@@ -109,7 +109,7 @@ export async function GET(req: NextRequest) {
       },
       invite_summary: {
         monthly_rent: tenant.monthly_rent ? Number(tenant.monthly_rent) : 0,
-        advance_deposit: Number(tenant.advance_deposit || 0),
+        advance_deposit: Number(tenant.security_deposit || 0),
         maintenance_charge: Number(tenant.maintenance_charge || 0),
         maintenance_type: tenant.maintenance_type,
         joined_on: tenant.joined_on,

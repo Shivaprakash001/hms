@@ -30,7 +30,7 @@ export class ActivationFinancialStatusService {
       where: { id },
       select: {
         id: true,
-        advance_deposit: true,
+        security_deposit: true,
         maintenance_charge: true,
         maintenance_type: true,
       },
@@ -38,11 +38,11 @@ export class ActivationFinancialStatusService {
     if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
 
     const [depositCredits, maintenanceObligations, paidAdvanceObligations, ledgerDepositPayments] = await Promise.all([
-      prisma.tenant_advance_ledger.aggregate({
+      prisma.tenant_financial_ledger.aggregate({
         where: {
           tenant_id: id,
           type: "CREDIT",
-          reason: "DEPOSIT",
+          reason: { in: ["DEPOSIT", "SECURITY_DEPOSIT_COLLECTED"] } as any,
         },
         _sum: { amount: true },
       }),
@@ -62,18 +62,18 @@ export class ActivationFinancialStatusService {
         where: {
           tenant_id: id,
           obligation: {
-            obligation_type: "ADVANCE",
+            obligation_type: { in: ["SECURITY_DEPOSIT", "ADVANCE"] },
           },
         },
         _sum: {
           amount_paid: true,
         },
       }),
-      prisma.tenant_advance_ledger.aggregate({
+      prisma.tenant_financial_ledger.aggregate({
         where: {
           tenant_id: id,
           type: "CREDIT",
-          reason: "DEPOSIT",
+          reason: { in: ["DEPOSIT", "SECURITY_DEPOSIT_COLLECTED"] } as any,
           reference_type: "PAYMENT",
         },
         _sum: {
@@ -82,7 +82,7 @@ export class ActivationFinancialStatusService {
       }),
     ]);
 
-    const requiredDeposit = money(tenant.advance_deposit);
+    const requiredDeposit = money(tenant.security_deposit);
     const paidAdvanceObligationSum = Number(paidAdvanceObligations?._sum?.amount_paid || 0);
     const ledgerDepositPaymentsSum = Number(ledgerDepositPayments?._sum?.amount || 0);
     const paidAdvanceObligationSumOutsideLedger = Math.max(0, paidAdvanceObligationSum - ledgerDepositPaymentsSum);

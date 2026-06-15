@@ -4,7 +4,7 @@ import {
   AgreementLifecycleRecoveryService,
 } from "@/src/services/tenants/agreement-lifecycle-recovery-service";
 
-const completeSnapshot = {
+const completeSnapshot: any = {
   joining_date: "2026-06-14",
   monthly_rent: 8500,
   advance_deposit: 10000,
@@ -13,7 +13,7 @@ const completeSnapshot = {
   payment_frequency: "MONTHLY",
 };
 
-const legacyAgreement = {
+const legacyAgreement: any = {
   id: "agreement-1",
   tenant_id: "tenant-1",
   hostel_id: "hostel-1",
@@ -45,7 +45,7 @@ function createDb(recordsInput = [legacyAgreement]) {
   const records = new Map(recordsInput.map((record: any) => [record.id, { ...record }]));
   const db = {
     agreement: {
-      findMany: vi.fn(async () => [...records.values()].map((record) => ({ ...record }))),
+      findMany: vi.fn(async () => Array.from(records.values()).map((record) => ({ ...record }))),
       findUnique: vi.fn(async ({ where }: any) => {
         const record = records.get(where.id);
         return record ? { ...record } : null;

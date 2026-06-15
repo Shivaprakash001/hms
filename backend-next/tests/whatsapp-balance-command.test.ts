@@ -612,7 +612,7 @@ describe("WhatsApp Balance Command Integration Tests", () => {
     expect((result as any).command_results[0].reason).toBe("MULTIPLE_MATCHES");
 
     // Verify selection state is set
-    const state = await getSelectionState(guardianPhone);
+    const state: any = await getSelectionState(guardianPhone);
     expect(state).toBeDefined();
     expect(state?.action).toBe("BALANCE_SELECTION");
     expect(state?.tenantIds.length).toBe(3);
@@ -679,7 +679,7 @@ describe("WhatsApp Balance Command Integration Tests", () => {
     expect((result as any).command_results[0].reason).toBe("INVALID_SELECTION");
 
     // State should still be active
-    const state = await getSelectionState(guardianPhone);
+    const state: any = await getSelectionState(guardianPhone);
     expect(state).toBeDefined();
     expect(state?.tenantIds.length).toBe(2);
 
@@ -744,7 +744,7 @@ describe("WhatsApp Balance Command Integration Tests", () => {
     expect((res1 as any).command_results[0].matches).toBe(2);
 
     // State should now contain only the ambiguous tenants (size = 2)
-    const state1 = await getSelectionState(guardianPhone);
+    const state1: any = await getSelectionState(guardianPhone);
     expect(state1?.tenantIds.length).toBe(2);
     expect(state1?.tenantIds).toContain(tenantIds[0]);
     expect(state1?.tenantIds).toContain(tenantIds[1]);
@@ -857,7 +857,7 @@ describe("WhatsApp Balance Command Integration Tests", () => {
     );
 
     // State should only contain the 2 active tenant IDs
-    const state = await getSelectionState(guardianPhone);
+    const state: any = await getSelectionState(guardianPhone);
     expect(state).toBeDefined();
     expect(state?.tenantIds.length).toBe(2);
     expect(state?.tenantIds).toContain(tenantIds[0]);

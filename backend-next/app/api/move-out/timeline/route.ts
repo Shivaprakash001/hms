@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
         settlement_direction: request.settlement.settlement_direction,
         payment_status: request.settlement.payment_status,
         security_deposit_amount: Number(request.settlement.security_deposit_amount),
-        advance_balance: Number(request.settlement.advance_balance),
+        advance_balance: Number(request.settlement.future_rent_credit_balance),
         pending_rent_dues: Number(request.settlement.pending_rent_dues),
         pending_late_fees: Number(request.settlement.pending_late_fees),
         pending_utility_dues: Number(request.settlement.pending_utility_dues),

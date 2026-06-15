@@ -9,7 +9,7 @@ import { prisma } from '../../lib/db';
 vi.mock('../../lib/services/email-service', () => {
   return {
     EmailService: {
-      sendInvitation: vi.fn().mockResolvedValue({ sent: true }),
+      sendInvitation: vi.fn().mockResolvedValue({ sent: true } as any),
     },
   };
 });
@@ -40,7 +40,7 @@ describe('Tenant Onboarding Integration Flow', () => {
       attempts: 1,
     });
 
-    const result = await tenantInvitationLifecycleService.createInvitation({
+    const result: any = await tenantInvitationLifecycleService.createInvitation({
       name: 'Rahul Sharma',
       phone: '9876543210',
       room_id: room.id,
@@ -77,9 +77,9 @@ describe('Tenant Onboarding Integration Flow', () => {
     // Email succeeds
     vi.mocked(EmailService.sendInvitation).mockResolvedValueOnce({
       sent: true,
-    });
+    } as any);
 
-    const result = await tenantInvitationLifecycleService.createInvitation({
+    const result: any = await tenantInvitationLifecycleService.createInvitation({
       name: 'Rahul Sharma',
       phone: '9876543212',
       email: 'rahul2@test.com',
@@ -107,7 +107,7 @@ describe('Tenant Onboarding Integration Flow', () => {
     // WhatsApp fails
     sendInvitationSpy.mockRejectedValueOnce(new Error('WhatsApp service unavailable'));
 
-    const result = await tenantInvitationLifecycleService.createInvitation({
+    const result: any = await tenantInvitationLifecycleService.createInvitation({
       name: 'Rahul Sharma',
       phone: '9876543213',
       room_id: room.id,
@@ -126,7 +126,7 @@ describe('Tenant Onboarding Integration Flow', () => {
   it('should resend invitation with email override for fallback flow', async () => {
     // 1. Create invitation without email (WhatsApp failed, needs_email is true)
     sendInvitationSpy.mockRejectedValueOnce(new Error('WhatsApp failed'));
-    const initial = await tenantInvitationLifecycleService.createInvitation({
+    const initial: any = await tenantInvitationLifecycleService.createInvitation({
       name: 'Rahul Sharma',
       phone: '9876543214',
       room_id: room.id,
@@ -142,9 +142,9 @@ describe('Tenant Onboarding Integration Flow', () => {
     // 2. Resend invitation specifying fallback email override
     vi.mocked(EmailService.sendInvitation).mockResolvedValueOnce({
       sent: true,
-    });
+    } as any);
 
-    const resendResult = await tenantInvitationLifecycleService.resendInvitation(
+    const resendResult: any = await tenantInvitationLifecycleService.resendInvitation(
       initial.invitation_id,
       { id: owner.id, role: 'OWNER' },
       { email: 'rahul-fallback4@test.com' }
@@ -166,7 +166,7 @@ describe('Tenant Onboarding Integration Flow', () => {
       attempts: 1,
     });
 
-    const result = await tenantInvitationLifecycleService.createInvitation({
+    const result: any = await tenantInvitationLifecycleService.createInvitation({
       name: 'Zero Rent Tenant',
       phone: '9876543211',
       room_id: room.id,

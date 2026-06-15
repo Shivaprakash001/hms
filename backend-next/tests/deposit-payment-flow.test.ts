@@ -111,10 +111,10 @@ describe("Release C5 deposit payment flow", () => {
     mocks.tenantFinancialLedgerService.creditIdempotentInTx.mockResolvedValue({ alreadyCredited: false });
   });
 
-  it("credits successful onboarding deposit payments as DEPOSIT ledger entries", async () => {
+  it("credits successful onboarding deposit payments as SECURITY_DEPOSIT_COLLECTED ledger entries", async () => {
     const { PaymentService } = await import("@/src/services/payments/payment-service");
     const service = new PaymentService();
-    const attempt = { ...baseAttempt, flow_type: PAYMENT_FLOW.DEPOSIT, payment_type: "DEPOSIT" };
+    const attempt = { ...baseAttempt, flow_type: PAYMENT_FLOW.SECURITY_DEPOSIT, payment_type: "SECURITY_DEPOSIT" };
     mocks.prisma.paymentAttempt.findUnique
       .mockResolvedValueOnce({
         status: "PENDING",
@@ -133,7 +133,7 @@ describe("Release C5 deposit payment flow", () => {
       amount: 10000,
       referenceId: "attempt-1",
       referenceType: "PAYMENT_ATTEMPT",
-      reason: "DEPOSIT",
+      reason: "SECURITY_DEPOSIT_COLLECTED",
     }));
     expect(mocks.tx.paymentAttempt.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: "attempt-1" },
@@ -148,7 +148,7 @@ describe("Release C5 deposit payment flow", () => {
   it("continues to credit future-rent advance payments as TOPUP ledger entries", async () => {
     const { PaymentService } = await import("@/src/services/payments/payment-service");
     const service = new PaymentService();
-    const attempt = { ...baseAttempt, flow_type: PAYMENT_FLOW.ADVANCE, payment_type: "ADVANCE" };
+    const attempt = { ...baseAttempt, flow_type: PAYMENT_FLOW.FUTURE_RENT_CREDIT, payment_type: "FUTURE_RENT_CREDIT" };
     mocks.prisma.paymentAttempt.findUnique
       .mockResolvedValueOnce({
         status: "PENDING",
@@ -192,23 +192,23 @@ describe("Release C5 deposit payment flow", () => {
     }));
   });
 
-  it("classifies DEPOSIT attempts as rent-collection treasury flow metadata", () => {
+  it("classifies SECURITY_DEPOSIT attempts as rent-collection treasury flow metadata", () => {
     expect(inferAttemptFinancialMetadata({
-      payment_type: "DEPOSIT",
+      payment_type: "SECURITY_DEPOSIT",
       hostel_id: "hostel-1",
     })).toEqual(expect.objectContaining({
       payment_domain: PAYMENT_DOMAIN.RENT_COLLECTION,
-      flow_type: PAYMENT_FLOW.DEPOSIT,
+      flow_type: PAYMENT_FLOW.SECURITY_DEPOSIT,
       scope_type: "HOSTEL",
       merchant_context_type: "HMS_TREASURY",
       merchant_context_id: "HMS_TREASURY",
     }));
 
     expect(inferAttemptFinancialMetadata({
-      flow_type: PAYMENT_FLOW.DEPOSIT,
+      flow_type: PAYMENT_FLOW.SECURITY_DEPOSIT,
       hostel_id: "hostel-1",
     })).toEqual(expect.objectContaining({
-      flow_type: PAYMENT_FLOW.DEPOSIT,
+      flow_type: PAYMENT_FLOW.SECURITY_DEPOSIT,
       merchant_context_type: "HMS_TREASURY",
     }));
   });

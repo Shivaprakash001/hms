@@ -5,6 +5,7 @@ export type MaintenanceType = "MONTHLY" | "ONE_TIME" | "NONE";
 
 export type BillingDefaults = {
   advance_deposit: number;
+  security_deposit: number;
   maintenance_charge: number;
   maintenance_type: MaintenanceType;
   auto_fill_room_rent: boolean;
@@ -24,6 +25,7 @@ export type TenantInviteDefaults = {
   resolved_values: {
     monthly_rent: number;
     advance_deposit: number;
+    security_deposit: number;
     maintenance_charge: number;
     maintenance_type: MaintenanceType;
     reservation_policy?: string;
@@ -35,6 +37,7 @@ const VALID_MAINTENANCE_TYPES = new Set<MaintenanceType>(["MONTHLY", "ONE_TIME",
 
 export const DEFAULT_BILLING_DEFAULTS: BillingDefaults = {
   advance_deposit: 0,
+  security_deposit: 0,
   maintenance_charge: 0,
   maintenance_type: "MONTHLY",
   auto_fill_room_rent: true,
@@ -69,12 +72,13 @@ export function normalizeBillingDefaults(rawConfig: unknown): BillingDefaults {
   const nested = asConfig(config.billing_defaults);
 
   // Backward compatibility: legacy preferences lived as flat JSON keys.
-  const advanceSource = nested.advance_deposit ?? config.advance_amount_default;
+  const advanceSource = nested.security_deposit ?? nested.advance_deposit ?? config.advance_amount_default;
   const maintenanceSource = nested.maintenance_charge ?? config.maintenance_amount_default;
   const maintenanceTypeSource = nested.maintenance_type ?? config.maintenance_type;
-
+ 
   return {
     advance_deposit: nonNegativeNumber(advanceSource, DEFAULT_BILLING_DEFAULTS.advance_deposit),
+    security_deposit: nonNegativeNumber(advanceSource, DEFAULT_BILLING_DEFAULTS.security_deposit),
     maintenance_charge: nonNegativeNumber(maintenanceSource, DEFAULT_BILLING_DEFAULTS.maintenance_charge),
     maintenance_type: maintenanceType(maintenanceTypeSource, DEFAULT_BILLING_DEFAULTS.maintenance_type),
     auto_fill_room_rent: nested.auto_fill_room_rent !== undefined
@@ -90,8 +94,11 @@ export function normalizeBillingDefaults(rawConfig: unknown): BillingDefaults {
 
 function sanitizeBillingDefaultsPayload(payload: Partial<BillingDefaults>) {
   const next: Partial<BillingDefaults> = {};
-  if (payload.advance_deposit !== undefined) {
-    next.advance_deposit = nonNegativeNumber(payload.advance_deposit, DEFAULT_BILLING_DEFAULTS.advance_deposit);
+  const advanceSource = payload.security_deposit ?? payload.advance_deposit;
+  if (advanceSource !== undefined) {
+    const val = nonNegativeNumber(advanceSource, DEFAULT_BILLING_DEFAULTS.security_deposit);
+    next.security_deposit = val;
+    next.advance_deposit = val;
   }
   if (payload.maintenance_charge !== undefined) {
     next.maintenance_charge = nonNegativeNumber(payload.maintenance_charge, DEFAULT_BILLING_DEFAULTS.maintenance_charge);
@@ -204,7 +211,8 @@ export class HostelBillingPreferencesService {
       billing_defaults: billingDefaults,
       resolved_values: {
         monthly_rent: billingDefaults.auto_fill_room_rent ? Number(room.base_rent || 0) : 0,
-        advance_deposit: billingDefaults.advance_deposit,
+        advance_deposit: billingDefaults.security_deposit ?? billingDefaults.advance_deposit,
+        security_deposit: billingDefaults.security_deposit ?? billingDefaults.advance_deposit,
         maintenance_charge: maintenanceCharge,
         maintenance_type: billingDefaults.maintenance_type,
         reservation_policy: billingDefaults.reservation_policy ?? "FULL_DEPOSIT",

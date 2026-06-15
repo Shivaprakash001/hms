@@ -70,11 +70,11 @@ export class BillingTimelineService {
       take: 20,
     });
 
-    const rentAdvanceCredits = await prisma.tenant_advance_ledger.findMany({
+    const rentAdvanceCredits = await prisma.tenant_financial_ledger.findMany({
       where: {
         tenant_id: tenantId,
         type: "CREDIT",
-        reason: "TOPUP",
+        reason: { in: ["TOPUP", "FUTURE_RENT_CREDIT_TOPUP"] } as any,
       },
       orderBy: { created_at: "desc" },
       take: 20,

@@ -902,6 +902,39 @@ export function ActivateAccountPage() {
         setLastPassword(data.password);
       }
       if (step === 'ACTIVATE') {
+        // Auto-login: the backend now sets hms_session + hms_refresh_token cookies
+        // and returns session data in the response body
+        const session = (result as any)?.session;
+        if (session?.access_token) {
+          try {
+            const { setAccessToken } = await import('@lib/api-client');
+            const { queryClient } = await import('@lib/queryClient');
+            queryClient.clear();
+            setAccessToken(session.access_token);
+
+            const userData = {
+              email: session.email || ctx?.profile?.email || '',
+              role: (session.role || 'tenant').toLowerCase(),
+              name: session.name || ctx?.profile?.name || '',
+              id: session.user_id,
+              owner_id: session.owner_id || null,
+              tenant_id: session.tenant_id || null,
+              is_profile_completed: session.is_profile_completed ?? true,
+            };
+            const storageKey = userData.role === 'owner' ? 'ownerUser' : 'tenantUser';
+            localStorage.setItem(storageKey, JSON.stringify(userData));
+            localStorage.removeItem(storageKey === 'ownerUser' ? 'tenantUser' : 'ownerUser');
+
+            navigate('/tenant/dashboard', { replace: true });
+            return true;
+          } catch {
+            // Session cookie was still set by the backend, try login page
+            navigate('/login?signin=1', { replace: true });
+            return true;
+          }
+        }
+
+        // Fallback: no session in response, try traditional login
         const submittedPassword = String(data?.password || lastPassword || "");
         const email = ctx?.profile?.email || (ctx?.profile?.phone ? `${ctx.profile.phone}@hms.temp` : (ctx?.tenant?.phone_1 ? `${ctx.tenant.phone_1}@hms.temp` : ''));
         if (submittedPassword && email) {

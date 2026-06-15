@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/db';
 import { v4 as uuidv4 } from 'uuid';
 
-export async function createTestTenant(ownerId: string, hostelId: string, overrides = {}) {
+export async function createTestTenant(ownerId: string, hostelId: string, overrides: any = {}) {
   const profileId = uuidv4();
   
   // Create profile for tenant
@@ -29,7 +29,7 @@ export async function createTestTenant(ownerId: string, hostelId: string, overri
   return tenant;
 }
 
-export async function allocateTestRoom(tenantId: string, roomId: string, overrides = {}) {
+export async function allocateTestRoom(tenantId: string, roomId: string, overrides: any = {}) {
   return await prisma.roomAllocation.create({
     data: {
       id: uuidv4(),

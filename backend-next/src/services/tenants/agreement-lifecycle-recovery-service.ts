@@ -67,7 +67,7 @@ function snapshotValues(agreement: any) {
   return {
     joining_date: snapshot.joining_date ?? snapshot.agreement_start_date ?? null,
     monthly_rent: snapshot.monthly_rent ?? null,
-    advance_deposit: snapshot.advance_deposit ?? null,
+    advance_deposit: snapshot.security_deposit ?? snapshot.advance_deposit ?? null,
     maintenance_charge: snapshot.maintenance_charge ?? null,
     maintenance_type: snapshot.maintenance_type ?? null,
     payment_frequency: snapshot.payment_frequency ?? null,

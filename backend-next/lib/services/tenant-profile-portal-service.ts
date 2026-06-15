@@ -113,7 +113,7 @@ export async function getTenantPortalProfile(profileId: string) {
       })
     : 0;
 
-  const advanceEntries = await prisma.tenant_advance_ledger.findMany({
+  const advanceEntries = await prisma.tenant_financial_ledger.findMany({
     where: { tenant_id: tenant.id },
     orderBy: { created_at: "asc" },
   });
@@ -173,7 +173,8 @@ export async function getTenantPortalProfile(profileId: string) {
       billing_start_date: tenant.billing_start_date,
       monthly_rent: tenant.monthly_rent,
       maintenance_charge: tenant.maintenance_charge,
-      advance_deposit: tenant.advance_deposit,
+      advance_deposit: tenant.security_deposit,
+      security_deposit: tenant.security_deposit,
       photo_url: tenant.photo_url,
       gender: tenant.gender,
       date_of_birth: tenant.date_of_birth,
@@ -249,7 +250,7 @@ export async function getTenantPortalProfile(profileId: string) {
       : null,
     advance: {
       balance: Math.round(advanceBalance * 100) / 100,
-      security_deposit: Number(tenant.advance_deposit ?? 0),
+      security_deposit: Number(tenant.security_deposit ?? 0),
     },
     documents,
     required_documents: requiredTypes,

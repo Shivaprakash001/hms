@@ -312,9 +312,26 @@ export class InvitationService {
       tenantId: tenant.id,
     }).catch(() => {});
     
+    // Auto-login: generate session & tokens for the newly activated tenant
+    const { authService } = await import("../../../lib/services/auth-service");
+    const updatedProfile = await prisma.profile.findUnique({
+      where: { id: profile.id },
+      include: { tenants: true },
+    });
+    const sessionResult = updatedProfile ? await authService.createSessionAndTokens(
+      updatedProfile,
+      updatedProfile.tenants?.id || null,
+      updatedProfile.tenants?.profile_completed || false,
+      {}
+    ) : null;
+
     logger.info(`Successfully activated account for email: ${profile.email}`);
 
-    return { success: true, message: "Account activated successfully." };
+    return {
+      success: true,
+      message: "Account activated successfully.",
+      session: sessionResult,
+    };
   }
 
   async validateActivationToken(token: string) {

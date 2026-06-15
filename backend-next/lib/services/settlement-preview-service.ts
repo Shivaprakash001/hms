@@ -32,7 +32,7 @@ export class SettlementPreviewService {
       where: { id: params.tenantId },
       include: {
         payments: true,
-        tenant_advance_ledger: { orderBy: { created_at: "desc" }, take: 1 },
+        tenant_financial_ledger: { orderBy: { created_at: "desc" }, take: 1 },
         rent_obligations: {
           include: { payments: true },
           orderBy: { due_date: "desc" },
@@ -44,7 +44,7 @@ export class SettlementPreviewService {
 
     const dues = await financialService.getTenantDues(tenant.id, tenant.owner_id || undefined, tenant.hostel_id);
     const paidAmount = money((tenant.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount_paid || 0), 0));
-    const advanceBalance = money((tenant.tenant_advance_ledger || [])[0]?.balance_after || 0);
+    const advanceBalance = money((tenant.tenant_financial_ledger || [])[0]?.balance_after || 0);
     const monthlyRent = money(tenant.monthly_rent);
     const maintenance = String(tenant.maintenance_type || "MONTHLY") === "MONTHLY" ? money(tenant.maintenance_charge) : 0;
     const currentFrequency = (tenant.payment_frequency || "MONTHLY") as PaymentFrequency;
@@ -80,6 +80,7 @@ export class SettlementPreviewService {
         pending_rent: money(dues.rent_due),
         late_fees: money(dues.late_fees_due),
         advance_balance: advanceBalance,
+        future_rent_credit: advanceBalance,
         existing_obligation_count: tenant.rent_obligations?.length || 0,
       },
       projection_snapshot: {

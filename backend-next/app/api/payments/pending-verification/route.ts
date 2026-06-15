@@ -60,8 +60,8 @@ export async function GET(req: Request) {
     const items = attempts.map((a: any) => {
       const tenantActiveAllocation = a.tenants?.room_allocations?.[0];
       const roomNo = tenantActiveAllocation?.room?.room_no || a.rent_obligations?.room_allocations?.room?.room_no || "N/A";
-      const isAdvance = a.payment_type === "ADVANCE" || a.flow_type === "ADVANCE";
-      const isDeposit = a.payment_type === "DEPOSIT" || a.flow_type === "DEPOSIT";
+      const isAdvance = a.payment_type === "ADVANCE" || a.flow_type === "ADVANCE" || a.payment_type === "FUTURE_RENT_CREDIT" || a.flow_type === "FUTURE_RENT_CREDIT";
+      const isDeposit = a.payment_type === "DEPOSIT" || a.flow_type === "DEPOSIT" || a.payment_type === "SECURITY_DEPOSIT" || a.flow_type === "SECURITY_DEPOSIT";
 
       return {
         attempt_id: a.id,

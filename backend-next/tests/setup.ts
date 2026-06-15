@@ -12,11 +12,11 @@ async function resetDatabase() {
   `;
 
   const tableNames = tables
-    .map(t => t.tablename)
-    .filter(name => !name.startsWith('_prisma_migrations') && name !== 'spatial_ref_sys'); // Ignore prisma migrations
+    .map((t: any) => t.tablename)
+    .filter((name: string) => !name.startsWith('_prisma_migrations') && name !== 'spatial_ref_sys'); // Ignore prisma migrations
 
   if (tableNames.length > 0) {
-    const truncateQuery = `TRUNCATE TABLE ${tableNames.map(t => `"test"."${t}"`).join(', ')} CASCADE;`;
+    const truncateQuery = `TRUNCATE TABLE ${tableNames.map((t: string) => `"test"."${t}"`).join(', ')} CASCADE;`;
     await prisma.$executeRawUnsafe(truncateQuery);
   }
 }

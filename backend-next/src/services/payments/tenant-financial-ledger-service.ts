@@ -36,19 +36,19 @@ export class TenantFinancialLedgerService {
 
   private async _buildBalanceResponse(tenantId: string) {
     const [entries, tenant, paidSecurityDepositObligations] = await Promise.all([
-      prisma.tenant_advance_ledger.findMany({
+      prisma.tenant_financial_ledger.findMany({
         where: { tenant_id: tenantId },
         orderBy: { created_at: "asc" },
       }),
       prisma.tenants.findUniqueOrThrow({
         where: { id: tenantId },
-        select: { advance_deposit: true },
+        select: { security_deposit: true },
       }),
       prisma.payments.aggregate({
         where: {
           tenant_id: tenantId,
           obligation: {
-            obligation_type: "ADVANCE", // Database obligation type remains 'ADVANCE' for backward compatibility
+            obligation_type: { in: ["SECURITY_DEPOSIT", "ADVANCE"] },
           },
         },
         _sum: {
@@ -63,14 +63,14 @@ export class TenantFinancialLedgerService {
     }, 0);
 
     const ledgerDepositPayments = entries.reduce((acc: number, entry: any) => {
-      if (entry.type !== "CREDIT" || entry.reason !== "DEPOSIT" || entry.reference_type !== "PAYMENT") return acc;
+      if (entry.type !== "CREDIT" || (entry.reason !== "DEPOSIT" && entry.reason !== "SECURITY_DEPOSIT_COLLECTED") || entry.reference_type !== "PAYMENT") return acc;
       return acc + Number(entry.amount || 0);
     }, 0);
 
-    const configuredSecurityDeposit = Number(tenant.advance_deposit || 0);
+    const configuredSecurityDeposit = Number(tenant.security_deposit || 0);
     const paidSecurityDepositObligationSum = Number(paidSecurityDepositObligations?._sum?.amount_paid || 0);
     const paidSecurityDepositObligationSumOutsideLedger = Math.max(0, paidSecurityDepositObligationSum - ledgerDepositPayments);
-    const ledgerDepositCredits = this._sumLedgerCreditsByReason(entries, "DEPOSIT");
+    const ledgerDepositCredits = this._sumLedgerCreditsByReason(entries, "SECURITY_DEPOSIT_COLLECTED");
     
     const ledgerSecurityDeposit = this._calculateLedgerSecurityDeposit({
       ledgerBalance: balance,
@@ -103,13 +103,14 @@ export class TenantFinancialLedgerService {
     tenantId: string;
     ownerId: string;
     createdBy: string;
-    reason: "DEPOSIT" | "TOPUP";
+    reason: "DEPOSIT" | "TOPUP" | "SECURITY_DEPOSIT_COLLECTED" | "FUTURE_RENT_CREDIT_TOPUP";
     amount: number;
     notes?: string;
     referenceId?: string;
     referenceType?: string;
   }) {
-    const { tenantId, ownerId, createdBy, reason, amount, notes, referenceId, referenceType } = params;
+    const { tenantId, ownerId, createdBy, reason: inputReason, amount, notes, referenceId, referenceType } = params;
+    const reason = mapLegacyReason(inputReason);
 
     if (amount <= 0) throw new Error("BAD_REQUEST: Amount must be positive");
     await this._assertOwnership(tenantId, ownerId);
@@ -123,7 +124,7 @@ export class TenantFinancialLedgerService {
       await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId}::uuid FOR UPDATE`;
       const currentBalance = await this._computeBalance(tx, tenantId);
       const newBalance = Math.round((currentBalance + amount) * 100) / 100;
-      const entry = await tx.tenant_advance_ledger.create({
+      const entry = await tx.tenant_financial_ledger.create({
         data: {
           id: randomUUID(),
           tenant_id: tenantId,
@@ -182,13 +183,14 @@ export class TenantFinancialLedgerService {
       referenceId: string;
       referenceType: string;
       notes?: string;
-      reason?: "DEPOSIT" | "TOPUP";
+      reason?: "DEPOSIT" | "TOPUP" | "SECURITY_DEPOSIT_COLLECTED" | "FUTURE_RENT_CREDIT_TOPUP";
     }
   ) {
-    const { tenantId, ownerId, createdBy, amount, referenceId, referenceType, notes, reason = "TOPUP" } = params;
+    const { tenantId, ownerId, createdBy, amount, referenceId, referenceType, notes, reason: inputReason = "FUTURE_RENT_CREDIT_TOPUP" } = params;
+    const reason = mapLegacyReason(inputReason);
 
     // Idempotency: if a ledger entry already exists for this reference, return it.
-    const existing = await tx.tenant_advance_ledger.findFirst({
+    const existing = await tx.tenant_financial_ledger.findFirst({
       where: {
         reference_id: referenceId,
         reference_type: referenceType,
@@ -208,7 +210,7 @@ export class TenantFinancialLedgerService {
     const currentBalance = await this._computeBalance(tx, tenantId);
     const newBalance = Math.round((currentBalance + amount) * 100) / 100;
 
-    const entry = await tx.tenant_advance_ledger.create({
+    const entry = await tx.tenant_financial_ledger.create({
       data: {
         id: randomUUID(),
         tenant_id: tenantId,
@@ -250,14 +252,15 @@ export class TenantFinancialLedgerService {
     tenantId: string;
     ownerId: string;
     createdBy: string;
-    reason: "DEDUCTION" | "REFUND" | "CORRECTION";
+    reason: "DEDUCTION" | "REFUND" | "CORRECTION" | "SECURITY_DEPOSIT_DEDUCTION" | "SECURITY_DEPOSIT_REFUNDED" | "LEDGER_CORRECTION";
     amount: number;
     notes?: string;
     referenceId?: string;
     referenceType?: string;
     refundStatus?: RefundStatus;
   }) {
-    const { tenantId, ownerId, createdBy, reason, amount, notes, referenceId, referenceType, refundStatus } = params;
+    const { tenantId, ownerId, createdBy, reason: inputReason, amount, notes, referenceId, referenceType, refundStatus } = params;
+    const reason = mapLegacyReason(inputReason);
 
     if (amount <= 0) throw new Error("BAD_REQUEST: Amount must be positive");
     await this._assertOwnership(tenantId, ownerId);
@@ -268,7 +271,7 @@ export class TenantFinancialLedgerService {
     // been returned yet. Owner must call the update-refund-status endpoint to mark COMPLETED.
     // CORRECTION entries bypass this — they are admin fixes and don't track physical flow.
     const effectiveRefundStatus =
-      reason === "REFUND" ? (refundStatus ?? "PENDING") : null;
+      reason === "SECURITY_DEPOSIT_REFUNDED" ? (refundStatus ?? "PENDING") : null;
 
     return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const tenant = await tx.tenants.findUniqueOrThrow({
@@ -278,7 +281,7 @@ export class TenantFinancialLedgerService {
       await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId}::uuid FOR UPDATE`;
       const currentBalance = await this._computeBalance(tx, tenantId);
 
-      if (reason !== "CORRECTION" && currentBalance < amount) {
+      if (reason !== "LEDGER_CORRECTION" && currentBalance < amount) {
         throw new Error(
           `BAD_REQUEST: Insufficient financial ledger balance. Available: ₹${currentBalance.toFixed(2)}, Requested: ₹${amount.toFixed(2)}`
         );
@@ -286,7 +289,7 @@ export class TenantFinancialLedgerService {
 
       const newBalance = Math.max(0, Math.round((currentBalance - amount) * 100) / 100);
 
-      const entry = await tx.tenant_advance_ledger.create({
+      const entry = await tx.tenant_financial_ledger.create({
         data: {
           id: randomUUID(),
           tenant_id: tenantId,
@@ -314,15 +317,15 @@ export class TenantFinancialLedgerService {
    * This must be called when the bank transfer actually completes or fails.
    */
   async updateRefundStatus(entryId: string, ownerId: string, status: RefundStatus) {
-    const entry = await prisma.tenant_advance_ledger.findUnique({
+    const entry = await prisma.tenant_financial_ledger.findUnique({
       where: { id: entryId },
       select: { owner_id: true, reason: true },
     });
     if (!entry) throw new Error("NOT_FOUND: Ledger entry not found");
     if (entry.owner_id !== ownerId) throw new Error("FORBIDDEN: Not your ledger entry");
-    if ((entry as any).reason !== "REFUND") throw new Error("BAD_REQUEST: Can only update refund_status on REFUND entries");
+    if (entry.reason !== "SECURITY_DEPOSIT_REFUNDED") throw new Error("BAD_REQUEST: Can only update refund_status on REFUND entries");
 
-    return prisma.tenant_advance_ledger.update({
+    return prisma.tenant_financial_ledger.update({
       where: { id: entryId },
       data: { refund_status: status },
     });
@@ -436,14 +439,14 @@ export class TenantFinancialLedgerService {
 
     // Ledger DEBIT
     const newBalance = Math.round((currentBalance - amount) * 100) / 100;
-    const entry = await tx.tenant_advance_ledger.create({
+    const entry = await tx.tenant_financial_ledger.create({
       data: {
         id: randomUUID(),
         tenant_id: tenantId,
         owner_id: ownerId,
         hostel_id: obligation.hostel_id,
         type: "DEBIT",
-        reason: "ADJUSTMENT",
+        reason: "FUTURE_RENT_CREDIT_ADJUSTMENT",
         amount,
         balance_after: newBalance,
         notes: notes || `Adjusted against obligation ${obligationId}`,
@@ -562,11 +565,11 @@ export class TenantFinancialLedgerService {
    */
   private async _computeBalance(tx: Prisma.TransactionClient, tenantId: string): Promise<number> {
     const [credits, debits] = await Promise.all([
-      tx.tenant_advance_ledger.aggregate({
+      tx.tenant_financial_ledger.aggregate({
         where: { tenant_id: tenantId, type: "CREDIT" },
         _sum: { amount: true },
       }),
-      tx.tenant_advance_ledger.aggregate({
+      tx.tenant_financial_ledger.aggregate({
         where: { tenant_id: tenantId, type: "DEBIT" },
         _sum: { amount: true },
       }),
@@ -606,35 +609,35 @@ export class TenantFinancialLedgerService {
     const [tenant, paidSecurityDepositObligations, depositCredits, ledgerBalance, ledgerDepositPayments] = await Promise.all([
       tx.tenants.findUniqueOrThrow({
         where: { id: tenantId },
-        select: { advance_deposit: true },
+        select: { security_deposit: true },
       }),
       tx.payments.aggregate({
         where: {
           tenant_id: tenantId,
           obligation: {
-            obligation_type: "ADVANCE",
+            obligation_type: { in: ["SECURITY_DEPOSIT", "ADVANCE"] },
           },
         },
         _sum: {
           amount_paid: true,
         },
       }),
-      tx.tenant_advance_ledger.aggregate({
+      tx.tenant_financial_ledger.aggregate({
         where: {
           tenant_id: tenantId,
           type: "CREDIT",
-          reason: "DEPOSIT",
+          reason: { in: ["DEPOSIT", "SECURITY_DEPOSIT_COLLECTED"] } as any,
         },
         _sum: {
           amount: true,
         },
       }),
       this._computeBalance(tx, tenantId),
-      tx.tenant_advance_ledger.aggregate({
+      tx.tenant_financial_ledger.aggregate({
         where: {
           tenant_id: tenantId,
           type: "CREDIT",
-          reason: "DEPOSIT",
+          reason: { in: ["DEPOSIT", "SECURITY_DEPOSIT_COLLECTED"] } as any,
           reference_type: "PAYMENT",
         },
         _sum: {
@@ -649,7 +652,7 @@ export class TenantFinancialLedgerService {
 
     const ledgerSecurityDeposit = this._calculateLedgerSecurityDeposit({
       ledgerBalance,
-      configuredSecurityDeposit: Number(tenant.advance_deposit || 0),
+      configuredSecurityDeposit: Number(tenant.security_deposit || 0),
       paidSecurityDepositObligationSum: paidSecurityDepositObligationSumOutsideLedger,
       ledgerDepositCredits: Number(depositCredits?._sum?.amount || 0),
     });
@@ -663,6 +666,25 @@ export class TenantFinancialLedgerService {
 
   private _roundCurrency(value: number): number {
     return Math.round(value * 100) / 100;
+  }
+}
+
+function mapLegacyReason(reason: string): any {
+  switch (reason) {
+    case "DEPOSIT":
+      return "SECURITY_DEPOSIT_COLLECTED";
+    case "TOPUP":
+      return "FUTURE_RENT_CREDIT_TOPUP";
+    case "ADJUSTMENT":
+      return "FUTURE_RENT_CREDIT_ADJUSTMENT";
+    case "DEDUCTION":
+      return "SECURITY_DEPOSIT_DEDUCTION";
+    case "REFUND":
+      return "SECURITY_DEPOSIT_REFUNDED";
+    case "CORRECTION":
+      return "LEDGER_CORRECTION";
+    default:
+      return reason;
   }
 }
 

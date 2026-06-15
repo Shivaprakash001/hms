@@ -13,8 +13,8 @@ export const PAYMENT_FLOW = {
   SUBSCRIPTION: "SUBSCRIPTION",
   ADDON: "ADDON",
   RENT: "RENT",
-  ADVANCE: "ADVANCE",
-  DEPOSIT: "DEPOSIT",
+  FUTURE_RENT_CREDIT: "FUTURE_RENT_CREDIT",
+  SECURITY_DEPOSIT: "SECURITY_DEPOSIT",
   MANUAL_UPI_REFERENCE: "MANUAL_UPI_REFERENCE",
 } as const;
 
@@ -55,12 +55,12 @@ export function inferAttemptFinancialMetadata(attempt: any) {
     return platformBillingMetadata(PAYMENT_FLOW.ADDON);
   }
 
-  if (attempt?.payment_type === "ADVANCE" || attempt?.flow_type === PAYMENT_FLOW.ADVANCE) {
-    return rentCollectionMetadata(PAYMENT_FLOW.ADVANCE, attempt?.hostel_id);
+  if (attempt?.payment_type === "FUTURE_RENT_CREDIT" || attempt?.flow_type === PAYMENT_FLOW.FUTURE_RENT_CREDIT || attempt?.payment_type === "ADVANCE" || attempt?.flow_type === "ADVANCE") {
+    return rentCollectionMetadata(PAYMENT_FLOW.FUTURE_RENT_CREDIT, attempt?.hostel_id);
   }
 
-  if (attempt?.payment_type === "DEPOSIT" || attempt?.flow_type === PAYMENT_FLOW.DEPOSIT) {
-    return rentCollectionMetadata(PAYMENT_FLOW.DEPOSIT, attempt?.hostel_id);
+  if (attempt?.payment_type === "SECURITY_DEPOSIT" || attempt?.flow_type === PAYMENT_FLOW.SECURITY_DEPOSIT || attempt?.payment_type === "DEPOSIT" || attempt?.flow_type === "DEPOSIT") {
+    return rentCollectionMetadata(PAYMENT_FLOW.SECURITY_DEPOSIT, attempt?.hostel_id);
   }
 
   return rentCollectionMetadata(PAYMENT_FLOW.RENT, attempt?.hostel_id);
@@ -78,7 +78,7 @@ export function platformBillingMetadata(flowType: string) {
 }
 
 export function rentCollectionMetadata(flowType: string, hostelId: string | null | undefined) {
-  const treasuryMode = flowType === PAYMENT_FLOW.RENT || flowType === PAYMENT_FLOW.ADVANCE || flowType === PAYMENT_FLOW.DEPOSIT;
+  const treasuryMode = flowType === PAYMENT_FLOW.RENT || flowType === PAYMENT_FLOW.FUTURE_RENT_CREDIT || flowType === PAYMENT_FLOW.SECURITY_DEPOSIT || flowType === "ADVANCE" || flowType === "DEPOSIT";
   return {
     payment_domain: PAYMENT_DOMAIN.RENT_COLLECTION,
     scope_type: PAYMENT_SCOPE.HOSTEL,

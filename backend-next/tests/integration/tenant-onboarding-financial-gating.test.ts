@@ -38,7 +38,7 @@ describe('Tenant Onboarding Financial Gating Integration', () => {
     sendInvitationSpy = vi.spyOn(MetaWhatsAppProvider.prototype, 'sendInvitation').mockResolvedValue({
       providerMessageId: 'wamid.test_gating',
       attempts: 1,
-    });
+    } as any);
     vi.spyOn(MetaWhatsAppProvider.prototype, 'sendTemplate').mockResolvedValue({
       providerMessageId: 'wamid.test_gating',
       attempts: 1,
@@ -56,7 +56,7 @@ describe('Tenant Onboarding Financial Gating Integration', () => {
     const email = `gated_${Date.now()}_${Math.floor(Math.random() * 1000)}@gmail.com`;
 
     // 1. Create invitation for tenant with required deposit and maintenance
-    const invitationResult = await tenantInvitationLifecycleService.createInvitation({
+    const invitationResult: any = await tenantInvitationLifecycleService.createInvitation({
       name: 'Gated Tenant',
       phone,
       room_id: room.id,
@@ -100,8 +100,8 @@ describe('Tenant Onboarding Financial Gating Integration', () => {
       where: { tenant_id: tenantId },
     });
     expect(obligations.length).toBe(2);
-    const depositObligation = obligations.find(o => o.obligation_type === 'ADVANCE');
-    const maintenanceObligation = obligations.find(o => o.obligation_type === 'MAINTENANCE');
+    const depositObligation = obligations.find((o: any) => o.obligation_type === 'ADVANCE');
+    const maintenanceObligation = obligations.find((o: any) => o.obligation_type === 'MAINTENANCE');
     expect(depositObligation).toBeTruthy();
     expect(maintenanceObligation).toBeTruthy();
 

@@ -8,6 +8,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
+import { randomUUID } from 'crypto';
 
 const prisma = new PrismaClient();
 
@@ -40,6 +41,7 @@ async function testMidImportCrashRecovery(): Promise<TestResult> {
     // Setup: Create test owner and hostel
     const owner = await prisma.profile.create({
       data: {
+        id: randomUUID(),
         email: 'test-owner@test.com',
         name: 'Test Owner',
         phone: '+919999999999',
@@ -49,17 +51,20 @@ async function testMidImportCrashRecovery(): Promise<TestResult> {
       }
     });
 
-    const hostel = await prisma.hostel.create({
+    const hostel = await prisma.hostels.create({
       data: {
+        id: randomUUID(),
         name: 'Test Hostel',
         owner_id: owner.id,
+        phone: '+919999999999',
+        address: 'Test Address',
         is_active: true,
       }
     });
 
     // Create rooms (101-105, capacity 2 each)
     for (let i = 101; i <= 105; i++) {
-      await prisma.room.create({
+      await prisma.rooms.create({
         data: {
           hostel_id: hostel.id,
           room_no: String(i),
@@ -70,11 +75,12 @@ async function testMidImportCrashRecovery(): Promise<TestResult> {
     }
 
     // Simulate: Import 22 tenants successfully
-    const batchId = crypto.randomUUID();
+    const batchId = randomUUID();
     
     for (let i = 1; i <= 22; i++) {
       const profile = await prisma.profile.create({
         data: {
+          id: randomUUID(),
           email: `tenant${i}@test.com`,
           name: `Tenant ${i}`,
           phone: `+9198765432${String(i).padStart(2, '0')}`,
@@ -87,9 +93,9 @@ async function testMidImportCrashRecovery(): Promise<TestResult> {
         }
       });
 
-      const tenant = await prisma.tenant.create({
+      const tenant = await prisma.tenants.create({
         data: {
-          id: crypto.randomUUID(),
+          id: randomUUID(),
           profile_id: profile.id,
           owner_id: owner.id,
           hostel_id: hostel.id,
@@ -102,12 +108,13 @@ async function testMidImportCrashRecovery(): Promise<TestResult> {
 
       // Assign to rooms (round-robin)
       const roomNo = String(101 + Math.floor((i - 1) / 2));
-      const room = await prisma.room.findFirst({
+      const room = await prisma.rooms.findFirst({
         where: { hostel_id: hostel.id, room_no: roomNo }
       });
 
       await prisma.roomAllocation.create({
         data: {
+          id: randomUUID(),
           tenant_id: tenant.id,
           room_id: room!.id,
           hostel_id: hostel.id,
@@ -118,13 +125,13 @@ async function testMidImportCrashRecovery(): Promise<TestResult> {
     }
 
     // Verify: 22 tenants created
-    const partialCount = await prisma.tenant.count({
+    const partialCount = await prisma.tenants.count({
       where: { owner_id: owner.id }
     });
     assert(partialCount === 22, `Expected 22 tenants, got ${partialCount}`);
 
     // Verify: All have allocations
-    const tenantsWithoutAllocations = await prisma.tenant.findMany({
+    const tenantsWithoutAllocations = await prisma.tenants.findMany({
       where: {
         owner_id: owner.id,
         room_allocations: { none: {} }
@@ -149,10 +156,10 @@ async function testMidImportCrashRecovery(): Promise<TestResult> {
 
     // Cleanup
     await prisma.roomAllocation.deleteMany({ where: { hostel_id: hostel.id } });
-    await prisma.tenant.deleteMany({ where: { owner_id: owner.id } });
+    await prisma.tenants.deleteMany({ where: { owner_id: owner.id } });
     await prisma.profile.deleteMany({ where: { owner_id: owner.id } });
-    await prisma.room.deleteMany({ where: { hostel_id: hostel.id } });
-    await prisma.hostel.delete({ where: { id: hostel.id } });
+    await prisma.rooms.deleteMany({ where: { hostel_id: hostel.id } });
+    await prisma.hostels.delete({ where: { id: hostel.id } });
     await prisma.profile.delete({ where: { id: owner.id } });
 
     console.log('✅ PASSED');
@@ -176,6 +183,7 @@ async function testTransactionRollback(): Promise<TestResult> {
   try {
     const owner = await prisma.profile.create({
       data: {
+        id: randomUUID(),
         email: 'test-rollback@test.com',
         name: 'Test Rollback',
         phone: '+919888888888',
@@ -185,10 +193,13 @@ async function testTransactionRollback(): Promise<TestResult> {
       }
     });
 
-    const hostel = await prisma.hostel.create({
+    const hostel = await prisma.hostels.create({
       data: {
+        id: randomUUID(),
         name: 'Test Hostel Rollback',
         owner_id: owner.id,
+        phone: '+919999999999',
+        address: 'Test Address',
         is_active: true,
       }
     });
@@ -197,7 +208,7 @@ async function testTransactionRollback(): Promise<TestResult> {
     // (Manual test - simulate failed allocation creation)
     
     // Cleanup
-    await prisma.hostel.delete({ where: { id: hostel.id } });
+    await prisma.hostels.delete({ where: { id: hostel.id } });
     await prisma.profile.delete({ where: { id: owner.id } });
 
     console.log('✅ PASSED (manual verification needed)');
@@ -221,6 +232,7 @@ async function testIdempotency(): Promise<TestResult> {
   try {
     const owner = await prisma.profile.create({
       data: {
+        id: randomUUID(),
         email: 'test-idempotent@test.com',
         name: 'Test Idempotent',
         phone: '+919777777777',
@@ -234,6 +246,7 @@ async function testIdempotency(): Promise<TestResult> {
     for (let i = 1; i <= 5; i++) {
       await prisma.profile.create({
         data: {
+          id: randomUUID(),
           email: `idempotent${i}@test.com`,
           name: `Idempotent ${i}`,
           phone: `+9197654321${i}`,
@@ -286,6 +299,7 @@ async function testRoomCapacity(): Promise<TestResult> {
   try {
     const owner = await prisma.profile.create({
       data: {
+        id: randomUUID(),
         email: 'test-capacity@test.com',
         name: 'Test Capacity',
         phone: '+919666666666',
@@ -295,16 +309,19 @@ async function testRoomCapacity(): Promise<TestResult> {
       }
     });
 
-    const hostel = await prisma.hostel.create({
+    const hostel = await prisma.hostels.create({
       data: {
+        id: randomUUID(),
         name: 'Test Hostel Capacity',
         owner_id: owner.id,
+        phone: '+919999999999',
+        address: 'Test Address',
         is_active: true,
       }
     });
 
     // Create room with capacity 2
-    const room = await prisma.room.create({
+    const room = await prisma.rooms.create({
       data: {
         hostel_id: hostel.id,
         room_no: '101',
@@ -317,6 +334,7 @@ async function testRoomCapacity(): Promise<TestResult> {
     for (let i = 1; i <= 2; i++) {
       const profile = await prisma.profile.create({
         data: {
+          id: randomUUID(),
           email: `capacity${i}@test.com`,
           name: `Capacity ${i}`,
           phone: `+9196543210${i}`,
@@ -327,9 +345,9 @@ async function testRoomCapacity(): Promise<TestResult> {
         }
       });
 
-      const tenant = await prisma.tenant.create({
+      const tenant = await prisma.tenants.create({
         data: {
-          id: crypto.randomUUID(),
+          id: randomUUID(),
           profile_id: profile.id,
           owner_id: owner.id,
           hostel_id: hostel.id,
@@ -342,6 +360,7 @@ async function testRoomCapacity(): Promise<TestResult> {
 
       await prisma.roomAllocation.create({
         data: {
+          id: randomUUID(),
           tenant_id: tenant.id,
           room_id: room.id,
           hostel_id: hostel.id,
@@ -360,10 +379,10 @@ async function testRoomCapacity(): Promise<TestResult> {
 
     // Cleanup
     await prisma.roomAllocation.deleteMany({ where: { hostel_id: hostel.id } });
-    await prisma.tenant.deleteMany({ where: { owner_id: owner.id } });
+    await prisma.tenants.deleteMany({ where: { owner_id: owner.id } });
     await prisma.profile.deleteMany({ where: { owner_id: owner.id } });
-    await prisma.room.delete({ where: { id: room.id } });
-    await prisma.hostel.delete({ where: { id: hostel.id } });
+    await prisma.rooms.delete({ where: { id: room.id } });
+    await prisma.hostels.delete({ where: { id: hostel.id } });
     await prisma.profile.delete({ where: { id: owner.id } });
 
     console.log('✅ PASSED');

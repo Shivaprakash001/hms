@@ -67,6 +67,14 @@ vi.mock("@/lib/db", () => {
     roomAllocation: {
       count: vi.fn(),
     },
+    tenant_financial_ledger: {
+      aggregate: vi.fn().mockImplementation((args) => {
+        if (args?.where?.reference_type === "PAYMENT") {
+          return Promise.resolve({ _sum: { amount: 0 } });
+        }
+        return Promise.resolve({ _sum: { amount: 5000 } });
+      }),
+    },
     tenant_advance_ledger: {
       aggregate: vi.fn().mockImplementation((args) => {
         if (args?.where?.reference_type === "PAYMENT") {

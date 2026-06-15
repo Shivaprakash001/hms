@@ -86,7 +86,7 @@ export class TenantInvitationLifecycleService {
           roomNumber: room.room_no,
           roomRent: Number(tenant.monthly_rent),
           activationLink,
-          advanceDeposit: Number(tenant.advance_deposit),
+          advanceDeposit: Number(tenant.security_deposit),
           maintenanceCharge: Number(tenant.maintenance_charge),
           maintenanceType: tenant.maintenance_type,
           joiningDate: tenant.joined_on || undefined,
@@ -270,7 +270,7 @@ export class TenantInvitationLifecycleService {
           joined_on: joiningDate,
           billing_start_date: billingStartDate,
           status: "INVITED",
-          advance_deposit: advanceDeposit,
+          security_deposit: advanceDeposit,
           maintenance_charge: maintenanceCharge,
           maintenance_type: maintenanceType,
           phone_1: normalizedPhone,
@@ -821,7 +821,7 @@ export class TenantInvitationLifecycleService {
     if (!invitation || !invitation.room_id) return;
 
     // Allocate!
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: any) => {
       // Re-verify under lock
       const existing = await tx.roomAllocation.findFirst({
         where: { tenant_id: tenantId, is_active: true, end_date: null },

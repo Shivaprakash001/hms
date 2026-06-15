@@ -1191,7 +1191,7 @@ export class AdmissionsService {
         select: {
           id: true,
           status: true,
-          advance_deposit: true,
+          security_deposit: true,
           maintenance_charge: true,
           maintenance_type: true,
           reservation_policy: true,
@@ -1250,7 +1250,7 @@ export class AdmissionsService {
         } else if (t.status === "ACTIVE") {
           funnelActivated++;
 
-          const requiredDeposit = Number(t.advance_deposit || 0);
+          const requiredDeposit = Number(t.security_deposit || 0);
           const paidDeposit = funnelDepositCreditsMap.get(t.id) || 0;
           const depositOutstanding = Math.max(0, requiredDeposit - paidDeposit);
 

@@ -19,10 +19,9 @@ import { billingRepository } from "@/src/repositories/billingRepository";
  *     Includes: every tenant who ever owed money and hasn't paid/waived it.
  *
  * FIELD CONSISTENCY:
- *   All calculations use `o.amount` (base rent obligation amount, without late fees).
- *   Late fees are separate LATE_FEE-type obligations summed independently.
- *   `total_amount` on the obligation row is `amount + late_fee` — we never read it
- *   for summation to avoid double-counting (late fees arrive as their own obligations).
+ *   All calculations use `o.total_amount` (rent + late fees).
+ *   Late fees are applied directly to the base RENT obligations by incrementing
+ *   `late_fee` and `total_amount` fields.
  *
  * NO LOGIC DUPLICATION:
  *   Dashboard, analytics, tenant table, and reminders MUST call this service.
@@ -43,7 +42,7 @@ export class FinancialService {
         WHERE o.owner_id = ${ownerId}::uuid
           AND o.hostel_id = ${hostelId}::uuid
           AND o.status IN ('PENDING', 'PARTIAL')
-          AND o.amount - COALESCE(p.total_paid, 0) <= 0
+          AND o.total_amount - COALESCE(p.total_paid, 0) <= 0
       )
       UPDATE rent_obligations o
       SET status = 'PAID', updated_at = NOW()
@@ -61,7 +60,7 @@ export class FinancialService {
    * - ACTIVE tenants only
    * - obligations whose rent_month is within [start, end]
    * - excludes WAIVED obligations
-   * - remaining balance is canonical: amount - paid
+   * - remaining balance is canonical: total_amount - paid
    */
   async getOperationalCashflowMetrics(
     ownerId: string,
@@ -148,7 +147,7 @@ export class FinancialService {
 
   /**
    * Operational defaulters (ACTIVE tenants only), ranked by overdue outstanding.
-   * Uses remaining amount (amount - paid), never raw amount.
+   * Uses remaining amount (total_amount - paid), never raw amount.
    */
   async getOperationalDefaulters(
     ownerId: string,
@@ -179,7 +178,7 @@ export class FinancialService {
    * @param ownerId   - Optional: scope to a single owner. Omit for cron (all owners).
    */
   async getOperationalOverdueObligations(
-    asOfDate: Date = new Date(),
+    asOfDate: Date,
     ownerId: string,
     hostelId: string,
   ): Promise<Array<{
@@ -189,17 +188,19 @@ export class FinancialService {
     hostel_id: string | null;
     allocation_id: string | null;
     rent_month: Date;
-    billing_period_start?: Date | null;
-    billing_period_end?: Date | null;
-    installment_label?: string | null;
-    installment_sequence?: number | null;
-    billing_plan_id?: string | null;
+    billing_period_start: Date | null;
+    billing_period_end: Date | null;
+    installment_label: string | null;
+    installment_sequence: number | null;
+    billing_plan_id: string | null;
     due_date: Date;
     amount: number;
     remaining_amount: number;
     tenant_name: string | null;
     personal_email: string | null;
     phone: string | null;
+    late_fee: number;
+    total_amount: number;
   }>> {
     const rows = await billingRepository.getOperationalOverdueObligations(asOfDate, ownerId, hostelId);
 
@@ -221,6 +222,8 @@ export class FinancialService {
       tenant_name:      r.tenant_name,
       personal_email:   r.personal_email,
       phone:            r.phone,
+      late_fee:         Number((r as any).late_fee || 0),
+      total_amount:     Number((r as any).total_amount || 0),
     }));
   }
 
@@ -260,9 +263,14 @@ export class FinancialService {
   }> {
     const obligations = await billingRepository.getTenantPendingObligations(tenantId, ownerId, hostelId);
 
+    let totalLateFeesDue = 0;
     const items: TenantDueItem[] = obligations.map((ob) => {
       const paid = ob.payments.reduce((s, p) => s + Number(p.amount_paid), 0);
-      const outstanding = Math.max(Number(ob.amount) - paid, 0);
+      const outstanding = Math.max(Number(ob.total_amount || ob.amount) - paid, 0);
+      const lateFeeVal = Number((ob as any).late_fee || 0);
+      const itemLateFeeOutstanding = Math.min(lateFeeVal, outstanding);
+      totalLateFeesDue += itemLateFeeOutstanding;
+
       return {
         obligation_id: ob.id,
         type: ob.obligation_type,
@@ -272,7 +280,7 @@ export class FinancialService {
         installment_label: (ob as any).installment_label,
         installment_sequence: (ob as any).installment_sequence,
         due_date: ob.due_date,
-        amount: Number(ob.amount),
+        amount: Number(ob.total_amount || ob.amount),
         paid,
         outstanding,
         status: ob.status,
@@ -280,16 +288,15 @@ export class FinancialService {
       };
     }).filter((i) => i.outstanding > 0);
 
-    const totalDue     = items.reduce((s, i) => s + i.outstanding, 0);
-    const rentDue      = items.filter((i) => i.type === "RENT").reduce((s, i) => s + i.outstanding, 0);
-    const lateFeesDue  = items.filter((i) => i.type === "LATE_FEE").reduce((s, i) => s + i.outstanding, 0);
+    const totalDue = items.reduce((s, i) => s + i.outstanding, 0);
+    const rentDue = Math.max(0, totalDue - totalLateFeesDue);
 
     return {
       tenant_id:        tenantId,
       items,
       total_due:        totalDue,
       rent_due:         rentDue,
-      late_fees_due:    lateFeesDue,
+      late_fees_due:    totalLateFeesDue,
       obligation_count: items.length,
     };
   }
@@ -313,7 +320,7 @@ export class FinancialService {
 
     for (const ob of obligationRows) {
       if (ob.status === "WAIVED") continue;
-      totalBilled += Number(ob.amount);
+      totalBilled += Number(ob.total_amount || ob.amount);
       for (const p of ob.payments) {
         const amt = Number(p.amount_paid);
         totalPaid += amt;
@@ -360,6 +367,7 @@ export interface TenantDueItem {
 
 export interface ObligationRow {
   amount: number | string;
+  total_amount?: number | string;
   status: string;
   payments: Array<{ amount_paid: number | string; payment_date: Date | string }>;
 }

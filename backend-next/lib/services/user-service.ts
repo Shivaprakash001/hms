@@ -16,9 +16,32 @@ export class UserService extends BaseService {
   }
 
   async updateProfile(userId: string, data: any) {
+    if (!data || typeof data !== "object") {
+      throw new Error("Invalid profile update payload");
+    }
+
+    const allowedFields = [
+      "name",
+      "email",
+      "phone",
+      "address",
+      "city",
+      "state",
+      "pincode",
+      "emergency_contact",
+      "is_profile_completed"
+    ];
+
+    const filteredData: Record<string, any> = {};
+    for (const key of allowedFields) {
+      if (key in data) {
+        filteredData[key] = data[key];
+      }
+    }
+
     return this.db.profile.update({
       where: { id: userId },
-      data,
+      data: filteredData,
     });
   }
 }

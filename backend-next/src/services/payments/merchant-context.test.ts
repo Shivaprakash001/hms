@@ -55,7 +55,7 @@ const OWNER_B = "22222222-2222-2222-2222-222222222222";
 const HOSTEL_A = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 
 async function installPrismaHostelStub(ownerId = OWNER_A) {
-  const dbModule: any = await import("../../db");
+  const dbModule: any = await import("../../../lib/db");
   dbModule.prisma.hostels.findUnique = async ({ where }: any) => {
     if (where?.id !== HOSTEL_A) return null;
     return {
@@ -108,7 +108,7 @@ async function test_advance_collection_uses_hms_treasury_context() {
 
   const ctx = await getProviderContext({
     paymentDomain: PAYMENT_DOMAIN.RENT_COLLECTION,
-    flowType: PAYMENT_FLOW.ADVANCE,
+    flowType: PAYMENT_FLOW.FUTURE_RENT_CREDIT,
     operationalOwnerId: OWNER_A,
     hostelId: HOSTEL_A,
     scopeType: PAYMENT_SCOPE.HOSTEL,

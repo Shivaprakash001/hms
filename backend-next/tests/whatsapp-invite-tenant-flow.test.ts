@@ -23,7 +23,7 @@ vi.spyOn(MetaWhatsAppProvider.prototype, "sendTextMessage").mockResolvedValue({
 vi.spyOn(MetaWhatsAppProvider.prototype, "sendInvitation").mockResolvedValue({
   providerMessageId: "mock-invitation-id-12345",
   attempts: 1,
-});
+} as any);
 
 vi.spyOn(rateLimitService, "checkStatelessLimit").mockImplementation(async () => {
   return { allowed: true, attemptsRemaining: 5 };
@@ -129,7 +129,7 @@ describe("WhatsApp Tenant Onboarding - Invite Flow", () => {
     let result = await whatsappWebhookEventService.processWebhookEvent(payload1.eventId, payload1.payload);
     expect(result).toBeDefined();
 
-    let state = await getSelectionState(ownerPhone);
+    let state: any = await getSelectionState(ownerPhone);
     expect(state).toBeDefined();
     expect(state?.step).toBe("AWAITING_NAME");
 
@@ -192,7 +192,7 @@ describe("WhatsApp Tenant Onboarding - Invite Flow", () => {
     const payload3 = makeWebhookPayload(ownerPhone, "8888888888");
     await whatsappWebhookEventService.processWebhookEvent(payload3.eventId, payload3.payload);
 
-    let state = await getSelectionState(ownerPhone);
+    let state: any = await getSelectionState(ownerPhone);
     expect(state?.step).toBe("AWAITING_HOSTEL");
     expect(state?.data.phone).toBe("+918888888888");
 
@@ -250,7 +250,7 @@ describe("WhatsApp Tenant Onboarding - Invite Flow", () => {
     const result = await whatsappWebhookEventService.processWebhookEvent(payload1.eventId, payload1.payload);
     expect(result).toBeDefined();
 
-    const state = await getSelectionState(ownerPhone);
+    const state: any = await getSelectionState(ownerPhone);
     expect(state).toBeDefined();
     expect(state?.step).toBe("AWAITING_CONFIRMATION");
     expect(state?.data.name).toBe("John Doe");
@@ -280,7 +280,7 @@ describe("WhatsApp Tenant Onboarding - Invite Flow", () => {
     const payload1 = makeWebhookPayload(ownerPhone, "invite Jane Doe 9876543211");
     await whatsappWebhookEventService.processWebhookEvent(payload1.eventId, payload1.payload);
 
-    let state = await getSelectionState(ownerPhone);
+    let state: any = await getSelectionState(ownerPhone);
     expect(state).toBeDefined();
     expect(state?.step).toBe("AWAITING_HOSTEL");
     expect(state?.data.name).toBe("Jane Doe");
@@ -324,7 +324,7 @@ describe("WhatsApp Tenant Onboarding - Invite Flow", () => {
     const payload1 = makeWebhookPayload(ownerPhone, "invite Sam 9876543212 101");
     await whatsappWebhookEventService.processWebhookEvent(payload1.eventId, payload1.payload);
 
-    const state = await getSelectionState(ownerPhone);
+    const state: any = await getSelectionState(ownerPhone);
     expect(state).toBeDefined();
     expect(state?.step).toBe("AWAITING_CONFIRMATION");
     expect(state?.data.name).toBe("Sam");
@@ -340,7 +340,7 @@ describe("WhatsApp Tenant Onboarding - Invite Flow", () => {
     const payload1 = makeWebhookPayload(ownerPhone, "invite Bob, 9876543213, Sri Hostel 1, 101");
     await whatsappWebhookEventService.processWebhookEvent(payload1.eventId, payload1.payload);
 
-    const state = await getSelectionState(ownerPhone);
+    const state: any = await getSelectionState(ownerPhone);
     expect(state).toBeDefined();
     expect(state?.step).toBe("AWAITING_CONFIRMATION");
     expect(state?.data.name).toBe("Bob");

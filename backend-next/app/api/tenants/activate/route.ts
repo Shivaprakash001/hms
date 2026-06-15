@@ -1,7 +1,9 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { ACCESS_TOKEN_MAX_AGE_SECONDS, getSessionCookieOptions, TENANT_REFRESH_DAYS } from "@/lib/services/session-lifecycle-service";
+import { setCsrfCookie } from "@/lib/security/csrf";
 import { apiError, apiResponse } from "@/lib/auth";
 import { invitationService } from "@/src/services/tenants/invitation-service";
 import { ActivationSchema } from "@/lib/validators";
@@ -36,6 +38,33 @@ function normalizeActivationError(error: any, fallback: string) {
  * POST /api/tenants/activate
  * Access: Public (token-based)
  */
+
+function createActivationResponse(result: any, startedAt: number) {
+  if (result && typeof result === "object" && "session" in result && result.session) {
+    const { session, ...restResult } = result;
+    const { refresh_token, ...sessionResponse } = session;
+    
+    const response = NextResponse.json({
+      success: true,
+      ...restResult,
+      session: sessionResponse,
+    }, { status: 200 });
+
+    response.cookies.set("hms_session", session.access_token, {
+      ...getSessionCookieOptions(ACCESS_TOKEN_MAX_AGE_SECONDS),
+    });
+
+    response.cookies.set("hms_refresh_token", refresh_token, {
+      ...getSessionCookieOptions(60 * 60 * 24 * TENANT_REFRESH_DAYS),
+    });
+    setCsrfCookie(response, 60 * 60 * 24 * TENANT_REFRESH_DAYS);
+
+    return withOnboardingMetrics(response, { startedAt, payload: restResult });
+  }
+
+  return withOnboardingMetrics(apiResponse(result, 200), { startedAt, payload: result });
+}
+
 export async function POST(req: NextRequest) {
   const startedAt = performance.now();
   try {
@@ -52,7 +81,7 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await invitationService.activateTenant(token, password);
-    return withOnboardingMetrics(apiResponse(result, 200), { startedAt, payload: result });
+    return createActivationResponse(result, startedAt);
   } catch (error: any) {
     const normalized = normalizeActivationError(error, "Failed to activate account");
 
@@ -92,7 +121,7 @@ export async function PATCH(req: NextRequest) {
       ip: req.headers.get("x-forwarded-for") || req.ip || "unknown",
       userAgent: req.headers.get("user-agent") || "unknown",
     });
-    return withOnboardingMetrics(apiResponse(result, 200), { startedAt, payload: result });
+    return createActivationResponse(result, startedAt);
   } catch (error: any) {
     const normalized = normalizeActivationError(error, "Failed to update activation workflow");
 

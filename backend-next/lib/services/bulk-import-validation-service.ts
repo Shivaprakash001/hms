@@ -16,6 +16,7 @@ export interface TenantImportRow {
   room_id?: string;
   monthly_rent?: number;
   advance_deposit?: number;
+  security_deposit?: number;
   deposit?: number;
   maintenance_charge?: number;
   maintenance_type?: MaintenanceType;
@@ -33,6 +34,7 @@ export interface TenantImportRow {
 export interface ImportDefaults {
   joining_date?: string;
   advance_deposit?: number;
+  security_deposit?: number;
   maintenance_charge?: number;
   maintenance_type?: MaintenanceType;
   billing_start_mode?: "JOINING_DATE" | "IMPORT_DATE";
@@ -115,7 +117,8 @@ export class BulkImportValidationService {
       email: this.readCell(row, ["Username", "Email Address", "Email Address_1", "email_address", "email", "Email", "EMAIL"]),
       room_no: this.readCell(row, ["Current Room", "current_room", "room_no", "room", "Room", "ROOM", "room_number"]),
       monthly_rent: this.parseNumber(this.readCell(row, ["Monthly Rent", "monthly_rent", "rent", "Rent"])),
-      advance_deposit: this.parseNumber(this.readCell(row, ["Deposit", "deposit", "Advance Deposit", "advance_deposit"])),
+      advance_deposit: this.parseNumber(this.readCell(row, ["Deposit", "deposit", "Advance Deposit", "advance_deposit", "Security Deposit", "security_deposit"])),
+      security_deposit: this.parseNumber(this.readCell(row, ["Deposit", "deposit", "Advance Deposit", "advance_deposit", "Security Deposit", "security_deposit"])),
       joining_date: this.readCell(row, ["Joining Date", "joining_date", "Join Date", "join_date"]) || undefined,
       notes: this.readCell(row, ["Notes", "notes"]) || undefined,
       profile_type: this.readCell(row, ["profile_type", "type"]) || "STUDENT",
@@ -167,7 +170,7 @@ export class BulkImportValidationService {
     const defaultMaintenanceCharge = defaultMaintenanceType === "NONE"
       ? 0
       : (importDefaults.maintenance_charge ?? billingDefaults.maintenance_charge);
-    const defaultAdvanceDeposit = importDefaults.advance_deposit ?? billingDefaults.advance_deposit;
+    const defaultAdvanceDeposit = importDefaults.security_deposit ?? importDefaults.advance_deposit ?? billingDefaults.security_deposit ?? billingDefaults.advance_deposit;
     const defaultBillingStartMode = importDefaults.billing_start_mode || "JOINING_DATE";
 
     for (let i = 0; i < rows.length; i++) {
@@ -330,7 +333,8 @@ export class BulkImportValidationService {
           email: normalizedEmail,
           room_id: roomForRow?.id || room?.id,
           monthly_rent: row.monthly_rent ?? (room?.base_rent ? Number(room.base_rent) : undefined),
-          advance_deposit: defaultAdvanceDeposit,
+          advance_deposit: row.security_deposit ?? row.advance_deposit ?? defaultAdvanceDeposit,
+          security_deposit: row.security_deposit ?? row.advance_deposit ?? defaultAdvanceDeposit,
           maintenance_charge: defaultMaintenanceCharge,
           maintenance_type: defaultMaintenanceType,
           joining_date: row.joining_date || defaultJoiningDate,

@@ -767,7 +767,7 @@ export class TenantService {
       if (!dueDate || dueDate.getTime() >= Date.now()) return sum;
       return sum + Number(item.outstanding || 0);
     }, 0);
-    const advanceEntries = await prisma.tenant_advance_ledger.findMany({
+    const advanceEntries = await prisma.tenant_financial_ledger.findMany({
       where: { tenant_id: tenantId, owner_id: ownerId },
       orderBy: { created_at: "asc" },
     });
@@ -835,8 +835,8 @@ export class TenantService {
       rent: Number(legacyTenant.monthly_rent),
       maintenance_charge: legacyTenant.maintenance_charge,
       maintenance_type: legacyTenant.maintenance_type,
-      advance_deposit: legacyTenant.advance_deposit,
-      security_deposit: legacyTenant.advance_deposit,
+      advance_deposit: legacyTenant.security_deposit || legacyTenant.advance_deposit,
+      security_deposit: legacyTenant.security_deposit || legacyTenant.advance_deposit,
       document_verified: legacyTenant.document_verified,
       profile_completed: legacyTenant.profile_completed,
       total_paid: totalPaid,
@@ -888,8 +888,8 @@ export class TenantService {
         monthly_rent: legacyTenant.monthly_rent,
         maintenance_charge: legacyTenant.maintenance_charge,
         maintenance_type: legacyTenant.maintenance_type,
-        advance_deposit: legacyTenant.advance_deposit,
-        security_deposit: legacyTenant.advance_deposit,
+        advance_deposit: legacyTenant.security_deposit || legacyTenant.advance_deposit,
+        security_deposit: legacyTenant.security_deposit || legacyTenant.advance_deposit,
         joined_on: legacyTenant.joined_on,
         billing_start_date: legacyTenant.billing_start_date,
         phone_1: legacyTenant.phone_1,

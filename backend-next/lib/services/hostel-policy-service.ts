@@ -467,6 +467,7 @@ export function toCompatibilityPreferences(policy: HostelPolicy): Record<string,
     maintenance_type: policy.billing.maintenance.type,
     billing_defaults: {
       advance_deposit: policy.billing.deposit.default_amount,
+      security_deposit: policy.billing.deposit.default_amount,
       maintenance_charge: policy.billing.maintenance.amount,
       maintenance_type: policy.billing.maintenance.type,
       auto_fill_room_rent: policy.billing.invite_defaults.auto_fill_room_rent,
@@ -524,7 +525,7 @@ export function compatibilityPreferencesToPolicyPatch(data: Record<string, any>)
         },
       }),
       ...(data.billing_defaults !== undefined && {
-        deposit: { default_amount: data.billing_defaults.advance_deposit },
+        deposit: { default_amount: data.billing_defaults.security_deposit ?? data.billing_defaults.advance_deposit },
         maintenance: { type: data.billing_defaults.maintenance_type, amount: data.billing_defaults.maintenance_charge },
         invite_defaults: {
           auto_fill_room_rent: data.billing_defaults.auto_fill_room_rent,

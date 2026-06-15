@@ -358,7 +358,7 @@ export class ReceiptService {
    * Generate a PDF buffer for an advance ledger entry.
    */
   async generateLedgerPdfBuffer(ledgerId: string): Promise<Buffer> {
-    const ledgerEntry = await prisma.tenant_advance_ledger.findUnique({
+    const ledgerEntry = await prisma.tenant_financial_ledger.findUnique({
       where: { id: ledgerId },
       include: {
         tenants: { include: { profiles: true } },

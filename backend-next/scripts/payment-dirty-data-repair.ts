@@ -17,7 +17,7 @@ async function repairAttemptHostelScope(): Promise<RepairResult> {
     where: {
       status: { notIn: ["FAILED", "EXPIRED", "CANCELLED"] },
       payment_domain: "RENT_COLLECTION",
-      flow_type: { in: ["RENT", "ADVANCE", "MANUAL_UPI_REFERENCE"] },
+      flow_type: { in: ["RENT", "ADVANCE", "FUTURE_RENT_CREDIT", "MANUAL_UPI_REFERENCE"] },
       hostel_id: null,
     },
     include: {

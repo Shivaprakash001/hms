@@ -91,6 +91,9 @@ export class PaymentRepository {
                 rent_month: true,
                 due_date: true,
                 amount: true,
+                total_amount: true,
+                late_fee: true,
+                obligation_type: true,
                 status: true,
                 tenants: {
                     select: {

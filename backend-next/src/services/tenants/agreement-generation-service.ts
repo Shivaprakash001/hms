@@ -178,7 +178,7 @@ export class AgreementGenerationService {
       permanentAddress: tenant.permanent_address || "N/A",
       roomNo: snapshot.room_number || "N/A",
       monthlyRent: Number(snapshot.monthly_rent || tenant.monthly_rent || 0),
-      advanceDeposit: Number(snapshot.advance_deposit || tenant.advance_deposit || 0),
+      advanceDeposit: Number(snapshot.advance_deposit || tenant.security_deposit || 0),
       maintenanceCharge: Number(snapshot.maintenance_charge || tenant.maintenance_charge || 0),
       maintenanceType: snapshot.maintenance_type || tenant.maintenance_type || "MONTHLY",
       joiningDate: formattedJoiningDate,

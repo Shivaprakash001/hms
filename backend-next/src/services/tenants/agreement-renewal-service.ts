@@ -32,7 +32,7 @@ function moneyOrNull(value: unknown) {
 function resolveContractSnapshot(sourceAgreement: any) {
   const snapshot = (sourceAgreement?.content_snapshot || {}) as Record<string, any>;
   const contractRent = moneyOrNull(sourceAgreement?.contract_rent) ?? moneyOrNull(snapshot.monthly_rent);
-  const contractDeposit = moneyOrNull(sourceAgreement?.contract_security_deposit) ?? moneyOrNull(snapshot.advance_deposit);
+  const contractDeposit = moneyOrNull(sourceAgreement?.contract_security_deposit) ?? moneyOrNull(snapshot.security_deposit ?? snapshot.advance_deposit);
   const contractMaintenance = moneyOrNull(sourceAgreement?.contract_maintenance) ?? moneyOrNull(snapshot.maintenance_charge);
   const contractMaintenanceType = sourceAgreement?.contract_maintenance_type ?? snapshot.maintenance_type ?? null;
   const contractPaymentFrequency = sourceAgreement?.contract_payment_frequency ?? snapshot.payment_frequency ?? null;
@@ -41,7 +41,7 @@ function resolveContractSnapshot(sourceAgreement: any) {
     contentSnapshot: {
       ...snapshot,
       ...(contractRent !== null ? { monthly_rent: contractRent } : {}),
-      ...(contractDeposit !== null ? { advance_deposit: contractDeposit } : {}),
+      ...(contractDeposit !== null ? { security_deposit: contractDeposit, advance_deposit: contractDeposit } : {}),
       ...(contractMaintenance !== null ? { maintenance_charge: contractMaintenance } : {}),
       ...(contractMaintenanceType ? { maintenance_type: contractMaintenanceType } : {}),
       ...(contractPaymentFrequency ? { payment_frequency: contractPaymentFrequency } : {}),

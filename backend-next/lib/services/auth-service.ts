@@ -131,9 +131,13 @@ export class AuthService {
       }
     }
 
+    return this.createSessionAndTokens(profile, tenantId, tenantProfileCompleted, meta);
+  }
+
+  async createSessionAndTokens(profile: any, tenantId: string | null, tenantProfileCompleted: boolean | null, meta: AuthSessionMeta = {}) {
     let effectiveOwnerId = profile.owner_id;
     if (profile.role === "OWNER" && (!effectiveOwnerId || effectiveOwnerId.trim() === "")) {
-      console.warn("[auth.login] repairing missing owner_id for OWNER", { user_id: profile.id });
+      console.warn("[auth.createSessionAndTokens] repairing missing owner_id for OWNER", { user_id: profile.id });
       const updated = await prisma.profile.update({
         where: { id: profile.id },
         data: { owner_id: profile.id },
@@ -730,45 +734,7 @@ export class AuthService {
     let tenantId = profile.tenants?.id || null;
     let tenantProfileCompleted = profile.tenants ? profile.tenants.profile_completed : profile.is_profile_completed;
 
-    let effectiveOwnerId = profile.owner_id;
-    if (profile.role === "OWNER" && (!effectiveOwnerId || effectiveOwnerId.trim() === "")) {
-      console.warn("[auth.googleLogin] repairing missing owner_id for OWNER", { user_id: profile.id });
-      const updated = await prisma.profile.update({
-        where: { id: profile.id },
-        data: { owner_id: profile.id },
-        select: { owner_id: true },
-      });
-      effectiveOwnerId = updated.owner_id;
-    }
-
-    if (profile.role === "OWNER" && !effectiveOwnerId) {
-      throw new Error("UNAUTHORIZED: Invalid OWNER: missing owner_id");
-    }
-
-    const sessionProfile = { ...profile, owner_id: effectiveOwnerId || null };
-    const session = await sessionLifecycleService.createSession(sessionProfile, meta);
-
-    // 4. Create local JWT
-    const token = await generateToken({
-      sub: profile.id,
-      role: profile.role,
-      email: profile.email,
-      owner_id: effectiveOwnerId || null,
-      tenant_id: tenantId,
-      sid: session.sessionId,
-    });
-
-    return {
-      access_token: token,
-      refresh_token: session.refreshToken,
-      token_type: "bearer",
-      role: profile.role,
-      name: profile.name,
-      user_id: profile.id,
-      owner_id: effectiveOwnerId || null,
-      tenant_id: tenantId,
-      is_profile_completed: tenantProfileCompleted,
-    };
+    return this.createSessionAndTokens(profile, tenantId, tenantProfileCompleted, meta);
   }
 }
 

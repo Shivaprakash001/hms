@@ -54,7 +54,7 @@ export async function POST(req: Request) {
     }
 
     // ── ADVANCE / DEPOSIT payment intents ─────────────────────────────────
-    if (payment_type === "ADVANCE" || payment_type === "DEPOSIT") {
+    if (payment_type === "ADVANCE" || payment_type === "DEPOSIT" || payment_type === "FUTURE_RENT_CREDIT" || payment_type === "SECURITY_DEPOSIT") {
       if (!amount || typeof amount !== "number" || amount <= 0) {
         return apiError(`amount is required and must be positive for ${payment_type} payments`, "VALIDATION_ERROR", 400);
       }
@@ -69,7 +69,7 @@ export async function POST(req: Request) {
       if (!tenant?.owner_id) return apiError("Tenant has no owner assigned", "NOT_FOUND", 404);
 
       logger.info("create_ledger_intent_called", { userId: user.id, tenantId, amount, payment_type });
-      const result = payment_type === "DEPOSIT"
+      const result = (payment_type === "DEPOSIT" || payment_type === "SECURITY_DEPOSIT")
         ? await paymentService.createDepositPaymentIntent({
             tenantId,
             ownerId: tenant.owner_id,

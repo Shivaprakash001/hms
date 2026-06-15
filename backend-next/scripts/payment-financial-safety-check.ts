@@ -36,7 +36,7 @@ const checks: Check[] = [
       FROM payment_attempts pa
       WHERE pa.status = 'SUCCESS'
         AND COALESCE(pa.payment_domain, 'RENT_COLLECTION') = 'RENT_COLLECTION'
-        AND COALESCE(pa.flow_type, CASE WHEN pa.payment_type = 'ADVANCE' THEN 'ADVANCE' ELSE 'RENT' END) = 'RENT'
+        AND COALESCE(pa.flow_type, pa.payment_type, 'RENT') = 'RENT'
         AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.payment_attempt_id = pa.id)
       LIMIT 1000
     `,
@@ -121,7 +121,7 @@ const checks: Check[] = [
              jsonb_build_object('status', pa.status, 'flow_type', pa.flow_type, 'payment_type', pa.payment_type) AS metadata
       FROM payment_attempts pa
       WHERE COALESCE(pa.payment_domain, 'RENT_COLLECTION') = 'RENT_COLLECTION'
-        AND COALESCE(pa.flow_type, CASE WHEN pa.payment_type = 'ADVANCE' THEN 'ADVANCE' ELSE 'RENT' END) IN ('RENT', 'ADVANCE', 'MANUAL_UPI_REFERENCE')
+        AND COALESCE(pa.flow_type, pa.payment_type, 'RENT') IN ('RENT', 'ADVANCE', 'DEPOSIT', 'FUTURE_RENT_CREDIT', 'SECURITY_DEPOSIT', 'MANUAL_UPI_REFERENCE')
         AND pa.status NOT IN ('FAILED', 'EXPIRED', 'CANCELLED')
         AND pa.hostel_id IS NULL
       LIMIT 1000
@@ -138,7 +138,7 @@ const checks: Check[] = [
              jsonb_build_object('status', pa.status, 'flow_type', pa.flow_type, 'merchant_context_id', pa.merchant_context_id, 'merchant_transaction_id', COALESCE(pa.merchant_transaction_id, pa.merchant_txn_id)) AS metadata
       FROM payment_attempts pa
       WHERE COALESCE(pa.payment_domain, 'RENT_COLLECTION') = 'RENT_COLLECTION'
-        AND COALESCE(pa.flow_type, CASE WHEN pa.payment_type = 'ADVANCE' THEN 'ADVANCE' ELSE 'RENT' END) IN ('RENT', 'ADVANCE', 'MANUAL_UPI_REFERENCE')
+        AND COALESCE(pa.flow_type, pa.payment_type, 'RENT') IN ('RENT', 'ADVANCE', 'DEPOSIT', 'FUTURE_RENT_CREDIT', 'SECURITY_DEPOSIT', 'MANUAL_UPI_REFERENCE')
         AND (
           pa.merchant_context_type = 'HMS_PLATFORM'
           OR pa.scope_type = 'PLATFORM'
@@ -158,7 +158,7 @@ const checks: Check[] = [
              jsonb_build_object('flow_type', pa.flow_type, 'provider_order_id', pa.provider_order_id, 'merchant_transaction_id', COALESCE(pa.merchant_transaction_id, pa.merchant_txn_id), 'checkout_present', pa.checkout_url IS NOT NULL) AS metadata
       FROM payment_attempts pa
       WHERE COALESCE(pa.payment_domain, 'RENT_COLLECTION') = 'RENT_COLLECTION'
-        AND COALESCE(pa.flow_type, CASE WHEN pa.payment_type = 'ADVANCE' THEN 'ADVANCE' ELSE 'RENT' END) IN ('RENT', 'ADVANCE')
+        AND COALESCE(pa.flow_type, pa.payment_type, 'RENT') IN ('RENT', 'ADVANCE', 'DEPOSIT', 'FUTURE_RENT_CREDIT', 'SECURITY_DEPOSIT')
         AND pa.provider = 'PHONEPE'
         AND pa.status IN ('CREATED', 'PENDING', 'PENDING_VERIFICATION', 'PROCESSING', 'SUCCESS')
         AND (

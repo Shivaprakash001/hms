@@ -44,7 +44,7 @@ describe('Payments API - /api/payments/dues', () => {
       id: owner.id,
       role: 'OWNER',
       email: owner.email,
-    });
+    } as any);
     const req = new NextRequest('http://localhost/api/payments/dues');
     const res = await GET(req);
     const json = await res.json();
@@ -61,7 +61,7 @@ describe('Payments API - /api/payments/dues', () => {
       id: owner.id,
       role: 'OWNER',
       email: owner.email,
-    });
+    } as any);
 
     const req = new NextRequest(`http://localhost/api/payments/dues?hostelId=${hostel.id}`);
     const res = await GET(req);

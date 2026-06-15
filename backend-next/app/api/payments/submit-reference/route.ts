@@ -138,8 +138,8 @@ export async function POST(req: Request) {
       });
       const tenantName = tenantProfile?.profiles?.name || "A tenant";
       const roomNo = tenantProfile?.room_no || "N/A";
-      const isAdvance = attempt.payment_type === "ADVANCE";
-      const isDeposit = attempt.payment_type === "DEPOSIT";
+      const isAdvance = attempt.payment_type === "ADVANCE" || attempt.payment_type === "FUTURE_RENT_CREDIT";
+      const isDeposit = attempt.payment_type === "DEPOSIT" || attempt.payment_type === "SECURITY_DEPOSIT";
 
       await prisma.notifications.create({
         data: {

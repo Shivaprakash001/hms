@@ -159,7 +159,7 @@ describe("onboarding financial flow routing", () => {
       maintenance_amount: 1500,
     }, "owner-1");
 
-    expect(result.obligations).toEqual(["MAINTENANCE"]);
+    expect((result as any).obligations).toEqual(["MAINTENANCE"]);
     expect(onboardingFinancialsService.initializeOnboardingFinancials).toHaveBeenCalledWith(
       tx,
       expect.objectContaining({

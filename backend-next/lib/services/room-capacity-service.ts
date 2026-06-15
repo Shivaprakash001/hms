@@ -128,7 +128,7 @@ export class RoomCapacityService {
       where: { id: { in: tenantIds } },
       select: {
         id: true,
-        advance_deposit: true,
+        security_deposit: true,
         maintenance_charge: true,
         maintenance_type: true,
         reservation_policy: true,
@@ -136,18 +136,18 @@ export class RoomCapacityService {
       },
     });
 
-    const tenantMap = new Map(tenants.map((t: any) => [t.id, t]));
+    const tenantMap = new Map<string, any>(tenants.map((t: any) => [t.id, t]));
 
-    const depositCredits = await db.tenant_advance_ledger.groupBy({
+    const depositCredits = await db.tenant_financial_ledger.groupBy({
       by: ["tenant_id"],
       where: {
         tenant_id: { in: tenantIds },
         type: "CREDIT",
-        reason: "DEPOSIT",
+        reason: { in: ["DEPOSIT", "SECURITY_DEPOSIT_COLLECTED"] } as any,
       },
       _sum: { amount: true },
     });
-    const depositCreditsMap = new Map(depositCredits.map((d: any) => [d.tenant_id, Number(d._sum.amount || 0)]));
+    const depositCreditsMap = new Map<string, number>(depositCredits.map((d: any) => [d.tenant_id, Number(d._sum.amount || 0)]));
 
     const maintenanceObligations = await db.rent_obligations.findMany({
       where: {
@@ -174,7 +174,7 @@ export class RoomCapacityService {
       const tenant = tenantMap.get(tenantId);
       if (!tenant) return true;
 
-      const requiredDeposit = Number(tenant.advance_deposit || 0);
+      const requiredDeposit = Number(tenant.security_deposit || 0);
       const paidDeposit = depositCreditsMap.get(tenantId) || 0;
       const depositOutstanding = Math.max(0, requiredDeposit - paidDeposit);
 

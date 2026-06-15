@@ -79,7 +79,7 @@ export class ObligationEngine {
       if (wasCreated) created.push("RENT");
     }
 
-    // ── ADVANCE obligation ──────────────────────────────────────
+    // ── SECURITY_DEPOSIT obligation ─────────────────────────────
     if (advanceDeposit > 0) {
       const wasCreated = await this.upsertObligation(tx, {
         tenantId,
@@ -89,9 +89,9 @@ export class ObligationEngine {
         rentMonth,
         amount: advanceDeposit,
         dueDate: joiningDate,
-        obligationType: "ADVANCE",
+        obligationType: "SECURITY_DEPOSIT",
       });
-      if (wasCreated) created.push("ADVANCE");
+      if (wasCreated) created.push("SECURITY_DEPOSIT");
     }
 
     // ── ONE-TIME MAINTENANCE obligation ─────────────────────────
