@@ -373,7 +373,7 @@ export function AlertsView() {
                   const amount = payment.amount;
                   const upiRef = payment.upi_reference || '—';
                   const isAdvance = payment.payment_type === 'ADVANCE' || payment.flow_type === 'ADVANCE';
-                  const description = isAdvance ? 'Bulk Advance Payment' : `Rent for ${payment.rent_month || '—'}`;
+                  const description = isAdvance ? 'Security Deposit' : `Rent for ${payment.rent_month || '—'}`;
                   const hostelName = activeHostel ? String(activeHostel.name ?? '') : 'Sri Adithya Hostels';
 
                   const rawPhone = String(payment.tenant_phone || '');

@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => {
       },
       $transaction: vi.fn(async (callback: any) => callback(tx)),
     },
-    tenantAdvanceService: {
+    tenantFinancialLedgerService: {
       credit: vi.fn(),
       creditIdempotentInTx: vi.fn(),
     },
@@ -36,11 +36,11 @@ const mocks = vi.hoisted(() => {
 });
 
 vi.mock("@/lib/db", () => ({ prisma: mocks.prisma }));
-vi.mock("@/src/services/payments/tenant-advance-service", () => ({
-  tenantAdvanceService: mocks.tenantAdvanceService,
+vi.mock("@/src/services/payments/tenant-financial-ledger-service", () => ({
+  tenantFinancialLedgerService: mocks.tenantFinancialLedgerService,
 }));
-vi.mock("../src/services/payments/tenant-advance-service", () => ({
-  tenantAdvanceService: mocks.tenantAdvanceService,
+vi.mock("../src/services/payments/tenant-financial-ledger-service", () => ({
+  tenantFinancialLedgerService: mocks.tenantFinancialLedgerService,
 }));
 vi.mock("@/lib/services/payment-status-event-service", () => ({
   paymentStatusEventService: mocks.paymentStatusEventService,
@@ -108,7 +108,7 @@ describe("Release C5 deposit payment flow", () => {
       ...data,
       settlement_status: data.settlement_status ?? SETTLEMENT_STATUS.SETTLED,
     }));
-    mocks.tenantAdvanceService.creditIdempotentInTx.mockResolvedValue({ alreadyCredited: false });
+    mocks.tenantFinancialLedgerService.creditIdempotentInTx.mockResolvedValue({ alreadyCredited: false });
   });
 
   it("credits successful onboarding deposit payments as DEPOSIT ledger entries", async () => {
@@ -127,7 +127,7 @@ describe("Release C5 deposit payment flow", () => {
 
     await service.finalizePaymentAttempt("attempt-1", "SUCCESS", "gateway-1");
 
-    expect(mocks.tenantAdvanceService.creditIdempotentInTx).toHaveBeenCalledWith(mocks.tx, expect.objectContaining({
+    expect(mocks.tenantFinancialLedgerService.creditIdempotentInTx).toHaveBeenCalledWith(mocks.tx, expect.objectContaining({
       tenantId: "tenant-1",
       ownerId: "owner-1",
       amount: 10000,
@@ -161,7 +161,7 @@ describe("Release C5 deposit payment flow", () => {
 
     await service.finalizePaymentAttempt("attempt-1", "SUCCESS", "gateway-1");
 
-    expect(mocks.tenantAdvanceService.creditIdempotentInTx).toHaveBeenCalledWith(mocks.tx, expect.objectContaining({
+    expect(mocks.tenantFinancialLedgerService.creditIdempotentInTx).toHaveBeenCalledWith(mocks.tx, expect.objectContaining({
       tenantId: "tenant-1",
       reason: "TOPUP",
     }));
@@ -169,9 +169,9 @@ describe("Release C5 deposit payment flow", () => {
   });
 
   it("manual owner recording can create an explicit DEPOSIT ledger credit", async () => {
-    const { POST } = await import("@/app/api/tenants/[id]/advance/route");
+    const { POST } = await import("@/app/api/tenants/[id]/financial-ledger/route");
     mocks.getSession.mockResolvedValue({ role: "OWNER", sub: "owner-1" });
-    mocks.tenantAdvanceService.credit.mockResolvedValue({ entry: { id: "ledger-1", reason: "DEPOSIT" }, balance: 10000 });
+    mocks.tenantFinancialLedgerService.credit.mockResolvedValue({ entry: { id: "ledger-1", reason: "DEPOSIT" }, balance: 10000 });
     const request = {
       json: vi.fn().mockResolvedValue({
         action: "credit",
@@ -183,7 +183,7 @@ describe("Release C5 deposit payment flow", () => {
 
     await POST(request, { params: { id: "tenant-1" } });
 
-    expect(mocks.tenantAdvanceService.credit).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mocks.tenantFinancialLedgerService.credit).toHaveBeenCalledWith(expect.objectContaining({
       tenantId: "tenant-1",
       ownerId: "owner-1",
       createdBy: "owner-1",

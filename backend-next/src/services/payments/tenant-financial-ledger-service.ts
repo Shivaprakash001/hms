@@ -4,14 +4,14 @@ import { getLogger } from "@/lib/logger";
 import { getTenantOperationalContext } from "@/lib/hostel-context";
 import { randomUUID } from "crypto";
 
-const logger = getLogger("tenant.advance");
+const logger = getLogger("tenant.financial-ledger");
 
 // Refund lifecycle — physical money has not necessarily been returned until COMPLETED.
 export type RefundStatus = "PENDING" | "COMPLETED" | "FAILED";
 
-export class TenantAdvanceService {
+export class TenantFinancialLedgerService {
   /**
-   * Get the current advance balance and full ledger history for a tenant.
+   * Get the current financial ledger balance and full ledger history for a tenant.
    * Balance = SUM(CREDIT) - SUM(DEBIT).
    * We recompute from ledger entries (authoritative), not from balance_after
    * snapshots (which are for audit display only).
@@ -35,7 +35,7 @@ export class TenantAdvanceService {
   }
 
   private async _buildBalanceResponse(tenantId: string) {
-    const [entries, tenant, paidAdvanceObligations] = await Promise.all([
+    const [entries, tenant, paidSecurityDepositObligations] = await Promise.all([
       prisma.tenant_advance_ledger.findMany({
         where: { tenant_id: tenantId },
         orderBy: { created_at: "asc" },
@@ -48,7 +48,7 @@ export class TenantAdvanceService {
         where: {
           tenant_id: tenantId,
           obligation: {
-            obligation_type: "ADVANCE",
+            obligation_type: "ADVANCE", // Database obligation type remains 'ADVANCE' for backward compatibility
           },
         },
         _sum: {
@@ -68,17 +68,19 @@ export class TenantAdvanceService {
     }, 0);
 
     const configuredSecurityDeposit = Number(tenant.advance_deposit || 0);
-    const paidAdvanceObligationSum = Number(paidAdvanceObligations?._sum?.amount_paid || 0);
-    const paidAdvanceObligationSumOutsideLedger = Math.max(0, paidAdvanceObligationSum - ledgerDepositPayments);
+    const paidSecurityDepositObligationSum = Number(paidSecurityDepositObligations?._sum?.amount_paid || 0);
+    const paidSecurityDepositObligationSumOutsideLedger = Math.max(0, paidSecurityDepositObligationSum - ledgerDepositPayments);
     const ledgerDepositCredits = this._sumLedgerCreditsByReason(entries, "DEPOSIT");
+    
     const ledgerSecurityDeposit = this._calculateLedgerSecurityDeposit({
       ledgerBalance: balance,
       configuredSecurityDeposit,
-      paidAdvanceObligationSum: paidAdvanceObligationSumOutsideLedger,
+      paidSecurityDepositObligationSum: paidSecurityDepositObligationSumOutsideLedger,
       ledgerDepositCredits,
     });
-    const availableRentAdvance = Math.max(0, balance - ledgerSecurityDeposit);
-    const paidSecurityDeposit = Math.min(configuredSecurityDeposit, ledgerSecurityDeposit + paidAdvanceObligationSumOutsideLedger);
+    
+    const futureRentCredit = Math.max(0, balance - ledgerSecurityDeposit);
+    const paidSecurityDeposit = Math.min(configuredSecurityDeposit, ledgerSecurityDeposit + paidSecurityDepositObligationSumOutsideLedger);
 
     return {
       tenant_id: tenantId,
@@ -87,13 +89,14 @@ export class TenantAdvanceService {
       entries,
       security_deposit: Math.round(configuredSecurityDeposit * 100) / 100,
       security_deposit_paid: Math.round(paidSecurityDeposit * 100) / 100,
-      available_rent_advance: Math.round(availableRentAdvance * 100) / 100,
+      available_rent_advance: Math.round(futureRentCredit * 100) / 100, // Legacy key for backward compatibility
+      future_rent_credit: Math.round(futureRentCredit * 100) / 100, // Standardized financial terminology
     };
   }
 
   /**
    * Record money received from tenant.
-   * DEPOSIT is security deposit. TOPUP is rent advance/future rent credit.
+   * DEPOSIT is security deposit. TOPUP is future rent credit / rent advance.
    * Concurrency: SELECT FOR UPDATE on tenant row.
    */
   async credit(params: {
@@ -110,7 +113,7 @@ export class TenantAdvanceService {
 
     if (amount <= 0) throw new Error("BAD_REQUEST: Amount must be positive");
     await this._assertOwnership(tenantId, ownerId);
-    await this._assertAdvanceEnabled(ownerId, tenantId);
+    await this._assertFinancialLedgerEnabled(ownerId, tenantId);
 
     return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const tenant = await tx.tenants.findUniqueOrThrow({
@@ -137,11 +140,11 @@ export class TenantAdvanceService {
         },
       });
       
-      // Auto-apply advance balance to any outstanding obligations!
-      await this.autoApplyAdvanceToDuesInTx(tx, tenantId, ownerId, createdBy);
+      // Auto-apply future rent credit balance to any outstanding obligations!
+      await this.autoApplyFutureRentCreditToDuesInTx(tx, tenantId, ownerId, createdBy);
       const balanceAfterApply = await this._computeBalance(tx, tenantId);
 
-      logger.info("advance.credit", { tenant_id: tenantId, reason, amount, new_balance: balanceAfterApply, entry_id: entry.id });
+      logger.info("financial-ledger.credit", { tenant_id: tenantId, reason, amount, new_balance: balanceAfterApply, entry_id: entry.id });
       return { entry, balance: balanceAfterApply, hostelId: tenant.hostel_id };
     }).then(async (res) => {
       try {
@@ -155,7 +158,7 @@ export class TenantAdvanceService {
           entry_id: res.entry.id,
         });
       } catch (err) {
-        logger.error("advance.credit.event_failed", { tenant_id: tenantId, err });
+        logger.error("financial-ledger.credit.event_failed", { tenant_id: tenantId, err });
       }
       return { entry: res.entry, balance: res.balance };
     });
@@ -193,7 +196,7 @@ export class TenantAdvanceService {
       select: { id: true },
     });
     if (existing) {
-      logger.info("advance.credit.already_credited", { reference_id: referenceId, reference_type: referenceType });
+      logger.info("financial-ledger.credit.already_credited", { reference_id: referenceId, reference_type: referenceType });
       return { alreadyCredited: true };
     }
 
@@ -222,11 +225,11 @@ export class TenantAdvanceService {
       },
     });
 
-    // Auto-apply advance balance to any outstanding obligations!
-    await this.autoApplyAdvanceToDuesInTx(tx, tenantId, ownerId, createdBy);
+    // Auto-apply future rent credit balance to any outstanding obligations!
+    await this.autoApplyFutureRentCreditToDuesInTx(tx, tenantId, ownerId, createdBy);
     const balanceAfterApply = await this._computeBalance(tx, tenantId);
 
-    logger.info("advance.credit.from_gateway", {
+    logger.info("financial-ledger.credit.from_gateway", {
       tenant_id: tenantId,
       reason,
       amount,
@@ -239,7 +242,7 @@ export class TenantAdvanceService {
   }
 
   /**
-   * Record advance deduction or refund (DEDUCTION, REFUND, CORRECTION).
+   * Record ledger deduction or refund (DEDUCTION, REFUND, CORRECTION).
    * Validates balance is sufficient for DEDUCTION/REFUND.
    * Concurrency: SELECT FOR UPDATE on tenant row.
    */
@@ -258,7 +261,7 @@ export class TenantAdvanceService {
 
     if (amount <= 0) throw new Error("BAD_REQUEST: Amount must be positive");
     await this._assertOwnership(tenantId, ownerId);
-    await this._assertAdvanceEnabled(ownerId, tenantId);
+    await this._assertFinancialLedgerEnabled(ownerId, tenantId);
 
     // For REFUND: the entry is created with refund_status = PENDING.
     // Balance decreases immediately (intent recorded), but the physical money may not have
@@ -277,7 +280,7 @@ export class TenantAdvanceService {
 
       if (reason !== "CORRECTION" && currentBalance < amount) {
         throw new Error(
-          `BAD_REQUEST: Insufficient advance balance. Available: ₹${currentBalance.toFixed(2)}, Requested: ₹${amount.toFixed(2)}`
+          `BAD_REQUEST: Insufficient financial ledger balance. Available: ₹${currentBalance.toFixed(2)}, Requested: ₹${amount.toFixed(2)}`
         );
       }
 
@@ -301,7 +304,7 @@ export class TenantAdvanceService {
         },
       });
 
-      logger.info("advance.debit", { tenant_id: tenantId, reason, amount, new_balance: newBalance, entry_id: entry.id, refund_status: effectiveRefundStatus });
+      logger.info("financial-ledger.debit", { tenant_id: tenantId, reason, amount, new_balance: newBalance, entry_id: entry.id, refund_status: effectiveRefundStatus });
       return { entry, balance: newBalance };
     });
   }
@@ -326,9 +329,9 @@ export class TenantAdvanceService {
   }
 
   /**
-   * Apply advance balance against an outstanding obligation.
+   * Apply future rent credit balance against an outstanding obligation.
    * Atomically:
-   *   1. Validates advance balance >= requested amount
+   *   1. Validates future rent credit balance >= requested amount
    *   2. Validates obligation belongs to tenant and is not PAID/WAIVED
    *   3. Creates a Payment record (method: ADVANCE_ADJUSTMENT)
    *   4. Updates obligation status
@@ -348,7 +351,7 @@ export class TenantAdvanceService {
 
     if (amount <= 0) throw new Error("BAD_REQUEST: Amount must be positive");
     await this._assertOwnership(tenantId, ownerId);
-    await this._assertAdvanceEnabled(ownerId, tenantId);
+    await this._assertFinancialLedgerEnabled(ownerId, tenantId);
 
     return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       return this.adjustAgainstObligationInTx(tx, params);
@@ -356,7 +359,7 @@ export class TenantAdvanceService {
   }
 
   /**
-   * Inner logic to adjust advance balance against an obligation, running inside an existing transaction.
+   * Inner logic to adjust future rent credit balance against an obligation, running inside an existing transaction.
    */
   async adjustAgainstObligationInTx(
     tx: Prisma.TransactionClient,
@@ -399,13 +402,13 @@ export class TenantAdvanceService {
       );
     }
 
-    // Check rent-advance availability. Security deposit credits are held
+    // Check future rent credit availability. Security deposit credits are held
     // separately and must not be consumed by rent adjustments.
-    const availability = await this._computeAdvanceAvailabilityInTx(tx, tenantId);
+    const availability = await this._computeFinancialLedgerAvailabilityInTx(tx, tenantId);
     const currentBalance = availability.ledgerBalance;
-    if (availability.availableRentAdvance < amount) {
+    if (availability.futureRentCredit < amount) {
       throw new Error(
-        `BAD_REQUEST: Insufficient rent advance balance. Available: ₹${availability.availableRentAdvance.toFixed(2)}, Requested: ₹${amount.toFixed(2)}`
+        `BAD_REQUEST: Insufficient future rent credit balance. Available: ₹${availability.futureRentCredit.toFixed(2)}, Requested: ₹${amount.toFixed(2)}`
       );
     }
 
@@ -450,7 +453,7 @@ export class TenantAdvanceService {
       },
     });
 
-    logger.info("advance.adjust", {
+    logger.info("financial-ledger.adjust", {
       tenant_id: tenantId,
       obligation_id: obligationId,
       amount,
@@ -464,20 +467,20 @@ export class TenantAdvanceService {
   }
 
   /**
-   * Automatically apply any positive advance balance to unpaid obligations
+   * Automatically apply any positive future rent credit balance to unpaid obligations
    * (PENDING / PARTIAL) for the tenant, oldest first. Runs inside an existing transaction.
    */
-  async autoApplyAdvanceToDuesInTx(
+  async autoApplyFutureRentCreditToDuesInTx(
     tx: Prisma.TransactionClient,
     tenantId: string,
     ownerId: string,
     createdBy: string
   ) {
-    // 1. Lock tenant row and compute rent-advance availability.
+    // 1. Lock tenant row and compute future rent credit availability.
     // Security deposit credits are not available for automatic rent settlement.
     await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId}::uuid FOR UPDATE`;
-    const availability = await this._computeAdvanceAvailabilityInTx(tx, tenantId);
-    let currentBalance = this._roundCurrency(availability.availableRentAdvance);
+    const availability = await this._computeFinancialLedgerAvailabilityInTx(tx, tenantId);
+    let currentBalance = this._roundCurrency(availability.futureRentCredit);
     if (currentBalance <= 0) return;
 
     // 3. Fetch all outstanding obligations for this tenant (oldest first)
@@ -510,11 +513,21 @@ export class TenantAdvanceService {
           createdBy,
           obligationId: obligation.id,
           amount: adjustAmount,
-          notes: `Auto-adjusted from tenant advance balance`,
+          notes: `Auto-adjusted from tenant future rent credit balance`,
         });
         currentBalance = Math.round((currentBalance - adjustAmount) * 100) / 100;
       }
     }
+  }
+
+  // Backward compatibility alias for autoApplyAdvanceToDuesInTx
+  async autoApplyAdvanceToDuesInTx(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    ownerId: string,
+    createdBy: string
+  ) {
+    return this.autoApplyFutureRentCreditToDuesInTx(tx, tenantId, ownerId, createdBy);
   }
 
   // ── Private helpers ───────────────────────────────────────────────────────
@@ -528,8 +541,7 @@ export class TenantAdvanceService {
     if (tenant.owner_id !== ownerId) throw new Error("FORBIDDEN: Tenant does not belong to this owner");
   }
 
-  private async _assertAdvanceEnabled(ownerId: string, tenantId?: string) {
-    // Phase 2: resolve from tenant's hostel if available
+  private async _assertFinancialLedgerEnabled(ownerId: string, tenantId?: string) {
     if (!tenantId) {
       throw new Error("HOSTEL_CONTEXT_REQUIRED: tenantId is required to resolve advance preferences");
     }
@@ -574,12 +586,12 @@ export class TenantAdvanceService {
   private _calculateLedgerSecurityDeposit(params: {
     ledgerBalance: number;
     configuredSecurityDeposit: number;
-    paidAdvanceObligationSum: number;
+    paidSecurityDepositObligationSum: number;
     ledgerDepositCredits: number;
   }): number {
     const remainingSecurityDepositFromLedger = Math.max(
       0,
-      params.configuredSecurityDeposit - params.paidAdvanceObligationSum
+      params.configuredSecurityDeposit - params.paidSecurityDepositObligationSum
     );
     return this._roundCurrency(
       Math.min(
@@ -590,8 +602,8 @@ export class TenantAdvanceService {
     );
   }
 
-  private async _computeAdvanceAvailabilityInTx(tx: Prisma.TransactionClient, tenantId: string) {
-    const [tenant, paidAdvanceObligations, depositCredits, ledgerBalance, ledgerDepositPayments] = await Promise.all([
+  private async _computeFinancialLedgerAvailabilityInTx(tx: Prisma.TransactionClient, tenantId: string) {
+    const [tenant, paidSecurityDepositObligations, depositCredits, ledgerBalance, ledgerDepositPayments] = await Promise.all([
       tx.tenants.findUniqueOrThrow({
         where: { id: tenantId },
         select: { advance_deposit: true },
@@ -631,21 +643,21 @@ export class TenantAdvanceService {
       }),
     ]);
 
-    const paidAdvanceObligationSum = Number(paidAdvanceObligations?._sum?.amount_paid || 0);
+    const paidSecurityDepositObligationSum = Number(paidSecurityDepositObligations?._sum?.amount_paid || 0);
     const ledgerDepositPaymentsSum = Number(ledgerDepositPayments?._sum?.amount || 0);
-    const paidAdvanceObligationSumOutsideLedger = Math.max(0, paidAdvanceObligationSum - ledgerDepositPaymentsSum);
+    const paidSecurityDepositObligationSumOutsideLedger = Math.max(0, paidSecurityDepositObligationSum - ledgerDepositPaymentsSum);
 
     const ledgerSecurityDeposit = this._calculateLedgerSecurityDeposit({
       ledgerBalance,
       configuredSecurityDeposit: Number(tenant.advance_deposit || 0),
-      paidAdvanceObligationSum: paidAdvanceObligationSumOutsideLedger,
+      paidSecurityDepositObligationSum: paidSecurityDepositObligationSumOutsideLedger,
       ledgerDepositCredits: Number(depositCredits?._sum?.amount || 0),
     });
 
     return {
       ledgerBalance,
       ledgerSecurityDeposit,
-      availableRentAdvance: this._roundCurrency(Math.max(0, ledgerBalance - ledgerSecurityDeposit)),
+      futureRentCredit: this._roundCurrency(Math.max(0, ledgerBalance - ledgerSecurityDeposit)),
     };
   }
 
@@ -654,4 +666,4 @@ export class TenantAdvanceService {
   }
 }
 
-export const tenantAdvanceService = new TenantAdvanceService();
+export const tenantFinancialLedgerService = new TenantFinancialLedgerService();

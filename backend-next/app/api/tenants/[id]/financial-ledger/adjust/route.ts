@@ -3,11 +3,11 @@ export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
-import { tenantAdvanceService } from "@/src/services/payments/tenant-advance-service";
+import { tenantFinancialLedgerService } from "@/src/services/payments/tenant-financial-ledger-service";
 
 /**
- * POST /api/tenants/[id]/advance/adjust
- * Apply tenant advance balance against an outstanding obligation.
+ * POST /api/tenants/[id]/financial-ledger/adjust
+ * Apply tenant future rent credit balance against an outstanding obligation.
  *
  * Body: { obligation_id, amount, notes? }
  * Auth: OWNER or ADMIN only
@@ -34,7 +34,7 @@ export async function POST(
 
     const ownerId = session.role === "OWNER" ? session.sub : session.sub;
 
-    const result = await tenantAdvanceService.adjustAgainstObligation({
+    const result = await tenantFinancialLedgerService.adjustAgainstObligation({
       tenantId: params.id,
       ownerId,
       createdBy: session.sub,

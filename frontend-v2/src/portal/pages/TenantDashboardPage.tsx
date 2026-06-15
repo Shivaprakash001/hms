@@ -288,7 +288,7 @@ export function TenantDashboardPage() {
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="rounded-xl bg-secondary py-2.5 px-2">
-                <p className="text-muted-foreground text-[10px] mb-0.5">Paid Deposit</p>
+                <p className="text-muted-foreground text-[10px] mb-0.5">Paid Security Deposit</p>
                 <p className="text-sm font-bold text-foreground">{fmt(Number((advance as any)?.security_deposit_paid ?? 0))}</p>
               </div>
               <div className="rounded-xl bg-secondary py-2.5 px-2">

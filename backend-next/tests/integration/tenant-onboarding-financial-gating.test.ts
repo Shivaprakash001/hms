@@ -6,7 +6,7 @@ import { MetaWhatsAppProvider } from '../../lib/services/notifications/providers
 import { EmailService } from '../../lib/services/email-service';
 import { prisma } from '../../lib/db';
 import { paymentService } from '../../src/services/payments/payment-service';
-import { tenantAdvanceService } from '../../src/services/payments/tenant-advance-service';
+import { tenantFinancialLedgerService } from '../../src/services/payments/tenant-financial-ledger-service';
 import { reservationStatusService } from '../../src/services/tenants/reservation-status-service';
 
 vi.mock('../../lib/services/email-service', () => {
@@ -148,8 +148,8 @@ describe('Tenant Onboarding Financial Gating Integration', () => {
     });
     expect(allocations.length).toBe(0);
 
-    // 4. Pay security deposit (advance) via tenantAdvanceService.credit
-    await tenantAdvanceService.credit({
+    // 4. Pay security deposit (advance) via tenantFinancialLedgerService.credit
+    await tenantFinancialLedgerService.credit({
       tenantId,
       ownerId: owner.id,
       createdBy: owner.id,

@@ -35,7 +35,7 @@ export function useTenantProfile(hostelId: string, tenantId: string, section?: s
 
   const advanceQuery = useQuery({
     queryKey: queryKeys.tenants.advance(hostelId, tenantId),
-    queryFn: () => tenantService.getAdvance(tenantId),
+    queryFn: () => tenantService.getFinancialLedger(tenantId),
     enabled: Boolean(hostelId && tenantId) && (section === 'billing' || section === 'money' || !section),
     staleTime: 60_000,
   });

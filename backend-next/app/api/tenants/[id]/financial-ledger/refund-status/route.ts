@@ -3,10 +3,10 @@ export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
-import { tenantAdvanceService } from "@/src/services/payments/tenant-advance-service";
+import { tenantFinancialLedgerService } from "@/src/services/payments/tenant-financial-ledger-service";
 
 /**
- * PATCH /api/tenants/[id]/advance/refund-status
+ * PATCH /api/tenants/[id]/financial-ledger/refund-status
  * Mark a REFUND ledger entry as COMPLETED or FAILED once the bank transfer is confirmed.
  *
  * Body: { entry_id, refund_status: "COMPLETED" | "FAILED" }
@@ -35,7 +35,7 @@ export async function PATCH(
     }
 
     const ownerId = session.role === "OWNER" ? session.sub : session.sub;
-    const updated = await tenantAdvanceService.updateRefundStatus(entry_id, ownerId, refund_status);
+    const updated = await tenantFinancialLedgerService.updateRefundStatus(entry_id, ownerId, refund_status);
     return apiResponse(updated);
   } catch (error: any) {
     const msg = String(error?.message ?? error);

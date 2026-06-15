@@ -508,7 +508,7 @@ export function MoveOutsView() {
                               </div>
                               {Number(settlement.advance_balance) > 0 && (
                                 <div className="flex justify-between">
-                                  <span>Extra Advance Balance</span>
+                                  <span>Future Rent Credit Balance</span>
                                   <span>{fmt(settlement.advance_balance)}</span>
                                 </div>
                               )}

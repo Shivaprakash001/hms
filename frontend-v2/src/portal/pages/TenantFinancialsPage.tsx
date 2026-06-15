@@ -324,7 +324,7 @@ export function TenantFinancialsPage() {
           {selectedProjectedTotal > 0 && (
             <div className="flex items-center justify-between gap-3 pt-4 border-t border-border mt-4">
               <div>
-                <p className="text-xs text-muted-foreground">Selected advance total</p>
+                <p className="text-xs text-muted-foreground">Selected prepayment total</p>
                 <p className="text-xl font-bold text-accent">{fmt(selectedProjectedTotal)}</p>
               </div>
               <button
@@ -333,7 +333,7 @@ export function TenantFinancialsPage() {
                 className="flex items-center gap-2 px-5 py-3 rounded-xl bg-accent text-accent-foreground font-bold text-sm hover:bg-accent/90 transition-colors"
               >
                 <CreditCard className="w-4 h-4" />
-                Pay Advance {fmt(selectedProjectedTotal)}
+                Prepay Rent {fmt(selectedProjectedTotal)}
               </button>
             </div>
           )}
@@ -540,7 +540,7 @@ export function TenantFinancialsPage() {
           setShowAdvancePayModal(false);
           setSelectedProjectedIds([]);
           queryClient.invalidateQueries({ queryKey: ['tenant'] });
-          toast.success('Advance payment recorded successfully!');
+          toast.success('Prepayment recorded successfully!');
         }}
       />
 

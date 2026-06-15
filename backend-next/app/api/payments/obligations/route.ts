@@ -6,7 +6,7 @@ import { randomUUID } from "crypto";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
-import { tenantAdvanceService } from "@/src/services/payments/tenant-advance-service";
+import { tenantFinancialLedgerService } from "@/src/services/payments/tenant-financial-ledger-service";
 
 const ALLOWED_MANUAL_TYPES = ["MAINTENANCE", "FINE", "EXTRA_CHARGE", "OTHER"];
 
@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
           status: "PENDING",
         },
       });
-      await tenantAdvanceService.autoApplyAdvanceToDuesInTx(tx, tenant_id, ownerId, ownerId);
+      await tenantFinancialLedgerService.autoApplyAdvanceToDuesInTx(tx, tenant_id, ownerId, ownerId);
       return obl;
     });
 

@@ -85,7 +85,7 @@ vi.mock("../src/services/tenants/reservation-status-service", () => ({
 vi.mock("../lib/db", () => ({ prisma: prismaMock }));
 vi.mock("../lib/services/move-out-notifications", () => ({ notifyMoveOutTransition: vi.fn() }));
 vi.mock("../src/services/payments/financial-service", () => ({ financialService: {} }));
-vi.mock("../src/services/payments/tenant-advance-service", () => ({ tenantAdvanceService: {} }));
+vi.mock("../src/services/payments/tenant-financial-ledger-service", () => ({ tenantFinancialLedgerService: {} }));
 
 describe("MoveOutService service-layer authorization", () => {
   let moveOutService: import("../lib/services/move-out-service").MoveOutService;

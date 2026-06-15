@@ -3,7 +3,7 @@ import { Prisma, MoveOutStatus, MoveOutReason } from "@prisma/client";
 type Tx = Prisma.TransactionClient;
 import { getLogger } from "../logger";
 import { financialService } from "../../src/services/payments/financial-service";
-import { tenantAdvanceService } from "../../src/services/payments/tenant-advance-service";
+import { tenantFinancialLedgerService } from "../../src/services/payments/tenant-financial-ledger-service";
 import { reservationStatusService } from "../../src/services/tenants/reservation-status-service";
 import { assertTransition, assertCapability, checkCapability, getTenantSteps } from "./move-out-state-machine";
 import {
@@ -368,7 +368,7 @@ export class MoveOutService {
     if (!req) throw new Error("NOT_FOUND: Move-out request not found");
 
     const configuredSecurityDeposit = Number(req.tenant.advance_deposit || 0);
-    const advBal = await tenantAdvanceService.getBalance(req.tenant_id, req.owner_id);
+    const advBal = await tenantFinancialLedgerService.getBalance(req.tenant_id, req.owner_id);
     const paidAdvanceBalance = Math.max(0, Number(advBal.balance || 0));
 
     // Fetch total paid amount against ADVANCE obligations (which represents the security deposit paid outside the ledger/already adjusted)

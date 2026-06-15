@@ -3,11 +3,11 @@ export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
-import { tenantAdvanceService } from "@/src/services/payments/tenant-advance-service";
+import { tenantFinancialLedgerService } from "@/src/services/payments/tenant-financial-ledger-service";
 
 /**
- * GET /api/tenants/me/advance
- * Returns current advance balance + full ledger history for the authenticated tenant.
+ * GET /api/tenants/me/financial-ledger
+ * Returns current financial ledger balance + full ledger history for the authenticated tenant.
  *
  * Auth: TENANT only — derives tenant record from JWT sub (profile_id).
  * A tenant can ONLY see their own balance. No cross-tenant access possible.
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
   if (session.role !== "TENANT") return apiError("Forbidden — tenant access only", "FORBIDDEN", 403);
 
   try {
-    const result = await tenantAdvanceService.getBalanceForTenant(session.sub);
+    const result = await tenantFinancialLedgerService.getBalanceForTenant(session.sub);
     return apiResponse(result);
   } catch (error: any) {
     const msg = String(error?.message ?? error);

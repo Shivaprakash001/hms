@@ -6,7 +6,7 @@ import crypto from "crypto";
 import { EmailService } from "@/lib/services/email-service";
 import { receiptService } from "./receipt-service";
 import { getObligationOperationalContext, getPaymentOperationalContext, getTenantOperationalContext, resolveHostelIdFromObligation } from "@/lib/hostel-context";
-import { tenantAdvanceService } from "./tenant-advance-service";
+import { tenantFinancialLedgerService } from "./tenant-financial-ledger-service";
 import { formatCurrency, formatMonthYear } from "@/lib/format";
 import { eventLog } from "@/lib/services/event-log-service";
 import { getLogger } from "@/lib/logger";
@@ -218,7 +218,7 @@ export class PaymentService {
     });
 
     if (obligation.obligation_type === "ADVANCE") {
-      await tenantAdvanceService.creditIdempotentInTx(tx, {
+      await tenantFinancialLedgerService.creditIdempotentInTx(tx, {
         tenantId: obligation.tenant_id,
         ownerId: obligation.owner_id || "",
         createdBy: data.offlineRecordedBy || obligation.owner_id || "SYSTEM",
@@ -1868,7 +1868,7 @@ export class PaymentService {
       const finalizedAdvance = await prisma.$transaction(async (tx) => {
         // Lock ordering: tenant row first (consistent with adjustAgainstObligation)
         await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${advanceTenantId}::uuid FOR UPDATE`;
-        await tenantAdvanceService.creditIdempotentInTx(tx, {
+        await tenantFinancialLedgerService.creditIdempotentInTx(tx, {
           tenantId: advanceTenantId,
           ownerId: attempt.owner_id,
           amount: Number(attempt.amount),
@@ -1960,7 +1960,7 @@ export class PaymentService {
       const depositTenantId: string = attempt.tenant_id;
       const finalizedDeposit = await prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${depositTenantId}::uuid FOR UPDATE`;
-        await tenantAdvanceService.creditIdempotentInTx(tx, {
+        await tenantFinancialLedgerService.creditIdempotentInTx(tx, {
           tenantId: depositTenantId,
           ownerId: attempt.owner_id,
           amount: Number(attempt.amount),

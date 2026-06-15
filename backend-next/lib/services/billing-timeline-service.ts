@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { billingScheduleService, type PaymentFrequency } from "@/lib/services/billing-schedule-service";
 import { hostelPolicyService } from "@/lib/services/hostel-policy-service";
-import { tenantAdvanceService } from "@/src/services/payments/tenant-advance-service";
+import { tenantFinancialLedgerService } from "@/src/services/payments/tenant-financial-ledger-service";
 
 function money(value: unknown) {
   return Math.round((Number(value) || 0) * 100) / 100;
@@ -43,7 +43,7 @@ export class BillingTimelineService {
 
     const [policyResponse, advanceSummary] = await Promise.all([
       hostelPolicyService.getHostelPolicy(tenant.hostel_id).catch(() => null),
-      tenantAdvanceService.getBalance(tenant.id, tenant.owner_id).catch(() => null),
+      tenantFinancialLedgerService.getBalance(tenant.id, tenant.owner_id).catch(() => null),
     ]);
     const policy = billingScheduleService.normalizePolicy(policyResponse?.policy);
     // Extract billing schedule settings from the full policy (NOT just payment_frequency)

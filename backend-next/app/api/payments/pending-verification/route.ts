@@ -74,7 +74,7 @@ export async function GET(req: Request) {
         room_no: roomNo,
         amount: Number(a.amount),
         upi_reference: a.gateway_txn_id || "—",
-        rent_month: isDeposit ? "Security Deposit" : isAdvance ? "Advance Payment" : a.rent_obligations?.rent_month,
+        rent_month: (isDeposit || isAdvance) ? "Security Deposit" : a.rent_obligations?.rent_month,
         submitted_at: a.raw_webhook_payload?.submitted_at || a.updated_at,
         created_at: a.created_at,
       };

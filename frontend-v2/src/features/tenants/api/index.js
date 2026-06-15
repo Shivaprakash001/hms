@@ -138,8 +138,8 @@ export const tenantService = {
         const response = await api.get(`/tenants/${tenantId}/score`);
         return response.data.success !== undefined ? (response.data.data !== undefined ? response.data.data : response.data) : response.data;
     },
-    getMyAdvance: async () => {
-        const response = await api.get('/tenants/me/advance');
+    getMyFinancialLedger: async () => {
+        const response = await api.get('/tenants/me/financial-ledger');
         return response.data.success !== undefined ? (response.data.data !== undefined ? response.data.data : response.data) : response.data;
     },
     getMyBillingFrequency: async () => {
@@ -207,8 +207,8 @@ export const tenantService = {
         const response = await api.post(`/tenants/${id}/compliance-action`, { action });
         return unwrap(response);
     },
-    getAdvance: async (tenantId) => {
-        const response = await api.get(`/tenants/${tenantId}/advance`);
+    getFinancialLedger: async (tenantId) => {
+        const response = await api.get(`/tenants/${tenantId}/financial-ledger`);
         return unwrap(response);
     },
     getPendingDocuments: async (hostelId = '') => {

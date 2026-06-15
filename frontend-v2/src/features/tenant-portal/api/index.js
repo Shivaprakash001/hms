@@ -27,7 +27,7 @@ export const tenantPortalApi = {
     const data = unwrap(response);
     return Array.isArray(data) ? data : data?.notifications ?? [];
   },
-  getAdvance: async () => tenantService.getMyAdvance(),
+  getAdvance: async () => tenantService.getMyFinancialLedger(),
   uploadMyPhoto: async (file) => {
     const formData = new FormData();
     formData.append('file', file);

@@ -145,8 +145,8 @@ export async function POST(req: Request) {
         data: {
           id: crypto.randomUUID(),
           profile_id: attempt.owner_id,
-          title: isDeposit ? "Security Deposit Submitted" : isAdvance ? "Bulk Advance Payment Submitted" : "New Payment Submitted",
-          message: `${tenantName} (Room ${roomNo}) has submitted a ${isDeposit ? "security deposit " : isAdvance ? "bulk advance " : ""}payment of ₹${attempt.amount} (UPI Ref: ${cleanRef}).`,
+          title: (isDeposit || isAdvance) ? "Security Deposit Submitted" : "New Payment Submitted",
+          message: `${tenantName} (Room ${roomNo}) has submitted a ${(isDeposit || isAdvance) ? "security deposit " : ""}payment of ₹${attempt.amount} (UPI Ref: ${cleanRef}).`,
           type: "payment"
         }
       });

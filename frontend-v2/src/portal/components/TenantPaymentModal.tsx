@@ -181,7 +181,7 @@ export function TenantPaymentModal({
     <Dialog open={open} onOpenChange={(v) => !loading && status !== 'SUCCESS' && !v && onClose()}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto p-0 gap-0">
         <DialogHeader className="p-5 border-b border-border bg-muted/30">
-          <DialogTitle>{paymentType === 'ADVANCE' ? 'Pay advance' : 'Pay rent'}</DialogTitle>
+          <DialogTitle>{paymentType === 'ADVANCE' ? 'Pay security deposit' : 'Pay rent'}</DialogTitle>
           <p className="text-sm text-muted-foreground">
             {step === 'init' && 'Review amount and continue to PhonePe'}
             {step === 'pay' && 'Complete payment or enter UPI reference'}
@@ -193,7 +193,7 @@ export function TenantPaymentModal({
         <div className="space-y-4 p-5">
           <div className="rounded-xl border border-accent/30 bg-accent/5 px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-accent">
-              {paymentType === 'ADVANCE' ? 'Total advance amount' : 'Total due'}
+              {paymentType === 'ADVANCE' ? 'Total security deposit' : 'Total due'}
             </p>
             <p className="text-3xl font-bold text-foreground mt-1">{fmt(amount)}</p>
           </div>
@@ -201,7 +201,7 @@ export function TenantPaymentModal({
           {paymentContext.length > 0 && (
             <div className="rounded-xl border border-border p-3 space-y-2">
               <p className="text-sm font-semibold text-foreground">
-                {paymentType === 'ADVANCE' ? 'You are paying in advance for' : 'You are paying for'}
+                {paymentType === 'ADVANCE' ? 'You are paying security deposit for' : 'You are paying for'}
               </p>
               {paymentContext.map((item) => (
                 <div key={item.id} className="rounded-lg bg-muted/50 px-3 py-2 text-sm">

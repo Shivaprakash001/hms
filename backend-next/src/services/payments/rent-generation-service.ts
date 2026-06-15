@@ -11,7 +11,7 @@ import {
 } from "@/lib/services/billing-validation";
 import { billingScheduleService, type PaymentFrequency } from "@/lib/services/billing-schedule-service";
 import crypto from "crypto";
-import { tenantAdvanceService } from "./tenant-advance-service";
+import { tenantFinancialLedgerService } from "./tenant-financial-ledger-service";
 
 /**
  * 🏦 Rent Generation Service — Phases 1-7
@@ -470,7 +470,7 @@ export class RentGenerationService {
             const row = rentRows.find((r: any) => r.tenant_id === tenantId) ||
                         maintRows.find((r: any) => r.tenant_id === tenantId);
             if (row) {
-              await tenantAdvanceService.autoApplyAdvanceToDuesInTx(tx, tenantId, row.owner_id, row.owner_id);
+              await tenantFinancialLedgerService.autoApplyAdvanceToDuesInTx(tx, tenantId, row.owner_id, row.owner_id);
             }
           }
 

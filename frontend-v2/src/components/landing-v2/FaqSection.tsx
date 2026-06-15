@@ -29,8 +29,8 @@ const DEFAULT_FAQS: FaqContent[] = [
     answer: "Yes, we have power backup systems installed for basic lights, fans, and Wi-Fi router operations so that studies are not disrupted during power cuts."
   },
   {
-    question: "What is the policy on rent advance, deposits, and refunds?",
-    answer: "We charge a transparent monthly rent with a one-month rent advance. There are no hidden maintenance or electricity charges. Refund terms are fully documented in the stay agreement."
+    question: "What is the policy on security deposits and refunds?",
+    answer: "We charge a transparent monthly rent with a one-month security deposit. There are no hidden maintenance or electricity charges. Refund terms are fully documented in the stay agreement."
   },
   {
     question: "Can parents visit or stay at the hostel?",

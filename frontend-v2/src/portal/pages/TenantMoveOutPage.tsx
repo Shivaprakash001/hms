@@ -395,7 +395,7 @@ export function TenantMoveOutPage() {
               </div>
               {extraAdvance > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Extra advance balance</span>
+                  <span className="text-muted-foreground">Future rent credit balance</span>
                   <span>{fmt(extraAdvance)}</span>
                 </div>
               )}
