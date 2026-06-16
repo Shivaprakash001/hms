@@ -110,19 +110,31 @@ export class PropertyService {
         }
 
         if (normOld !== normNew) {
-          const otp = data.phone_otp;
-          if (!otp) {
-            throw new Error("VALIDATION: Verification code is required to update your phone number");
-          }
-          try {
-            await authOtpService.verifyPhoneOtp({
+          const alreadyVerified = await prisma.phoneVerificationOtp.findFirst({
+            where: {
               phone: normNew,
-              otp,
               purpose: "ProfileUpdate",
-              requestIp: null,
-            });
-          } catch (err: any) {
-            throw new Error(`VALIDATION: Phone verification failed: ${err.message || "Invalid or expired code"}`);
+              status: "VERIFIED",
+              verified_at: { gte: new Date(Date.now() - 15 * 60 * 1000) },
+            },
+            orderBy: { verified_at: "desc" },
+          });
+
+          if (!alreadyVerified) {
+            const otp = data.phone_otp;
+            if (!otp) {
+              throw new Error("VALIDATION: Verification code is required to update your phone number");
+            }
+            try {
+              await authOtpService.verifyPhoneOtp({
+                phone: normNew,
+                otp,
+                purpose: "ProfileUpdate",
+                requestIp: null,
+              });
+            } catch (err: any) {
+              throw new Error(`VALIDATION: Phone verification failed: ${err.message || "Invalid or expired code"}`);
+            }
           }
         }
       }
@@ -161,19 +173,31 @@ export class PropertyService {
         }
 
         if (normOld !== normNew) {
-          const otp = data.emergency_otp;
-          if (!otp) {
-            throw new Error("VALIDATION: Verification code is required to update your emergency contact phone number");
-          }
-          try {
-            await authOtpService.verifyPhoneOtp({
+          const alreadyVerified = await prisma.phoneVerificationOtp.findFirst({
+            where: {
               phone: normNew,
-              otp,
               purpose: "ProfileUpdate",
-              requestIp: null,
-            });
-          } catch (err: any) {
-            throw new Error(`VALIDATION: Emergency contact verification failed: ${err.message || "Invalid or expired code"}`);
+              status: "VERIFIED",
+              verified_at: { gte: new Date(Date.now() - 15 * 60 * 1000) },
+            },
+            orderBy: { verified_at: "desc" },
+          });
+
+          if (!alreadyVerified) {
+            const otp = data.emergency_otp;
+            if (!otp) {
+              throw new Error("VALIDATION: Verification code is required to update your emergency contact phone number");
+            }
+            try {
+              await authOtpService.verifyPhoneOtp({
+                phone: normNew,
+                otp,
+                purpose: "ProfileUpdate",
+                requestIp: null,
+              });
+            } catch (err: any) {
+              throw new Error(`VALIDATION: Emergency contact verification failed: ${err.message || "Invalid or expired code"}`);
+            }
           }
         }
       }

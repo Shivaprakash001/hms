@@ -734,7 +734,7 @@ model payments {
 model profile {
   email                                                             String                @unique
   name                                                              String
-  phone                                                             String?
+  phone                                                             String?               @unique
   password_hash                                                     String?
   role                                                              Role
   is_active                                                         Boolean               @default(true)
