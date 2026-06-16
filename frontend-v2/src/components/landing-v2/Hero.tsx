@@ -1,4 +1,4 @@
-import { Phone, MessageCircle } from 'lucide-react';
+import { Phone, MessageCircle, MapPin } from 'lucide-react';
 import { motion } from 'motion/react';
 import { VideoPlayer } from './VideoPlayer';
 import ownerPhoto from './assets/person__up-removebg-preview__1_.png';
@@ -33,7 +33,7 @@ export function Hero({ availability, content }: { availability?: LandingAvailabi
     <section id="home" className="bg-gradient-to-b from-[#FFFDF5] to-white py-10 md:py-24">
       <div className="max-w-7xl mx-auto px-4">
         <div className="grid md:grid-cols-[55%_45%] gap-12 items-center">
-          <div className="space-y-10">
+          <div className="space-y-8">
             {/* Title section (Clean and free space above and below) */}
             <motion.div
               className="text-center sm:text-left"
@@ -83,6 +83,21 @@ export function Hero({ availability, content }: { availability?: LandingAvailabi
                 >
                   {content.title || '400m from SNIST. Home Food. Everything Included.'}
                 </h1>
+              </div>
+            </motion.div>
+
+            {/* Location Highlight Badge */}
+            <motion.div
+              className="flex justify-center sm:justify-start"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.2, ease: [0.25, 0.4, 0.25, 1] }}
+            >
+              <div className="inline-flex items-center gap-2.5 bg-[#FFFDF5] border-2 border-[#F07B1D]/30 text-[#1B2D5B] px-5 py-2.5 rounded-full shadow-md hover:border-[#F07B1D]/60 transition-all group">
+                <div className="w-8 h-8 rounded-full bg-[#F07B1D]/10 flex items-center justify-center text-[#F07B1D] group-hover:bg-[#F07B1D]/20 transition-colors">
+                  <MapPin className="w-4.5 h-4.5" />
+                </div>
+                <span className="font-bold text-sm sm:text-base tracking-wide uppercase text-[#1B2D5B]">5 Minutes from SNIST Gate</span>
               </div>
             </motion.div>
 
