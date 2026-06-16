@@ -1,14 +1,17 @@
 import { prisma } from "@/lib/db";
 import { getLogger } from "@/lib/logger";
+import { getFrontendUrl } from "@/lib/config/domains";
 import {
   MetaWhatsAppProvider,
   WhatsAppProviderError,
   WhatsAppValidationError,
   buildRentReminderBodyParameters,
   getMetaTemplateName,
+  getMetaTemplateLanguage,
   maskWhatsAppPhone,
   normalizeWhatsAppPhone,
   selectRentReminderTemplate,
+  WhatsAppRentReminderTemplate,
 } from "./providers/whatsapp";
 
 const logger = getLogger("whatsapp.reminder-delivery");
@@ -38,15 +41,94 @@ export class WhatsAppReminderDeliveryService {
   constructor(private readonly provider = new MetaWhatsAppProvider()) {}
 
   async sendRentReminder(input: WhatsAppRentReminderInput) {
+    // 1. Check obligation status (PAID/SETTLED/CANCELLED) before execution to satisfy settlement stop rules
+    const obligation = await prisma.rent_obligations.findUnique({
+      where: { id: input.obligationId },
+      select: { status: true, is_superseded: true },
+    });
+
+    if (
+      !obligation ||
+      obligation.status === "PAID" ||
+      (obligation.status as string) === "SETTLED" ||
+      (obligation.status as string) === "CANCELLED" ||
+      (obligation.status as string) === "WAIVED" ||
+      obligation.is_superseded
+    ) {
+      logger.info("whatsapp.reminder.stopped_settled", {
+        obligation_id: input.obligationId,
+        status: obligation?.status || "NOT_FOUND",
+        is_superseded: obligation?.is_superseded,
+      });
+      return { sent: false, skipped: true, reason: "SETTLED_OR_CANCELLED" };
+    }
+
     const template = selectRentReminderTemplate(input.daysOverdue);
     const templateName = getMetaTemplateName(template);
-    const idempotencyKey = `rent_reminder:${input.obligationId}:${template}:${input.sendDateKey}`;
-    let normalizedPhone = input.phone;
-    let maskedPhone = maskWhatsAppPhone(input.phone);
+    const baseIdempotencyKey = `rent_reminder:${input.obligationId}:${template}:${input.sendDateKey}`;
+
+    // Query tenant to get guardian phone details
+    const tenant = await prisma.tenants.findUnique({
+      where: { id: input.tenantId },
+      select: { guardian_phone: true },
+    });
+
+    // Send to tenant (Primary recipient)
+    let tenantResult;
+    try {
+      tenantResult = await this.sendReminderToRecipient(
+        input,
+        input.phone,
+        `${baseIdempotencyKey}:tenant`,
+        template,
+        templateName
+      );
+    } catch (tenantErr) {
+      logger.error("whatsapp.reminder.tenant_failed", {
+        obligation_id: input.obligationId,
+        phone: maskWhatsAppPhone(input.phone),
+        error: String(tenantErr),
+      });
+      throw tenantErr;
+    }
+
+    // Escalation rule: Overdue (starting 3 days overdue) goes to Tenant + Guardian
+    const isOverdueEscalation = input.daysOverdue >= 3;
+    if (isOverdueEscalation && tenant?.guardian_phone) {
+      try {
+        await this.sendReminderToRecipient(
+          input,
+          tenant.guardian_phone,
+          `${baseIdempotencyKey}:guardian`,
+          template,
+          templateName
+        );
+      } catch (guardianErr) {
+        logger.error("whatsapp.reminder.guardian_failed", {
+          obligation_id: input.obligationId,
+          phone: maskWhatsAppPhone(tenant.guardian_phone),
+          error: String(guardianErr),
+        });
+        // We log the guardian failure, but we do not block the method since tenant reminder succeeded
+      }
+    }
+
+    return tenantResult;
+  }
+
+  private async sendReminderToRecipient(
+    input: WhatsAppRentReminderInput,
+    phone: string,
+    idempotencyKey: string,
+    template: WhatsAppRentReminderTemplate,
+    templateName: string
+  ) {
+    let normalizedPhone = phone;
+    let maskedPhone = maskWhatsAppPhone(phone);
 
     const reserved = await this.reserveDelivery({
       ...input,
-      phone: input.phone,
+      phone,
       templateName,
       idempotencyKey,
     });
@@ -57,17 +139,19 @@ export class WhatsAppReminderDeliveryService {
         tenant_id: input.tenantId,
         obligation_id: input.obligationId,
         template,
+        phone: maskedPhone,
       });
       return { sent: false, skipped: true, idempotencyKey };
     }
 
     try {
-      normalizedPhone = normalizeWhatsAppPhone(input.phone);
+      normalizedPhone = normalizeWhatsAppPhone(phone);
       maskedPhone = maskWhatsAppPhone(normalizedPhone);
       const bodyParameters = buildRentReminderBodyParameters(input);
 
       // Create a payment link token (7-day expiry) for this obligation
       let paymentUrl: string | null = null;
+      let tokenValue: string | null = null;
       try {
         const token = await prisma.payment_link_tokens.create({
           data: {
@@ -80,14 +164,9 @@ export class WhatsAppReminderDeliveryService {
           select: { token: true },
         });
 
-        const baseUrl = (
-          process.env.NEXT_PUBLIC_APP_URL ||
-          process.env.NEXT_PUBLIC_API_URL ||
-          process.env.API_URL ||
-          process.env.BACKEND_URL ||
-          "https://api.sriadithyahostels.in"
-        ).replace(/\/+$/, "");
-        paymentUrl = `${baseUrl}/api/payments/pay/${token.token}`;
+        tokenValue = token.token;
+        const appUrl = getFrontendUrl().replace(/\/+$/, "");
+        paymentUrl = `${appUrl}/pay/${token.token}`;
       } catch (tokenErr) {
         logger.warn("whatsapp.reminder.payment_link_failed", {
           obligation_id: input.obligationId,
@@ -95,15 +174,13 @@ export class WhatsAppReminderDeliveryService {
         });
       }
 
-      // Append the payment URL as the last body parameter if available
-      const finalBodyParameters = paymentUrl
-        ? [...bodyParameters, paymentUrl]
-        : bodyParameters;
-
+      // Attach the payment URL token to the approved Meta template button via buttonParameters
       const result = await this.provider.sendTemplate({
         to: normalizedPhone,
         templateName,
-        bodyParameters: finalBodyParameters,
+        language: { code: getMetaTemplateLanguage(template) },
+        bodyParameters: bodyParameters,
+        buttonParameters: tokenValue ? [tokenValue] : undefined,
       });
 
       await prisma.$executeRaw`
@@ -150,10 +227,13 @@ export class WhatsAppReminderDeliveryService {
     }
   }
 
-  private async reserveDelivery(input: WhatsAppRentReminderInput & {
-    templateName: string;
-    idempotencyKey: string;
-  }): Promise<ReservationResult | null> {
+  private async reserveDelivery(
+    input: WhatsAppRentReminderInput & {
+      phone: string;
+      templateName: string;
+      idempotencyKey: string;
+    }
+  ): Promise<ReservationResult | null> {
     const rows = await prisma.$queryRaw<ReservationResult[]>`
       INSERT INTO whatsapp_logs (
         id,

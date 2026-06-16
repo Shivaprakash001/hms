@@ -482,7 +482,7 @@ export class ReminderService {
           result.whatsapp.provider_message_id = delivery.providerMessageId;
           result.whatsapp.idempotency_key = delivery.idempotencyKey;
           if (delivery.skipped) {
-            result.whatsapp.reason = "DUPLICATE_REMINDER";
+            result.whatsapp.reason = (delivery as any).reason || "DUPLICATE_REMINDER";
           }
         }
       } catch (err: any) {

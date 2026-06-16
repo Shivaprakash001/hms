@@ -330,7 +330,16 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
-  const { token } = await params;
+  const { token: rawToken } = await params;
+  let token = rawToken;
+  try {
+    const decoded = decodeURIComponent(rawToken);
+    if (decoded.startsWith("{{1}}")) {
+      token = decoded.substring(5);
+    }
+  } catch (e) {
+    // Use rawToken as fallback
+  }
 
   try {
     // 1. Token lookup
@@ -458,7 +467,16 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
-  const { token } = await params;
+  const { token: rawToken } = await params;
+  let token = rawToken;
+  try {
+    const decoded = decodeURIComponent(rawToken);
+    if (decoded.startsWith("{{1}}")) {
+      token = decoded.substring(5);
+    }
+  } catch (e) {
+    // Use rawToken as fallback
+  }
 
   try {
     // 1. Re-validate token

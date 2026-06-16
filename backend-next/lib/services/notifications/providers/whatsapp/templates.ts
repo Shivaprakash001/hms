@@ -20,6 +20,7 @@ export type RentReminderTemplateVariables = {
 
 type TemplateDefinition = {
   metaName: string;
+  languageCode: string;
   buildParameters: (data: RentReminderTemplateVariables) => string[];
 };
 
@@ -36,31 +37,33 @@ function formatTemplateAmount(amount: number): string {
 const TEMPLATE_REGISTRY: Record<WhatsAppRentReminderTemplate, TemplateDefinition> = {
   [WhatsAppRentReminderTemplate.RENT_DUE_REMINDER]: {
     metaName: "rent_due_reminder_v1",
+    languageCode: "en_IN",
+    buildParameters: (data) => [
+      data.tenantName || "Tenant",
+      String(Math.abs(data.daysOverdue)),
+      formatTemplateAmount(data.amount),
+      formatMonthYear(data.rentMonth, data.prefs),
+      formatDate(data.dueDate, data.prefs),
+    ],
+  },
+  [WhatsAppRentReminderTemplate.RENT_DUE_TODAY]: {
+    metaName: "rent_due_today_v1",
+    languageCode: "en",
+    buildParameters: (data) => [
+      data.tenantName || "Tenant",
+      formatTemplateAmount(data.amount),
+      formatMonthYear(data.rentMonth, data.prefs),
+    ],
+  },
+  [WhatsAppRentReminderTemplate.RENT_OVERDUE_REMINDER]: {
+    metaName: "rent_overdue_warm_v1",
+    languageCode: "en_IN",
     buildParameters: (data) => [
       data.tenantName || "Tenant",
       formatTemplateAmount(data.amount),
       formatMonthYear(data.rentMonth, data.prefs),
       formatDate(data.dueDate, data.prefs),
-      data.hostelName || "Your Hostel",
-    ],
-  },
-  [WhatsAppRentReminderTemplate.RENT_DUE_TODAY]: {
-    metaName: "rent_due_today_v1",
-    buildParameters: (data) => [
-      data.tenantName || "Tenant",
-      formatTemplateAmount(data.amount),
-      formatMonthYear(data.rentMonth, data.prefs),
-      data.hostelName || "Your Hostel",
-    ],
-  },
-  [WhatsAppRentReminderTemplate.RENT_OVERDUE_REMINDER]: {
-    metaName: "rent_overdue_reminder_v1",
-    buildParameters: (data) => [
-      data.tenantName || "Tenant",
-      formatTemplateAmount(data.amount),
-      formatMonthYear(data.rentMonth, data.prefs),
       String(Math.max(1, Math.floor(data.daysOverdue))),
-      data.hostelName || "Your Hostel",
     ],
   },
 };
@@ -73,6 +76,10 @@ export function selectRentReminderTemplate(daysOverdue: number): WhatsAppRentRem
 
 export function getMetaTemplateName(template: WhatsAppRentReminderTemplate): string {
   return TEMPLATE_REGISTRY[template].metaName;
+}
+
+export function getMetaTemplateLanguage(template: WhatsAppRentReminderTemplate): string {
+  return TEMPLATE_REGISTRY[template].languageCode;
 }
 
 export function buildRentReminderBodyParameters(data: RentReminderTemplateVariables): string[] {
