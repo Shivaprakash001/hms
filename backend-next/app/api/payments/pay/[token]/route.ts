@@ -50,9 +50,8 @@ function renderPage(content: {
             <p class="amount">${formatCurrency(amount || 0)}</p>
             <p class="due-month">${dueMonth || ""}</p>
           </div>
-          <form method="POST" action="/api/payments/pay/${token}">
-            <button type="submit" class="pay-btn">Pay Now</button>
-          </form>
+          <button type="button" id="pay-btn" class="pay-btn">Pay Now</button>
+          <div id="error-message" class="error-msg" style="display: none;"></div>
         `;
       case "PAID":
         return `
@@ -81,6 +80,121 @@ function renderPage(content: {
     }
   })();
 
+  const razorpayScript = status === "DUE" ? `<script src="https://checkout.razorpay.com/v1/checkout.js"></script>` : "";
+
+  const clientScript = status === "DUE" ? `
+    <script>
+      (function() {
+        const payBtn = document.getElementById('pay-btn');
+        const errorMsg = document.getElementById('error-message');
+
+        if (payBtn) {
+          payBtn.addEventListener('click', async () => {
+            payBtn.disabled = true;
+            payBtn.innerText = 'Initializing...';
+            if (errorMsg) errorMsg.style.display = 'none';
+
+            try {
+              const response = await fetch(window.location.pathname, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ action: 'initiate' })
+              });
+
+              const data = await response.json();
+              if (!data.success) {
+                throw new Error(data.error?.message || data.error || 'Failed to initiate payment');
+              }
+
+              const attempt = data.attempt;
+              const raw = attempt.raw_response || {};
+
+              const options = {
+                key: raw.key_id,
+                amount: raw.amount,
+                currency: raw.currency || 'INR',
+                name: '${hostelName.replace(/'/g, "\\'")}',
+                description: 'Rent Payment',
+                order_id: attempt.gateway_txn_id,
+                prefill: {
+                  name: raw.notes?.tenant_name || '',
+                  email: raw.notes?.tenant_email || '',
+                  contact: raw.notes?.tenant_phone || '',
+                },
+                theme: {
+                  color: '#3b82f6',
+                },
+                handler: async (rzpResponse) => {
+                  payBtn.innerText = 'Verifying...';
+                  try {
+                    const verifyRes = await fetch(window.location.pathname, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json'
+                      },
+                      body: JSON.stringify({
+                        action: 'verify',
+                        attempt_id: attempt.id,
+                        razorpay_payment_id: rzpResponse.razorpay_payment_id,
+                        razorpay_order_id: rzpResponse.razorpay_order_id,
+                        razorpay_signature: rzpResponse.razorpay_signature
+                      })
+                    });
+
+                    const verifyData = await verifyRes.json();
+                    if (verifyData.success && (verifyData.status === 'SUCCESS' || verifyData.attempt?.status === 'SUCCESS')) {
+                      document.querySelector('.container').innerHTML = \`
+                        <p class="hostel-name">\${escapeHtml("${hostelName}")}</p>
+                        <p class="tenant-name">\${escapeHtml("${tenantName}")}</p>
+                        <div class="status-card paid">
+                          <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="#16a34a" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12l2.5 2.5L16 9"/></svg>
+                          <p class="status-text">Payment Successful</p>
+                          <p class="status-sub">Your payment has been successfully recorded. Thank you!</p>
+                        </div>
+                        \${"${supportPhone}" ? \`<p class="support">Need help? Call <a href="tel:${supportPhone}">${supportPhone}</a></p>\` : ""}
+                      \`;
+                    } else {
+                      throw new Error(verifyData.error?.message || verifyData.error || 'Payment verification pending or failed');
+                    }
+                  } catch (err) {
+                    if (errorMsg) {
+                      errorMsg.innerText = err.message || 'Payment verification failed. Please contact support.';
+                      errorMsg.style.display = 'block';
+                    }
+                    payBtn.disabled = false;
+                    payBtn.innerText = 'Pay Now';
+                  }
+                },
+                modal: {
+                  ondismiss: () => {
+                    payBtn.disabled = false;
+                    payBtn.innerText = 'Pay Now';
+                  }
+                }
+              };
+
+              const rzp = new window.Razorpay(options);
+              rzp.open();
+            } catch (err) {
+              if (errorMsg) {
+                errorMsg.innerText = err.message || 'Failed to initialize checkout';
+                errorMsg.style.display = 'block';
+              }
+              payBtn.disabled = false;
+              payBtn.innerText = 'Pay Now';
+            }
+          });
+        }
+
+        function escapeHtml(str) {
+          return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+      })();
+    </script>
+  ` : "";
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -89,6 +203,7 @@ function renderPage(content: {
   <title>${title}</title>
   <meta name="description" content="Payment for ${hostelName}">
   <meta name="robots" content="noindex, nofollow">
+  ${razorpayScript}
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -163,6 +278,17 @@ function renderPage(content: {
     }
     .pay-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(37, 99, 235, 0.5); }
     .pay-btn:active { transform: translateY(0); }
+    .pay-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
+    .error-msg {
+      background: rgba(220, 38, 38, 0.1);
+      border: 1px solid rgba(220, 38, 38, 0.25);
+      color: #f87171;
+      padding: 12px;
+      border-radius: 8px;
+      margin-top: 16px;
+      font-size: 14px;
+      text-align: left;
+    }
     .status-card {
       padding: 32px 16px;
       border-radius: 14px;
@@ -189,6 +315,7 @@ function renderPage(content: {
     ${statusBlock}
     ${supportPhone ? `<p class="support">Need help? Call <a href="tel:${supportPhone}">${supportPhone}</a></p>` : ""}
   </div>
+  ${clientScript}
 </body>
 </html>`;
 }
@@ -323,7 +450,8 @@ export async function GET(
 /**
  * POST /api/payments/pay/[token]
  *
- * Creates or reuses a payment attempt, then redirects to Razorpay checkout.
+ * Creates or reuses a payment attempt, returning JSON details to the frontend
+ * for client-side SDK payment initialization, or verifies the payment status.
  * No authentication required — access is gated by the cryptographic token.
  */
 export async function POST(
@@ -344,51 +472,49 @@ export async function POST(
     });
 
     if (!linkToken) {
-      return new NextResponse(
-        renderPage({
-          title: "Payment Not Found",
-          hostelName: "Sri Adithya Boys Hostel",
-          tenantName: "",
-          status: "ERROR",
-          errorMessage: "This payment link is not valid.",
-        }),
-        { status: 404, headers: { "Content-Type": "text/html; charset=utf-8" } }
-      );
+      return NextResponse.json({ success: false, error: "This payment link is not valid." }, { status: 404 });
     }
-
-    const hostelName = linkToken.hostels.name || "Sri Adithya Boys Hostel";
-    const tenantName = linkToken.tenants.profiles?.name || "Tenant";
-    const supportPhone = linkToken.hostels.phone || "";
 
     // 2. Expiry check
     if (linkToken.expires_at < new Date()) {
-      return new NextResponse(
-        renderPage({
-          title: "Link Expired",
-          hostelName,
-          tenantName,
-          status: "EXPIRED",
-          supportPhone,
-        }),
-        { status: 410, headers: { "Content-Type": "text/html; charset=utf-8" } }
-      );
+      return NextResponse.json({ success: false, error: "This payment link has expired." }, { status: 410 });
     }
 
     // 3. Obligation status check
     if (linkToken.rent_obligations.status === "PAID") {
-      return new NextResponse(
-        renderPage({
-          title: "Payment Complete",
-          hostelName,
-          tenantName,
-          status: "PAID",
-          supportPhone,
-        }),
-        { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } }
-      );
+      return NextResponse.json({ success: false, error: "This payment obligation has already been paid." }, { status: 400 });
     }
 
-    // 4. Create or reuse payment attempt (built-in dedup)
+    // Read request body to determine action
+    let body: any = {};
+    try {
+      body = await _req.json();
+    } catch (e) {
+      // Default to initiate if body is missing or malformed
+    }
+
+    if (body.action === "verify") {
+      logger.info("payment_link.verify.initiate", {
+        token,
+        attempt_id: body.attempt_id,
+        razorpay_payment_id: body.razorpay_payment_id,
+        razorpay_order_id: body.razorpay_order_id,
+      });
+
+      // Verification uses owner role context since this is a public token lookup
+      const verifyResult = await paymentService.verifyPaymentStatus({
+        userId: linkToken.owner_id,
+        role: "OWNER",
+        attemptId: body.attempt_id,
+        razorpay_payment_id: body.razorpay_payment_id,
+        razorpay_order_id: body.razorpay_order_id,
+        razorpay_signature: body.razorpay_signature,
+      });
+
+      return NextResponse.json({ success: true, ...verifyResult });
+    }
+
+    // Default: initiate payment
     logger.info("payment_link.checkout.initiate", {
       token,
       obligation_id: linkToken.obligation_id,
@@ -407,47 +533,15 @@ export async function POST(
       ? (rawAttempt as any).attempt
       : rawAttempt;
 
-    const checkoutUrl = attempt.checkout_url;
-
-    if (!checkoutUrl) {
-      logger.error("payment_link.checkout.no_url", {
-        token,
-        attempt_id: attempt.id,
-        status: attempt.status,
-      });
-      return new NextResponse(
-        renderPage({
-          title: "Checkout Unavailable",
-          hostelName,
-          tenantName,
-          status: "ERROR",
-          errorMessage: "Payment checkout is temporarily unavailable. Please try again.",
-          supportPhone,
-        }),
-        { status: 503, headers: { "Content-Type": "text/html; charset=utf-8" } }
-      );
-    }
-
-    // 5. Redirect to Razorpay checkout
-    logger.info("payment_link.checkout.redirect", {
-      token,
-      attempt_id: attempt.id,
-      checkout_url: checkoutUrl,
+    return NextResponse.json({
+      success: true,
+      attempt,
     });
-
-    return NextResponse.redirect(checkoutUrl, 302);
   } catch (error: any) {
     logger.error("payment_link.post.failed", { token, error: String(error?.message || error) });
-
-    return new NextResponse(
-      renderPage({
-        title: "Payment Error",
-        hostelName: "Sri Adithya Boys Hostel",
-        tenantName: "",
-        status: "ERROR",
-        errorMessage: "Could not initiate payment. Please try again later.",
-      }),
-      { status: 500, headers: { "Content-Type": "text/html; charset=utf-8" } }
-    );
+    return NextResponse.json({
+      success: false,
+      error: error?.message || "Could not initiate payment. Please try again later."
+    }, { status: 500 });
   }
 }

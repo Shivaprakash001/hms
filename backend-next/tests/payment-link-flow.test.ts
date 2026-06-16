@@ -97,7 +97,7 @@ describe("Payment Link Token Public Flow", () => {
   });
 
   describe("POST /api/payments/pay/[token]", () => {
-    it("redirects 302 to checkout_url when payment attempt is successfully created/reused", async () => {
+    it("returns JSON with success and attempt when payment attempt is successfully created/reused", async () => {
       mocks.prisma.payment_link_tokens.findUnique.mockResolvedValueOnce({
         token: mockToken,
         expires_at: new Date(Date.now() + 100000),
@@ -112,18 +112,19 @@ describe("Payment Link Token Public Flow", () => {
 
       mocks.paymentService.createMultiObligationPaymentIntent.mockResolvedValueOnce({
         id: "attempt-123",
-        checkout_url: "https://checkout.razorpay.com/v1/checkout.html",
         status: "PENDING",
       });
 
       const request = new NextRequest(`http://localhost/api/payments/pay/${mockToken}`, { method: "POST" });
       const response = await POST(request, { params: Promise.resolve({ token: mockToken }) });
 
-      expect(response.status).toBe(302);
-      expect(response.headers.get("location")).toBe("https://checkout.razorpay.com/v1/checkout.html");
+      expect(response.status).toBe(200);
+      const json = await response.json();
+      expect(json.success).toBe(true);
+      expect(json.attempt.id).toBe("attempt-123");
     });
 
-    it("returns 503 if no checkout URL is returned", async () => {
+    it("verifies payment signature when action is verify", async () => {
       mocks.prisma.payment_link_tokens.findUnique.mockResolvedValueOnce({
         token: mockToken,
         expires_at: new Date(Date.now() + 100000),
@@ -136,17 +137,38 @@ describe("Payment Link Token Public Flow", () => {
         hostels: { name: "Adithya Hostel", phone: "1234567890" },
       });
 
-      mocks.paymentService.createMultiObligationPaymentIntent.mockResolvedValueOnce({
-        id: "attempt-123",
-        status: "CREATED", // No checkout_url
-      });
+      const mockVerifyResult = {
+        status: "SUCCESS",
+        attempt: { id: "attempt-123", status: "SUCCESS" }
+      };
+      
+      const verifySpy = vi.fn().mockResolvedValueOnce(mockVerifyResult);
+      mocks.paymentService.verifyPaymentStatus = verifySpy;
 
-      const request = new NextRequest(`http://localhost/api/payments/pay/${mockToken}`, { method: "POST" });
+      const request = new NextRequest(`http://localhost/api/payments/pay/${mockToken}`, {
+        method: "POST",
+        body: JSON.stringify({
+          action: "verify",
+          attempt_id: "attempt-123",
+          razorpay_payment_id: "pay-1",
+          razorpay_order_id: "order-1",
+          razorpay_signature: "sig-1"
+        })
+      });
       const response = await POST(request, { params: Promise.resolve({ token: mockToken }) });
 
-      expect(response.status).toBe(503);
-      const text = await response.text();
-      expect(text).toContain("Payment checkout is temporarily unavailable");
+      expect(response.status).toBe(200);
+      const json = await response.json();
+      expect(json.success).toBe(true);
+      expect(json.status).toBe("SUCCESS");
+      expect(verifySpy).toHaveBeenCalledWith({
+        userId: "owner-1",
+        role: "OWNER",
+        attemptId: "attempt-123",
+        razorpay_payment_id: "pay-1",
+        razorpay_order_id: "order-1",
+        razorpay_signature: "sig-1"
+      });
     });
   });
 });

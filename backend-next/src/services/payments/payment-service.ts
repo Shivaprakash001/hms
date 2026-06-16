@@ -87,6 +87,14 @@ export class PaymentService {
     };
   }
 
+  private mapAttemptWithRawResponse(attempt: any) {
+    if (!attempt) return attempt;
+    return {
+      ...attempt,
+      raw_response: attempt.raw_create_response,
+    };
+  }
+
   private async updateAttemptStatus(tx: any, params: {
     attemptId: string;
     fromStatus?: string | null;
@@ -119,7 +127,7 @@ export class PaymentService {
       hostelId: params.hostelId || updated.hostel_id || null,
       metadata: params.metadata,
     });
-    return updated;
+    return this.mapAttemptWithRawResponse(updated);
   }
 
   private async updateAttemptStatusOutsideTx(params: any) {
@@ -1019,7 +1027,7 @@ export class PaymentService {
             merchantTxnId: existingAttempt.merchant_txn_id,
             reason: isInFlight ? "in_flight_created" : "valid_checkout",
           });
-          return { attempt: existingAttempt, isReused: true as const, totalAmount, paymentBreakdown };
+          return { attempt: this.mapAttemptWithRawResponse(existingAttempt), isReused: true as const, totalAmount, paymentBreakdown };
         }
 
         // Stale: CREATED > 2 min with no checkout_url, or PENDING with expired URL
@@ -1220,7 +1228,7 @@ export class PaymentService {
         const isInFlight = existing.status === "CREATED" && existing.created_at > twoMinAgo;
         const hasValidCheckout = checkoutUrl.length > 0 && !checkoutUrl.includes("/payment-return");
         if (isInFlight || hasValidCheckout) {
-          return { attempt: existing, isReused: true };
+          return { attempt: this.mapAttemptWithRawResponse(existing), isReused: true };
         }
         await this.updateAttemptStatus(tx, {
           attemptId: existing.id,
@@ -1394,7 +1402,7 @@ export class PaymentService {
         const isInFlight = existing.status === "CREATED" && existing.created_at > twoMinAgo;
         const hasValidCheckout = checkoutUrl.length > 0 && !checkoutUrl.includes("/payment-return");
         if (isInFlight || hasValidCheckout) {
-          return { attempt: existing, isReused: true };
+          return { attempt: this.mapAttemptWithRawResponse(existing), isReused: true };
         }
         await this.updateAttemptStatus(tx, {
           attemptId: existing.id,
@@ -1549,7 +1557,7 @@ export class PaymentService {
       throw new Error("FORBIDDEN: You can only view attempts for your hostel");
     }
 
-    return attempt;
+    return this.mapAttemptWithRawResponse(attempt);
   }
 
   async finalizePaymentAttempt(
@@ -1589,7 +1597,7 @@ export class PaymentService {
       } else {
         logger.info("payments.finalize.lock_contention", { ...requestMeta, attempt_id: attemptId, status: fresh.status });
       }
-      return fresh;
+      return this.mapAttemptWithRawResponse(fresh);
     }
 
     logger.info("payments.finalize.lock_acquired", { ...requestMeta, attempt_id: attemptId, incoming_status: status });
@@ -1765,7 +1773,7 @@ export class PaymentService {
         }).catch(() => {});
       }
 
-      return await prisma.paymentAttempt.findUnique({ where: { id: attemptId } });
+      return this.mapAttemptWithRawResponse(await prisma.paymentAttempt.findUnique({ where: { id: attemptId } }));
     } // end ADDON PATH
 
 
@@ -2397,7 +2405,7 @@ export class PaymentService {
 
     if (["SUCCESS", "FAILED", "EXPIRED", "CANCELLED", "PENDING_MANUAL_CONFIRMATION"].includes(attempt.status)) {
       return {
-        attempt,
+        attempt: this.mapAttemptWithRawResponse(attempt),
         status: attempt.status,
         source: "cached"
       };
@@ -2465,7 +2473,7 @@ export class PaymentService {
       }
 
       return {
-        attempt,
+        attempt: this.mapAttemptWithRawResponse(attempt),
         status: attempt.status,
         source: "provider",
       };
@@ -2501,7 +2509,7 @@ export class PaymentService {
       });
 
       return {
-        attempt,
+        attempt: this.mapAttemptWithRawResponse(attempt),
         status: attempt.status,
         source: "cached_pending"
       };
@@ -2518,7 +2526,7 @@ export class PaymentService {
     // Skip finalize when provider says PENDING — no state change needed, avoids
     // a no-op DB write on every poll while payment is in-flight.
     if (fetched.status === "PENDING") {
-      return { attempt, status: attempt.status, source: "pending" };
+      return { attempt: this.mapAttemptWithRawResponse(attempt), status: attempt.status, source: "pending" };
     }
 
     const finalized = await this.finalizePaymentAttempt(
@@ -2531,7 +2539,7 @@ export class PaymentService {
     const resolvedAttempt = finalized || attempt;
 
     return {
-      attempt: resolvedAttempt,
+      attempt: this.mapAttemptWithRawResponse(resolvedAttempt),
       status: resolvedAttempt.status,
       source: "provider"
     };
