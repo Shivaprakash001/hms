@@ -16,15 +16,10 @@ const combinedQuery = `{
     seoDescription,
     ogImage
   },
-  "hostel": *[_type == "hostel" && isFeatured == true][0] {
+  "hostel": *[_type == "landingHostel"][0] {
     name,
-    slug,
-    description,
-    startingPrice,
-    ownerName,
-    ownerMessage,
-    ownerPhoto,
-    carouselImages,
+    "description": heroSubtitle,
+    "carouselImages": gallery,
     tourVideos[] {
       id,
       label,

@@ -18,15 +18,6 @@ export const structure = (S: StructureBuilder) =>
             .schemaType('landingHostel')
             .documentId('landingHostel')
         ),
-      S.divider(),
-      S.listItem()
-        .title('🏠 Hostel (Operational)')
-        .child(
-          S.document()
-            .schemaType('hostel')
-            .documentId('hostel-1')
-            .title('Hostel (Operational)')
-        ),
       S.listItem()
         .title('⭐ Testimonials')
         .child(

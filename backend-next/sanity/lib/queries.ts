@@ -92,62 +92,6 @@ export const LANDING_HOSTEL_QUERY = `
   }
 `
 
-export const ACTIVE_HOSTEL_QUERY = `
-  *[_type == "hostel" && slug.current == $slug][0] {
-    name,
-    bedsAvailable,
-    intakeMonth,
-    startingPrice,
-    heroTitle,
-    heroSubtitle,
-    heroHighlights,
-    gallery[] {
-      image,
-      caption,
-      alt
-    },
-    mapEmbedUrl,
-    totalBuildings,
-    sharingTypes,
-    amenitiesCount,
-    roomTypeTitle,
-    roomImage,
-    locationTitle,
-    locationDescription,
-    distanceTitle,
-    distanceDescription,
-    shortLocation,
-    features[] {
-      title,
-      description,
-      icon,
-      image,
-      highlights
-    },
-    facilities[] {
-      title,
-      icon,
-      description
-    },
-    admissionSteps[] {
-      stepNumber,
-      title,
-      description
-    },
-    roomTypesImages[] {
-      roomType,
-      image
-    },
-    tourVideos[] {
-      id,
-      label,
-      videoUrl,
-      "videoFileUrl": videoFile.asset->url,
-      icon
-    }
-  }
-`
-
 export const TESTIMONIALS_QUERY = `
   *[_type == "testimonial" && isActive == true]
   | order(order asc) {

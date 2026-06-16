@@ -24,7 +24,6 @@ import { client } from "@/sanity/lib/client";
 import {
   SITE_SETTINGS_QUERY,
   LANDING_HOSTEL_QUERY,
-  ACTIVE_HOSTEL_QUERY,
   TESTIMONIALS_QUERY,
   FAQS_QUERY,
   CATEGORY_RATINGS_QUERY,
