@@ -43,7 +43,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://accounts.google.com https://checkout.razorpay.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https: https://*.razorpay.com https://cdn.razorpay.com; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://api.sriadithyahostels.in https://accounts.google.com https://*.api.sanity.io https://api.razorpay.com; frame-src https://accounts.google.com https://www.google.com https://api.razorpay.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+          "value": "default-src 'self'; media-src 'self' https://cdn.sanity.io https://media.w3.org https://www.w3schools.com; script-src 'self' 'unsafe-inline' https://accounts.google.com https://checkout.razorpay.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https: https://*.razorpay.com https://cdn.razorpay.com; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://api.sriadithyahostels.in https://accounts.google.com https://*.api.sanity.io https://api.razorpay.com; frame-src https://accounts.google.com https://www.google.com https://api.razorpay.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
         },
         {
           "key": "X-Frame-Options",
