@@ -194,7 +194,7 @@ export function TenantFinancialsPage() {
           key: intent.raw_response?.key_id,
           amount: intent.raw_response?.amount,
           currency: intent.raw_response?.currency || 'INR',
-          name: 'Sri Adithya Hostels (Test)',
+          name: 'Sri Adithya Boys Hostel (Test)',
           description: '1 Rs Test Payment',
           order_id: intent.gateway_txn_id,
           handler: async (response: any) => {
@@ -592,7 +592,7 @@ export function TenantFinancialsPage() {
         label: 'Future rent credit',
         amount: Number(entry.amount ?? 0),
         date: String(entry.created_at ?? ''),
-        method: entry.reference_type === 'PAYMENT_ATTEMPT' ? 'PHONEPE' : 'Future rent credit',
+        method: entry.reference_type === 'PAYMENT_ATTEMPT' ? 'RAZORPAY' : 'Future rent credit',
         receipt_payment_id: `advance-${entry.id}`,
         reference_number: String(entry.reference_id || ''),
         rent_month: '',
@@ -682,7 +682,7 @@ export function TenantFinancialsPage() {
         <h1 style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: '18px', color: '#1A1A1A' }}>Financials</h1>
         <div className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold" style={{ backgroundColor: '#1B2D5B', color: '#FFFFFF' }}>
           <Shield className="w-3.5 h-3.5" />
-          <span>Sri Adithya Hostels</span>
+          <span>Sri Adithya Boys Hostel</span>
         </div>
       </div>
 
@@ -1199,7 +1199,7 @@ export function TenantFinancialsPage() {
                 Initiating payment...
               </>
             ) : (
-              'Pay ₹1 Test Payment (Razorpay/PhonePe)'
+              'Pay ₹1 Test Payment (Razorpay)'
             )}
           </button>
         </section>

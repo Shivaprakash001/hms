@@ -144,7 +144,7 @@ describe("WhatsApp Owner Briefing Integration Tests", () => {
 
     expect(mockSendTextMessage).toHaveBeenCalledWith(
       ownerPhone,
-      "Sri Adithya Hostels: No active context found. Use the menu commands below to view stats or send reminders."
+      "Sri Adithya Boys Hostel: No active context found. Use the menu commands below to view stats or send reminders."
     );
   });
 

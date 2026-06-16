@@ -15,7 +15,7 @@ import {
 
 export default defineConfig({
   name: 'sri-adithya-hostels',
-  title: 'Sri Adithya Hostels',
+  title: 'Sri Adithya Boys Hostel',
   projectId: process.env.NEXT_PUBLIC_SANITY_PROJECT_ID!,
   dataset: process.env.NEXT_PUBLIC_SANITY_DATASET!,
   basePath: '/studio',

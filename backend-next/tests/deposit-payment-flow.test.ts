@@ -103,7 +103,7 @@ describe("Release C5 deposit payment flow", () => {
     status: "PROCESSING",
     payments: [],
     payment_domain: PAYMENT_DOMAIN.RENT_COLLECTION,
-    provider: "PHONEPE",
+    provider: "RAZORPAY",
   };
 
   beforeEach(() => {

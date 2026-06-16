@@ -22,6 +22,7 @@ vi.mock("@/lib/db", () => {
   const mockDb = {
     $transaction: vi.fn().mockImplementation((cb) => cb(mockDb)),
     $queryRaw: vi.fn().mockImplementation(() => Promise.resolve([{ next_sequence: 1 }])),
+    $executeRaw: vi.fn().mockImplementation(() => Promise.resolve()),
     paymentAttempt: {
       findFirst: vi.fn().mockImplementation(() => Promise.resolve(mockAttempt)),
       findUnique: vi.fn().mockImplementation(() => Promise.resolve(mockAttempt)),

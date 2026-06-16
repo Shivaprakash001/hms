@@ -13,7 +13,7 @@ export function EnquiryForm() {
     e.preventDefault();
 
     const whatsappMessage = encodeURIComponent(
-      `Hi! I'm interested in Sri Adithya Hostels.\n\nName: ${formData.name}\nPhone: ${formData.phone}\nPreferred Move-in Date: ${formData.moveInDate}\n\nMessage: ${formData.message}`,
+      `Hi! I'm interested in Sri Adithya Boys Hostel.\n\nName: ${formData.name}\nPhone: ${formData.phone}\nPreferred Move-in Date: ${formData.moveInDate}\n\nMessage: ${formData.message}`,
     );
 
     window.open(`https://wa.me/919392433422?text=${whatsappMessage}`, '_blank');

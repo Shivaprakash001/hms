@@ -151,7 +151,7 @@ export function TenantPaymentModal({
           key: intent.raw_response?.key_id,
           amount: intent.raw_response?.amount,
           currency: intent.raw_response?.currency || 'INR',
-          name: 'Sri Adithya Hostels',
+          name: 'Sri Adithya Boys Hostel',
           description: 'Secure Checkout',
           order_id: intent.gateway_txn_id,
           handler: async (response: any) => {
@@ -299,7 +299,7 @@ export function TenantPaymentModal({
               <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 flex gap-3">
                 <Smartphone className="w-5 h-5 text-emerald-600 shrink-0" />
                 <p className="text-sm text-foreground">
-                  Secure checkout. Your payment is recorded in Sri Adithya Hostels once confirmed.
+                  Secure checkout. Your payment is recorded in Sri Adithya Boys Hostel once confirmed.
                 </p>
               </div>
               {error && (

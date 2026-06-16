@@ -22,7 +22,7 @@ export function Navbar() {
               className="text-lg font-bold text-[#1B2D5B] leading-tight hidden sm:block"
               style={{ fontFamily: 'var(--font-display)' }}
             >
-              Sri Adithya<br />Hostels
+              Sri Adithya<br />Boys Hostel
             </span>
           </Link>
 

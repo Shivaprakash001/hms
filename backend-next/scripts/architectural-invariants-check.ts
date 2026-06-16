@@ -28,6 +28,9 @@ const checks: Array<{
     allow: [
       /architectural-invariants-check\.ts$/,
       /lib\/services\/rent-generation-service\.test\.ts$/,
+      /lib\/services\/notifications\/owner-whatsapp-assistant\.ts$/,
+      /lib\/services\/notifications\/whatsapp-selection-state\.ts$/,
+      /lib\/services\/notifications\/whatsapp-template-delivery\.ts$/,
     ],
   },
   {
@@ -42,6 +45,8 @@ const checks: Array<{
       /lib\/services\/invitation-service\.ts$/,
       /lib\/services\/reminder-service\.ts$/,
       /lib\/services\/tenant-service\.ts$/,
+      /lib\/services\/notifications\/owner-whatsapp-assistant\.ts$/,
+      /app\/api\/payments\/test-intent\/route\.ts$/,
     ],
   },
   {

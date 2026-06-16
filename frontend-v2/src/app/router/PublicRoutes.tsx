@@ -57,8 +57,16 @@ export function PublicRoutes() {
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/rules" element={<RulesPage />} />
         <Route path="/legal" element={<LegalPage />} />
+        <Route path="/legal/terms" element={<LegalPage />} />
+        <Route path="/legal/privacy" element={<LegalPage />} />
+        <Route path="/legal/refund-policy" element={<LegalPage />} />
+        <Route path="/legal/shipping-policy" element={<LegalPage />} />
+        <Route path="/legal/contact" element={<LegalPage />} />
+        <Route path="/legal/data-deletion" element={<LegalPage />} />
         <Route path="/terms" element={<LegalPage />} />
         <Route path="/privacy" element={<LegalPage />} />
+        <Route path="/shipping-policy" element={<LegalPage />} />
+        <Route path="/refund-policy" element={<LegalPage />} />
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/visit/:hostelSlug" element={<VisitPage />} />
       </Route>

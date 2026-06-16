@@ -2983,25 +2983,15 @@ export class PaymentService {
   }
 
   private getOwnerLevelProviderConfig() {
-    const active = getActivePaymentProvider();
-    if (active === "RAZORPAY") {
-      return {
-        key_id: process.env.RAZORPAY_KEY_ID!,
-        key_secret: process.env.RAZORPAY_KEY_SECRET!,
-        webhook_secret: process.env.RAZORPAY_WEBHOOK_SECRET!,
-        base_url: process.env.RAZORPAY_BASE_URL || "https://api.razorpay.com",
-        callbackUrl: backendUrl("/api/webhooks/payments/razorpay"),
-      };
+    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+      throw new Error("CONFIG_ERROR: Razorpay key and secret are not configured");
     }
     return {
-      clientId: process.env.PHONEPE_CLIENT_ID!,
-      clientSecret: process.env.PHONEPE_CLIENT_SECRET!,
-      clientVersion: process.env.PHONEPE_CLIENT_VERSION || "1",
-      merchantId: process.env.PHONEPE_MERCHANT_ID!,
-      saltKey: process.env.PHONEPE_SALT_KEY!,
-      saltIndex: process.env.PHONEPE_SALT_INDEX!,
-      environment: (process.env.PHONEPE_ENV as "SANDBOX" | "PRODUCTION") || "SANDBOX",
-      callbackUrl: backendUrl("/api/webhooks/payments/phonepe"),
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET,
+      webhook_secret: process.env.RAZORPAY_WEBHOOK_SECRET || "",
+      base_url: process.env.RAZORPAY_BASE_URL || "https://api.razorpay.com",
+      callbackUrl: backendUrl("/api/webhooks/payments/razorpay"),
     };
   }
 

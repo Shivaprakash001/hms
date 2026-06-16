@@ -407,7 +407,7 @@ export function HostelActivityCenterView({ hostelId }: HostelActivityCenterViewP
                     if (tenant.phone) {
                       let clean = tenant.phone.replace(/[^\d]/g, '');
                       if (clean.length === 10) clean = '91' + clean;
-                      const msg = `Hi ${tenant.name}, a friendly reminder regarding your outstanding rent of ${formatCurrency(tenant.amountOverdue)} at ${hostel?.name || 'Sri Adithya Hostels'}. Please clear it at your earliest convenience. Thank you!`;
+                      const msg = `Hi ${tenant.name}, a friendly reminder regarding your outstanding rent of ${formatCurrency(tenant.amountOverdue)} at ${hostel?.name || 'Sri Adithya Boys Hostel'}. Please clear it at your earliest convenience. Thank you!`;
                       whatsappUrl = `https://wa.me/${clean}?text=${encodeURIComponent(msg)}`;
                     }
 

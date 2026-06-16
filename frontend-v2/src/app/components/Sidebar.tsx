@@ -24,7 +24,7 @@ export function Sidebar() {
         <div className="flex items-center gap-3">
           <img
             src="/android-chrome-512x512.png"
-            alt="Sri Adithya Hostels"
+            alt="Sri Adithya Boys Hostel"
             className="h-9 w-auto object-contain"
           />
           <div className="min-w-0">
@@ -32,7 +32,7 @@ export function Sidebar() {
               Sri Adithya
             </span>
             <span className="block text-[10px] text-sidebar-foreground/60 leading-tight">
-              Hostels — Owner
+              Boys Hostel — Owner
             </span>
           </div>
         </div>

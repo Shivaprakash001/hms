@@ -84,7 +84,7 @@ export function WelcomeLanding({
             <Building2 className="h-6 w-6 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-[var(--brand-navy)]" style={{ fontFamily: 'var(--font-hero)' }}>
-            {hostel?.name || 'Sri Adithya'}
+            {hostel?.name || 'Sri Adithya Boys Hostel'}
           </h1>
         </div>
       </div>

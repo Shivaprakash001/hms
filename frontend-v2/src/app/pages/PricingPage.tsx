@@ -3,7 +3,7 @@ import { Check, ShieldCheck, Mail, Phone, ArrowRight } from 'lucide-react';
 
 export function PricingPage() {
   useEffect(() => {
-    document.title = "Room Plans & Pricing | Sri Adithya Hostels";
+    document.title = "Room Plans & Pricing | Sri Adithya Boys Hostel";
     
     // Manage meta tags for SEO
     let metaDescription = document.querySelector('meta[name="description"]');
@@ -20,7 +20,7 @@ export function PricingPage() {
       ogTitle.setAttribute('property', 'og:title');
       document.head.appendChild(ogTitle);
     }
-    ogTitle.setAttribute('content', 'Room Plans & Pricing | Sri Adithya Hostels');
+    ogTitle.setAttribute('content', 'Room Plans & Pricing | Sri Adithya Boys Hostel');
   }, []);
 
   const plans = [
@@ -72,13 +72,13 @@ export function PricingPage() {
       <section className="px-4 py-20 md:py-32 max-w-7xl mx-auto flex flex-col items-center text-center space-y-6">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-700 text-sm font-medium mb-4">
           <ShieldCheck className="w-4 h-4" />
-          <span>Verified PhonePe Merchant</span>
+          <span>Verified Merchant</span>
         </div>
         <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight text-foreground max-w-3xl">
           Affordable and transparent <span className="text-indigo-600">hostel pricing.</span>
         </h1>
         <p className="text-lg md:text-xl text-muted-foreground max-w-2xl">
-          Choose a room plan that fits your lifestyle and budget. All payments are accepted securely through UPI and PhonePe.
+          Choose a room plan that fits your lifestyle and budget. All payments are accepted securely through UPI and Razorpay.
         </p>
       </section>
 
@@ -148,7 +148,7 @@ export function PricingPage() {
             <ul className="space-y-3 text-amber-900/80">
               <li className="flex items-start gap-3">
                 <div className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-2 shrink-0" />
-                <p>All hostel rent payments must be made <strong>only through the official Sri Adithya Hostels web portal</strong>.</p>
+                <p>All hostel rent payments must be made <strong>only through the official Sri Adithya Boys Hostel web portal</strong>.</p>
               </li>
               <li className="flex items-start gap-3">
                 <div className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-2 shrink-0" />
@@ -160,7 +160,7 @@ export function PricingPage() {
               </li>
               <li className="flex items-start gap-3">
                 <div className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-2 shrink-0" />
-                <p>PhonePe secure payment gateway is used exclusively for processing all online transactions.</p>
+                <p>Razorpay secure payment gateway is used exclusively for processing all online transactions.</p>
               </li>
             </ul>
           </div>

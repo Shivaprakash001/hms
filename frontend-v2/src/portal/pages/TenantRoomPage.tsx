@@ -102,7 +102,7 @@ export function TenantRoomPage() {
           </p>
           <div className="mt-8 pt-6 border-t border-border/60 flex items-center justify-center gap-2 text-xs text-muted-foreground">
             <Sparkles className="w-4 h-4 text-blue-500 animate-pulse" />
-            <span>Sri Adithya Hostels welcomes you!</span>
+            <span>Sri Adithya Boys Hostel welcomes you!</span>
           </div>
         </div>
       </div>
@@ -118,7 +118,7 @@ export function TenantRoomPage() {
   const vacantCount = Math.max(0, capacity - occupiedCount);
 
   // Hostel Address formatting
-  const hostelName = hostel?.name ?? 'Sri Adithya Hostel';
+  const hostelName = hostel?.name ?? 'Sri Adithya Boys Hostel';
   const fullAddress = hostel?.address 
     ? `${hostel.address}, ${hostel.city ?? ''}, ${hostel.state ?? ''} ${hostel.pincode ?? ''}`
     : 'Hyderabad, Telangana';

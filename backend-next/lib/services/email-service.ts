@@ -7,7 +7,7 @@ import { frontendUrl } from "../config/domains";
 const resend = new Resend(process.env.RESEND_API_KEY);
 const DEFAULT_FROM_DOMAIN = "notify.sriadithyahostels.in";
 const DEFAULT_FROM_ADDRESS = `noreply@${DEFAULT_FROM_DOMAIN}`;
-const DEFAULT_FROM = `Sri Adithya Hostels <${DEFAULT_FROM_ADDRESS}>`;
+const DEFAULT_FROM = `Sri Adithya Boys Hostel <${DEFAULT_FROM_ADDRESS}>`;
 
 function resolveEmailFrom(value?: string | null) {
   const raw = String(value || "").trim();
@@ -25,7 +25,7 @@ function resolveEmailFrom(value?: string | null) {
     .trim();
 
   if (/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(domain)) {
-    return `Sri Adithya Hostels <noreply@${domain}>`;
+    return `Sri Adithya Boys Hostel <noreply@${domain}>`;
   }
 
   return DEFAULT_FROM;

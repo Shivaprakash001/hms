@@ -16,7 +16,35 @@ type TransitionInput = {
   metadata?: any;
 };
 
+class KeyedMutex {
+  private locks = new Map<string, Promise<void>>();
+
+  async acquire(key: string): Promise<() => void> {
+    let unlock: () => void = () => {};
+    const currentLock = this.locks.get(key);
+    
+    const newLock = new Promise<void>((resolve) => {
+      unlock = () => {
+        if (this.locks.get(key) === newLock) {
+          this.locks.delete(key);
+        }
+        resolve();
+      };
+    });
+
+    this.locks.set(key, newLock);
+
+    if (currentLock) {
+      await currentLock;
+    }
+
+    return unlock;
+  }
+}
+
 export class PaymentStatusEventService {
+  private mutex = new KeyedMutex();
+
   async updateAttemptStatus(tx: any, input: TransitionInput & { data?: any }) {
     const updated = await tx.paymentAttempt.update({
       where: { id: input.attemptId },
@@ -39,35 +67,46 @@ export class PaymentStatusEventService {
   }
 
   async append(tx: any, input: TransitionInput) {
-    await tx.$queryRaw`SELECT id FROM payment_attempts WHERE id = ${input.attemptId}::uuid FOR UPDATE`;
-    const rows = await tx.$queryRaw<Array<{ next_sequence: number }>>`
-      SELECT COALESCE(MAX(transition_sequence), 0) + 1 AS next_sequence
-      FROM payment_attempt_status_events
-      WHERE payment_attempt_id = ${input.attemptId}::uuid
-    `;
-    const nextSequence = Number(rows?.[0]?.next_sequence || 1);
-    
-    // Ensure we ALWAYS get a valid UUID string even if crypto.randomUUID() is stripped/undefined in edge
-    const generatedId = (typeof crypto.randomUUID === 'function') 
-      ? crypto.randomUUID() 
-      : crypto.randomBytes(16).toString("hex").replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5");
+    const unlock = await this.mutex.acquire(input.attemptId);
+    try {
+      // 1. Transaction-level PG advisory lock to serialize across concurrent processes
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"status_event:" + input.attemptId})::bigint)`;
 
-    return tx.paymentAttemptStatusEvent.create({
-      data: {
-        id: generatedId,
-        payment_attempt_id: input.attemptId,
-        transition_sequence: nextSequence,
-        from_status: input.fromStatus || null,
-        to_status: input.toStatus,
-        reason: input.reason || null,
-        source: input.source,
-        actor_id: input.actorId || null,
-        operational_owner_id: input.operationalOwnerId || null,
-        financial_owner_id: input.financialOwnerId || null,
-        hostel_id: input.hostelId || null,
-        metadata: input.metadata || null,
-      },
-    });
+      // 2. Row-level lock on payment attempts as a fallback
+      await tx.$queryRaw`SELECT id FROM payment_attempts WHERE id = ${input.attemptId}::uuid FOR UPDATE`;
+
+      // 3. Query the next sequence
+      const rows = await tx.$queryRaw<Array<{ next_sequence: number }>>`
+        SELECT COALESCE(MAX(transition_sequence), 0) + 1 AS next_sequence
+        FROM payment_attempt_status_events
+        WHERE payment_attempt_id = ${input.attemptId}::uuid
+      `;
+      const nextSequence = Number(rows?.[0]?.next_sequence || 1);
+      
+      // Ensure we ALWAYS get a valid UUID string even if crypto.randomUUID() is stripped/undefined in edge
+      const generatedId = (typeof crypto.randomUUID === 'function') 
+        ? crypto.randomUUID() 
+        : crypto.randomBytes(16).toString("hex").replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5");
+
+      return await tx.paymentAttemptStatusEvent.create({
+        data: {
+          id: generatedId,
+          payment_attempt_id: input.attemptId,
+          transition_sequence: nextSequence,
+          from_status: input.fromStatus || null,
+          to_status: input.toStatus,
+          reason: input.reason || null,
+          source: input.source,
+          actor_id: input.actorId || null,
+          operational_owner_id: input.operationalOwnerId || null,
+          financial_owner_id: input.financialOwnerId || null,
+          hostel_id: input.hostelId || null,
+          metadata: input.metadata || null,
+        },
+      });
+    } finally {
+      unlock();
+    }
   }
 
   async appendOutsideTransaction(input: TransitionInput) {

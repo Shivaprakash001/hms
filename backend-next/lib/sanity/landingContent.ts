@@ -162,12 +162,12 @@ const fallbackImages = {
 
 export const fallbackLandingContent: LandingMarketingContent = {
   hostelProfile: {
-    name: 'Sri Adithya Hostels',
+    name: 'Sri Adithya Boys Hostel',
     phone: '9392433422',
     whatsappNumber: '919392433422',
     email: 'sriadithyahostels@gmail.com',
     shortLocation: 'Yamnampet, Secunderabad',
-    addressLines: ['Sri Adithya Hostels', 'Yamnampet', 'Secunderabad, Telangana'],
+    addressLines: ['Sri Adithya Boys Hostel', 'Yamnampet', 'Secunderabad, Telangana'],
     locationTitle: 'Prime Location',
     locationDescription: 'Conveniently located near SNIST — your daily commute is just a 5-minute walk',
     distanceTitle: 'Just 400m from SNIST',
@@ -179,7 +179,7 @@ export const fallbackLandingContent: LandingMarketingContent = {
     ownerMessage: 'I personally respond to every enquiry.',
   },
   seo: {
-    title: 'Best Boys Hostel in Yamnampet, Secunderabad | Sri Adithya Hostels',
+    title: 'Best Boys Hostel in Yamnampet, Secunderabad | Sri Adithya Boys Hostel',
     description:
       'Sri Adithya Boys Hostel offers safe student accommodation near SNIST with homely meals, transparent pricing, parent-friendly admissions, and easy room visit booking.',
     canonicalUrl: 'https://sriadithyahostels.in/',
@@ -224,19 +224,19 @@ export const fallbackLandingContent: LandingMarketingContent = {
       icon: 'food',
       title: 'Homely Food',
       description: "Fresh, daily meals included — just like mom's cooking",
-      image: { url: fallbackImages.food, alt: 'Homely food served at Sri Adithya Hostels' },
+      image: { url: fallbackImages.food, alt: 'Homely food served at Sri Adithya Boys Hostel' },
     },
     {
       icon: 'home',
       title: 'Homely Atmosphere',
       description: 'Warm, safe & comfortable — designed for students',
-      image: { url: fallbackImages.room, alt: 'Student room at Sri Adithya Hostels' },
+      image: { url: fallbackImages.room, alt: 'Student room at Sri Adithya Boys Hostel' },
     },
     {
       icon: 'location',
       title: 'Prime Location',
       description: '400m from SNIST gate — walk in 5 minutes',
-      image: { url: fallbackImages.building, alt: 'Sri Adithya Hostels building location' },
+      image: { url: fallbackImages.building, alt: 'Sri Adithya Boys Hostel building location' },
     },
   ],
   facilities: [
@@ -317,7 +317,7 @@ export const fallbackLandingContent: LandingMarketingContent = {
     { stepNumber: 5, title: 'Move In', description: 'Bring your things. Your home near SNIST is ready.' },
   ],
   footer: {
-    title: 'Sri Adithya Hostels',
+    title: 'Sri Adithya Boys Hostel',
     description: 'Your home away from home — providing comfortable, safe, and affordable accommodation for students near SNIST.',
     quickLinks: [
       { label: 'Home', href: '#home' },
@@ -327,7 +327,7 @@ export const fallbackLandingContent: LandingMarketingContent = {
       { label: 'Contact', href: '#contact' },
       { label: 'Tenant / Owner Login', href: '/login' },
     ],
-    copyright: '© 2026 Sri Adithya Hostels. All rights reserved.',
+    copyright: '© 2026 Sri Adithya Boys Hostel. All rights reserved.',
   },
   food: {
     title: 'Homely & Hygienic Meals',
@@ -342,11 +342,11 @@ export const fallbackLandingContent: LandingMarketingContent = {
       { day: 'Saturday', breakfast: 'Puri Sabji', lunch: 'Rice, Pappu, Curry', dinner: 'Rice, Rasam, Curd' },
       { day: 'Sunday', breakfast: 'Special Dosa', lunch: 'Veg / Egg Fried Rice', dinner: 'Rice, Chicken Curry / Special Curry' },
     ],
-    parentQuote: 'I was worried about my son’s food habits. After visiting Sri Adithya’s kitchen, I am completely satisfied that he gets fresh, homely meals every single day.',
+    parentQuote: 'I was worried about my son’s food habits. After visiting Sri Adithya Boys Hostel’s kitchen, I am completely satisfied that he gets fresh, homely meals every single day.',
     parentName: 'R. Srinivasa Rao (Father of Karthik, SNIST 3rd Year)',
   },
   parentTrust: {
-    title: 'Why Parents Trust Sri Adithya Hostels',
+    title: 'Why Parents Trust Sri Adithya Boys Hostel',
     subtitle: 'We provide a safe, secure, and disciplined environment for your son’s academic journey.',
     points: [
       { title: '24/7 Active Warden', description: 'Experienced hostel warden resident on-site to maintain discipline and handle student needs.', icon: 'warden' },

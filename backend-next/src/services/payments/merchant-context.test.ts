@@ -69,16 +69,15 @@ async function installPrismaHostelStub(ownerId = OWNER_A) {
   };
 }
 
-function installPhonePeEnv() {
-  process.env.PHONEPE_CLIENT_ID = "client-id";
-  process.env.PHONEPE_CLIENT_SECRET = "client-secret";
-  process.env.PHONEPE_CLIENT_VERSION = "1";
-  process.env.PHONEPE_MERCHANT_ID = "merchant-id";
-  process.env.PHONEPE_ENV = "SANDBOX";
+function installRazorpayEnv() {
+  process.env.RAZORPAY_KEY_ID = "key-id";
+  process.env.RAZORPAY_KEY_SECRET = "key-secret";
+  process.env.RAZORPAY_WEBHOOK_SECRET = "webhook-secret";
+  process.env.RAZORPAY_BASE_URL = "https://api.razorpay.com";
 }
 
 async function test_rent_collection_uses_hms_treasury_context() {
-  installPhonePeEnv();
+  installRazorpayEnv();
   await installPrismaHostelStub(OWNER_A);
 
   const ctx = await getProviderContext({
@@ -90,7 +89,7 @@ async function test_rent_collection_uses_hms_treasury_context() {
     scopeType: PAYMENT_SCOPE.HOSTEL,
   });
 
-  assertEq(ctx.provider, "PHONEPE", "treasury rent: provider");
+  assertEq(ctx.provider, "RAZORPAY", "treasury rent: provider");
   assertEq(ctx.payment_domain, PAYMENT_DOMAIN.RENT_COLLECTION, "treasury rent: domain");
   assertEq(ctx.scope_type, PAYMENT_SCOPE.HOSTEL, "treasury rent: hostel scope");
   assertEq(ctx.merchant_context_type, MERCHANT_CONTEXT.HMS_TREASURY, "treasury rent: merchant context");
@@ -98,12 +97,12 @@ async function test_rent_collection_uses_hms_treasury_context() {
   assertEq(ctx.operational_owner_id, OWNER_A, "treasury rent: operational owner retained");
   assertEq(ctx.financial_owner_id, OWNER_A, "treasury rent: owner liability retained");
   assertEq(ctx.hostel_id, HOSTEL_A, "treasury rent: hostel retained");
-  assertEq(ctx.config.clientId, "client-id", "treasury rent: PhonePe client id");
+  assertEq(ctx.config.key_id, "key-id", "treasury rent: Razorpay key id");
   assertEq(ctx.config.treasuryMode, true, "treasury rent: treasury mode flag");
 }
 
 async function test_advance_collection_uses_hms_treasury_context() {
-  installPhonePeEnv();
+  installRazorpayEnv();
   await installPrismaHostelStub(OWNER_A);
 
   const ctx = await getProviderContext({
@@ -119,7 +118,7 @@ async function test_advance_collection_uses_hms_treasury_context() {
 }
 
 async function test_cross_owner_hostel_rejected() {
-  installPhonePeEnv();
+  installRazorpayEnv();
   await installPrismaHostelStub(OWNER_B);
 
   await expectThrow(
@@ -137,8 +136,8 @@ async function test_cross_owner_hostel_rejected() {
 
 async function test_missing_treasury_credentials_rejected() {
   await installPrismaHostelStub(OWNER_A);
-  delete process.env.PHONEPE_CLIENT_ID;
-  delete process.env.PHONEPE_CLIENT_SECRET;
+  delete process.env.RAZORPAY_KEY_ID;
+  delete process.env.RAZORPAY_KEY_SECRET;
 
   await expectThrow(
     () => getProviderContext({
@@ -148,7 +147,7 @@ async function test_missing_treasury_credentials_rejected() {
       hostelId: HOSTEL_A,
       scopeType: PAYMENT_SCOPE.HOSTEL,
     }),
-    /HMS treasury PhonePe credentials/,
+    /HMS treasury Razorpay credentials/,
     "treasury rent: missing credentials rejected"
   );
 }

@@ -18,7 +18,7 @@ export function Navbar({ hostelProfile = fallbackLandingContent.hostelProfile }:
           <div className="flex items-center gap-3">
             <img
               src={hostelLogo}
-              alt="Sri Adithya Hostels Logo"
+              alt="Sri Adithya Boys Hostel Logo"
               className="w-8 h-8 xs:w-10 xs:h-10 md:w-12 md:h-12 object-contain rounded-md"
             />
             <div>

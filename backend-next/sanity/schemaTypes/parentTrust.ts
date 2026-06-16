@@ -9,7 +9,7 @@ export const parentTrust = defineType({
       name: 'title',
       title: 'Section Title',
       type: 'string',
-      initialValue: 'Why Parents Trust Sri Adithya Hostels',
+      initialValue: 'Why Parents Trust Sri Adithya Boys Hostel',
       validation: Rule => Rule.required(),
     }),
     defineField({

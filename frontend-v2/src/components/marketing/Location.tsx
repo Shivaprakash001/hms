@@ -23,7 +23,7 @@ export function Location() {
               <div>
                 <h3 className="text-xl font-semibold text-[#1B2D5B] mb-2">Address</h3>
                 <p className="text-[#2C2C2A]">
-                  Sri Adithya Hostels<br />
+                  Sri Adithya Boys Hostel<br />
                   FM37+P3V, Yamnampet<br />
                   Secunderabad, Telangana — 501301
                 </p>
@@ -62,7 +62,7 @@ export function Location() {
               allowFullScreen
               loading="lazy"
               referrerPolicy="no-referrer-when-downgrade"
-              title="Sri Adithya Hostels Location"
+              title="Sri Adithya Boys Hostel Location"
             />
           </div>
         </div>

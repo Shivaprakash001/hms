@@ -146,7 +146,7 @@ export function LoginPage() {
               className="text-xl font-bold text-white leading-tight"
               style={{ fontFamily: 'var(--font-display)' }}
             >
-              Sri Adithya<br />Hostels
+              Sri Adithya<br />Boys Hostel
             </span>
           </Link>
         </div>
@@ -188,7 +188,7 @@ export function LoginPage() {
         {/* Bottom strip */}
         <div className="relative z-10">
           <div className="h-px w-full mb-4" style={{ backgroundColor: 'rgba(255,255,255,0.15)' }} />
-          <p className="text-white/40 text-xs">© {new Date().getFullYear()} Sri Adithya Hostels</p>
+          <p className="text-white/40 text-xs">© {new Date().getFullYear()} Sri Adithya Boys Hostel</p>
         </div>
       </div>
 
@@ -203,7 +203,7 @@ export function LoginPage() {
               className="text-base font-bold tracking-wide"
               style={{ color: '#1B2D5B', fontFamily: 'var(--font-display)' }}
             >
-              Sri Adithya Hostels
+              Sri Adithya Boys Hostel
             </span>
           </Link>
         </div>
@@ -218,7 +218,7 @@ export function LoginPage() {
               Welcome back
             </h1>
             <p className="text-sm" style={{ color: '#2C2C2A', opacity: 0.65 }}>
-              Sign in to your Sri Adithya account
+              Sign in to your Sri Adithya Boys Hostel account
             </p>
           </div>
 
@@ -374,7 +374,7 @@ export function LoginPage() {
             <p className="text-xs" style={{ color: '#9ca3af' }}>
               By continuing, you agree to our{' '}
               <a
-                href="/legal#terms"
+                href="/legal/terms"
                 className="underline underline-offset-4 transition-colors"
                 style={{ color: '#6b7280' }}
               >
@@ -382,7 +382,7 @@ export function LoginPage() {
               </a>
               {' '}and{' '}
               <a
-                href="/legal#privacy"
+                href="/legal/privacy"
                 className="underline underline-offset-4 transition-colors"
                 style={{ color: '#6b7280' }}
               >
@@ -390,7 +390,7 @@ export function LoginPage() {
               </a>.
             </p>
             <p className="text-xs" style={{ color: '#d1d5db' }}>
-              Sri Adithya Hostels · HMS
+              Sri Adithya Boys Hostel · HMS
             </p>
           </div>
         </div>

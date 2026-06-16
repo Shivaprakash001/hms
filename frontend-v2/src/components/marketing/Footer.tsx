@@ -24,7 +24,7 @@ export function Footer() {
                 className="text-lg font-bold text-white leading-tight"
                 style={{ fontFamily: 'var(--font-display)' }}
               >
-                Sri Adithya<br />Hostels
+                Sri Adithya<br />Boys Hostel
               </span>
             </div>
             <p className="text-white/80 text-sm">
@@ -68,9 +68,18 @@ export function Footer() {
               </button>
               <Link
                 to="/legal"
-                className="block text-white/80 hover:text-white transition-colors text-sm no-underline"
+                className="block text-white/80 hover:text-white transition-colors text-sm no-underline font-semibold"
               >
-                Legal
+                Legal Hub
+              </Link>
+              <Link to="/legal/terms" className="block text-white/60 hover:text-white transition-colors text-sm no-underline pl-2">
+                &bull; Terms &amp; Conditions
+              </Link>
+              <Link to="/legal/privacy" className="block text-white/60 hover:text-white transition-colors text-sm no-underline pl-2">
+                &bull; Privacy Policy
+              </Link>
+              <Link to="/legal/refund-policy" className="block text-white/60 hover:text-white transition-colors text-sm no-underline pl-2">
+                &bull; Refund Policy
               </Link>
             </div>
           </div>
@@ -103,7 +112,7 @@ export function Footer() {
         </div>
 
         <div className="border-t border-white/20 pt-8 flex flex-wrap items-center justify-between gap-4 text-sm text-white/60">
-          <p className="m-0">&copy; {new Date().getFullYear()} Sri Adithya Hostels. All rights reserved.</p>
+          <p className="m-0">&copy; {new Date().getFullYear()} Sri Adithya Boys Hostel. All rights reserved.</p>
           <div className="flex gap-5">
             <Link to="/legal" className="text-white/60 hover:text-white transition-colors no-underline">
               Legal

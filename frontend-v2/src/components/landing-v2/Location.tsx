@@ -123,7 +123,7 @@ export function Location({
                   allowFullScreen
                   loading="lazy"
                   referrerPolicy="no-referrer-when-downgrade"
-                  title={`${profile.name || 'Sri Adithya Hostels'} Location`}
+                  title={`${profile.name || 'Sri Adithya Boys Hostel'} Location`}
                 />
               </div>
             </StaggerItem>

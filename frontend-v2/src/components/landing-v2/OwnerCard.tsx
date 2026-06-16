@@ -17,7 +17,7 @@ export function OwnerCard() {
             Srinivasa Rao
           </h3>
           <p className="text-sm text-[#2C2C2A]/60 mb-1">
-            Owner, Sri Adithya Hostels
+            Owner, Sri Adithya Boys Hostel
           </p>
           <p className="text-sm text-[#F07B1D] italic">
             Here to help you find your home near SNIST.

@@ -374,7 +374,7 @@ export function AlertsView() {
                   const upiRef = payment.upi_reference || '—';
                   const isAdvance = payment.payment_type === 'ADVANCE' || payment.flow_type === 'ADVANCE';
                   const description = isAdvance ? 'Security Deposit' : `Rent for ${payment.rent_month || '—'}`;
-                  const hostelName = activeHostel ? String(activeHostel.name ?? '') : 'Sri Adithya Hostels';
+                  const hostelName = activeHostel ? String(activeHostel.name ?? '') : 'Sri Adithya Boys Hostel';
 
                   const rawPhone = String(payment.tenant_phone || '');
                   const telPhone = rawPhone ? rawPhone.replace(/[^\d+]/g, '') : null;
@@ -478,7 +478,7 @@ export function AlertsView() {
                   const currentFrequency = String(req.active_frequency || 'MONTHLY').replaceAll('_', ' ');
                   const reason = req.reason ? String(req.reason) : 'No reason provided';
                   const effectiveFrom = req.effective_from ? new Date(req.effective_from) : null;
-                  const hostelName = activeHostel ? String(activeHostel.name ?? '') : 'Sri Adithya Hostels';
+                  const hostelName = activeHostel ? String(activeHostel.name ?? '') : 'Sri Adithya Boys Hostel';
 
                   const rawPhone = String(req.tenants?.profiles?.phone || '');
                   const telPhone = rawPhone ? rawPhone.replace(/[^\d+]/g, '') : null;
@@ -590,7 +590,7 @@ export function AlertsView() {
                   const room = String(doc.room_no || 'N/A');
                   const uploadedAt = doc.uploaded_at ? new Date(String(doc.uploaded_at)) : null;
                   const avatarUrl = doc.photo_url ?? doc.avatar ?? doc.tenant_avatar ?? doc.tenant_avatar_url ?? doc.avatar_url;
-                  const hostelName = activeHostel ? String(activeHostel.name ?? '') : 'Sri Adithya Hostels';
+                  const hostelName = activeHostel ? String(activeHostel.name ?? '') : 'Sri Adithya Boys Hostel';
 
                   const rawPhone = String(doc.tenant_phone || '');
                   const telPhone = rawPhone ? rawPhone.replace(/[^\d+]/g, '') : null;
@@ -733,7 +733,7 @@ function DueCard({ due, isOverdue, activeHostel, onRecordPayment }: DueCardProps
     ? (days > 0 ? `${days}d overdue (Due ${formattedDueDate})` : `Overdue (Due ${formattedDueDate})`)
     : (days > 0 ? `Due in ${days}d (${formattedDueDate})` : `Due today (${formattedDueDate})`);
 
-  const hostelName = activeHostel ? String(activeHostel.name ?? '') : 'Sri Adithya Hostels';
+  const hostelName = activeHostel ? String(activeHostel.name ?? '') : 'Sri Adithya Boys Hostel';
   let whatsappUrl = null;
   if (phone) {
     let clean = phone.replace(/[^\d]/g, '');

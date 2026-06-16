@@ -334,7 +334,7 @@ export class AuthService {
         <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:560px;margin:0 auto;border:1px solid #eadfce;border-radius:16px;overflow:hidden;">
           <div style="background:linear-gradient(135deg,#1B2D5B,#2a427e);padding:28px 24px;color:#ffffff;">
             <h1 style="margin:0;font-size:22px;color:#ffffff;">Reset Your Password</h1>
-            <p style="margin:8px 0 0;opacity:0.9;font-size:14px;color:#eadfce;">Sri Adithya Hostels Account Recovery</p>
+            <p style="margin:8px 0 0;opacity:0.9;font-size:14px;color:#eadfce;">Sri Adithya Boys Hostel Account Recovery</p>
           </div>
           <div style="padding:24px;color:#1e293b;line-height:1.6;background:#FFFDF5;">
             <p>Hello <strong>${profile.name || "User"}</strong>,</p>
@@ -349,7 +349,7 @@ export class AuthService {
         </div>
       `;
 
-      await EmailService.sendEmail(normalizedEmail, "Reset your Sri Adithya Hostels password", html);
+      await EmailService.sendEmail(normalizedEmail, "Reset your Sri Adithya Boys Hostel password", html);
 
       await eventLog.log("PASSWORD_RESET_REQUESTED", profile.owner_id || profile.id, {
         profile_id: profile.id,

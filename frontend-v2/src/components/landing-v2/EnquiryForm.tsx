@@ -31,7 +31,7 @@ export function EnquiryForm({
 
   const openWhatsApp = () => {
     const whatsappMessage = encodeURIComponent(
-      `Hi! I'm interested in Sri Adithya Hostels.\n\nName: ${formData.name}\nPhone: ${formData.phone}\nPreferred Move-in: ${formData.moveInMonth}\n\nMessage: ${formData.message}`,
+      `Hi! I'm interested in Sri Adithya Boys Hostel.\n\nName: ${formData.name}\nPhone: ${formData.phone}\nPreferred Move-in: ${formData.moveInMonth}\n\nMessage: ${formData.message}`,
     );
 
     window.open(`${whatsappBaseUrl}&text=${whatsappMessage}`, '_blank');
@@ -236,7 +236,7 @@ export function EnquiryForm({
                       </div>
                       <div>
                         <div className="text-xs text-[#2C2C2A]/70 font-semibold">{profile.email ? 'Email' : 'Hostel'}</div>
-                        <div className="font-bold text-[#1B2D5B]">{profile.email || profile.name || 'Sri Adithya Hostels'}</div>
+                        <div className="font-bold text-[#1B2D5B]">{profile.email || profile.name || 'Sri Adithya Boys Hostel'}</div>
                       </div>
                     </div>
                   </div>

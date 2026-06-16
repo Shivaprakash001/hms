@@ -1,7 +1,6 @@
+  # Sri Adithya Boys Hostel
 
-  # Sri Adithya Hostels
-
-  This is a code bundle for Sri Adithya Hostels. The original project is available at https://www.figma.com/design/ymuS0p19hxaQQvo3lbhfL1.
+  This is a code bundle for Sri Adithya Boys Hostel. The original project is available at https://www.figma.com/design/ymuS0p19hxaQQvo3lbhfL1.
 
   ## Running the code
 

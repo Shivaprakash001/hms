@@ -1,7 +1,5 @@
 import { prisma } from "@/lib/db";
 import { PAYMENT_DOMAIN, PAYMENT_FLOW, PAYMENT_SCOPE, MERCHANT_CONTEXT } from "./financial-domain";
-import { resolvePhonePeEnvironment } from "./phonepe-env";
-import { getActivePaymentProvider } from "./payment-env";
 import { backendUrl, getBackendUrl } from "@/lib/config/domains";
 
 type MaybeHostelId = string | null;
@@ -23,57 +21,28 @@ export async function getProviderContext(params: {
     scopeType,
   } = params;
 
-  const activeProvider = getActivePaymentProvider();
-
   if (paymentDomain === PAYMENT_DOMAIN.PLATFORM_BILLING) {
-    if (activeProvider === "RAZORPAY") {
-      if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-        throw new Error("CONFIG_ERROR: HMS platform Razorpay credentials are not configured");
-      }
-      return {
-        provider: "RAZORPAY",
-        payment_domain: PAYMENT_DOMAIN.PLATFORM_BILLING,
-        flow_type: flowType,
-        scope_type: PAYMENT_SCOPE.PLATFORM,
-        merchant_context_type: MERCHANT_CONTEXT.HMS_PLATFORM,
-        merchant_context_id: MERCHANT_CONTEXT.HMS_PLATFORM,
-        operational_owner_id: operationalOwnerId,
-        financial_owner_id: financialOwnerId || process.env.HMS_FINANCIAL_OWNER_ID || null,
-        hostel_id: null,
-        config: {
-          key_id: process.env.RAZORPAY_KEY_ID || "",
-          key_secret: process.env.RAZORPAY_KEY_SECRET || "",
-          webhook_secret: process.env.RAZORPAY_WEBHOOK_SECRET || "",
-          base_url: process.env.RAZORPAY_BASE_URL || "https://api.razorpay.com",
-          callbackUrl: backendUrl("/api/webhooks/payments/razorpay"),
-        },
-      };
-    } else {
-      if (!process.env.PHONEPE_CLIENT_ID || !process.env.PHONEPE_CLIENT_SECRET) {
-        throw new Error("CONFIG_ERROR: HMS platform PhonePe credentials are not configured");
-      }
-      return {
-        provider: "PHONEPE",
-        payment_domain: PAYMENT_DOMAIN.PLATFORM_BILLING,
-        flow_type: flowType,
-        scope_type: PAYMENT_SCOPE.PLATFORM,
-        merchant_context_type: MERCHANT_CONTEXT.HMS_PLATFORM,
-        merchant_context_id: MERCHANT_CONTEXT.HMS_PLATFORM,
-        operational_owner_id: operationalOwnerId,
-        financial_owner_id: financialOwnerId || process.env.HMS_FINANCIAL_OWNER_ID || null,
-        hostel_id: null,
-        config: {
-          clientId: process.env.PHONEPE_CLIENT_ID || "",
-          clientSecret: process.env.PHONEPE_CLIENT_SECRET || "",
-          clientVersion: process.env.PHONEPE_CLIENT_VERSION || "1",
-          merchantId: process.env.PHONEPE_MERCHANT_ID || "",
-          saltKey: process.env.PHONEPE_SALT_KEY || "",
-          saltIndex: process.env.PHONEPE_SALT_INDEX || "",
-          environment: resolvePhonePeEnvironment(),
-          callbackUrl: backendUrl("/api/webhooks/payments/phonepe"),
-        },
-      };
+    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+      throw new Error("CONFIG_ERROR: HMS platform Razorpay credentials are not configured");
     }
+    return {
+      provider: "RAZORPAY",
+      payment_domain: PAYMENT_DOMAIN.PLATFORM_BILLING,
+      flow_type: flowType,
+      scope_type: PAYMENT_SCOPE.PLATFORM,
+      merchant_context_type: MERCHANT_CONTEXT.HMS_PLATFORM,
+      merchant_context_id: MERCHANT_CONTEXT.HMS_PLATFORM,
+      operational_owner_id: operationalOwnerId,
+      financial_owner_id: financialOwnerId || process.env.HMS_FINANCIAL_OWNER_ID || null,
+      hostel_id: null,
+      config: {
+        key_id: process.env.RAZORPAY_KEY_ID || "",
+        key_secret: process.env.RAZORPAY_KEY_SECRET || "",
+        webhook_secret: process.env.RAZORPAY_WEBHOOK_SECRET || "",
+        base_url: process.env.RAZORPAY_BASE_URL || "https://api.razorpay.com",
+        callbackUrl: backendUrl("/api/webhooks/payments/razorpay"),
+      },
+    };
   }
 
   if (paymentDomain !== PAYMENT_DOMAIN.RENT_COLLECTION) {
@@ -100,89 +69,44 @@ export async function getProviderContext(params: {
   }
 
   if ([PAYMENT_FLOW.RENT, PAYMENT_FLOW.FUTURE_RENT_CREDIT, PAYMENT_FLOW.SECURITY_DEPOSIT, "ADVANCE", "DEPOSIT"].includes(flowType as any)) {
-    if (activeProvider === "RAZORPAY") {
-      if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-        throw new Error("CONFIG_ERROR: HMS treasury Razorpay credentials are not configured");
-      }
-
-      console.info("[merchant-context] HMS_TREASURY Razorpay context resolved", {
-        payment_domain:           PAYMENT_DOMAIN.RENT_COLLECTION,
-        merchant_context_type:    MERCHANT_CONTEXT.HMS_TREASURY,
-        flow_type:                flowType,
-        hostel_id:                hostelId,
-        operational_owner_id:     operationalOwnerId,
-        RAZORPAY_KEY_ID_set:      Boolean(process.env.RAZORPAY_KEY_ID),
-        backend_url:              getBackendUrl(),
-      });
-
-      return {
-        provider: "RAZORPAY",
-        payment_domain: PAYMENT_DOMAIN.RENT_COLLECTION,
-        flow_type: flowType,
-        scope_type: PAYMENT_SCOPE.HOSTEL,
-        merchant_context_type: MERCHANT_CONTEXT.HMS_TREASURY,
-        merchant_context_id: MERCHANT_CONTEXT.HMS_TREASURY,
-        operational_owner_id: operationalOwnerId,
-        financial_owner_id: financialOwnerId || operationalOwnerId,
-        hostel_id: hostel.id,
-        config: {
-          key_id: process.env.RAZORPAY_KEY_ID || "",
-          key_secret: process.env.RAZORPAY_KEY_SECRET || "",
-          webhook_secret: process.env.RAZORPAY_WEBHOOK_SECRET || "",
-          base_url: process.env.RAZORPAY_BASE_URL || "https://api.razorpay.com",
-          callbackUrl: backendUrl("/api/webhooks/payments/razorpay"),
-          treasuryMode: true,
-          hostelId: hostel.id,
-          operationalOwnerId,
-        },
-      };
-    } else {
-      if (!process.env.PHONEPE_CLIENT_ID || !process.env.PHONEPE_CLIENT_SECRET) {
-        throw new Error("CONFIG_ERROR: HMS treasury PhonePe credentials are not configured");
-      }
-
-      const resolvedEnv = resolvePhonePeEnvironment();
-      const isProduction = resolvedEnv === "production";
-      console.info("[merchant-context] HMS_TREASURY PhonePe context resolved", {
-        payment_domain:           PAYMENT_DOMAIN.RENT_COLLECTION,
-        merchant_context_type:    MERCHANT_CONTEXT.HMS_TREASURY,
-        flow_type:                flowType,
-        hostel_id:                hostelId,
-        operational_owner_id:     operationalOwnerId,
-        environment:              resolvedEnv,
-        is_production_mode:       isProduction,
-        PHONEPE_CLIENT_ID_set:    Boolean(process.env.PHONEPE_CLIENT_ID),
-        backend_url:              getBackendUrl(),
-      });
-
-      return {
-        provider: "PHONEPE",
-        payment_domain: PAYMENT_DOMAIN.RENT_COLLECTION,
-        flow_type: flowType,
-        scope_type: PAYMENT_SCOPE.HOSTEL,
-        merchant_context_type: MERCHANT_CONTEXT.HMS_TREASURY,
-        merchant_context_id: MERCHANT_CONTEXT.HMS_TREASURY,
-        operational_owner_id: operationalOwnerId,
-        financial_owner_id: financialOwnerId || operationalOwnerId,
-        hostel_id: hostel.id,
-        config: {
-          clientId: process.env.PHONEPE_CLIENT_ID || "",
-          clientSecret: process.env.PHONEPE_CLIENT_SECRET || "",
-          clientVersion: process.env.PHONEPE_CLIENT_VERSION || "1",
-          merchantId: process.env.PHONEPE_MERCHANT_ID || "",
-          saltKey: process.env.PHONEPE_SALT_KEY || "",
-          saltIndex: process.env.PHONEPE_SALT_INDEX || "",
-          environment: resolvedEnv,
-          callbackUrl: backendUrl("/api/webhooks/payments/phonepe"),
-          treasuryMode: true,
-          hostelId: hostel.id,
-          operationalOwnerId,
-        },
-      };
+    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+      throw new Error("CONFIG_ERROR: HMS treasury Razorpay credentials are not configured");
     }
+
+    console.info("[merchant-context] HMS_TREASURY Razorpay context resolved", {
+      payment_domain:           PAYMENT_DOMAIN.RENT_COLLECTION,
+      merchant_context_type:    MERCHANT_CONTEXT.HMS_TREASURY,
+      flow_type:                flowType,
+      hostel_id:                hostelId,
+      operational_owner_id:     operationalOwnerId,
+      RAZORPAY_KEY_ID_set:      Boolean(process.env.RAZORPAY_KEY_ID),
+      backend_url:              getBackendUrl(),
+    });
+
+    return {
+      provider: "RAZORPAY",
+      payment_domain: PAYMENT_DOMAIN.RENT_COLLECTION,
+      flow_type: flowType,
+      scope_type: PAYMENT_SCOPE.HOSTEL,
+      merchant_context_type: MERCHANT_CONTEXT.HMS_TREASURY,
+      merchant_context_id: MERCHANT_CONTEXT.HMS_TREASURY,
+      operational_owner_id: operationalOwnerId,
+      financial_owner_id: financialOwnerId || operationalOwnerId,
+      hostel_id: hostel.id,
+      config: {
+        key_id: process.env.RAZORPAY_KEY_ID || "",
+        key_secret: process.env.RAZORPAY_KEY_SECRET || "",
+        webhook_secret: process.env.RAZORPAY_WEBHOOK_SECRET || "",
+        base_url: process.env.RAZORPAY_BASE_URL || "https://api.razorpay.com",
+        callbackUrl: backendUrl("/api/webhooks/payments/razorpay"),
+        treasuryMode: true,
+        hostelId: hostel.id,
+        operationalOwnerId,
+      },
+    };
   }
 
-  // Fallback to UPI Direct (which formats PhonePe UPI URLs)
+  // Fallback to UPI Direct
   if (!hostel.upi_id) {
     throw new Error("CONFIG_ERROR: Owner UPI ID is not configured. Please set your UPI ID in hostel settings.");
   }
@@ -194,7 +118,7 @@ export async function getProviderContext(params: {
   });
 
   return {
-    provider: "PHONEPE",
+    provider: "PHONEPE", // Keep PHONEPE for backward compatibility with manual/direct UPI tracking in database
     payment_domain: PAYMENT_DOMAIN.RENT_COLLECTION,
     flow_type: flowType,
     scope_type: PAYMENT_SCOPE.HOSTEL,

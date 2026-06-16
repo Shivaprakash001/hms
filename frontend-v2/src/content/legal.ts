@@ -3,7 +3,7 @@ export const legalSections = [
     id: "terms",
     title: "Terms & Conditions",
     subtitle: "Please read these terms carefully before using our platform.",
-    lastUpdated: "May 2026",
+    lastUpdated: "June 2026",
     content: [
       {
         type: "paragraph",
@@ -15,7 +15,7 @@ export const legalSections = [
       },
       {
         type: "paragraph",
-        text: "The Platform is owned by Sri Adithya Hostels, a company incorporated under the Companies Act, 1956 with its registered office at Yamnampet, Secunderabad, Telangana 501302 (hereinafter referred to as 'Platform Owner', 'we', 'us', 'our').",
+        text: "The Platform is owned by Sri Adithya Boys Hostel, with its registered office at Yamnampet, Secunderabad, Telangana 501302 (hereinafter referred to as 'Platform Owner', 'we', 'us', 'our').",
       },
       {
         type: "paragraph",
@@ -23,11 +23,19 @@ export const legalSections = [
       },
       {
         type: "paragraph",
-        text: "For the purpose of these Terms of Use, wherever the context so requires 'you', 'your' or 'user' shall mean any natural or legal person who has agreed to become a user/buyer on the Platform.",
+        text: "For the purpose of these Terms of Use, wherever the context so requires 'you', 'your' or 'user' shall mean any tenant, resident, or customer who has agreed to become a user/buyer on the Platform.",
       },
       {
         type: "notice",
         text: "ACCESSING, BROWSING OR OTHERWISE USING THE PLATFORM INDICATES YOUR AGREEMENT TO ALL THE TERMS AND CONDITIONS UNDER THESE TERMS OF USE, SO PLEASE READ THE TERMS OF USE CAREFULLY BEFORE PROCEEDING.",
+      },
+      {
+        type: "subheading",
+        text: "Platform Usage & Services",
+      },
+      {
+        type: "paragraph",
+        text: "Sri Adithya Boys Hostel operates this Platform to facilitate tenant onboarding, room allocations, agreement generation, digital check-in, fee payments, and related communication. Accommodation services are provided at our physical hostel premises in Yamnampet, Secunderabad.",
       },
       {
         type: "subheading",
@@ -47,7 +55,7 @@ export const legalSections = [
       },
       {
         type: "paragraph",
-        text: "The contents of the Platform and the Services are proprietary to us and are licensed to us. You will not have any authority to claim any intellectual property rights, title, or interest in its contents. The contents includes and is not limited to the design, layout, look and graphics.",
+        text: "The contents of the Platform and the Services are proprietary to us and are licensed to us. You will not have any authority to claim any intellectual property rights, title, or interest in its contents. The contents include and are not limited to the design, layout, look and graphics.",
       },
       {
         type: "paragraph",
@@ -55,11 +63,11 @@ export const legalSections = [
       },
       {
         type: "paragraph",
-        text: "You agree to pay us the charges associated with availing the Services.",
+        text: "You agree to pay us the charges associated with availing the Services, including rent, security deposits, late fees, and utilities, in a timely manner.",
       },
       {
         type: "paragraph",
-        text: "You agree not to use the Platform and/or Services for any purpose that is unlawful, illegal or forbidden by these Terms, or Indian or local laws that might apply to you.",
+        text: "You agree not to use the Platform and/or Services for any purpose that is unlawful, illegal or forbidden by these Terms, or Indian or local laws that might apply to you. Prohibited activities include but are not limited to attempting to bypass payment mechanisms, hacking the platform, or submitting false tenant identification.",
       },
       {
         type: "paragraph",
@@ -79,6 +87,14 @@ export const legalSections = [
       },
       {
         type: "subheading",
+        text: "Limitation of Liability",
+      },
+      {
+        type: "paragraph",
+        text: "In no event shall Sri Adithya Boys Hostel or its representatives be liable for any indirect, incidental, special, consequential, or punitive damages arising out of or in connection with your use of the Platform or the physical services provided.",
+      },
+      {
+        type: "subheading",
         text: "Force Majeure",
       },
       {
@@ -95,7 +111,7 @@ export const legalSections = [
       },
       {
         type: "paragraph",
-        text: "All disputes arising out of or in connection with these Terms shall be subject to the exclusive jurisdiction of the courts in India.",
+        text: "All disputes arising out of or in connection with these Terms shall be subject to the exclusive jurisdiction of the courts in Hyderabad, India.",
       },
       {
         type: "paragraph",
@@ -107,7 +123,7 @@ export const legalSections = [
     id: "privacy",
     title: "Privacy Policy",
     subtitle: "How we collect, use, and protect your personal information.",
-    lastUpdated: "May 2026",
+    lastUpdated: "June 2026",
     content: [
       {
         type: "subheading",
@@ -115,51 +131,51 @@ export const legalSections = [
       },
       {
         type: "paragraph",
-        text: "This Privacy Policy describes how Sri Adithya Hostels and its affiliates (collectively \"Sri Adithya Hostels, we, our, us\") collect, use, share, protect or otherwise process your information/personal data through our website https://www.sriadithyahostels.in (hereinafter referred to as Platform). Please note that you may be able to browse certain sections of the Platform without registering with us. We do not offer any product/service under this Platform outside India and your personal data will primarily be stored and processed in India. By visiting this Platform, providing your information or availing any product/service offered on the Platform, you expressly agree to be bound by the terms and conditions of this Privacy Policy, the Terms of Use and the applicable service/product terms and conditions, and agree to be governed by the laws of India including but not limited to the laws applicable to data protection and privacy. If you do not agree please do not use or access our Platform.",
+        text: "This Privacy Policy describes how Sri Adithya Boys Hostel (collectively \"Sri Adithya Boys Hostel, we, our, us\") collect, use, share, protect or otherwise process your information/personal data through our website https://www.sriadithyahostels.in (hereinafter referred to as Platform). Please note that you may be able to browse certain sections of the Platform without registering with us. We do not offer any product/service under this Platform outside India and your personal data will primarily be stored and processed in India. By visiting this Platform, providing your information or availing any product/service offered on the Platform, you expressly agree to be bound by the terms and conditions of this Privacy Policy, the Terms of Use and the applicable service/product terms and conditions, and agree to be governed by the laws of India including but not limited to the laws applicable to data protection and privacy. If you do not agree please do not use or access our Platform.",
       },
       {
         type: "subheading",
-        text: "Collection",
+        text: "Collection of Information",
       },
       {
         type: "paragraph",
-        text: "We collect your personal data when you use our Platform, services or otherwise interact with us during the course of our relationship and related information provided from time to time. Some of the information that we may collect includes but is not limited to personal data/information provided to us during sign-up/registering or using our Platform such as name, date of birth, address, telephone/mobile number, email ID and/or any such information shared as proof of identity or address.",
+        text: "We collect your personal data when you use our Platform, services or otherwise interact with us during the course of our relationship. Some of the information that we may collect includes but is not limited to personal information provided to us during sign-up/registering or using our Platform such as name, date of birth, address, telephone/mobile number, email ID, parent/guardian contact details, and documents shared as proof of identity or address.",
       },
       {
         type: "paragraph",
-        text: "Some of the sensitive personal data may be collected with your consent, such as your bank account or credit or debit card or other payment instrument information or biometric information such as your facial features or physiological information (in order to enable use of certain features when opted for, available on the Platform) etc., all of the above being in accordance with applicable law(s). You always have the option to not provide information, by choosing not to use a particular service or feature on the Platform.",
+        text: "Payment processing: Online payments on our platform are processed securely via our integration with Razorpay. During transactions, payment details like transaction IDs, payment method, and amount are shared. We do not store sensitive payment credentials such as credit card numbers, debit card numbers, or net banking passwords on our servers.",
       },
       {
         type: "paragraph",
-        text: "We may track your behaviour, preferences, and other information that you choose to provide on our Platform. This information is compiled and analysed on an aggregated basis. We will also collect your information related to your transactions on Platform and such third-party business partner platforms. When such a third-party business partner collects your personal data directly from you, you will be governed by their privacy policies. We shall not be responsible for the third-party business partner's privacy practices or the content of their privacy policies, and we request you to read their privacy policies prior to disclosing any information.",
+        text: "We may track your behaviour, preferences, and other information that you choose to provide on our Platform. This information is compiled and analysed on an aggregated basis. We will also collect your information related to your transactions on Platform and such third-party business partner platforms.",
       },
       {
         type: "notice",
-        text: "If you receive an email or a call from a person/association claiming to be Sri Adithya Hostels seeking personal data like debit/credit card PIN, net-banking or mobile banking password, never provide such information. Report any such incident immediately to an appropriate law enforcement agency.",
+        text: "If you receive an email or a call from a person/association claiming to be Sri Adithya Boys Hostel seeking personal data like debit/credit card PIN, net-banking or mobile banking password, never provide such information. Report any such incident immediately to an appropriate law enforcement agency.",
       },
       {
         type: "subheading",
-        text: "Usage",
+        text: "Usage of Personal Data",
       },
       {
         type: "paragraph",
-        text: "We use personal data to provide the services you request. To the extent we use your personal data to market to you, we will provide you the ability to opt-out of such uses. We use your personal data to assist sellers and business partners in handling and fulfilling orders; enhancing customer experience; to resolve disputes; troubleshoot problems; inform you about online and offline offers, products, services, and updates; customise your experience; detect and protect us against error, fraud and other criminal activity; enforce our terms and conditions; conduct marketing research, analysis and surveys; and as otherwise described to you at the time of collection of information. You understand that your access to these products/services may be affected in the event permission is not provided to us.",
+        text: "We use personal data to provide the services you request. We use your personal data to handle tenant admissions, manage allocations, process rent and late fee calculations, handle secure payments, resolve disputes, troubleshoot problems, customize your experience, detect and protect us against error, fraud and other criminal activity, and enforce our terms and conditions.",
       },
       {
         type: "subheading",
-        text: "Sharing",
+        text: "Sharing of Information",
       },
       {
         type: "paragraph",
-        text: "We may share your personal data internally within our group entities, our other corporate entities, and affiliates to provide you access to the services and products offered by them. These entities and affiliates may market to you as a result of such sharing unless you explicitly opt-out.",
+        text: "We may share your personal data internally within our group entities, our other corporate entities, and affiliates to provide you access to the services and products offered by them.",
       },
       {
         type: "paragraph",
-        text: "We may disclose personal data to third parties such as sellers, business partners, third party service providers including logistics partners, prepaid payment instrument issuers, third-party reward programs and other payment opted by you. These disclosures may be required for us to provide you access to our services and products offered to you, to comply with our legal obligations, to enforce our user agreement, to facilitate our marketing and advertising activities, to prevent, detect, mitigate, and investigate fraudulent or illegal activities related to our services.",
+        text: "We may disclose personal data to third parties such as payment gateways (Razorpay), business partners, or third party service providers. These disclosures are required for us to provide you access to our services, to comply with our legal obligations, to enforce our user agreement, and to prevent, detect, mitigate, and investigate fraudulent or illegal activities related to our services.",
       },
       {
         type: "paragraph",
-        text: "We may disclose personal and sensitive personal data to government agencies or other authorised law enforcement agencies if required to do so by law or in the good faith belief that such disclosure is reasonably necessary to respond to subpoenas, court orders, or other legal process. We may disclose personal data to law enforcement offices, third party rights owners, or others in the good faith belief that such disclosure is reasonably necessary to: enforce our Terms of Use or Privacy Policy; respond to claims that an advertisement, posting or other content violates the rights of a third party; or protect the rights, property or personal safety of our users or the general public.",
+        text: "We may disclose personal and sensitive personal data to government agencies or other authorised law enforcement agencies if required to do so by law or in the good faith belief that such disclosure is reasonably necessary to respond to subpoenas, court orders, or other legal process.",
       },
       {
         type: "subheading",
@@ -167,7 +183,7 @@ export const legalSections = [
       },
       {
         type: "paragraph",
-        text: "To protect your personal data from unauthorised access or disclosure, loss or misuse we adopt reasonable security practices and procedures. Once your information is in our possession or whenever you access your account information, we adhere to our security guidelines to protect it against unauthorised access and offer the use of a secure server. However, the transmission of information is not completely secure for reasons beyond our control. By using the Platform, the users accept the security implications of data transmission over the internet and the World Wide Web which cannot always be guaranteed as completely secure, and therefore, there would always remain certain inherent risks regarding use of the Platform. Users are responsible for ensuring the protection of login and password records for their account.",
+        text: "To protect your personal data from unauthorised access or disclosure, loss or misuse we adopt reasonable security practices and procedures. Once your information is in our possession or whenever you access your account information, we adhere to our security guidelines to protect it against unauthorised access. However, the transmission of information is not completely secure for reasons beyond our control. By using the Platform, the users accept the security implications of data transmission over the internet. Users are responsible for ensuring the protection of login and password records for their account.",
       },
       {
         type: "subheading",
@@ -175,19 +191,11 @@ export const legalSections = [
       },
       {
         type: "paragraph",
-        text: "You have an option to delete your account by visiting your profile and settings on our Platform; this action would result in you losing all information related to your account. You may also write to us at the contact information provided below to assist you with these requests. We may in the event of any pending grievance, claims, pending shipments or any other services, refuse or delay deletion of the account. Once the account is deleted, you will lose access to the account.",
+        text: "You have an option to request the deletion of your account. Please write to us at the contact information provided below to assist you with these requests. We may refuse or delay deletion in the event of any pending grievance, outstanding payments, or active residency agreement obligations. Once the account is deleted, you will lose access to the account.",
       },
       {
         type: "paragraph",
-        text: "We retain your personal data information for a period no longer than is required for the purpose for which it was collected or as required under any applicable law. However, we may retain data related to you if we believe it may be necessary to prevent fraud or future abuse or for other legitimate purposes. We may continue to retain your data in anonymised form for analytical and research purposes.",
-      },
-      {
-        type: "subheading",
-        text: "Your Rights",
-      },
-      {
-        type: "paragraph",
-        text: "You may access, rectify, and update your personal data directly through the functionalities provided on the Platform.",
+        text: "We retain your personal data for a period no longer than is required for the purpose for which it was collected or as required under any applicable law (such as financial records retention).",
       },
       {
         type: "subheading",
@@ -195,31 +203,35 @@ export const legalSections = [
       },
       {
         type: "paragraph",
-        text: "By visiting our Platform or by providing your information, you consent to the collection, use, storage, disclosure and otherwise processing of your information on the Platform in accordance with this Privacy Policy. If you disclose to us any personal data relating to other people, you represent that you have the authority to do so and permit us to use the information in accordance with this Privacy Policy.",
+        text: "By visiting our Platform or by providing your information, you consent to the collection, use, storage, disclosure and otherwise processing of your information on the Platform in accordance with this Privacy Policy. If you disclose to us any personal data relating to other people, you represent that you have the authority to do so.",
       },
       {
         type: "paragraph",
-        text: "You, while providing your personal data over the Platform or any partner platforms or establishments, consent to us (including our other corporate entities, affiliates, lending partners, technology partners, marketing channels, business partners and other third parties) to contact you through SMS, instant messaging apps, call and/or e-mail for the purposes specified in this Privacy Policy.",
-      },
-      {
-        type: "paragraph",
-        text: "You have an option to withdraw your consent that you have already provided by writing to the Grievance Officer at the contact information provided below. Please mention \"Withdrawal of consent for processing personal data\" in your subject line of your communication. We may verify such requests before acting on our request. However, please note that your withdrawal of consent will not be retrospective and will be in accordance with the Terms of Use, this Privacy Policy, and applicable laws. In the event you withdraw consent given to us under this Privacy Policy, we reserve the right to restrict or deny the provision of our services for which we consider such information to be necessary.",
+        text: "You, while providing your personal data over the Platform or any partner platforms, consent to us contacting you through SMS, instant messaging apps (WhatsApp), call and/or e-mail for the purposes specified in this Privacy Policy.",
       },
     ],
   },
   {
     id: "refund",
-    title: "Refund Policy",
-    subtitle: "Our policy regarding payments and refunds.",
-    lastUpdated: "May 2026",
+    title: "Refund & Cancellation Policy",
+    subtitle: "Our policy regarding payments, deposits, and refunds.",
+    lastUpdated: "June 2026",
     content: [
       {
-        type: "notice",
-        text: "We do not provide any kind of refund once a payment has been made.",
+        type: "paragraph",
+        text: "All payments made to Sri Adithya Boys Hostel for rent, admission fees, or advance security deposits are generally non-refundable once credited toward accommodation obligations.",
       },
       {
         type: "paragraph",
-        text: "All payments made on the Platform are final and non-refundable. Please ensure you review your subscription plan and any charges before completing a payment. If you have any concerns regarding a charge, please contact our support team using the details below.",
+        text: "In the event of accidental or duplicate transactions made during the online payment process, tenants may request a review by presenting transaction receipts and payment details to the hostel management.",
+      },
+      {
+        type: "paragraph",
+        text: "If a refund is approved by the management after verification of the claim, the refund amount will be credited back to the original bank account or payment method within 7 to 10 business days.",
+      },
+      {
+        type: "paragraph",
+        text: "Cancellation of admissions or booking reservations must be submitted in writing. The refundability of any initial token deposit is subject to the terms of the individual reservation agreement, and hostel management reserves final review and approval rights.",
       },
       {
         type: "subheading",
@@ -236,6 +248,55 @@ export const legalSections = [
     ],
   },
   {
+    id: "shipping",
+    title: "Shipping & Delivery Policy",
+    subtitle: "Information regarding digital service delivery.",
+    lastUpdated: "June 2026",
+    content: [
+      {
+        type: "paragraph",
+        text: "Sri Adithya Boys Hostel provides student and working professional accommodation services. No physical products are shipped or delivered as part of our operations.",
+      },
+      {
+        type: "paragraph",
+        text: "All services are provided digitally through our online hostel management platform. Payment confirmations, fee receipts, digital check-ins, and hostel residency agreements are generated digitally and delivered via email or inside the tenant portal.",
+      },
+      {
+        type: "paragraph",
+        text: "Access to the hostel rooms and associated physical amenities (such as Wi-Fi, dining, and laundry) becomes active and available immediately after successful tenant onboarding, verification, agreement execution, and payment confirmation.",
+      },
+    ],
+  },
+  {
+    id: "contact",
+    title: "Contact Us",
+    subtitle: "Grievance redressal and business contact details.",
+    lastUpdated: "June 2026",
+    content: [
+      {
+        type: "paragraph",
+        text: "If you have any questions about our services, admissions, billing, or if you wish to report a grievance, please contact us using the details below:",
+      },
+      {
+        type: "subheading",
+        text: "Customer Support & Grievances",
+      },
+      {
+        type: "contact_list",
+        items: [
+          { label: "Customer Support", value: "Chidiri Shiva Prakash" },
+          { label: "Grievance Officer", value: "Chidiri Shiva Prakash" },
+          { label: "Business Email", value: "sriadithyahostels@gmail.com" },
+          { label: "Grievance Email", value: "spchidiri2006@gmail.com" },
+          { label: "Mobile", value: "+91 9392433422" },
+          { label: "Support Mobile", value: "+91 7901070333" },
+          { label: "Grievance Phone", value: "+91 8008046952" },
+          { label: "Registered Office", value: "Sri Adithya Boys Hostel, FM37+P3V, Yamnampet, Secunderabad, Telangana 501301" },
+        ],
+      },
+    ],
+  },
+  {
     id: "data-deletion",
     title: "Data Deletion Instructions",
     subtitle: "How to request the deletion of your account and personal data.",
@@ -243,7 +304,7 @@ export const legalSections = [
     content: [
       {
         type: "paragraph",
-        text: "Sri Adithya Hostels is committed to protecting your privacy and ensuring transparency regarding your personal data. If you have used our platform, registered an account, or logged in using Meta (Facebook/WhatsApp) services, you have the right to request the deletion of your data in accordance with applicable policies.",
+        text: "Sri Adithya Boys Hostel is committed to protecting your privacy and ensuring transparency regarding your personal data. If you have used our platform, registered an account, or logged in, you have the right to request the deletion of your data in accordance with applicable policies.",
       },
       {
         type: "subheading",
@@ -255,7 +316,7 @@ export const legalSections = [
       },
       {
         type: "paragraph",
-        text: "1. Self-Service Deletion: Log in to your Sri Adithya Hostels account, go to Profile/Settings, and click on 'Delete Account'. Please note that this action is permanent and cannot be undone.",
+        text: "1. Self-Service Deletion: Log in to your Sri Adithya Boys Hostel account, go to Profile/Settings, and click on 'Delete Account'. Please note that this action is permanent and cannot be undone.",
       },
       {
         type: "paragraph",
@@ -267,7 +328,7 @@ export const legalSections = [
       },
       {
         type: "paragraph",
-        text: "Upon receiving your request, we will verify your identity and delete your personal data within 30 business days. Once deleted, you will lose access to all associated portals and services, and a confirmation email will be dispatched to your registered address.",
+        text: "Upon receiving your request, we will verify your identity and delete your personal data within 30 business days. Once deleted, you will lose access to all associated portals and services.",
       },
       {
         type: "subheading",
@@ -275,7 +336,7 @@ export const legalSections = [
       },
       {
         type: "paragraph",
-        text: "Please note that we may retain certain records (such as transaction receipts and legally binding residency agreements) where we are required to do so by law, to resolve pending payment disputes, or to comply with active audit requirements under Indian laws.",
+        text: "Please note that we may retain certain records (such as transaction receipts, invoices, and legally binding residency agreements) where we are required to do so by law, to resolve pending payment disputes, or to comply with active audit requirements under Indian laws.",
       },
       {
         type: "subheading",
@@ -291,4 +352,4 @@ export const legalSections = [
       },
     ],
   },
-]
+];

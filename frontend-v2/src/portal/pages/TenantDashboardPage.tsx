@@ -45,7 +45,7 @@ export function TenantDashboardPage() {
   const status = String(tenant?.status ?? profile?.status ?? 'ACTIVE');
   const displayStatus = status === 'ACTIVE' ? resStatus : status;
   const roomNo = profile?.room?.room_no ?? profile?.room_no ?? null;
-  const hostelName = String(hostel?.name ?? 'Sri Adithya Hostels');
+  const hostelName = String(hostel?.name ?? 'Sri Adithya Boys Hostel');
   const hostelLogo = String(hostel?.logo_url ?? '');
   const hostelLocation = [hostel?.city, hostel?.state].filter(Boolean).join(', ');
   const profileDocs = (profile?.documents ?? documents) as unknown[] | undefined;

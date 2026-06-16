@@ -225,7 +225,7 @@ export class BillingTimelineService {
       due_date: entry.created_at,
       status: "PAID",
       state: "paid",
-      payment_method: entry.reference_type === "PAYMENT_ATTEMPT" ? "PHONEPE" : "OFFLINE",
+      payment_method: entry.reference_type === "PAYMENT_ATTEMPT" ? "RAZORPAY" : "OFFLINE",
       reference_number: entry.reference_id,
       notes: entry.notes,
     }));

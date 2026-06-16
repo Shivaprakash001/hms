@@ -2,7 +2,7 @@ import { StructureBuilder } from 'sanity/structure'
 
 export const structure = (S: StructureBuilder) =>
   S.list()
-    .title('Sri Adithya Hostels')
+    .title('Sri Adithya Boys Hostel')
     .items([
       S.listItem()
         .title('⚙️ Site Settings')
