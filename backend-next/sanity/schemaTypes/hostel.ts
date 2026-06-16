@@ -226,6 +226,79 @@ export const hostel = defineType({
         }
       ]
     }),
+    defineField({
+      name: 'tourVideos',
+      title: 'Tour Videos',
+      type: 'array',
+      description: 'Tour videos for room, common area, and dining sections.',
+      of: [
+        {
+          type: 'object',
+          name: 'tourVideo',
+          title: 'Tour Video',
+          fields: [
+            {
+              name: 'id',
+              title: 'Section Identifier',
+              type: 'string',
+              description: 'Matches the video tab ID (e.g., common, room, dining)',
+              options: {
+                list: [
+                  { title: 'Common Area', value: 'common' },
+                  { title: 'Room', value: 'room' },
+                  { title: 'Dining', value: 'dining' },
+                ],
+              },
+              validation: Rule => Rule.required(),
+            },
+            {
+              name: 'label',
+              title: 'Tab Label',
+              type: 'string',
+              description: 'Display name on the tab button (e.g., Common Tour, Room Tour, Dining Area)',
+              validation: Rule => Rule.required(),
+            },
+            {
+              name: 'videoUrl',
+              title: 'External Video URL',
+              type: 'url',
+              description: 'Link to an externally hosted MP4 video (Alternative to direct upload)',
+            },
+            {
+              name: 'videoFile',
+              title: 'Direct Video File Upload',
+              type: 'file',
+              description: 'Direct MP4 video file upload (Recommended)',
+              options: {
+                accept: 'video/mp4',
+              },
+            },
+            {
+              name: 'icon',
+              title: 'Icon Type',
+              type: 'string',
+              options: {
+                list: [
+                  { title: 'Building (Common Area)', value: 'building' },
+                  { title: 'Bed (Room)', value: 'bed' },
+                  { title: 'Utensils (Dining)', value: 'utensils' },
+                  { title: 'TV (Entertainment)', value: 'tv' },
+                  { title: 'WiFi (Internet)', value: 'wifi' },
+                  { title: 'Security (CCTV)', value: 'security' },
+                ],
+              },
+              validation: Rule => Rule.required(),
+            },
+          ],
+          preview: {
+            select: {
+              title: 'label',
+              subtitle: 'id',
+            },
+          },
+        },
+      ],
+    }),
   ],
   preview: {
     select: { title: 'name', subtitle: 'bedsAvailable' },

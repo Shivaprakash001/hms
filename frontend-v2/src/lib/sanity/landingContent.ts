@@ -166,16 +166,16 @@ export const fallbackLandingContent: LandingMarketingContent = {
     ],
     tourVideos: [
       {
-        id: 'room',
-        label: 'Room',
-        url: 'https://www.w3schools.com/html/mov_bbb.mp4',
-        icon: 'bed',
-      },
-      {
         id: 'common',
-        label: 'Common',
+        label: 'Common Area',
         url: 'https://media.w3.org/2010/05/sintel/trailer_hd.mp4',
         icon: 'building',
+      },
+      {
+        id: 'room',
+        label: 'Room Tour',
+        url: 'https://www.w3schools.com/html/mov_bbb.mp4',
+        icon: 'bed',
       },
       {
         id: 'dining',

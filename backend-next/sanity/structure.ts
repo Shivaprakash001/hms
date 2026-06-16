@@ -20,9 +20,12 @@ export const structure = (S: StructureBuilder) =>
         ),
       S.divider(),
       S.listItem()
-        .title('🏠 Hostels (Operational)')
+        .title('🏠 Hostel (Operational)')
         .child(
-          S.documentTypeList('hostel').title('Hostels (Operational)')
+          S.document()
+            .schemaType('hostel')
+            .documentId('hostel-1')
+            .title('Hostel (Operational)')
         ),
       S.listItem()
         .title('⭐ Testimonials')

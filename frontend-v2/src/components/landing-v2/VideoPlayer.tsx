@@ -20,16 +20,16 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
 
 const FALLBACK_VIDEOS: TourVideo[] = [
   {
-    id: 'room',
-    label: 'Room',
-    url: 'https://www.w3schools.com/html/mov_bbb.mp4',
-    icon: Bed,
-  },
-  {
     id: 'common',
-    label: 'Common',
+    label: 'Common Area',
     url: 'https://media.w3.org/2010/05/sintel/trailer_hd.mp4',
     icon: Building2,
+  },
+  {
+    id: 'room',
+    label: 'Room Tour',
+    url: 'https://www.w3schools.com/html/mov_bbb.mp4',
+    icon: Bed,
   },
   {
     id: 'dining',

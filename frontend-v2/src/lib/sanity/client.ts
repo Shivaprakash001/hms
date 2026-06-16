@@ -47,6 +47,13 @@ const landingQuery = `{
     roomTypesImages[] {
       roomType,
       "image": image { "url": asset->url, alt }
+    },
+    tourVideos[] {
+      id,
+      label,
+      videoUrl,
+      "videoFileUrl": videoFile.asset->url,
+      icon
     }
   },
   "siteSettings": *[_type == "siteSettings"][0]{
@@ -172,7 +179,14 @@ function mergeLandingContent(result: any): LandingMarketingContent {
       highlights: h?.heroHighlights || fallbackLandingContent.hero.highlights,
       ownerImage: hasImage(s?.ownerPhoto) ? s.ownerPhoto : undefined,
       carouselImages: h?.gallery && h.gallery.length > 0 ? h.gallery : fallbackLandingContent.hero.carouselImages,
-      tourVideos: fallbackLandingContent.hero.tourVideos,
+      tourVideos: h?.tourVideos && h.tourVideos.length > 0
+        ? h.tourVideos.map((v: any) => ({
+            id: v.id,
+            label: v.label,
+            url: v.videoFileUrl || v.videoUrl || '',
+            icon: v.icon,
+          }))
+        : fallbackLandingContent.hero.tourVideos,
     },
     announcements: activeAnnouncements(s?.announcements),
     features: compactFeatures(h?.features || fallbackLandingContent.features),

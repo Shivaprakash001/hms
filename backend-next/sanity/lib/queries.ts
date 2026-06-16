@@ -81,6 +81,13 @@ export const LANDING_HOSTEL_QUERY = `
     roomTypesImages[] {
       roomType,
       image
+    },
+    tourVideos[] {
+      id,
+      label,
+      videoUrl,
+      "videoFileUrl": videoFile.asset->url,
+      icon
     }
   }
 `
@@ -130,6 +137,13 @@ export const ACTIVE_HOSTEL_QUERY = `
     roomTypesImages[] {
       roomType,
       image
+    },
+    tourVideos[] {
+      id,
+      label,
+      videoUrl,
+      "videoFileUrl": videoFile.asset->url,
+      icon
     }
   }
 `
