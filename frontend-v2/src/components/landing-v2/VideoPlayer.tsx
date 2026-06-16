@@ -63,8 +63,9 @@ export function VideoPlayer({ videos }: VideoPlayerProps) {
     }
   }, [videos]);
 
-  const [isPlaying, setIsPlaying] = useState<boolean>(true);
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [progress, setProgress] = useState<number>(0);
   const [currentTime, setCurrentTime] = useState<string>('0:00');
   const [duration, setDuration] = useState<string>('0:00');
@@ -79,11 +80,22 @@ export function VideoPlayer({ videos }: VideoPlayerProps) {
   // AutoPlay / Reset state on tab change
   useEffect(() => {
     if (videoRef.current && activeVideo?.url) {
+      setIsLoading(true);
+      // Explicitly set muted property on DOM node to prevent autoplay failure
+      videoRef.current.muted = isMuted;
       videoRef.current.load();
       videoRef.current.play()
-        .then(() => setIsPlaying(true))
-        .catch(() => setIsPlaying(false));
+        .then(() => {
+          setIsPlaying(true);
+          setIsLoading(false);
+        })
+        .catch((err) => {
+          console.warn("Autoplay was blocked or failed:", err);
+          setIsPlaying(false);
+          setIsLoading(false);
+        });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, activeVideo?.url]);
 
   // Handle pointer/mouse movement to show/hide controls
@@ -205,6 +217,7 @@ export function VideoPlayer({ videos }: VideoPlayerProps) {
         onClick={togglePlay}
       >
         <video
+          key={activeVideo.url}
           ref={videoRef}
           src={activeVideo.url}
           className="w-full h-full object-cover"
@@ -212,16 +225,30 @@ export function VideoPlayer({ videos }: VideoPlayerProps) {
           muted={isMuted}
           loop
           playsInline
-          preload="metadata"
+          preload="auto"
           onTimeUpdate={handleTimeUpdate}
           onLoadedMetadata={handleLoadedMetadata}
+          onWaiting={() => setIsLoading(true)}
+          onPlaying={() => setIsLoading(false)}
+          onCanPlay={() => setIsLoading(false)}
+          onError={() => setIsLoading(false)}
         />
+
+        {/* Glassmorphic Loading Spinner */}
+        {isLoading && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 backdrop-blur-sm z-10 pointer-events-none transition-all duration-300">
+            <div className="w-12 h-12 border-4 border-white/20 border-t-[#F07B1D] rounded-full animate-spin mb-3" />
+            <span className="text-white text-xs font-semibold tracking-wider uppercase bg-black/40 px-3.5 py-1.5 rounded-full border border-white/10 backdrop-blur-md">
+              Loading Tour Video...
+            </span>
+          </div>
+        )}
 
         {/* Video Overlay Darkener (Top & Bottom gradients) */}
         <div className={`absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/30 transition-opacity duration-300 pointer-events-none ${showControls ? 'opacity-100' : 'opacity-0'}`} />
 
         {/* Big Glassmorphic Play button when Paused */}
-        {!isPlaying && (
+        {!isPlaying && !isLoading && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-md border border-white/30 flex items-center justify-center animate-pulse shadow-lg">
               <Play className="w-8 h-8 text-white fill-current translate-x-0.5" />

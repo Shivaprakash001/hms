@@ -6,6 +6,7 @@ import { AlertCircle, Phone, CheckCircle, Building2, CreditCard, ChevronDown, Fi
 import { ownerService } from '@features/owners/api';
 import { paymentService } from '@features/payments/api';
 import { tenantService } from '@features/tenants/api';
+import { moveOutService } from '@features/move-out/api';
 import { queryKeys } from '@lib/queryKeys';
 import { RecordPaymentModal } from '../modals/RecordPaymentModal';
 
@@ -55,7 +56,7 @@ export function AlertsView() {
   const [selectedHostelId, setSelectedHostelId] = useState<string | null>(null);
   const [showHostelPicker, setShowHostelPicker] = useState(false);
   const [recordPayment, setRecordPayment] = useState<{ hostelId: string; dueId?: string; amount?: string } | null>(null);
-  const [activeFilter, setActiveFilter] = useState<'all' | 'overdue' | 'upcoming' | 'docs' | 'payments'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'overdue' | 'upcoming' | 'docs' | 'payments' | 'move-out'>('all');
 
   const { data: hostelsData } = useQuery({
     queryKey: queryKeys.owner.hostels(),
@@ -109,6 +110,7 @@ export function AlertsView() {
     },
   });
 
+
   const billingRequests: Record<string, any>[] = Array.isArray(billingRequestsData)
     ? billingRequestsData
     : Array.isArray(billingRequestsData?.requests)
@@ -122,6 +124,22 @@ export function AlertsView() {
     staleTime: 60 * 1000,
     refetchOnWindowFocus: true,
   });
+
+  const { data: moveOutData } = useQuery({
+    queryKey: queryKeys.moveOut.list(activeHostelId ?? 'none'),
+    queryFn: () => moveOutService.listRequests(activeHostelId || ''),
+    enabled: !!activeHostelId,
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: true,
+  });
+
+  const moveOutRequests: Record<string, any>[] = Array.isArray(moveOutData?.requests)
+    ? moveOutData.requests
+    : [];
+
+  const activeMoveOutRequests = moveOutRequests.filter(
+    (req) => req.status !== 'COMPLETED' && req.status !== 'REJECTED' && req.status !== 'CANCELLED'
+  );
 
   const confirmPaymentMutation = useMutation({
     mutationFn: (attemptId: string) => paymentService.confirmPayment(attemptId),
@@ -178,14 +196,181 @@ export function AlertsView() {
 
   const overdueList = sortedDues.filter((d) => d.due_date && new Date(String(d.due_date)).getTime() < now);
   const pendingList = sortedDues.filter((d) => !d.due_date || new Date(String(d.due_date)).getTime() >= now);
+
+  // Group overdue rent by tenant
+  const groupedOverdueMap: Record<string, any> = {};
+  for (const due of overdueList) {
+    const tId = firstNonEmptyString(due.tenant_id, due.tenantId);
+    if (!tId) continue;
+    const amount = dueBalance(due);
+    if (amount <= 0) continue;
+
+    if (!groupedOverdueMap[tId]) {
+      groupedOverdueMap[tId] = {
+        tenant_id: tId,
+        tenant_name: String(due.tenant_name ?? due.name ?? 'Tenant'),
+        room_no: String(due.room_no ?? due.room_number ?? 'N/A'),
+        tenant_phone: String(due.phone ?? due.tenant_phone ?? due.tenantPhone ?? ''),
+        photo_url: due.photo_url,
+        avatar: due.avatar,
+        tenant_avatar: due.tenant_avatar,
+        tenant_avatar_url: due.tenant_avatar_url,
+        avatar_url: due.avatar_url,
+        total_amount: 0,
+        oldest_due_date: due.due_date ? String(due.due_date) : '',
+        dues_count: 0,
+        oldest_due_id: String(due.obligation_id ?? due.id ?? ''),
+        dues: [],
+      };
+    }
+
+    const entry = groupedOverdueMap[tId];
+    entry.total_amount += amount;
+    entry.dues_count += 1;
+    entry.dues.push(due);
+
+    if (due.due_date && entry.oldest_due_date) {
+      if (new Date(String(due.due_date)).getTime() < new Date(entry.oldest_due_date).getTime()) {
+        entry.oldest_due_date = String(due.due_date);
+        entry.oldest_due_id = String(due.obligation_id ?? due.id ?? '');
+      }
+    } else if (due.due_date) {
+      entry.oldest_due_date = String(due.due_date);
+      entry.oldest_due_id = String(due.obligation_id ?? due.id ?? '');
+    }
+  }
+  const groupedOverdueList = Object.values(groupedOverdueMap);
+
+  // Group pending dues (Upcoming Rent) by tenant
+  const groupedPendingMap: Record<string, any> = {};
+  for (const due of pendingList) {
+    const tId = firstNonEmptyString(due.tenant_id, due.tenantId);
+    if (!tId) continue;
+    const amount = dueBalance(due);
+    if (amount <= 0) continue;
+
+    if (!groupedPendingMap[tId]) {
+      groupedPendingMap[tId] = {
+        tenant_id: tId,
+        tenant_name: String(due.tenant_name ?? due.name ?? 'Tenant'),
+        room_no: String(due.room_no ?? due.room_number ?? 'N/A'),
+        tenant_phone: String(due.phone ?? due.tenant_phone ?? due.tenantPhone ?? ''),
+        photo_url: due.photo_url,
+        avatar: due.avatar,
+        tenant_avatar: due.tenant_avatar,
+        tenant_avatar_url: due.tenant_avatar_url,
+        avatar_url: due.avatar_url,
+        total_amount: 0,
+        soonest_due_date: due.due_date ? String(due.due_date) : '',
+        dues_count: 0,
+        soonest_due_id: String(due.obligation_id ?? due.id ?? ''),
+        dues: [],
+      };
+    }
+
+    const entry = groupedPendingMap[tId];
+    entry.total_amount += amount;
+    entry.dues_count += 1;
+    entry.dues.push(due);
+
+    if (due.due_date && entry.soonest_due_date) {
+      if (new Date(String(due.due_date)).getTime() < new Date(entry.soonest_due_date).getTime()) {
+        entry.soonest_due_date = String(due.due_date);
+        entry.soonest_due_id = String(due.obligation_id ?? due.id ?? '');
+      }
+    } else if (due.due_date) {
+      entry.soonest_due_date = String(due.due_date);
+      entry.soonest_due_id = String(due.obligation_id ?? due.id ?? '');
+    }
+  }
+  const groupedPendingList = Object.values(groupedPendingMap);
+
+  // Group pending payments by tenant
+  const groupedPaymentsMap: Record<string, any> = {};
+  for (const payment of pendingPayments) {
+    const tId = firstNonEmptyString(payment.tenant_id, payment.tenantId);
+    if (!tId) continue;
+
+    if (!groupedPaymentsMap[tId]) {
+      groupedPaymentsMap[tId] = {
+        tenant_id: tId,
+        tenant_name: payment.tenant_name || 'Tenant',
+        room_no: payment.room_no || 'N/A',
+        tenant_phone: payment.tenant_phone || '',
+        photo_url: payment.photo_url || payment.avatar || payment.tenant_avatar || payment.tenant_avatar_url || payment.avatar_url,
+        payments: [],
+      };
+    }
+    groupedPaymentsMap[tId].payments.push(payment);
+  }
+  const groupedPaymentsList = Object.values(groupedPaymentsMap);
+
+  // Group billing requests by tenant
+  const groupedBillingMap: Record<string, any> = {};
+  for (const req of billingRequests) {
+    const tId = firstNonEmptyString(req.tenant_id, req.tenantId, req.tenants?.id);
+    if (!tId) continue;
+
+    if (!groupedBillingMap[tId]) {
+      groupedBillingMap[tId] = {
+        tenant_id: tId,
+        tenant_name: req.tenants?.profiles?.name || 'Tenant',
+        room_no: req.room_no || 'N/A',
+        tenant_phone: req.tenants?.profiles?.phone || '',
+        requests: [],
+      };
+    }
+    groupedBillingMap[tId].requests.push(req);
+  }
+  const groupedBillingList = Object.values(groupedBillingMap);
+
+  // Group pending documents by tenant
+  const groupedDocsMap: Record<string, any> = {};
+  for (const doc of pendingDocs) {
+    const tId = firstNonEmptyString(doc.tenant_id, doc.tenantId, (doc.tenant as Record<string, unknown> | undefined)?.id);
+    if (!tId) continue;
+
+    if (!groupedDocsMap[tId]) {
+      groupedDocsMap[tId] = {
+        tenant_id: tId,
+        tenant_name: String(doc.tenant_name || 'Tenant'),
+        room_no: String(doc.room_no || 'N/A'),
+        tenant_phone: String(doc.tenant_phone || ''),
+        avatar_url: doc.photo_url ?? doc.avatar ?? doc.tenant_avatar ?? doc.tenant_avatar_url ?? doc.avatar_url,
+        documents: [],
+      };
+    }
+    groupedDocsMap[tId].documents.push(doc);
+  }
+  const groupedDocsList = Object.values(groupedDocsMap);
+
   const totalOverdueAmount = overdueList.reduce((sum, d) => sum + dueBalance(d), 0);
-  const actionsCount = overdueList.length + pendingPayments.length + billingRequests.length + pendingDocs.length;
+  const actionsCount =
+    groupedOverdueList.length +
+    groupedPaymentsList.length +
+    groupedBillingList.length +
+    groupedDocsList.length +
+    activeMoveOutRequests.length;
 
-  const showHighPriority = overdueList.length > 0 && (activeFilter === 'all' || activeFilter === 'overdue');
-  const showMediumPriority = (pendingPayments.length > 0 || billingRequests.length > 0) && (activeFilter === 'all' || activeFilter === 'payments');
-  const showLowPriority = (pendingDocs.length > 0 && (activeFilter === 'all' || activeFilter === 'docs')) || (pendingList.length > 0 && (activeFilter === 'all' || activeFilter === 'upcoming'));
+  const showHighPriority =
+    groupedOverdueList.length > 0 &&
+    (activeFilter === 'all' || activeFilter === 'overdue');
 
-  const hasData = overdueList.length > 0 || pendingList.length > 0 || pendingDocs.length > 0 || billingRequests.length > 0 || pendingPayments.length > 0;
+  const showMediumPriority =
+    (groupedPaymentsList.length > 0 || groupedBillingList.length > 0 || activeMoveOutRequests.length > 0) &&
+    (activeFilter === 'all' || activeFilter === 'payments' || activeFilter === 'move-out');
+
+  const showLowPriority =
+    (groupedDocsList.length > 0 && (activeFilter === 'all' || activeFilter === 'docs')) ||
+    (groupedPendingList.length > 0 && (activeFilter === 'all' || activeFilter === 'upcoming'));
+
+  const hasData =
+    groupedOverdueList.length > 0 ||
+    groupedPendingList.length > 0 ||
+    groupedDocsList.length > 0 ||
+    groupedBillingList.length > 0 ||
+    groupedPaymentsList.length > 0 ||
+    activeMoveOutRequests.length > 0;
 
   return (
     <div className="px-4 py-5 space-y-5 min-w-0">
@@ -242,7 +427,7 @@ export function AlertsView() {
             }`}
           >
             <span className="w-1.5 h-1.5 rounded-full bg-[#EF4444] shrink-0" style={{ display: activeFilter === 'overdue' ? 'none' : 'inline-block' }} />
-            Overdue {overdueList.length}
+            Overdue {groupedOverdueList.length}
           </button>
           <button
             onClick={() => setActiveFilter(activeFilter === 'upcoming' ? 'all' : 'upcoming')}
@@ -253,7 +438,7 @@ export function AlertsView() {
             }`}
           >
             <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B] shrink-0" style={{ display: activeFilter === 'upcoming' ? 'none' : 'inline-block' }} />
-            Upcoming {pendingList.length}
+            Upcoming {groupedPendingList.length}
           </button>
           <button
             onClick={() => setActiveFilter(activeFilter === 'docs' ? 'all' : 'docs')}
@@ -264,7 +449,7 @@ export function AlertsView() {
             }`}
           >
             <span className="w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0" style={{ display: activeFilter === 'docs' ? 'none' : 'inline-block' }} />
-            Docs {pendingDocs.length}
+            Docs {groupedDocsList.length}
           </button>
           <button
             onClick={() => setActiveFilter(activeFilter === 'payments' ? 'all' : 'payments')}
@@ -275,7 +460,18 @@ export function AlertsView() {
             }`}
           >
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0" style={{ display: activeFilter === 'payments' ? 'none' : 'inline-block' }} />
-            Payments {pendingPayments.length + billingRequests.length}
+            Payments {groupedPaymentsList.length + groupedBillingList.length}
+          </button>
+          <button
+            onClick={() => setActiveFilter(activeFilter === 'move-out' ? 'all' : 'move-out')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all shrink-0 ${
+              activeFilter === 'move-out'
+                ? 'bg-rose-600 text-white border-transparent shadow-sm'
+                : 'bg-rose-50 text-rose-600 border-rose-100 hover:bg-rose-100/50'
+            }`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-600 shrink-0" style={{ display: activeFilter === 'move-out' ? 'none' : 'inline-block' }} />
+            Move-outs {activeMoveOutRequests.length}
           </button>
         </div>
       )}
@@ -319,30 +515,40 @@ export function AlertsView() {
           <div className="flex items-center gap-2 border-b border-border pb-1">
             <span className="text-[10px] font-bold text-red-600 uppercase tracking-widest bg-red-50 px-2 py-0.5 rounded">High Priority</span>
           </div>
-          {overdueList.length > 0 && (activeFilter === 'all' || activeFilter === 'overdue') && (
+          {groupedOverdueList.length > 0 && (activeFilter === 'all' || activeFilter === 'overdue') && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold text-[#EF4444] uppercase tracking-wider flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#EF4444]" />
                   Overdue Rent
                 </h3>
-                <span className="text-[10px] bg-[#EF4444]/10 text-[#EF4444] px-1.5 py-0.5 rounded-md font-semibold">{overdueList.length}</span>
+                <span className="text-[10px] bg-[#EF4444]/10 text-[#EF4444] px-1.5 py-0.5 rounded-md font-semibold">{groupedOverdueList.length}</span>
               </div>
-              {overdueList.map((due, i) => (
-                <DueCard
-                  key={String(due.obligation_id ?? due.id ?? i)}
-                  due={due}
-                  isOverdue
-                  activeHostel={activeHostel}
-                  onRecordPayment={() =>
-                    activeHostelId && setRecordPayment({
-                      hostelId: activeHostelId,
-                      dueId: String(due.obligation_id ?? due.id ?? i),
-                      amount: String(dueBalance(due)),
-                    })
-                  }
-                />
-              ))}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {groupedOverdueList.map((gDue: any) => (
+                  <GroupedDueCard
+                    key={gDue.tenant_id}
+                    tenantId={gDue.tenant_id}
+                    tenantName={gDue.tenant_name}
+                    roomNo={gDue.room_no}
+                    tenantPhone={gDue.tenant_phone}
+                    avatarUrl={gDue.photo_url ?? gDue.avatar ?? gDue.tenant_avatar ?? gDue.tenant_avatar_url ?? gDue.avatar_url}
+                    totalAmount={gDue.total_amount}
+                    duesCount={gDue.dues_count}
+                    oldestDueDate={gDue.oldest_due_date}
+                    dues={gDue.dues}
+                    isOverdue={true}
+                    activeHostel={activeHostel}
+                    onRecordPayment={(dueId, amount) =>
+                      activeHostelId && setRecordPayment({
+                        hostelId: activeHostelId,
+                        dueId,
+                        amount,
+                      })
+                    }
+                  />
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -356,206 +562,86 @@ export function AlertsView() {
           </div>
 
           {/* Pending Payment Confirmation */}
-          {pendingPayments.length > 0 && (activeFilter === 'all' || activeFilter === 'payments') && (
+          {groupedPaymentsList.length > 0 && (activeFilter === 'all' || activeFilter === 'payments') && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                   Pending Payment Confirmation
                 </h3>
-                <span className="text-[10px] bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded-md font-semibold">{pendingPayments.length}</span>
+                <span className="text-[10px] bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded-md font-semibold">{groupedPaymentsList.length}</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {pendingPayments.map((payment) => {
-                  const attemptId = payment.attempt_id;
-                  const tenantName = payment.tenant_name || 'Tenant';
-                  const room = payment.room_no || 'N/A';
-                  const amount = payment.amount;
-                  const upiRef = payment.upi_reference || '—';
-                  const isAdvance = payment.payment_type === 'ADVANCE' || payment.flow_type === 'ADVANCE';
-                  const description = isAdvance ? 'Security Deposit' : `Rent for ${payment.rent_month || '—'}`;
-                  const hostelName = activeHostel ? String(activeHostel.name ?? '') : 'Sri Adithya Boys Hostel';
-
-                  const rawPhone = String(payment.tenant_phone || '');
-                  const telPhone = rawPhone ? rawPhone.replace(/[^\d+]/g, '') : null;
-                  let paymentWhatsappUrl = null;
-                  if (rawPhone) {
-                    let clean = rawPhone.replace(/[^\d]/g, '');
-                    if (clean.length === 10) {
-                      clean = '91' + clean;
+                {groupedPaymentsList.map((gPayment: any) => (
+                  <GroupedPaymentCard
+                    key={gPayment.tenant_id}
+                    tenantName={gPayment.tenant_name}
+                    roomNo={gPayment.room_no}
+                    tenantPhone={gPayment.tenant_phone}
+                    avatarUrl={gPayment.photo_url}
+                    payments={gPayment.payments}
+                    activeHostel={activeHostel}
+                    onConfirm={(attemptId) => confirmPaymentMutation.mutate(attemptId)}
+                    onReject={(attemptId) => rejectPaymentMutation.mutate(attemptId)}
+                    confirmPending={confirmPaymentMutation.isPending}
+                    rejectPending={rejectPaymentMutation.isPending}
+                    pendingAttemptId={
+                      confirmPaymentMutation.isPending
+                        ? String(confirmPaymentMutation.variables ?? '')
+                        : rejectPaymentMutation.isPending
+                        ? String(rejectPaymentMutation.variables ?? '')
+                        : null
                     }
-                    const message = `Hi ${tenantName}, this is regarding your rent payment of ${fmt(amount)} at ${hostelName}. I'm reviewing the UPI transaction reference ${upiRef}. Thank you!`;
-                    paymentWhatsappUrl = `https://wa.me/${clean}?text=${encodeURIComponent(message)}`;
-                  }
-
-                  return (
-                    <div key={attemptId} className="bg-card border border-emerald-100 hover:border-emerald-200 rounded-xl p-3 flex flex-col justify-between gap-3 shadow-sm hover:shadow-md transition-shadow">
-                      <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 font-bold text-sm">
-                          {tenantName.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2">
-                            <h4 className="font-semibold text-foreground truncate text-sm">{tenantName}</h4>
-                            <span className="text-xs text-muted-foreground shrink-0">Room {room}</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            Amount: <span className="font-bold text-foreground">{fmt(amount)}</span>
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            Type: <span className="font-semibold text-emerald-600">{description}</span>
-                          </p>
-                          {upiRef && (
-                            <div className="mt-2 bg-secondary/50 p-2 rounded-lg text-xs font-mono select-all flex items-center justify-between">
-                              <span className="text-muted-foreground">UPI Ref:</span>
-                              <span className="font-semibold text-foreground">{upiRef}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {telPhone && (
-                          <a
-                            href={`tel:${telPhone}`}
-                            className="w-9 h-9 flex items-center justify-center rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 active:scale-95 transition-all shrink-0"
-                          >
-                            <Phone className="w-4 h-4" />
-                          </a>
-                        )}
-                        {paymentWhatsappUrl && (
-                          <a
-                            href={paymentWhatsappUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="w-9 h-9 flex items-center justify-center rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-100 active:scale-95 transition-all shrink-0"
-                          >
-                            <WhatsAppIcon />
-                          </a>
-                        )}
-                        <button
-                          onClick={() => rejectPaymentMutation.mutate(attemptId)}
-                          disabled={rejectPaymentMutation.isPending || confirmPaymentMutation.isPending}
-                          className="flex-1 bg-secondary text-secondary-foreground py-2 rounded-lg text-xs font-semibold hover:bg-secondary/80 active:scale-98 transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
-                        >
-                          {rejectPaymentMutation.isPending && rejectPaymentMutation.variables === attemptId && (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          )}
-                          Reject
-                        </button>
-                        <button
-                          onClick={() => confirmPaymentMutation.mutate(attemptId)}
-                          disabled={confirmPaymentMutation.isPending || rejectPaymentMutation.isPending}
-                          className="flex-1 bg-accent text-accent-foreground py-2 rounded-lg text-xs font-semibold hover:opacity-90 active:scale-98 transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
-                        >
-                          {confirmPaymentMutation.isPending && confirmPaymentMutation.variables === attemptId && (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          )}
-                          Confirm
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+                  />
+                ))}
               </div>
             </div>
           )}
 
           {/* Billing Contract Requests */}
-          {billingRequests.length > 0 && (activeFilter === 'all' || activeFilter === 'payments') && (
+          {groupedBillingList.length > 0 && (activeFilter === 'all' || activeFilter === 'payments') && (
             <div className="space-y-3 mt-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold text-purple-600 uppercase tracking-wider flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
                   Billing Contract Requests
                 </h3>
-                <span className="text-[10px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded-md font-semibold">{billingRequests.length}</span>
+                <span className="text-[10px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded-md font-semibold">{groupedBillingList.length}</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {billingRequests.map((req) => {
-                  const reqId = req.id;
-                  const tenantName = req.tenants?.profiles?.name || 'Tenant';
-                  const requestedFrequency = String(req.requested_frequency).replaceAll('_', ' ');
-                  const currentFrequency = String(req.active_frequency || 'MONTHLY').replaceAll('_', ' ');
-                  const reason = req.reason ? String(req.reason) : 'No reason provided';
-                  const effectiveFrom = req.effective_from ? new Date(req.effective_from) : null;
-                  const hostelName = activeHostel ? String(activeHostel.name ?? '') : 'Sri Adithya Boys Hostel';
+                {groupedBillingList.map((gBilling: any) => (
+                  <GroupedBillingCard
+                    key={gBilling.tenant_id}
+                    tenantName={gBilling.tenant_name}
+                    roomNo={gBilling.room_no}
+                    tenantPhone={gBilling.tenant_phone}
+                    requests={gBilling.requests}
+                    activeHostel={activeHostel}
+                    onApprove={(id) => decisionMutation.mutate({ id, action: 'APPROVE' })}
+                    onReject={(id) => decisionMutation.mutate({ id, action: 'REJECT' })}
+                    pendingDecision={decisionMutation.isPending}
+                    pendingId={decisionMutation.isPending ? String(decisionMutation.variables?.id ?? '') : null}
+                    pendingAction={decisionMutation.isPending ? decisionMutation.variables?.action : null}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
 
-                  const rawPhone = String(req.tenants?.profiles?.phone || '');
-                  const telPhone = rawPhone ? rawPhone.replace(/[^\d+]/g, '') : null;
-                  let reqWhatsappUrl = null;
-                  if (rawPhone) {
-                    let clean = rawPhone.replace(/[^\d]/g, '');
-                    if (clean.length === 10) {
-                      clean = '91' + clean;
-                    }
-                    const message = `Hi ${tenantName}, this is regarding your billing frequency change request to ${requestedFrequency} at ${hostelName}. Let's chat about this!`;
-                    reqWhatsappUrl = `https://wa.me/${clean}?text=${encodeURIComponent(message)}`;
-                  }
-
-                  return (
-                    <div key={reqId} className="bg-card border border-purple-100 hover:border-purple-200 rounded-xl p-3 flex flex-col justify-between gap-3 shadow-sm hover:shadow-md transition-shadow">
-                      <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 font-bold text-sm">
-                          {tenantName.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-semibold text-foreground truncate text-sm">{tenantName}</h4>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            Requested: <span className="font-semibold text-purple-600">{requestedFrequency}</span> (from {currentFrequency})
-                          </p>
-                          {effectiveFrom && (
-                            <p className="text-[10px] text-muted-foreground mt-1">
-                              Effective: {effectiveFrom.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                            </p>
-                          )}
-                          <p className="text-xs text-muted-foreground bg-secondary/50 p-2 rounded-lg mt-2 italic">
-                            "{reason}"
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {telPhone && (
-                          <a
-                            href={`tel:${telPhone}`}
-                            className="w-9 h-9 flex items-center justify-center rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 active:scale-95 transition-all shrink-0"
-                          >
-                            <Phone className="w-4 h-4" />
-                          </a>
-                        )}
-                        {reqWhatsappUrl && (
-                          <a
-                            href={reqWhatsappUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="w-9 h-9 flex items-center justify-center rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-100 active:scale-95 transition-all shrink-0"
-                          >
-                            <WhatsAppIcon />
-                          </a>
-                        )}
-                        <button
-                          onClick={() => decisionMutation.mutate({ id: reqId, action: 'REJECT' })}
-                          disabled={decisionMutation.isPending}
-                          className="flex-1 bg-secondary text-secondary-foreground py-2 rounded-lg text-xs font-semibold hover:bg-secondary/80 active:scale-98 transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
-                        >
-                          {decisionMutation.isPending && decisionMutation.variables?.id === reqId && decisionMutation.variables?.action === 'REJECT' && (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          )}
-                          Reject
-                        </button>
-                        <button
-                          onClick={() => decisionMutation.mutate({ id: reqId, action: 'APPROVE' })}
-                          disabled={decisionMutation.isPending}
-                          className="flex-1 bg-accent text-accent-foreground py-2 rounded-lg text-xs font-semibold hover:opacity-90 active:scale-98 transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
-                        >
-                          {decisionMutation.isPending && decisionMutation.variables?.id === reqId && decisionMutation.variables?.action === 'APPROVE' && (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          )}
-                          Approve
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+          {/* Move-out Requests */}
+          {activeMoveOutRequests.length > 0 && (activeFilter === 'all' || activeFilter === 'move-out') && (
+            <div className="space-y-3 mt-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-rose-600 uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                  Move-out Requests
+                </h3>
+                <span className="text-[10px] bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded-md font-semibold">{activeMoveOutRequests.length}</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {activeMoveOutRequests.map((req) => (
+                  <MoveOutCard key={req.id} request={req} activeHostel={activeHostel} />
+                ))}
               </div>
             </div>
           )}
@@ -570,95 +656,32 @@ export function AlertsView() {
           </div>
 
           {/* Missing Documents */}
-          {pendingDocs.length > 0 && (activeFilter === 'all' || activeFilter === 'docs') && (
+          {groupedDocsList.length > 0 && (activeFilter === 'all' || activeFilter === 'docs') && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold text-blue-600 uppercase tracking-wider flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
                   Missing Documents
                 </h3>
-                <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-md font-semibold">{pendingDocs.length}</span>
+                <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-md font-semibold">{groupedDocsList.length}</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {pendingDocs.map((doc) => {
-                  const docId = firstNonEmptyString(doc.id);
-                  const tenantId = firstNonEmptyString(doc.tenant_id, doc.tenantId, (doc.tenant as Record<string, unknown> | undefined)?.id);
-                  const hostelId = firstNonEmptyString(doc.hostel_id, doc.hostelId, activeHostelId);
-                  const profilePath = tenantId && hostelId ? `/hostels/${hostelId}/tenants/${tenantId}?tab=documents` : '';
-                  const name = String(doc.tenant_name || 'Tenant');
-                  const docType = String(doc.doc_type || 'Document');
-                  const room = String(doc.room_no || 'N/A');
-                  const uploadedAt = doc.uploaded_at ? new Date(String(doc.uploaded_at)) : null;
-                  const avatarUrl = doc.photo_url ?? doc.avatar ?? doc.tenant_avatar ?? doc.tenant_avatar_url ?? doc.avatar_url;
-                  const hostelName = activeHostel ? String(activeHostel.name ?? '') : 'Sri Adithya Boys Hostel';
-
-                  const rawPhone = String(doc.tenant_phone || '');
-                  const telPhone = rawPhone ? rawPhone.replace(/[^\d+]/g, '') : null;
-                  let docWhatsappUrl = null;
-                  if (rawPhone) {
-                    let clean = rawPhone.replace(/[^\d]/g, '');
-                    if (clean.length === 10) {
-                      clean = '91' + clean;
-                    }
-                    const message = `Hi ${name}, this is a reminder to please upload your pending document (${docType}) for verification at ${hostelName}. Thank you!`;
-                    docWhatsappUrl = `https://wa.me/${clean}?text=${encodeURIComponent(message)}`;
-                  }
+                {groupedDocsList.map((gDocs: any) => {
+                  const firstDoc = gDocs.documents[0];
+                  const hostelId = firstNonEmptyString(firstDoc.hostel_id, firstDoc.hostelId, activeHostelId);
+                  const profilePath = gDocs.tenant_id && hostelId ? `/hostels/${hostelId}/tenants/${gDocs.tenant_id}?tab=documents` : '';
 
                   return (
-                    <div key={docId} className="bg-card border border-blue-100 hover:border-blue-200 rounded-xl p-3 flex flex-col justify-between gap-3 shadow-sm hover:shadow-md transition-shadow">
-                      <div className="flex items-start gap-3">
-                        {avatarUrl ? (
-                          <img src={String(avatarUrl)} alt={name} className="w-10 h-10 rounded-full object-cover shrink-0 border border-border" />
-                        ) : (
-                          <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 font-bold text-sm">
-                            {name.charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2">
-                            <h4 className="font-semibold text-foreground truncate text-sm">{name}</h4>
-                            <span className="text-xs text-muted-foreground shrink-0">Room {room}</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            Document: <span className="font-semibold text-blue-600">{docType}</span>
-                          </p>
-                          {uploadedAt && (
-                            <p className="text-[10px] text-muted-foreground mt-1">
-                              Uploaded {uploadedAt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {telPhone && (
-                          <a
-                            href={`tel:${telPhone}`}
-                            className="w-9 h-9 flex items-center justify-center rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 active:scale-95 transition-all shrink-0"
-                          >
-                            <Phone className="w-4 h-4" />
-                          </a>
-                        )}
-                        {docWhatsappUrl && (
-                          <a
-                            href={docWhatsappUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="w-9 h-9 flex items-center justify-center rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-100 active:scale-95 transition-all shrink-0"
-                          >
-                            <WhatsAppIcon />
-                          </a>
-                        )}
-                        {profilePath && (
-                          <Link
-                            to={profilePath}
-                            className="flex-1 bg-accent text-accent-foreground py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-98 transition-all"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                            Verify
-                          </Link>
-                        )}
-                      </div>
-                    </div>
+                    <GroupedDocsCard
+                      key={gDocs.tenant_id}
+                      tenantName={gDocs.tenant_name}
+                      roomNo={gDocs.room_no}
+                      tenantPhone={gDocs.tenant_phone}
+                      avatarUrl={gDocs.avatar_url}
+                      documents={gDocs.documents}
+                      activeHostel={activeHostel}
+                      profilePath={profilePath}
+                    />
                   );
                 })}
               </div>
@@ -666,30 +689,40 @@ export function AlertsView() {
           )}
 
           {/* Upcoming Rent */}
-          {pendingList.length > 0 && (activeFilter === 'all' || activeFilter === 'upcoming') && (
+          {groupedPendingList.length > 0 && (activeFilter === 'all' || activeFilter === 'upcoming') && (
             <div className="space-y-3 mt-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold text-[#F59E0B] uppercase tracking-wider flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B]" />
                   Upcoming Rent
                 </h3>
-                <span className="text-[10px] bg-[#F59E0B]/10 text-[#F59E0B] px-1.5 py-0.5 rounded-md font-semibold">{pendingList.length}</span>
+                <span className="text-[10px] bg-[#F59E0B]/10 text-[#F59E0B] px-1.5 py-0.5 rounded-md font-semibold">{groupedPendingList.length}</span>
               </div>
-              {pendingList.map((due, i) => (
-                <DueCard
-                  key={String(due.obligation_id ?? due.id ?? i)}
-                  due={due}
-                  isOverdue={false}
-                  activeHostel={activeHostel}
-                  onRecordPayment={() =>
-                    activeHostelId && setRecordPayment({
-                      hostelId: activeHostelId,
-                      dueId: String(due.obligation_id ?? due.id ?? i),
-                      amount: String(dueBalance(due)),
-                    })
-                  }
-                />
-              ))}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {groupedPendingList.map((gDue: any) => (
+                  <GroupedDueCard
+                    key={gDue.tenant_id}
+                    tenantId={gDue.tenant_id}
+                    tenantName={gDue.tenant_name}
+                    roomNo={gDue.room_no}
+                    tenantPhone={gDue.tenant_phone}
+                    avatarUrl={gDue.photo_url ?? gDue.avatar ?? gDue.tenant_avatar ?? gDue.tenant_avatar_url ?? gDue.avatar_url}
+                    totalAmount={gDue.total_amount}
+                    duesCount={gDue.dues_count}
+                    oldestDueDate={gDue.soonest_due_date}
+                    dues={gDue.dues}
+                    isOverdue={false}
+                    activeHostel={activeHostel}
+                    onRecordPayment={(dueId, amount) =>
+                      activeHostelId && setRecordPayment({
+                        hostelId: activeHostelId,
+                        dueId,
+                        amount,
+                      })
+                    }
+                  />
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -708,102 +741,724 @@ export function AlertsView() {
   );
 }
 
-interface DueCardProps {
-  due: Record<string, unknown>;
+interface GroupedDueCardProps {
+  tenantId: string;
+  tenantName: string;
+  roomNo: string;
+  tenantPhone: string;
+  avatarUrl?: string;
+  totalAmount: number;
+  duesCount: number;
+  oldestDueDate?: string;
+  dues: Record<string, any>[];
   isOverdue: boolean;
   activeHostel: Record<string, unknown> | undefined;
-  onRecordPayment: () => void;
+  onRecordPayment: (dueId: string, amount: string) => void;
 }
 
-function DueCard({ due, isOverdue, activeHostel, onRecordPayment }: DueCardProps) {
-  const amount = dueBalance(due);
-  const tenantName = String(due.tenant_name ?? due.name ?? 'Tenant');
-  const room = due.room_no ?? due.room_number;
-  const rawPhone = due.phone ?? due.tenant_phone ?? due.tenantPhone;
-  const phone = rawPhone ? String(rawPhone).trim() : null;
-  const telPhone = phone ? phone.replace(/[^\d+]/g, '') : null;
-  const avatarUrl = due.photo_url ?? due.avatar ?? due.tenant_avatar ?? due.tenant_avatar_url ?? due.avatar_url;
-
-  const days = isOverdue ? daysOverdue(due.due_date) : daysUntilDue(due.due_date);
-  const formattedDueDate = due.due_date
-    ? new Date(String(due.due_date)).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-    : '';
-
-  const urgencyLabel = isOverdue
-    ? (days > 0 ? `${days}d overdue (Due ${formattedDueDate})` : `Overdue (Due ${formattedDueDate})`)
-    : (days > 0 ? `Due in ${days}d (${formattedDueDate})` : `Due today (${formattedDueDate})`);
-
+function GroupedDueCard({
+  tenantId,
+  tenantName,
+  roomNo,
+  tenantPhone,
+  avatarUrl,
+  totalAmount,
+  duesCount,
+  oldestDueDate,
+  dues,
+  isOverdue,
+  activeHostel,
+  onRecordPayment,
+}: GroupedDueCardProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const telPhone = tenantPhone ? tenantPhone.replace(/[^\d+]/g, '') : null;
   const hostelName = activeHostel ? String(activeHostel.name ?? '') : 'Sri Adithya Boys Hostel';
+
   let whatsappUrl = null;
-  if (phone) {
-    let clean = phone.replace(/[^\d]/g, '');
+  if (tenantPhone) {
+    let clean = tenantPhone.replace(/[^\d]/g, '');
     if (clean.length === 10) {
       clean = '91' + clean;
     }
-    const message = `Hi ${tenantName}, this is a friendly reminder regarding your rent of ${fmt(amount)} at ${hostelName}. Please clear it at your earliest convenience or let us know if you've already paid. Thank you!`;
+    const message = `Hi ${tenantName}, this is a friendly reminder regarding your outstanding rent of ${fmt(totalAmount)} at ${hostelName}. Please clear it at your earliest convenience. Thank you!`;
+    whatsappUrl = `https://wa.me/${clean}?text=${encodeURIComponent(message)}`;
+  }
+
+  const formattedDate = oldestDueDate
+    ? new Date(oldestDueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+    : '';
+
+  const label = isOverdue
+    ? `Overdue (${duesCount} item${duesCount > 1 ? 's' : ''})`
+    : `Upcoming (${duesCount} item${duesCount > 1 ? 's' : ''})`;
+
+  return (
+    <div className={`bg-card border ${isOverdue ? 'border-red-100 hover:border-red-200' : 'border-amber-100 hover:border-amber-200'} rounded-xl p-3 flex flex-col gap-3 shadow-sm transition-all hover:shadow-md`}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          {avatarUrl ? (
+            <img src={avatarUrl} alt={tenantName} className="w-10 h-10 rounded-full object-cover shrink-0 border border-border" />
+          ) : (
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 font-bold text-sm ${isOverdue ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'}`}>
+              {tenantName.charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <h4 className="font-semibold text-foreground truncate text-sm">{tenantName}</h4>
+              <span className="text-xs text-muted-foreground shrink-0">· Room {roomNo}</span>
+            </div>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${isOverdue ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'}`}>
+                {label}
+              </span>
+              <span className="text-xs font-bold text-foreground">{fmt(totalAmount)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          {telPhone && (
+            <a
+              href={`tel:${telPhone}`}
+              aria-label={`Call ${tenantName}`}
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 active:scale-95 transition-all"
+            >
+              <Phone className="w-4 h-4" />
+            </a>
+          )}
+          {whatsappUrl && (
+            <a
+              href={whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`WhatsApp ${tenantName}`}
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-100 active:scale-95 transition-all"
+            >
+              <WhatsAppIcon />
+            </a>
+          )}
+          {dues.length > 1 && (
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 active:scale-95 transition-all"
+            >
+              <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+            </button>
+          )}
+          {dues.length === 1 && (
+            <button
+              onClick={() => onRecordPayment(String(dues[0].obligation_id ?? dues[0].id), String(dueBalance(dues[0])))}
+              aria-label="Record Payment"
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-accent text-accent-foreground shadow-sm hover:opacity-90 active:scale-95 transition-all"
+            >
+              <CreditCard className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {isExpanded && dues.length > 1 && (
+        <div className="mt-1 pt-2 border-t border-border space-y-2">
+          {dues.map((due, idx) => {
+            const dueId = String(due.obligation_id ?? due.id ?? idx);
+            const bal = dueBalance(due);
+            const dueDate = due.due_date ? new Date(String(due.due_date)).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A';
+            return (
+              <div key={dueId} className="flex items-center justify-between p-2 rounded-lg bg-secondary/30 text-xs">
+                <div>
+                  <p className="font-medium text-foreground">{due.description || 'Rent'}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Due {dueDate}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-foreground">{fmt(bal)}</span>
+                  <button
+                    onClick={() => onRecordPayment(dueId, String(bal))}
+                    className="p-1.5 rounded-full bg-accent text-accent-foreground hover:opacity-90 active:scale-95 transition-all"
+                  >
+                    <CreditCard className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface GroupedPaymentCardProps {
+  tenantName: string;
+  roomNo: string;
+  tenantPhone: string;
+  avatarUrl?: string;
+  payments: Record<string, any>[];
+  activeHostel: Record<string, unknown> | undefined;
+  onConfirm: (attemptId: string) => void;
+  onReject: (attemptId: string) => void;
+  confirmPending: boolean;
+  rejectPending: boolean;
+  pendingAttemptId: string | null;
+}
+
+function GroupedPaymentCard({
+  tenantName,
+  roomNo,
+  tenantPhone,
+  avatarUrl,
+  payments,
+  activeHostel,
+  onConfirm,
+  onReject,
+  confirmPending,
+  rejectPending,
+  pendingAttemptId,
+}: GroupedPaymentCardProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const telPhone = tenantPhone ? tenantPhone.replace(/[^\d+]/g, '') : null;
+  const hostelName = activeHostel ? String(activeHostel.name ?? '') : 'Sri Adithya Boys Hostel';
+
+  let whatsappUrl = null;
+  if (tenantPhone) {
+    let clean = tenantPhone.replace(/[^\d]/g, '');
+    if (clean.length === 10) {
+      clean = '91' + clean;
+    }
+    const message = `Hi ${tenantName}, this is regarding your rent payment confirmation request${payments.length > 1 ? 's' : ''} at ${hostelName}. Let's chat about this.`;
+    whatsappUrl = `https://wa.me/${clean}?text=${encodeURIComponent(message)}`;
+  }
+
+  const totalAmount = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+  return (
+    <div className="bg-card border border-emerald-100 hover:border-emerald-200 rounded-xl p-3 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          {avatarUrl ? (
+            <img src={avatarUrl} alt={tenantName} className="w-10 h-10 rounded-full object-cover shrink-0 border border-border" />
+          ) : (
+            <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 font-bold text-sm">
+              {tenantName.charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <h4 className="font-semibold text-foreground truncate text-sm">{tenantName}</h4>
+              <span className="text-xs text-muted-foreground shrink-0">· Room {roomNo}</span>
+            </div>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <span className="text-[10px] font-semibold bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-md">
+                Pending Confirmation ({payments.length})
+              </span>
+              <span className="text-xs font-bold text-foreground">{fmt(totalAmount)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          {telPhone && (
+            <a
+              href={`tel:${telPhone}`}
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 active:scale-95 transition-all shrink-0"
+            >
+              <Phone className="w-4 h-4" />
+            </a>
+          )}
+          {whatsappUrl && (
+            <a
+              href={whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-100 active:scale-95 transition-all shrink-0"
+            >
+              <WhatsAppIcon />
+            </a>
+          )}
+          {payments.length > 1 && (
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 active:scale-95 transition-all"
+            >
+              <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {!isExpanded || payments.length === 1 ? (
+        <div className="space-y-2">
+          {payments.length > 1 && (
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Showing oldest request. Expand to manage all.</p>
+          )}
+          {(() => {
+            const payment = payments[0];
+            const upiRef = payment.upi_reference || '—';
+            const isAdvance = payment.payment_type === 'ADVANCE' || payment.flow_type === 'ADVANCE';
+            const description = isAdvance ? 'Security Deposit' : `Rent for ${payment.rent_month || '—'}`;
+            return (
+              <div className="bg-secondary/20 p-2.5 rounded-lg flex flex-col gap-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">{description}</span>
+                  <span className="font-bold text-foreground">{fmt(payment.amount)}</span>
+                </div>
+                {upiRef && upiRef !== '—' && (
+                  <div className="bg-secondary/50 p-1.5 rounded text-[10px] font-mono select-all flex items-center justify-between">
+                    <span className="text-muted-foreground">UPI:</span>
+                    <span className="font-semibold text-foreground">{upiRef}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2 mt-1">
+                  <button
+                    onClick={() => onReject(payment.attempt_id)}
+                    disabled={rejectPending || confirmPending}
+                    className="flex-1 bg-secondary text-secondary-foreground py-1.5 rounded-md text-[11px] font-semibold hover:bg-secondary/80 active:scale-98 transition-all disabled:opacity-50 flex items-center justify-center gap-1"
+                  >
+                    {rejectPending && pendingAttemptId === payment.attempt_id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    Reject
+                  </button>
+                  <button
+                    onClick={() => onConfirm(payment.attempt_id)}
+                    disabled={confirmPending || rejectPending}
+                    className="flex-1 bg-accent text-accent-foreground py-1.5 rounded-md text-[11px] font-semibold hover:opacity-90 active:scale-98 transition-all disabled:opacity-50 flex items-center justify-center gap-1"
+                  >
+                    {confirmPending && pendingAttemptId === payment.attempt_id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    Confirm
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      ) : (
+        <div className="space-y-3 pt-2 border-t border-border">
+          {payments.map((payment) => {
+            const upiRef = payment.upi_reference || '—';
+            const isAdvance = payment.payment_type === 'ADVANCE' || payment.flow_type === 'ADVANCE';
+            const description = isAdvance ? 'Security Deposit' : `Rent for ${payment.rent_month || '—'}`;
+            return (
+              <div key={payment.attempt_id} className="bg-secondary/20 p-2.5 rounded-lg flex flex-col gap-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">{description}</span>
+                  <span className="font-bold text-foreground">{fmt(payment.amount)}</span>
+                </div>
+                {upiRef && upiRef !== '—' && (
+                  <div className="bg-secondary/50 p-1.5 rounded text-[10px] font-mono select-all flex items-center justify-between">
+                    <span className="text-muted-foreground">UPI:</span>
+                    <span className="font-semibold text-foreground">{upiRef}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2 mt-1">
+                  <button
+                    onClick={() => onReject(payment.attempt_id)}
+                    disabled={rejectPending || confirmPending}
+                    className="flex-1 bg-secondary text-secondary-foreground py-1.5 rounded-md text-[11px] font-semibold hover:bg-secondary/80 active:scale-98 transition-all disabled:opacity-50 flex items-center justify-center gap-1"
+                  >
+                    {rejectPending && pendingAttemptId === payment.attempt_id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    Reject
+                  </button>
+                  <button
+                    onClick={() => onConfirm(payment.attempt_id)}
+                    disabled={confirmPending || rejectPending}
+                    className="flex-1 bg-accent text-accent-foreground py-1.5 rounded-md text-[11px] font-semibold hover:opacity-90 active:scale-98 transition-all disabled:opacity-50 flex items-center justify-center gap-1"
+                  >
+                    {confirmPending && pendingAttemptId === payment.attempt_id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    Confirm
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface GroupedBillingCardProps {
+  tenantName: string;
+  roomNo: string;
+  tenantPhone: string;
+  requests: Record<string, any>[];
+  activeHostel: Record<string, unknown> | undefined;
+  onApprove: (id: string) => void;
+  onReject: (id: string) => void;
+  pendingDecision: boolean;
+  pendingId: string | null;
+  pendingAction: 'APPROVE' | 'REJECT' | null;
+}
+
+function GroupedBillingCard({
+  tenantName,
+  roomNo,
+  tenantPhone,
+  requests,
+  activeHostel,
+  onApprove,
+  onReject,
+  pendingDecision,
+  pendingId,
+  pendingAction,
+}: GroupedBillingCardProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const telPhone = tenantPhone ? tenantPhone.replace(/[^\d+]/g, '') : null;
+  const hostelName = activeHostel ? String(activeHostel.name ?? '') : 'Sri Adithya Boys Hostel';
+
+  let whatsappUrl = null;
+  if (tenantPhone) {
+    let clean = tenantPhone.replace(/[^\d]/g, '');
+    if (clean.length === 10) {
+      clean = '91' + clean;
+    }
+    const message = `Hi ${tenantName}, this is regarding your billing frequency change request at ${hostelName}. Let's chat!`;
     whatsappUrl = `https://wa.me/${clean}?text=${encodeURIComponent(message)}`;
   }
 
   return (
-    <div className={`bg-card border ${isOverdue ? 'border-red-100 hover:border-red-200' : 'border-amber-100 hover:border-amber-200'} rounded-xl p-3 flex items-center justify-between gap-3 min-w-0 shadow-sm transition-all hover:shadow-md`}>
-      <div className="flex items-center gap-3 min-w-0">
-        {/* Profile Pic / Initial */}
-        {avatarUrl ? (
-          <img src={String(avatarUrl)} alt={tenantName} className="w-10 h-10 rounded-full object-cover shrink-0 border border-border" />
-        ) : (
-          <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-            isOverdue ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'
-          }`}>
-            <span className="text-sm font-bold">{tenantName.charAt(0).toUpperCase()}</span>
+    <div className="bg-card border border-purple-100 hover:border-purple-200 rounded-xl p-3 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 font-bold text-sm">
+            {tenantName.charAt(0).toUpperCase()}
           </div>
-        )}
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <h4 className="font-semibold text-foreground truncate text-sm">{tenantName}</h4>
+              <span className="text-xs text-muted-foreground shrink-0">· Room {roomNo}</span>
+            </div>
+            <p className="text-[10px] font-semibold bg-purple-50 text-purple-600 px-2 py-0.5 rounded-md mt-1 w-max">
+              Billing Request ({requests.length})
+            </p>
+          </div>
+        </div>
 
-        {/* Details */}
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            <h4 className="font-semibold text-foreground truncate text-sm">{tenantName}</h4>
-            {room && <span className="text-xs text-muted-foreground shrink-0">· Room {String(room)}</span>}
-          </div>
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
-            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
-              isOverdue ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'
-            }`}>
-              {urgencyLabel}
-            </span>
-            <span className="text-xs font-bold text-foreground">{fmt(amount)}</span>
-          </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {telPhone && (
+            <a
+              href={`tel:${telPhone}`}
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 active:scale-95 transition-all shrink-0"
+            >
+              <Phone className="w-4 h-4" />
+            </a>
+          )}
+          {whatsappUrl && (
+            <a
+              href={whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-100 active:scale-95 transition-all shrink-0"
+            >
+              <WhatsAppIcon />
+            </a>
+          )}
+          {requests.length > 1 && (
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 active:scale-95 transition-all"
+            >
+              <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Actions */}
-      <div className="flex items-center gap-1.5 shrink-0 ml-1">
+      {!isExpanded || requests.length === 1 ? (
+        <div className="space-y-2">
+          {requests.length > 1 && (
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Showing oldest request. Expand to manage all.</p>
+          )}
+          {(() => {
+            const req = requests[0];
+            const requestedFrequency = String(req.requested_frequency).replaceAll('_', ' ');
+            const currentFrequency = String(req.active_frequency || 'MONTHLY').replaceAll('_', ' ');
+            const reason = req.reason ? String(req.reason) : 'No reason provided';
+            const effectiveFrom = req.effective_from ? new Date(req.effective_from) : null;
+            return (
+              <div className="bg-secondary/20 p-2.5 rounded-lg flex flex-col gap-2">
+                <div className="text-xs text-foreground">
+                  Change to <span className="font-semibold text-purple-600">{requestedFrequency}</span> (from {currentFrequency})
+                </div>
+                {effectiveFrom && (
+                  <p className="text-[10px] text-muted-foreground">
+                    Effective: {effectiveFrom.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </p>
+                )}
+                {reason && (
+                  <p className="text-[11px] text-muted-foreground bg-secondary/50 p-2 rounded-lg italic">
+                    "{reason}"
+                  </p>
+                )}
+                <div className="flex items-center gap-2 mt-1">
+                  <button
+                    onClick={() => onReject(req.id)}
+                    disabled={pendingDecision}
+                    className="flex-1 bg-secondary text-secondary-foreground py-1.5 rounded-md text-[11px] font-semibold hover:bg-secondary/80 active:scale-98 transition-all disabled:opacity-50 flex items-center justify-center gap-1"
+                  >
+                    {pendingDecision && pendingId === req.id && pendingAction === 'REJECT' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    Reject
+                  </button>
+                  <button
+                    onClick={() => onApprove(req.id)}
+                    disabled={pendingDecision}
+                    className="flex-1 bg-accent text-accent-foreground py-1.5 rounded-md text-[11px] font-semibold hover:opacity-90 active:scale-98 transition-all disabled:opacity-50 flex items-center justify-center gap-1"
+                  >
+                    {pendingDecision && pendingId === req.id && pendingAction === 'APPROVE' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    Approve
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      ) : (
+        <div className="space-y-3 pt-2 border-t border-border">
+          {requests.map((req) => {
+            const requestedFrequency = String(req.requested_frequency).replaceAll('_', ' ');
+            const currentFrequency = String(req.active_frequency || 'MONTHLY').replaceAll('_', ' ');
+            const reason = req.reason ? String(req.reason) : 'No reason provided';
+            const effectiveFrom = req.effective_from ? new Date(req.effective_from) : null;
+            return (
+              <div key={req.id} className="bg-secondary/20 p-2.5 rounded-lg flex flex-col gap-2">
+                <div className="text-xs text-foreground">
+                  Change to <span className="font-semibold text-purple-600">{requestedFrequency}</span> (from {currentFrequency})
+                </div>
+                {effectiveFrom && (
+                  <p className="text-[10px] text-muted-foreground">
+                    Effective: {effectiveFrom.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </p>
+                )}
+                {reason && (
+                  <p className="text-[11px] text-muted-foreground bg-secondary/50 p-2 rounded-lg italic">
+                    "{reason}"
+                  </p>
+                )}
+                <div className="flex items-center gap-2 mt-1">
+                  <button
+                    onClick={() => onReject(req.id)}
+                    disabled={pendingDecision}
+                    className="flex-1 bg-secondary text-secondary-foreground py-1.5 rounded-md text-[11px] font-semibold hover:bg-secondary/80 active:scale-98 transition-all disabled:opacity-50 flex items-center justify-center gap-1"
+                  >
+                    {pendingDecision && pendingId === req.id && pendingAction === 'REJECT' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    Reject
+                  </button>
+                  <button
+                    onClick={() => onApprove(req.id)}
+                    disabled={pendingDecision}
+                    className="flex-1 bg-accent text-accent-foreground py-1.5 rounded-md text-[11px] font-semibold hover:opacity-90 active:scale-98 transition-all disabled:opacity-50 flex items-center justify-center gap-1"
+                  >
+                    {pendingDecision && pendingId === req.id && pendingAction === 'APPROVE' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    Approve
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface GroupedDocsCardProps {
+  tenantName: string;
+  roomNo: string;
+  tenantPhone: string;
+  avatarUrl?: string;
+  documents: Record<string, any>[];
+  activeHostel: Record<string, unknown> | undefined;
+  profilePath: string;
+}
+
+function GroupedDocsCard({
+  tenantName,
+  roomNo,
+  tenantPhone,
+  avatarUrl,
+  documents,
+  activeHostel,
+  profilePath,
+}: GroupedDocsCardProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const telPhone = tenantPhone ? tenantPhone.replace(/[^\d+]/g, '') : null;
+  const hostelName = activeHostel ? String(activeHostel.name ?? '') : 'Sri Adithya Boys Hostel';
+
+  let whatsappUrl = null;
+  if (tenantPhone) {
+    let clean = tenantPhone.replace(/[^\d]/g, '');
+    if (clean.length === 10) {
+      clean = '91' + clean;
+    }
+    const message = `Hi ${tenantName}, this is a reminder to please upload your pending document${documents.length > 1 ? 's' : ''} (${documents.map((d) => d.doc_type).join(', ')}) for verification at ${hostelName}. Thank you!`;
+    whatsappUrl = `https://wa.me/${clean}?text=${encodeURIComponent(message)}`;
+  }
+
+  return (
+    <div className="bg-card border border-blue-100 hover:border-blue-200 rounded-xl p-3 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          {avatarUrl ? (
+            <img src={avatarUrl} alt={tenantName} className="w-10 h-10 rounded-full object-cover shrink-0 border border-border" />
+          ) : (
+            <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 font-bold text-sm">
+              {tenantName.charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <h4 className="font-semibold text-foreground truncate text-sm">{tenantName}</h4>
+              <span className="text-xs text-muted-foreground shrink-0">· Room {roomNo}</span>
+            </div>
+            <p className="text-[10px] font-semibold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-md mt-1 w-max">
+              Missing Documents ({documents.length})
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          {telPhone && (
+            <a
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 active:scale-95 transition-all shrink-0"
+              href={`tel:${telPhone}`}
+            >
+              <Phone className="w-4 h-4" />
+            </a>
+          )}
+          {whatsappUrl && (
+            <a
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-100 active:scale-95 transition-all shrink-0"
+              href={whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <WhatsAppIcon />
+            </a>
+          )}
+          {documents.length > 1 && (
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 active:scale-95 transition-all"
+            >
+              <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+            </button>
+          )}
+          {profilePath && (
+            <Link
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-accent text-accent-foreground hover:opacity-90 active:scale-95 transition-all shadow-sm"
+              to={profilePath}
+              aria-label="Verify Documents"
+            >
+              <ExternalLink className="w-4 h-4" />
+            </Link>
+          )}
+        </div>
+      </div>
+
+      {isExpanded && documents.length > 1 && (
+        <div className="mt-1 pt-2 border-t border-border space-y-1">
+          {documents.map((doc, idx) => {
+            const uploadedAt = doc.uploaded_at ? new Date(String(doc.uploaded_at)) : null;
+            return (
+              <div key={doc.id || idx} className="flex items-center justify-between p-2 rounded-lg bg-secondary/30 text-xs">
+                <div>
+                  <p className="font-semibold text-blue-600">{doc.doc_type || 'Document'}</p>
+                  {uploadedAt && (
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      Uploaded {uploadedAt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface MoveOutCardProps {
+  request: Record<string, any>;
+  activeHostel: Record<string, unknown> | undefined;
+}
+
+function MoveOutCard({ request, activeHostel }: MoveOutCardProps) {
+  const tenantName = request.tenant?.profiles?.name || 'Tenant';
+  const tenantId = request.tenant_id || request.tenant?.id;
+  const hostelId = request.hostel_id || activeHostel?.id;
+  const roomNo = request.tenant?.room_no || request.tenant?.room?.room_number || 'N/A';
+  const tenantPhone = request.tenant?.profiles?.phone || '';
+  const exitDateStr = request.requested_date || request.created_at;
+  const exitDate = exitDateStr ? new Date(exitDateStr) : null;
+  const status = request.status || 'PENDING';
+
+  const telPhone = tenantPhone ? tenantPhone.replace(/[^\d+]/g, '') : null;
+  const hostelName = activeHostel ? String(activeHostel.name ?? '') : 'Sri Adithya Boys Hostel';
+
+  let whatsappUrl = null;
+  if (tenantPhone) {
+    let clean = tenantPhone.replace(/[^\d]/g, '');
+    if (clean.length === 10) {
+      clean = '91' + clean;
+    }
+    const message = `Hi ${tenantName}, this is regarding your move-out request at ${hostelName}. Let's discuss the exit details.`;
+    whatsappUrl = `https://wa.me/${clean}?text=${encodeURIComponent(message)}`;
+  }
+
+  const profilePath = tenantId && hostelId ? `/hostels/${hostelId}/tenants/${tenantId}?tab=stay` : '';
+
+  return (
+    <div className="bg-card border border-rose-100 hover:border-rose-200 rounded-xl p-3 flex flex-col justify-between gap-3 shadow-sm hover:shadow-md transition-shadow">
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 font-bold text-sm">
+          {tenantName.charAt(0).toUpperCase()}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <h4 className="font-semibold text-foreground truncate text-sm">{tenantName}</h4>
+            <span className="text-xs text-muted-foreground shrink-0">Room {roomNo}</span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+            <CalendarDays className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+            Requested Exit Date:{' '}
+            <span className="font-semibold text-foreground">
+              {exitDate ? exitDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+            </span>
+          </p>
+          <div className="mt-2">
+            <span className="text-[10px] font-bold uppercase tracking-wider bg-rose-50 text-rose-600 px-2 py-0.5 rounded">
+              Status: {status}
+            </span>
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
         {telPhone && (
           <a
+            className="w-9 h-9 flex items-center justify-center rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 active:scale-95 transition-all shrink-0"
             href={`tel:${telPhone}`}
-            aria-label={`Call ${tenantName}`}
-            className="w-9 h-9 flex items-center justify-center rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 active:scale-95 transition-all"
           >
             <Phone className="w-4 h-4" />
           </a>
         )}
         {whatsappUrl && (
           <a
+            className="w-9 h-9 flex items-center justify-center rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-100 active:scale-95 transition-all shrink-0"
             href={whatsappUrl}
             target="_blank"
             rel="noopener noreferrer"
-            aria-label={`WhatsApp ${tenantName}`}
-            className="w-9 h-9 flex items-center justify-center rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-100 active:scale-95 transition-all"
           >
             <WhatsAppIcon />
           </a>
         )}
-        <button
-          onClick={onRecordPayment}
-          aria-label="Record Payment"
-          className="w-9 h-9 flex items-center justify-center rounded-full bg-accent text-accent-foreground shadow-sm hover:opacity-90 active:scale-95 transition-all"
-        >
-          <CreditCard className="w-4 h-4" />
-        </button>
+        {profilePath && (
+          <Link
+            to={profilePath}
+            className="flex-1 bg-accent text-accent-foreground py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-98 transition-all"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            Manage Exit
+          </Link>
+        )}
       </div>
     </div>
   );

@@ -1,11 +1,18 @@
 import { prisma } from "../lib/db";
 
 async function main() {
-  const events = await (prisma as any).paymentAttemptStatusEvent.findMany({
-    take: 10,
-    orderBy: { created_at: "desc" },
+  const owners = await prisma.profile.findMany({
+    where: { role: "OWNER" },
+    select: { id: true, email: true, phone: true, name: true }
   });
-  console.log("Recent status events:", JSON.stringify(events, null, 2));
+  console.log("Owners:", JSON.stringify(owners, null, 2));
+
+  const tenants = await prisma.profile.findMany({
+    where: { role: "TENANT" },
+    select: { id: true, email: true, phone: true, name: true },
+    take: 10
+  });
+  console.log("Tenants:", JSON.stringify(tenants, null, 2));
 }
 
 main().catch(console.error);
