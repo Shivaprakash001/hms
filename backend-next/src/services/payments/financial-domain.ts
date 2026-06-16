@@ -15,7 +15,6 @@ export const PAYMENT_FLOW = {
   RENT: "RENT",
   FUTURE_RENT_CREDIT: "FUTURE_RENT_CREDIT",
   SECURITY_DEPOSIT: "SECURITY_DEPOSIT",
-  MANUAL_UPI_REFERENCE: "MANUAL_UPI_REFERENCE",
   ADVANCE: "ADVANCE",
   DEPOSIT: "DEPOSIT",
 } as const;
@@ -23,7 +22,6 @@ export const PAYMENT_FLOW = {
 export const MERCHANT_CONTEXT = {
   HMS_PLATFORM: "HMS_PLATFORM",
   HMS_TREASURY: "HMS_TREASURY",
-  OWNER_HOSTEL: "OWNER_HOSTEL",
 } as const;
 
 export const SETTLEMENT_STATUS = {
@@ -79,14 +77,13 @@ export function platformBillingMetadata(flowType: string) {
   };
 }
 
-export function rentCollectionMetadata(flowType: string, hostelId: string | null | undefined) {
-  const treasuryMode = flowType === PAYMENT_FLOW.RENT || flowType === PAYMENT_FLOW.FUTURE_RENT_CREDIT || flowType === PAYMENT_FLOW.SECURITY_DEPOSIT || flowType === "ADVANCE" || flowType === "DEPOSIT";
+export function rentCollectionMetadata(flowType: string, _hostelId?: string | null | undefined) {
   return {
     payment_domain: PAYMENT_DOMAIN.RENT_COLLECTION,
     scope_type: PAYMENT_SCOPE.HOSTEL,
     flow_type: flowType,
-    merchant_context_type: treasuryMode ? MERCHANT_CONTEXT.HMS_TREASURY : MERCHANT_CONTEXT.OWNER_HOSTEL,
-    merchant_context_id: treasuryMode ? MERCHANT_CONTEXT.HMS_TREASURY : hostelId || null,
+    merchant_context_type: MERCHANT_CONTEXT.HMS_TREASURY,
+    merchant_context_id: MERCHANT_CONTEXT.HMS_TREASURY,
     settlement_status: SETTLEMENT_STATUS.NOT_SETTLED,
   };
 }

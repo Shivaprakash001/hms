@@ -301,41 +301,10 @@ export class PaymentService {
         );
       }
 
-      receiptService.createReceipt(res.payment.id).then(async (receipt: any) => {
-        try {
-          // Resolve prefs from payment's immutable hostel chain.
-          const { prefs } = await getPaymentOperationalContext(
-            res.payment.id,
-            res.payment.owner_id || "",
-            res.payment.hostel_id,
-            res.payment.tenant_id,
-          );
-          if (!prefs.auto_email_receipt) return;
-          const renderContext = receipt._renderContext || {
-            footer: prefs.receipt_footer || null,
-            currency: prefs.currency,
-            timezone: prefs.timezone,
-          };
-          const pdfBuffer = await receiptService.renderReceiptPdf(receipt, renderContext);
-          const tenant = await prisma.tenants.findUnique({
-            where: { id: res.payment.tenant_id },
-            include: { profiles: true },
-          });
-          if (tenant?.profiles?.email) {
-            const rentMonth = formatMonthYear(receipt.rent_month, prefs);
-            await EmailService.sendReceipt({
-              toEmail: tenant.profiles.email,
-              name: tenant.profiles.name,
-              amount: data.amountPaid,
-              rentMonth,
-              reference: receipt.receipt_number,
-              pdfBuffer,
-            });
-          }
-        } catch (err) {
-          logger.error("recordOfflinePaymentWithToken.receipt_email_failed", { err });
-        }
-      }).catch((err: any) => logger.error("recordOfflinePaymentWithToken.receipt_failed", { err }));
+      // Create ledger receipt record (no PDF/email — decommissioned for audit compliance)
+      receiptService.createReceipt(res.payment.id).catch((err: any) =>
+        logger.error("recordOfflinePaymentWithToken.receipt_failed", { err })
+      );
 
       await eventLog.log("OFFLINE_PAYMENT_RECORDED", data.userId, {
         payment_id: res.payment.id,
@@ -391,45 +360,10 @@ export class PaymentService {
         tenantAnalyticsService.calculateTenantScore(res.payment.tenant_id).catch(e => logger.error("tenantScore.failed", { err: e.message }));
       }
 
-      // 🔧 FIX C3: Create receipt for ALL payment paths (manual + UPI)
-      // Previously only the UPI finalization path created receipts.
-      // Cash/manual payments (majority of hostel payments) were invisible to the receipt system.
-      receiptService.createReceipt(res.payment.id).then(async (receipt) => {
-        try {
-          // Resolve prefs from payment's immutable hostel chain.
-          const { prefs } = await getPaymentOperationalContext(
-            res.payment.id,
-            res.payment.owner_id || "",
-            res.payment.hostel_id,
-            res.payment.tenant_id,
-          );
-          if (!prefs.auto_email_receipt) return;
-
-          const renderContext = receipt._renderContext || {
-            footer: prefs.receipt_footer || null,
-            currency: prefs.currency,
-            timezone: prefs.timezone,
-          };
-          const pdfBuffer = await receiptService.renderReceiptPdf(receipt, renderContext);
-          const tenant = await prisma.tenants.findUnique({
-            where: { id: res.payment.tenant_id },
-            include: { profiles: true },
-          });
-          if (tenant?.profiles?.email) {
-            const rentMonth = formatMonthYear(receipt.rent_month, prefs);
-            await EmailService.sendReceipt({
-              toEmail: tenant.profiles.email,
-              name: tenant.profiles.name,
-              amount: data.amountPaid,
-              rentMonth,
-              reference: receipt.receipt_number,
-              pdfBuffer,
-            });
-          }
-        } catch (err) {
-          console.error("[recordPayment] Receipt email failed:", err);
-        }
-      }).catch(err => console.error("[recordPayment] Receipt creation failed:", err));
+      // Create ledger receipt record (no PDF/email — decommissioned for audit compliance)
+      receiptService.createReceipt(res.payment.id).catch(err =>
+        console.error("[recordPayment] Receipt creation failed:", err)
+      );
 
       // 🔧 FIX M3: Audit log for all payment recordings
       await eventLog.log("PAYMENT_RECORDED", data.userId || null, {
@@ -2948,39 +2882,6 @@ export class PaymentService {
     return payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid), 0);
   }
 
-  private async getProviderForOwner(ownerId: string, hostelId: string) {
-    const scopedHostelId = requireFinancialHostelId(hostelId, "payment provider resolution");
-    const hostel = await prisma.hostels.findUnique({
-      where: { id: scopedHostelId },
-      include: { profiles: true },
-    });
-
-    if (!hostel || hostel.owner_id !== ownerId) {
-      throw new Error("HOSTEL_ACCESS_DENIED: Payment provider hostel does not belong to this owner.");
-    }
-
-    if (!hostel.upi_id) {
-      throw new Error("CONFIG_ERROR: Owner UPI ID is not configured. Please set your UPI ID in hostel settings.");
-    }
-
-    // UPI Direct provider — tenant pays owner directly via UPI intent link
-    return {
-      provider: "PHONEPE", // Provider class name kept for backward compat with existing attempts table
-      config: {
-        owner_upi_id: hostel.upi_id,
-        owner_name: hostel.name || (hostel as any).profiles?.name || "Hostel",
-        hostel_id: hostel.id,
-      }
-    };
-  }
-
-  private async getProviderInstance(ownerId: string, providerName: string, hostelId: string) {
-    const { config } = await this.getProviderForOwner(ownerId, hostelId);
-    return {
-      instance: PaymentProviderFactory.getProvider(providerName, config),
-      config
-    };
-  }
 
   private getOwnerLevelProviderConfig() {
     if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {

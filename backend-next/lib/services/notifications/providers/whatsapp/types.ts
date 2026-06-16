@@ -17,6 +17,8 @@ export type WhatsAppTemplateMessage = {
   templateName: string;
   language?: WhatsAppTemplateLanguage;
   bodyParameters?: string[];
+  /** URL suffix parameters for CTA URL button components */
+  buttonParameters?: string[];
 };
 
 export type WhatsAppButton = {

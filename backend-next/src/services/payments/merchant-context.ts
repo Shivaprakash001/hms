@@ -64,73 +64,43 @@ export async function getProviderContext(params: {
     throw new Error("HOSTEL_ACCESS_DENIED: Payment provider hostel does not belong to this owner.");
   }
 
-  if (![PAYMENT_FLOW.RENT, PAYMENT_FLOW.FUTURE_RENT_CREDIT, PAYMENT_FLOW.SECURITY_DEPOSIT, "ADVANCE", "DEPOSIT", PAYMENT_FLOW.MANUAL_UPI_REFERENCE].includes(flowType as any)) {
+  if (![PAYMENT_FLOW.RENT, PAYMENT_FLOW.FUTURE_RENT_CREDIT, PAYMENT_FLOW.SECURITY_DEPOSIT, "ADVANCE", "DEPOSIT"].includes(flowType as any)) {
     throw new Error(`UNSUPPORTED_RENT_COLLECTION_FLOW: ${flowType}`);
   }
 
-  if ([PAYMENT_FLOW.RENT, PAYMENT_FLOW.FUTURE_RENT_CREDIT, PAYMENT_FLOW.SECURITY_DEPOSIT, "ADVANCE", "DEPOSIT"].includes(flowType as any)) {
-    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-      throw new Error("CONFIG_ERROR: HMS treasury Razorpay credentials are not configured");
-    }
-
-    console.info("[merchant-context] HMS_TREASURY Razorpay context resolved", {
-      payment_domain:           PAYMENT_DOMAIN.RENT_COLLECTION,
-      merchant_context_type:    MERCHANT_CONTEXT.HMS_TREASURY,
-      flow_type:                flowType,
-      hostel_id:                hostelId,
-      operational_owner_id:     operationalOwnerId,
-      RAZORPAY_KEY_ID_set:      Boolean(process.env.RAZORPAY_KEY_ID),
-      backend_url:              getBackendUrl(),
-    });
-
-    return {
-      provider: "RAZORPAY",
-      payment_domain: PAYMENT_DOMAIN.RENT_COLLECTION,
-      flow_type: flowType,
-      scope_type: PAYMENT_SCOPE.HOSTEL,
-      merchant_context_type: MERCHANT_CONTEXT.HMS_TREASURY,
-      merchant_context_id: MERCHANT_CONTEXT.HMS_TREASURY,
-      operational_owner_id: operationalOwnerId,
-      financial_owner_id: financialOwnerId || operationalOwnerId,
-      hostel_id: hostel.id,
-      config: {
-        key_id: process.env.RAZORPAY_KEY_ID || "",
-        key_secret: process.env.RAZORPAY_KEY_SECRET || "",
-        webhook_secret: process.env.RAZORPAY_WEBHOOK_SECRET || "",
-        base_url: process.env.RAZORPAY_BASE_URL || "https://api.razorpay.com",
-        callbackUrl: backendUrl("/api/webhooks/payments/razorpay"),
-        treasuryMode: true,
-        hostelId: hostel.id,
-        operationalOwnerId,
-      },
-    };
+  if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+    throw new Error("CONFIG_ERROR: HMS treasury Razorpay credentials are not configured");
   }
 
-  // Fallback to UPI Direct
-  if (!hostel.upi_id) {
-    throw new Error("CONFIG_ERROR: Owner UPI ID is not configured. Please set your UPI ID in hostel settings.");
-  }
-
-  console.info("[merchant-context] OWNER_HOSTEL (UPI direct) context resolved", {
-    flow_type:             flowType,
-    hostel_id:             hostelId,
-    upi_id_set:            Boolean(hostel.upi_id),
+  console.info("[merchant-context] HMS_TREASURY Razorpay context resolved", {
+    payment_domain:           PAYMENT_DOMAIN.RENT_COLLECTION,
+    merchant_context_type:    MERCHANT_CONTEXT.HMS_TREASURY,
+    flow_type:                flowType,
+    hostel_id:                hostelId,
+    operational_owner_id:     operationalOwnerId,
+    RAZORPAY_KEY_ID_set:      Boolean(process.env.RAZORPAY_KEY_ID),
+    backend_url:              getBackendUrl(),
   });
 
   return {
-    provider: "PHONEPE", // Keep PHONEPE for backward compatibility with manual/direct UPI tracking in database
+    provider: "RAZORPAY",
     payment_domain: PAYMENT_DOMAIN.RENT_COLLECTION,
     flow_type: flowType,
     scope_type: PAYMENT_SCOPE.HOSTEL,
-    merchant_context_type: MERCHANT_CONTEXT.OWNER_HOSTEL,
-    merchant_context_id: hostel.id,
+    merchant_context_type: MERCHANT_CONTEXT.HMS_TREASURY,
+    merchant_context_id: MERCHANT_CONTEXT.HMS_TREASURY,
     operational_owner_id: operationalOwnerId,
     financial_owner_id: financialOwnerId || operationalOwnerId,
     hostel_id: hostel.id,
     config: {
-      owner_upi_id: hostel.upi_id,
-      owner_name: hostel.name || (hostel as any).profiles?.name || "Hostel",
-      hostel_id: hostel.id,
+      key_id: process.env.RAZORPAY_KEY_ID || "",
+      key_secret: process.env.RAZORPAY_KEY_SECRET || "",
+      webhook_secret: process.env.RAZORPAY_WEBHOOK_SECRET || "",
+      base_url: process.env.RAZORPAY_BASE_URL || "https://api.razorpay.com",
+      callbackUrl: backendUrl("/api/webhooks/payments/razorpay"),
+      treasuryMode: true,
+      hostelId: hostel.id,
+      operationalOwnerId,
     },
   };
 }

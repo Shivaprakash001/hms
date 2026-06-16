@@ -134,6 +134,24 @@ export class MetaWhatsAppProvider {
   async sendTemplate(message: WhatsAppTemplateMessage): Promise<WhatsAppSendResult> {
     const phone = normalizeWhatsAppPhone(message.to);
     const url = `${this.config.baseUrl}/${this.config.phoneNumberId}/messages`;
+    const components: any[] = [];
+    if (message.bodyParameters?.length) {
+      components.push({
+        type: "body",
+        parameters: message.bodyParameters.map((text) => ({ type: "text", text: String(text) })),
+      });
+    }
+    if (message.buttonParameters?.length) {
+      message.buttonParameters.forEach((suffix, index) => {
+        components.push({
+          type: "button",
+          sub_type: "url",
+          index,
+          parameters: [{ type: "text", text: String(suffix) }],
+        });
+      });
+    }
+
     const body = {
       messaging_product: "whatsapp",
       to: phone,
@@ -141,14 +159,7 @@ export class MetaWhatsAppProvider {
       template: {
         name: message.templateName,
         language: message.language || { code: "en" },
-        ...(message.bodyParameters?.length
-          ? {
-              components: [{
-                type: "body",
-                parameters: message.bodyParameters.map((text) => ({ type: "text", text: String(text) })),
-              }],
-            }
-          : {}),
+        ...(components.length > 0 ? { components } : {}),
       },
     };
 

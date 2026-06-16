@@ -260,6 +260,7 @@ model hostels {
   tenant_invitation_reservations tenant_invitation_reservations[]
   agreements          Agreement[]
   agreement_templates AgreementTemplate[]
+  payment_link_tokens payment_link_tokens[]
 }
 
 model identity_tokens {
@@ -962,6 +963,7 @@ model rent_obligations {
   tenants                     tenants                       @relation(fields: [tenant_id], references: [id])
   tenant_billing_plans        tenant_billing_plans?         @relation(fields: [billing_plan_id], references: [id])
   superseded_by_request       payment_frequency_change_requests? @relation("SupersededObligations", fields: [superseded_by_request_id], references: [id])
+  payment_link_tokens         payment_link_tokens[]
 
   @@unique([allocation_id, rent_month, obligation_type])
   @@index([billing_plan_id])
@@ -1289,6 +1291,7 @@ model tenants {
   bulk_import_rows         bulk_import_rows[]
   visitor_leads            visitor_leads[]
   agreements               Agreement[]
+  payment_link_tokens      payment_link_tokens[]
 
   @@index([hostel_id])
   @@index([owner_id])
@@ -1991,4 +1994,22 @@ model Agreement {
   @@index([status])
   @@index([renewed_from_agreement_id])
   @@index([renewed_to_agreement_id])
+}
+
+model payment_link_tokens {
+  token            String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  obligation_id    String             @db.Uuid
+  tenant_id        String             @db.Uuid
+  hostel_id        String             @db.Uuid
+  owner_id         String             @db.Uuid
+  expires_at       DateTime           @db.Timestamptz(6)
+  created_at       DateTime           @default(now()) @db.Timestamptz(6)
+
+  rent_obligations rent_obligations   @relation(fields: [obligation_id], references: [id])
+  tenants          tenants            @relation(fields: [tenant_id], references: [id])
+  hostels          hostels            @relation(fields: [hostel_id], references: [id])
+
+  @@index([obligation_id])
+  @@index([tenant_id])
+  @@index([expires_at])
 }

@@ -80,7 +80,6 @@ const checks: Array<{
     allow: [
       /payment-service\.ts$/,
       /payment-status-event-service\.ts$/,
-      /submit-reference\/route\.ts$/,
     ],
   },
   {

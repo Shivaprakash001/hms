@@ -1,5 +1,5 @@
 /**
- * Immediately expire all PhonePe CREATED/PENDING attempts that were generated
+ * Immediately expire all CREATED/PENDING attempts that were generated
  * under sandbox mode (checkout_url points to mercury-t2 or api-preprod).
  *
  * Run: npx tsx scripts/expire-sandbox-payment-attempts.ts
@@ -16,11 +16,10 @@ function isSandboxCheckoutUrl(url: string | null): boolean {
 }
 
 async function main() {
-  console.log("[expire-sandbox-attempts] Scanning PHONEPE CREATED/PENDING attempts...");
+  console.log("[expire-sandbox-attempts] Scanning CREATED/PENDING attempts for sandbox URLs...");
 
   const candidates = await prisma.paymentAttempt.findMany({
     where: {
-      provider: "PHONEPE",
       status: { in: ["CREATED", "PENDING"] },
     },
     select: {

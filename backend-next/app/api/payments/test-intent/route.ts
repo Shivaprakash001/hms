@@ -39,14 +39,8 @@ export async function POST(req: Request) {
     }
 
     const activeProvider = getActivePaymentProvider();
-    if (activeProvider === "RAZORPAY") {
-      if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-        return apiError("Sri Adithya Boys Hostel Razorpay credentials are not configured", "CONFIG_ERROR", 422);
-      }
-    } else {
-      if (!process.env.PHONEPE_CLIENT_ID || !process.env.PHONEPE_CLIENT_SECRET) {
-        return apiError("Sri Adithya Boys Hostel PhonePe credentials are not configured", "CONFIG_ERROR", 422);
-      }
+    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+      return apiError("Sri Adithya Boys Hostel Razorpay credentials are not configured", "CONFIG_ERROR", 422);
     }
 
     let tenantId = "";

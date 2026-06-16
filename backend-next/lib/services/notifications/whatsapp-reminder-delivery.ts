@@ -66,10 +66,44 @@ export class WhatsAppReminderDeliveryService {
       maskedPhone = maskWhatsAppPhone(normalizedPhone);
       const bodyParameters = buildRentReminderBodyParameters(input);
 
+      // Create a payment link token (7-day expiry) for this obligation
+      let paymentUrl: string | null = null;
+      try {
+        const token = await prisma.payment_link_tokens.create({
+          data: {
+            obligation_id: input.obligationId,
+            tenant_id: input.tenantId,
+            hostel_id: input.hostelId,
+            owner_id: input.ownerId,
+            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+          },
+          select: { token: true },
+        });
+
+        const baseUrl = (
+          process.env.NEXT_PUBLIC_APP_URL ||
+          process.env.NEXT_PUBLIC_API_URL ||
+          process.env.API_URL ||
+          process.env.BACKEND_URL ||
+          "https://api.sriadithyahostels.in"
+        ).replace(/\/+$/, "");
+        paymentUrl = `${baseUrl}/api/payments/pay/${token.token}`;
+      } catch (tokenErr) {
+        logger.warn("whatsapp.reminder.payment_link_failed", {
+          obligation_id: input.obligationId,
+          error: String((tokenErr as any)?.message || tokenErr),
+        });
+      }
+
+      // Append the payment URL as the last body parameter if available
+      const finalBodyParameters = paymentUrl
+        ? [...bodyParameters, paymentUrl]
+        : bodyParameters;
+
       const result = await this.provider.sendTemplate({
         to: normalizedPhone,
         templateName,
-        bodyParameters,
+        bodyParameters: finalBodyParameters,
       });
 
       await prisma.$executeRaw`
