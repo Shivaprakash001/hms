@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { paymentService } from "@/src/services/payments/payment-service";
+import { getProviderContext } from "@/src/services/payments/merchant-context";
 import { getLogger } from "@/lib/logger";
 
 const logger = getLogger("api.payments.pay");
@@ -550,6 +551,38 @@ export async function POST(
     const attempt = (rawAttempt as any).isReused === true
       ? (rawAttempt as any).attempt
       : rawAttempt;
+
+    if (attempt) {
+      if (!attempt.raw_response || typeof attempt.raw_response !== "object") {
+        attempt.raw_response = {};
+      }
+      try {
+        const providerContext = await getProviderContext({
+          paymentDomain: "RENT_COLLECTION",
+          flowType: "RENT",
+          operationalOwnerId: linkToken.owner_id,
+          hostelId: linkToken.hostel_id,
+          scopeType: "HOSTEL",
+        });
+        attempt.raw_response.key_id = providerContext.config.key_id;
+      } catch (e) {
+        logger.warn("payment_link.inject_key_failed", { attemptId: attempt.id, error: String(e) });
+      }
+
+      if (!attempt.raw_response.amount) {
+        attempt.raw_response.amount = Math.round(Number(attempt.amount) * 100);
+      }
+      if (!attempt.raw_response.currency) {
+        attempt.raw_response.currency = "INR";
+      }
+      if (!attempt.raw_response.notes) {
+        attempt.raw_response.notes = {
+          tenant_name: linkToken.tenants?.profiles?.name || "",
+          tenant_email: linkToken.tenants?.profiles?.email || "",
+          tenant_phone: linkToken.tenants?.profiles?.phone || "",
+        };
+      }
+    }
 
     return NextResponse.json({
       success: true,

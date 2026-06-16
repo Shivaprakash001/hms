@@ -1581,8 +1581,14 @@ export class PaymentService {
       select: { status: true, owner_id: true, hostel_id: true, payment_domain: true, flow_type: true },
     });
 
+    const isLockAcquired = (context as any)?.lockAcquired === true;
+    const allowedStatuses = ["PENDING", "PENDING_VERIFICATION", "PENDING_MANUAL_CONFIRMATION"];
+    if (isLockAcquired) {
+      allowedStatuses.push("PROCESSING");
+    }
+
     const lockResult = await prisma.paymentAttempt.updateMany({
-      where: { id: attemptId, status: { in: ["PENDING", "PENDING_VERIFICATION", "PENDING_MANUAL_CONFIRMATION"] } },
+      where: { id: attemptId, status: { in: allowedStatuses } },
       data: { status: "PROCESSING" },
     });
 
@@ -1601,17 +1607,19 @@ export class PaymentService {
     }
 
     logger.info("payments.finalize.lock_acquired", { ...requestMeta, attempt_id: attemptId, incoming_status: status });
-    await paymentStatusEventService.appendOutsideTransaction({
-      attemptId,
-      fromStatus: preLockAttempt?.status || null,
-      toStatus: "PROCESSING",
-      source: context?.source === "reconcile" ? "RECONCILE" : context?.source === "MANUAL_CONFIRM" ? "MANUAL_CONFIRM" : "VERIFY",
-      reason: "attempt claimed for settlement",
-      actorId: context?.actor?.id || null,
-      operationalOwnerId: preLockAttempt?.owner_id || null,
-      financialOwnerId: this.isPlatformBillingAttempt(preLockAttempt) ? this.hmsFinancialOwnerId() : preLockAttempt?.owner_id || null,
-      hostelId: preLockAttempt?.hostel_id || null,
-    });
+    if (!isLockAcquired) {
+      await paymentStatusEventService.appendOutsideTransaction({
+        attemptId,
+        fromStatus: preLockAttempt?.status || null,
+        toStatus: "PROCESSING",
+        source: context?.source === "reconcile" ? "RECONCILE" : context?.source === "MANUAL_CONFIRM" ? "MANUAL_CONFIRM" : "VERIFY",
+        reason: "attempt claimed for settlement",
+        actorId: context?.actor?.id || null,
+        operationalOwnerId: preLockAttempt?.owner_id || null,
+        financialOwnerId: this.isPlatformBillingAttempt(preLockAttempt) ? this.hmsFinancialOwnerId() : preLockAttempt?.owner_id || null,
+        hostelId: preLockAttempt?.hostel_id || null,
+      });
+    }
 
     // ── Step 2: Read current state (status = PROCESSING — we own the lock) ─────
     const attempt = await prisma.paymentAttempt.findUnique({
@@ -2309,7 +2317,11 @@ export class PaymentService {
         finalStatus,
         sourceOfTruth.gateway_txn_id || verification.gateway_txn_id || undefined,
         verification.raw_event,
-        context
+        {
+          ...context,
+          source: "WEBHOOK",
+          lockAcquired: true,
+        } as any
       );
       incrementWebhook(true);
       if (result?.status === "SUCCESS") incrementPayment("success");
