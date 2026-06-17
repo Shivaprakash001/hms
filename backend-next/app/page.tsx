@@ -303,6 +303,7 @@ export default async function HomePage() {
     review: t.quote,
     rating: t.rating || 5,
     initials: t.name ? t.name.split(" ").map((n: string) => n[0]).join("") : "SA",
+    image: t.image ? { url: urlFor(t.image).url(), alt: t.name } : undefined,
   })) || [];
 
   const categoryRatingsFormatted = categoryRating ? [

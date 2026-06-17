@@ -9,7 +9,7 @@ import { ApiError } from "@/src/lib/api-error";
 
 const LeadCaptureSchema = z.object({
   student_name: z.string().min(2).max(120),
-  student_phone: z.string().min(8).max(20),
+  student_phone: z.string().max(20).optional().or(z.literal("")),
   student_email: z.string().email().max(180).optional().or(z.literal("")),
   parent_name: z.string().max(120).optional().or(z.literal("")),
   parent_phone: z.string().max(20).optional().or(z.literal("")),

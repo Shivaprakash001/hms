@@ -63,9 +63,9 @@ export function EnquiryForm({
     e.preventDefault();
     setSubmitted(false);
     
-    // Additional validation just in case
+    // Additional validation just in case if phone is provided
     const phoneDigits = formData.phone.replace(/\D/g, '');
-    if (phoneDigits.length !== 10) {
+    if (formData.phone && phoneDigits.length !== 10) {
       alert('Please enter a valid 10-digit mobile number.');
       return;
     }
@@ -139,13 +139,12 @@ export function EnquiryForm({
 
                   <div>
                     <label htmlFor="phone" className="block text-sm font-bold text-[#2C2C2A] mb-2">
-                      Phone Number *
+                      Phone Number
                     </label>
                     <input
                       type="tel"
                       id="phone"
                       name="phone"
-                      required
                       pattern="[0-9]{10}"
                       value={formData.phone}
                       onChange={handleChange}

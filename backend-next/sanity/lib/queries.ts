@@ -118,7 +118,8 @@ export const TESTIMONIALS_QUERY = `
     location,
     rating,
     quote,
-    tag
+    tag,
+    image
   }
 `
 

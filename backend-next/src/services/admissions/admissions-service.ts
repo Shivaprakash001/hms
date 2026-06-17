@@ -255,13 +255,13 @@ export class AdmissionsService {
     const trap = cleanString(input.website, 50);
     if (trap) throw ApiError.badRequest("Invalid submission");
 
-    const studentPhone = normalizeIndianPhone(input.student_phone);
-    if (!studentPhone) throw ApiError.validationError("Student phone is invalid");
+    const studentPhone = input.student_phone ? normalizeIndianPhone(input.student_phone) : null;
+    if (input.student_phone && !studentPhone) throw ApiError.validationError("Student phone is invalid");
     const parentPhone = normalizeIndianPhone(input.parent_phone) || null;
 
     const limit = await checkFixedWindowLimit({
       scope: "visit-submit",
-      identifier: `${slug}:${studentPhone}:${ip}`,
+      identifier: studentPhone ? `${slug}:${studentPhone}:${ip}` : `${slug}:ip:${ip}`,
       maxAttempts: 6,
       windowSeconds: 60 * 60,
     });
@@ -277,14 +277,16 @@ export class AdmissionsService {
       ? input.decision_maker_type
       : parentPhone ? "BOTH" : "STUDENT";
 
-    const existing = await prisma.visitorLead.findFirst({
-      where: {
-        hostel_id: hostel.id,
-        student_phone: studentPhone,
-        status: { in: ACTIVE_LEAD_STATUSES },
-      },
-      orderBy: { created_at: "desc" },
-    });
+    const existing = studentPhone
+      ? await prisma.visitorLead.findFirst({
+          where: {
+            hostel_id: hostel.id,
+            student_phone: studentPhone,
+            status: { in: ACTIVE_LEAD_STATUSES },
+          },
+          orderBy: { created_at: "desc" },
+        })
+      : null;
 
     const lead = existing
       ? await prisma.visitorLead.update({
@@ -321,8 +323,8 @@ export class AdmissionsService {
   }
 
   async createDirectLead(ownerId: string, input: any) {
-    const studentPhone = normalizeIndianPhone(input.student_phone);
-    if (!studentPhone) throw ApiError.validationError("Student phone is invalid");
+    const studentPhone = input.student_phone ? normalizeIndianPhone(input.student_phone) : null;
+    if (input.student_phone && !studentPhone) throw ApiError.validationError("Student phone is invalid");
     const parentPhone = normalizeIndianPhone(input.parent_phone) || null;
 
     const studentName = cleanString(input.student_name, 120);
@@ -342,14 +344,16 @@ export class AdmissionsService {
       ? input.decision_maker_type
       : parentPhone ? "BOTH" : "STUDENT";
 
-    const existing = await prisma.visitorLead.findFirst({
-      where: {
-        hostel_id: hostel.id,
-        student_phone: studentPhone,
-        status: { in: ACTIVE_LEAD_STATUSES },
-      },
-      orderBy: { created_at: "desc" },
-    });
+    const existing = studentPhone
+      ? await prisma.visitorLead.findFirst({
+          where: {
+            hostel_id: hostel.id,
+            student_phone: studentPhone,
+            status: { in: ACTIVE_LEAD_STATUSES },
+          },
+          orderBy: { created_at: "desc" },
+        })
+      : null;
 
     const lead = existing
       ? await prisma.visitorLead.update({

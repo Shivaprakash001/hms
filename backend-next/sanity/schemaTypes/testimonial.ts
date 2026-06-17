@@ -13,6 +13,12 @@ export const testimonial = defineType({
       validation: Rule => Rule.required(),
     }),
     defineField({
+      name: 'image',
+      title: 'Profile Picture / Photo',
+      type: 'image',
+      options: { hotspot: true },
+    }),
+    defineField({
       name: 'type',
       title: 'Type',
       type: 'string',
@@ -95,11 +101,12 @@ export const testimonial = defineType({
     },
   ],
   preview: {
-    select: { title: 'name', subtitle: 'type', media: 'type' },
-    prepare({ title, subtitle }) {
+    select: { title: 'name', subtitle: 'type', media: 'image' },
+    prepare({ title, subtitle, media }) {
       return {
         title,
         subtitle: subtitle === 'parent' ? '👨👩👦 Parent Review' : '🎓 Student Review',
+        media,
       }
     },
   },

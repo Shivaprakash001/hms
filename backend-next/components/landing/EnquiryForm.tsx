@@ -134,13 +134,12 @@ export function EnquiryForm({
 
                   <div>
                     <label htmlFor="phone" className="block text-sm font-semibold text-[#2C2C2A] mb-2">
-                      Phone Number *
+                      Phone Number
                     </label>
                     <input
                       type="tel"
                       id="phone"
                       name="phone"
-                      required
                       value={formData.phone}
                       onChange={handleChange}
                       className="w-full px-4 py-3 bg-white border border-[#F07B1D]/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#F07B1D] text-[#2C2C2A] font-medium"

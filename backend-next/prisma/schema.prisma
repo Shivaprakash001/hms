@@ -1105,7 +1105,7 @@ model visitor_leads {
   hostel_id                 String              @db.Uuid
   owner_id                  String              @db.Uuid
   student_name              String
-  student_phone             String
+  student_phone             String?
   student_email             String?
   parent_name               String?
   parent_phone              String?
