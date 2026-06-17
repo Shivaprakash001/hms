@@ -23,8 +23,11 @@ export function Hero({ availability, content }: { availability?: LandingAvailabi
   const startingPriceText = rupee(availability?.startingPrice || 8000);
   let supportingCopy = content.supportingCopy || 'Join SNIST students';
   if (startingPriceText) {
-    const cleanCopy = supportingCopy.replace(/[,.]?\s*everything\s+included\.?/gi, '').trim();
-    supportingCopy = `${cleanCopy} — ${startingPriceText}/month, everything included.`;
+    const hasPrice = supportingCopy.includes('₹') || supportingCopy.toLowerCase().includes('/month');
+    if (!hasPrice) {
+      const cleanCopy = supportingCopy.replace(/[,.]?\s*everything\s+included\.?/gi, '').trim();
+      supportingCopy = `${cleanCopy} — ${startingPriceText}/month, everything included.`;
+    }
   }
   const primaryHref = availability?.visitUrl || content.primaryCta?.href || '#contact';
   const secondaryHref = content.secondaryCta?.href || 'https://api.whatsapp.com/send?phone=919392433422';

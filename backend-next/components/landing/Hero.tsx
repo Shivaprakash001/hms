@@ -53,8 +53,12 @@ export function Hero({
   let supportingCopy = hostel?.heroSupportingCopy || (availability?.hasLiveAvailability 
     ? `Join ${availability?.occupiedBeds ?? 0} SNIST students`
     : 'Join senior SNIST students at Sri Adithya Boys Hostel');
-  if (startingPriceText && !hostel?.heroSupportingCopy) {
-    supportingCopy = `${supportingCopy} — ${startingPriceText}/month, everything included.`;
+  if (startingPriceText) {
+    const hasPrice = supportingCopy.includes('₹') || supportingCopy.toLowerCase().includes('/month');
+    if (!hasPrice) {
+      const cleanCopy = supportingCopy.replace(/[,.]?\s*everything\s+included\.?/gi, '').trim();
+      supportingCopy = `${cleanCopy} — ${startingPriceText}/month, everything included.`;
+    }
   }
 
   const primaryHref = availability?.visitUrl || '#contact';
