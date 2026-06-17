@@ -421,6 +421,7 @@ export class ExpenseService {
     created_by?: string;
     approved_by?: string;
     expense_type?: string;
+    expense_scope?: "BUSINESS" | "HOSTEL" | null;
     tags?: string[];
     metadata?: any;
   }) {
@@ -432,6 +433,14 @@ export class ExpenseService {
 
     const parsedDate = data.date instanceof Date ? data.date : new Date(data.date);
     if (Number.isNaN(parsedDate.getTime())) throw new Error("VALIDATION: Invalid date provided");
+
+    const expense_scope = data.expense_scope || (data.hostel_id ? "HOSTEL" : "BUSINESS");
+    if (expense_scope === "BUSINESS" && data.hostel_id) {
+      throw new Error("VALIDATION: Business expenses must not have a hostel ID");
+    }
+    if (expense_scope === "HOSTEL" && !data.hostel_id) {
+      throw new Error("VALIDATION: Hostel expenses must have a valid hostel ID");
+    }
 
     const category = normalizeCategory(data.category || suggestedCategory(data.title));
     const expense = await prisma.expenses.create({
@@ -454,6 +463,7 @@ export class ExpenseService {
         created_by: data.created_by || data.owner_id,
         approved_by: data.approved_by || null,
         expense_type: data.expense_type || "BUSINESS",
+        expense_scope,
         tags: data.tags || [],
         metadata: {
           ...(data.metadata || {}),
@@ -503,11 +513,24 @@ export class ExpenseService {
     if (data.is_recurring !== undefined) updateData.is_recurring = Boolean(data.is_recurring);
     if (data.recurring_frequency !== undefined) updateData.recurring_frequency = data.recurring_frequency || null;
     if (data.expense_type !== undefined) updateData.expense_type = data.expense_type;
+    if (data.expense_scope !== undefined || data.expenseScope !== undefined) {
+      updateData.expense_scope = data.expense_scope ?? data.expenseScope ?? null;
+    }
     if (data.tags !== undefined) updateData.tags = Array.isArray(data.tags) ? data.tags : [];
     if (data.metadata !== undefined) updateData.metadata = data.metadata;
     if (data.date !== undefined) {
       const d = new Date(data.date);
       if (!Number.isNaN(d.getTime())) updateData.date = d;
+    }
+
+    const scopeToValidate = updateData.expense_scope ?? existing.expense_scope;
+    const hostelIdToValidate = updateData.hostel_id !== undefined ? updateData.hostel_id : existing.hostel_id;
+
+    if (scopeToValidate === "BUSINESS" && hostelIdToValidate) {
+      throw new Error("VALIDATION: Business expenses must not have a hostel ID");
+    }
+    if (scopeToValidate === "HOSTEL" && !hostelIdToValidate) {
+      throw new Error("VALIDATION: Hostel expenses must have a valid hostel ID");
     }
 
     const expense = await prisma.expenses.update({ where: { id: expenseId }, data: updateData });

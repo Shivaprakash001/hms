@@ -123,6 +123,7 @@ export async function POST(req: NextRequest) {
       recurring_frequency: body.recurring_frequency,
       created_by: session.sub,
       expense_type: body.expense_type,
+      expense_scope: body.expense_scope ?? body.expenseScope,
       tags: Array.isArray(body.tags) ? body.tags : [],
       metadata: body.metadata,
     });

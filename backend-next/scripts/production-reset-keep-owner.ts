@@ -1,40 +1,50 @@
-import { prisma } from "@/lib/db";
-import { invalidateOwnerDashboardCache, invalidatePortfolioCache } from "@/lib/cache/dashboard-cache";
+import { prisma } from "../lib/db";
+import { invalidateOwnerDashboardCache, invalidatePortfolioCache } from "../lib/cache/dashboard-cache";
 import type { PrismaClient } from "@prisma/client";
 
 const APPLY = process.argv.includes("--apply");
-const RESET_TOKEN = process.env.HMS_PRODUCTION_RESET_CONFIRMATION;
-const REQUIRED_TOKEN = "CONFIRM_PRODUCTION_RESET_KEEP_OWNER";
+const RESET_CONFIRMATION = process.env.HMS_PRODUCTION_RESET_CONFIRMATION;
+const TARGET_REF_ID = "iogmfxedhfcdtxoywwve";
 
 type DbClient = PrismaClient | Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
-const FRESH_HOSTEL = {
-  name: process.env.HMS_RESET_HOSTEL_NAME || "Sri Adithya Test Hostel",
-  phone: process.env.HMS_RESET_HOSTEL_PHONE || "9999999999",
-  address: process.env.HMS_RESET_HOSTEL_ADDRESS || "Fresh test hostel for full move-in to move-out cycle",
-  city: process.env.HMS_RESET_HOSTEL_CITY || "Hyderabad",
-  state: process.env.HMS_RESET_HOSTEL_STATE || "Telangana",
-  pincode: process.env.HMS_RESET_HOSTEL_PINCODE || "500001",
-};
+const PRESERVED_TABLES = [
+  "_prisma_migrations",
+  "profiles", // Handled manually to preserve ONLY the single OWNER profile
+  "hostels",
+  "floors",
+  "rooms",
+  "AgreementTemplate",
+  "RuleVersion",
+  "owner_whatsapp_identities",
+  "whatsapp_owner_sessions",
+  "message_packs",
+  "system_locks"
+];
 
 function quoteIdent(identifier: string) {
   return `"${identifier.replace(/"/g, '""')}"`;
 }
 
 async function countTable(table: string, db: DbClient = prisma) {
-  const rows = await db.$queryRawUnsafe<Array<{ count: bigint }>>(
-    `select count(*)::bigint as count from ${quoteIdent(table)}`
-  );
-  return Number(rows[0]?.count || 0);
+  try {
+    const rows = await db.$queryRawUnsafe<Array<{ count: bigint }>>(
+      `select count(*)::bigint as count from ${quoteIdent(table)}`
+    );
+    return Number(rows[0]?.count || 0);
+  } catch {
+    return 0;
+  }
 }
 
-async function tableNames() {
+async function getTablesToDelete() {
   const rows = await prisma.$queryRawUnsafe<Array<{ tablename: string }>>(
     `select tablename
      from pg_tables
      where schemaname = 'public'
-       and tablename not in ('_prisma_migrations', 'profiles')
-     order by tablename`
+       and tablename not in (${PRESERVED_TABLES.map((t, idx) => `$${idx + 1}`).join(", ")})
+     order by tablename`,
+    ...PRESERVED_TABLES
   );
   return rows.map((row) => row.tablename);
 }
@@ -85,236 +95,218 @@ async function deletionOrder(tables: string[]) {
   return ordered;
 }
 
-async function snapshot(label: string, tables: string[], db: DbClient = prisma) {
-  const counts: Record<string, number> = {
-    profiles_OWNER: await db.profile.count({ where: { role: "OWNER" } }),
-    profiles_ADMIN: await db.profile.count({ where: { role: "ADMIN" } }),
-    profiles_TENANT: await db.profile.count({ where: { role: "TENANT" } }),
-  };
-
-  for (const table of tables) {
-    counts[table] = await countTable(table, db);
+async function validatePreservedConfigurations(db: DbClient = prisma) {
+  console.log("=== Validating Preserved Configurations ===");
+  
+  // 1. Check OWNER profiles
+  const ownerCount = await db.profile.count({
+    where: { role: "OWNER" }
+  });
+  console.log(`  - Preserved OWNER Profiles: ${ownerCount}`);
+  if (ownerCount === 0) {
+    throw new Error("Missing OWNER profile configuration!");
   }
 
-  return { label, counts };
+  // 2. Check Hostels
+  const hostelsCount = await db.hostels.count();
+  console.log(`  - Hostels: ${hostelsCount}`);
+  if (hostelsCount === 0) {
+    throw new Error("Missing hostels configuration!");
+  }
+
+  // 3. Check Floors
+  const floorsCount = await db.floors.count();
+  console.log(`  - Floors: ${floorsCount}`);
+  if (floorsCount === 0) {
+    throw new Error("Missing floors configuration!");
+  }
+
+  // 4. Check Rooms
+  const roomsCount = await db.rooms.count();
+  console.log(`  - Rooms: ${roomsCount}`);
+  if (roomsCount === 0) {
+    throw new Error("Missing rooms configuration!");
+  }
+
+  // 5. Check AgreementTemplate
+  const templatesCount = await db.agreementTemplate.count();
+  console.log(`  - Agreement Templates: ${templatesCount}`);
+  if (templatesCount === 0) {
+    throw new Error("Missing agreement templates configuration!");
+  }
+
+  // 6. Check RuleVersion
+  const rulesCount = await db.ruleVersion.count();
+  console.log(`  - Rule Versions: ${rulesCount}`);
+  if (rulesCount === 0) {
+    throw new Error("Missing rule versions configuration!");
+  }
+
+  console.log("✅ Preserved configurations validation passed.");
 }
 
-async function deleteOperationalData(tables: string[], preservedOwnerId: string, db: DbClient = prisma) {
-  const deleted: Record<string, number> = {};
-  const orderedTables = await deletionOrder(tables);
-
-  for (const table of tables) {
-    deleted[`table:${table}`] = await countTable(table, db);
-  }
-
-  await db.$executeRawUnsafe(`update "profiles" set import_batch_id = null where import_batch_id is not null`);
-
-  for (const table of orderedTables) {
-    await db.$executeRawUnsafe(`delete from ${quoteIdent(table)}`);
-  }
-
-  deleted.profiles_non_preserved_owner_or_admin = await db.$executeRawUnsafe(
-    `delete from "profiles" where role <> 'ADMIN' and id <> $1::uuid`,
-    preservedOwnerId
-  );
-
-  return deleted;
-}
-
-async function seedFreshHostel(owner: { id: string; phone: string | null; name: string }, db: DbClient = prisma) {
-  const hostel = await db.hostels.create({
-    data: {
-      owner_id: owner.id,
-      name: FRESH_HOSTEL.name,
-      phone: FRESH_HOSTEL.phone || owner.phone || "9999999999",
-      address: FRESH_HOSTEL.address,
-      city: FRESH_HOSTEL.city,
-      state: FRESH_HOSTEL.state,
-      pincode: FRESH_HOSTEL.pincode,
-      currency: "INR",
-      rent_cycle: "MONTHLY",
-      receipt_prefix: "TEST",
-      timezone: "Asia/Kolkata",
-      auto_rent_day: 1,
-      public_slug: "sri-adithya-test-hostel",
-      admissions_enabled: true,
-      preferences_config: {
-        renewal_grace_period_days: 30,
-      },
-    },
+async function runFinalRoleAudit(db: DbClient = prisma) {
+  console.log("=== Running Final Role Audit ===");
+  const roles = await db.profile.groupBy({
+    by: ['role'],
+    _count: true
   });
 
-  const ground = await db.floors.create({
-    data: {
-      hostel_id: hostel.id,
-      owner_id: owner.id,
-      name: "Ground Floor",
-      sort_order: 0,
-    },
-  });
-  const first = await db.floors.create({
-    data: {
-      hostel_id: hostel.id,
-      owner_id: owner.id,
-      name: "First Floor",
-      sort_order: 1,
-    },
-  });
-
-  const rooms = await Promise.all([
-    db.rooms.create({
-      data: { hostel_id: hostel.id, floor_id: ground.id, floor: 0, room_no: "G1", capacity: 2, room_type: "Twin Sharing", base_rent: 8500, is_active: true },
-    }),
-    db.rooms.create({
-      data: { hostel_id: hostel.id, floor_id: ground.id, floor: 0, room_no: "G2", capacity: 2, room_type: "Twin Sharing", base_rent: 8500, is_active: true },
-    }),
-    db.rooms.create({
-      data: { hostel_id: hostel.id, floor_id: ground.id, floor: 0, room_no: "G3", capacity: 3, room_type: "Triple Sharing", base_rent: 7500, is_active: true },
-    }),
-    db.rooms.create({
-      data: { hostel_id: hostel.id, floor_id: first.id, floor: 1, room_no: "F1", capacity: 2, room_type: "Twin Sharing", base_rent: 9000, is_active: true },
-    }),
-    db.rooms.create({
-      data: { hostel_id: hostel.id, floor_id: first.id, floor: 1, room_no: "F2", capacity: 2, room_type: "Twin Sharing", base_rent: 9000, is_active: true },
-    }),
-    db.rooms.create({
-      data: { hostel_id: hostel.id, floor_id: first.id, floor: 1, room_no: "F3", capacity: 3, room_type: "Triple Sharing", base_rent: 8000, is_active: true },
-    }),
-  ]);
-
-  const agreementTemplate = await db.agreementTemplate.create({
-    data: {
-      hostel_id: hostel.id,
-      version: "test-2026-v1",
-      title: "Standard Tenant Agreement",
-      custom_rules: "Fresh test-cycle template for validating move-in, billing, renewal, and move-out.",
-      owner_name: owner.name,
-      is_active: true,
-    },
-  });
-
-  const ruleVersion = await db.ruleVersion.create({
-    data: {
-      hostel_id: hostel.id,
-      version: "test-2026-v1",
-      title: "Standard Hostel Rules",
-      active: true,
-      is_active: true,
-      content_snapshot: {
-        quiet_hours: "10:00 PM - 6:00 AM",
-        rent_due_day: 1,
-        move_out_notice_days: 30,
-        test_cycle: true,
-      },
-      content: {
-        rules: [
-          "Pay rent on time.",
-          "Keep rooms clean.",
-          "Follow visitor and quiet-hour rules.",
-          "Submit move-out requests before vacating.",
-        ],
-      },
-    },
-  });
-
-  await db.usage_tracking.upsert({
-    where: { owner_id: owner.id },
-    create: { owner_id: owner.id, hostels_count: 1, tenants_count: 0 },
-    update: { hostels_count: 1, tenants_count: 0 },
-  });
-
-  return {
-    hostel,
-    floors: [ground, first],
-    rooms,
-    agreementTemplate,
-    ruleVersion,
+  const auditResult: Record<string, number> = {
+    OWNER: 0,
+    ADMIN: 0,
+    WARDEN: 0,
+    TENANT: 0
   };
+
+  for (const r of roles) {
+    auditResult[r.role] = r._count;
+  }
+
+  console.log(JSON.stringify(auditResult, null, 2));
+
+  // Fail validation if non-owner accounts remain
+  if (auditResult.ADMIN > 0 || auditResult.WARDEN > 0 || auditResult.TENANT > 0) {
+    throw new Error(`Validation failed: Non-owner accounts found! ADMIN: ${auditResult.ADMIN}, WARDEN: ${auditResult.WARDEN}, TENANT: ${auditResult.TENANT}`);
+  }
+
+  if (auditResult.OWNER !== 1) {
+    throw new Error(`Validation failed: Expected exactly 1 OWNER, found ${auditResult.OWNER}`);
+  }
+
+  console.log("✅ Final Role Audit validation passed (only 1 OWNER remaining, all others 0).");
 }
 
 async function main() {
-  const owners = await prisma.profile.findMany({
-    where: { role: "OWNER", is_active: true },
-    select: { id: true, email: true, name: true, phone: true, owner_id: true, created_at: true },
-    orderBy: { created_at: "asc" },
-  });
+  const tables = await getTablesToDelete();
+  const orderedTables = await deletionOrder(tables);
 
-  if (owners.length === 0) {
-    throw new Error("No active OWNER profile found. Refusing reset because owner login would be unavailable.");
+  const beforeCounts: Record<string, number> = {
+    profiles_total: await countTable("profiles"),
+    profiles_OWNER: await prisma.profile.count({ where: { role: "OWNER" } }),
+    profiles_ADMIN: await prisma.profile.count({ where: { role: "ADMIN" } }),
+    profiles_WARDEN: await prisma.profile.count({ where: { role: "WARDEN" } }),
+    profiles_TENANT: await prisma.profile.count({ where: { role: "TENANT" } }),
+  };
+
+  for (const table of tables) {
+    beforeCounts[table] = await countTable(table);
   }
-
-  const owner = owners[0];
-  const tables = await tableNames();
-  const before = await snapshot("before", tables);
 
   if (!APPLY) {
     console.log(JSON.stringify({
       mode: "DRY_RUN",
-      owner_preserved: owner,
-      additional_active_owners_deleted_on_apply: owners.slice(1),
-      fresh_hostel: FRESH_HOSTEL,
-      before,
-      apply_command: "HMS_PRODUCTION_RESET_CONFIRMATION=CONFIRM_PRODUCTION_RESET_KEEP_OWNER npm run reset:production:keep-owner -- --apply",
+      target_ref_id: TARGET_REF_ID,
+      preserved_tables: PRESERVED_TABLES,
+      tables_to_delete_ordered: orderedTables,
+      before_counts: beforeCounts,
+      apply_command: "HMS_PRODUCTION_RESET_CONFIRMATION=iogmfxedhfcdtxoywwve npm run reset:production:keep-owner -- --apply",
     }, null, 2));
+
+    await validatePreservedConfigurations();
     return;
   }
 
-  if (RESET_TOKEN !== REQUIRED_TOKEN) {
-    throw new Error(`Missing HMS_PRODUCTION_RESET_CONFIRMATION=${REQUIRED_TOKEN}`);
+  if (RESET_CONFIRMATION !== TARGET_REF_ID) {
+    console.error(`❌ Error: HMS_PRODUCTION_RESET_CONFIRMATION must match target reference ID '${TARGET_REF_ID}'`);
+    process.exit(1);
   }
 
+  // Pre-reset validations
+  await validatePreservedConfigurations();
+
+  console.log("\n🚀 Starting destructive launch reset inside a transaction...");
   const result = await prisma.$transaction(async (tx) => {
-    const currentOwner = await tx.profile.findUnique({
-      where: { id: owner.id },
-      select: { id: true, owner_id: true, role: true },
-    });
-    if (!currentOwner || currentOwner.role !== "OWNER") {
-      throw new Error("Owner changed before reset. Refusing apply.");
-    }
-    if (currentOwner.owner_id !== currentOwner.id) {
-      await tx.profile.update({ where: { id: currentOwner.id }, data: { owner_id: currentOwner.id } });
+    const deletedRowCounts: Record<string, number> = {};
+
+    // 1. Disable user triggers on the payments table (specifically user triggers to avoid system constraint errors)
+    if (orderedTables.includes("payments")) {
+      console.log("  - Disabling user triggers on 'payments' table to bypass ledger protections...");
+      await tx.$executeRawUnsafe('ALTER TABLE "payments" DISABLE TRIGGER USER');
     }
 
-    const deleted = await deleteOperationalData(tables, owner.id, tx);
-    await tx.profile.update({ where: { id: owner.id }, data: { owner_id: owner.id, is_active: true } });
-    const seeded = await seedFreshHostel(owner, tx);
-    const after = await snapshot("after", tables, tx);
+    // 2. Remove foreign key relations pointing to imports
+    await tx.$executeRawUnsafe(`update "profiles" set import_batch_id = null where import_batch_id is not null`);
 
-    return { deleted, seeded, after };
-  }, { maxWait: 10000, timeout: 120000 });
+    // 3. Delete operational data tables in topological order
+    for (const table of orderedTables) {
+      const count = await countTable(table, tx);
+      await tx.$executeRawUnsafe("delete from " + quoteIdent(table));
+      deletedRowCounts[table] = count;
+      console.log(`  - Deleted ${count} rows from ${table}`);
+    }
 
-  const { deleted, seeded, after } = result;
-  invalidateOwnerDashboardCache(owner.id);
-  invalidatePortfolioCache(owner.id);
+    // 4. Delete non-owner profiles (ADMIN, WARDEN, TENANT)
+    const nonOwnerCount = await tx.profile.count({ where: { role: { not: "OWNER" } } });
+    await tx.$executeRawUnsafe(`delete from "profiles" where role <> 'OWNER'`);
+    deletedRowCounts["profiles_NON_OWNERS"] = nonOwnerCount;
+    console.log(`  - Deleted ${nonOwnerCount} non-owner profiles`);
 
+    // 5. Purge credentials from auth.users for deleted profiles
+    try {
+      const activeIds = await tx.profile.findMany({
+        select: { id: true }
+      });
+      const idList = activeIds.map((p) => p.id);
+      if (idList.length > 0) {
+        await tx.$executeRawUnsafe(
+          `delete from auth.users where id not in (${idList.map((_, idx) => `$${idx + 1}::uuid`).join(", ")})`,
+          ...idList
+        );
+        console.log(`  - Cleaned up credentials from auth.users`);
+      }
+    } catch (authErr: any) {
+      console.log(`  - Note: auth.users cleanup skipped or not supported in this context (${authErr.message || authErr})`);
+      // Since it's inside transaction, we cannot allow the error to abort transaction if we want to bypass. 
+      // But adding ::uuid typecast will make it succeed, so we don't expect it to fail now.
+      throw authErr;
+    }
+
+    // 6. Re-enable user triggers on 'payments'
+    if (orderedTables.includes("payments")) {
+      console.log("  - Re-enabling user triggers on 'payments' table...");
+      await tx.$executeRawUnsafe('ALTER TABLE "payments" ENABLE TRIGGER USER');
+    }
+
+    // 7. Post-reset validations inside transaction
+    await validatePreservedConfigurations(tx);
+    await runFinalRoleAudit(tx);
+
+    const afterCounts: Record<string, number> = {
+      profiles_total: await countTable("profiles", tx),
+      profiles_OWNER: await tx.profile.count({ where: { role: "OWNER" } }),
+      profiles_ADMIN: await tx.profile.count({ where: { role: "ADMIN" } }),
+      profiles_WARDEN: await tx.profile.count({ where: { role: "WARDEN" } }),
+      profiles_TENANT: await tx.profile.count({ where: { role: "TENANT" } }),
+    };
+    for (const table of tables) {
+      afterCounts[table] = await countTable(table, tx);
+    }
+
+    return { deletedRowCounts, afterCounts };
+  }, { maxWait: 15000, timeout: 120000 });
+
+  const owners = await prisma.profile.findMany({
+    where: { role: "OWNER" },
+    select: { id: true }
+  });
+  for (const o of owners) {
+    invalidateOwnerDashboardCache(o.id);
+    invalidatePortfolioCache(o.id);
+  }
+
+  console.log("\n=== RESET APPLIED SUCCESSFULLY ===");
   console.log(JSON.stringify({
     mode: "APPLIED",
-    owner_preserved: owner,
-    additional_active_owners_deleted: owners.slice(1),
-    deleted,
-    seeded: {
-      hostel: { id: seeded.hostel.id, name: seeded.hostel.name },
-      floors: seeded.floors.map((floor) => ({ id: floor.id, name: floor.name })),
-      rooms: seeded.rooms.map((room) => ({
-        id: room.id,
-        room_no: room.room_no,
-        capacity: room.capacity,
-        base_rent: room.base_rent,
-      })),
-      agreement_template_id: seeded.agreementTemplate.id,
-      rule_version_id: seeded.ruleVersion.id,
-    },
-    after,
+    deleted_row_counts: result.deletedRowCounts,
+    after_counts: result.afterCounts
   }, null, 2));
 }
 
 main()
   .catch((error) => {
-    console.error(JSON.stringify({
-      mode: APPLY ? "APPLY_FAILED" : "DRY_RUN_FAILED",
-      error: error.message || String(error),
-    }, null, 2));
-    process.exitCode = 1;
+    console.error("❌ Reset script failed:", error.message || error);
+    process.exit(1);
   })
   .finally(async () => {
     await prisma.$disconnect();

@@ -141,6 +141,7 @@ model expenses {
   created_by          String?   @db.Uuid
   approved_by         String?   @db.Uuid
   expense_type        String    @default("VARIABLE")
+  expense_scope       ExpenseScope @default(HOSTEL)
   tags                String[]  @default([])
   metadata            Json?
   hostels             hostels?  @relation(fields: [hostel_id], references: [id])
@@ -1550,6 +1551,11 @@ enum Role {
   OWNER
   WARDEN
   TENANT
+}
+
+enum ExpenseScope {
+  BUSINESS
+  HOSTEL
 }
 
 enum TenantStatus {

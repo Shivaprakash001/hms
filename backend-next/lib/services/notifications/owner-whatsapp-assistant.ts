@@ -780,38 +780,82 @@ export class OwnerWhatsAppAssistantService {
   }
 
   async processInboundMessage(phone: string, message: string): Promise<InboundOwnerResult | null> {
+    logger.info("whatsapp.command.received", { phone, message });
+
     const parsed = parseCommand(message);
-    if (!parsed.command) return null;
+    logger.info("whatsapp.command.parsed", { phone, message, command: parsed.command, parsed });
+    if (!parsed.command) {
+      logger.info("whatsapp.command.failed", { phone, message, reason: "empty_command" });
+      return null;
+    }
 
     const normalizedPhone = normalizeWhatsAppPhone(phone);
     const verifiedIdentity = await this.getVerifiedIdentity(normalizedPhone);
 
     if (!verifiedIdentity && parsed.command !== "LINK") {
+      logger.info("whatsapp.command.failed", { phone, message, reason: "unauthorized_owner", normalizedPhone });
       return null;
     }
 
+    logger.info("whatsapp.command.authorized", { phone, message, ownerId: verifiedIdentity?.owner_id, normalizedPhone });
+
     if (parsed.command === "LINK") {
-      return this.handleLink(normalizedPhone, parsed.normalized, parsed.command);
+      logger.info("whatsapp.command.executing", { phone, message, command: "LINK" });
+      try {
+        const res = await this.handleLink(normalizedPhone, parsed.normalized, parsed.command);
+        logger.info("whatsapp.command.completed", { phone, message, command: "LINK" });
+        return res;
+      } catch (err: any) {
+        logger.error("whatsapp.command.failed", { phone, message, command: "LINK", error: err.message });
+        throw err;
+      }
     }
 
     const ownerId = verifiedIdentity?.owner_id;
-    if (!ownerId) return null;
+    if (!ownerId) {
+      logger.info("whatsapp.command.failed", { phone, message, reason: "missing_owner_id" });
+      return null;
+    }
 
     await this.getOrCreateOwnerSession(ownerId, normalizedPhone);
 
     const assistantPayload = parseOwnerAssistantPayload(message);
     if (assistantPayload) {
-      return this.handleOwnerAssistantPayload(ownerId, normalizedPhone, message, assistantPayload);
+      logger.info("whatsapp.command.executing", { phone, message, type: "assistant_payload", assistantPayload });
+      try {
+        const res = await this.handleOwnerAssistantPayload(ownerId, normalizedPhone, message, assistantPayload);
+        logger.info("whatsapp.command.completed", { phone, message, type: "assistant_payload" });
+        return res;
+      } catch (err: any) {
+        logger.error("whatsapp.command.failed", { phone, message, type: "assistant_payload", error: err.message });
+        throw err;
+      }
     }
 
     const cleanMsgLower = message.trim().toLowerCase();
     if (cleanMsgLower.startsWith("invite")) {
-      return this.handleStructuredInviteCommand(ownerId, normalizedPhone, message);
+      logger.info("whatsapp.command.executing", { phone, message, command: "INVITE" });
+      try {
+        const res = await this.handleStructuredInviteCommand(ownerId, normalizedPhone, message);
+        logger.info("whatsapp.command.completed", { phone, message, command: "INVITE" });
+        return res;
+      } catch (err: any) {
+        logger.error("whatsapp.command.failed", { phone, message, command: "INVITE", error: err.message });
+        throw err;
+      }
     }
 
     const selectionState = await getSelectionState(normalizedPhone);
     if (selectionState && selectionState.action === "INVITE_TENANT") {
-      return this.handleInviteTenantStateFlow(ownerId, normalizedPhone, message, selectionState);
+      logger.info("whatsapp.command.executing", { phone, message, command: "INVITE_FLOW_STEP", step: selectionState.step });
+      try {
+        const res = await this.handleInviteTenantStateFlow(ownerId, normalizedPhone, message, selectionState);
+        logger.info("whatsapp.command.completed", { phone, message, command: "INVITE_FLOW_STEP", step: selectionState.step });
+        return res;
+      } catch (err: any) {
+        logger.error("whatsapp.command.failed", { phone, message, command: "INVITE_FLOW_STEP", step: selectionState.step, error: err.message });
+        throw err;
+      }
     }
 
     if (selectionState && selectionState.action === "OWNER_MOVE_OUT_DATE") {
