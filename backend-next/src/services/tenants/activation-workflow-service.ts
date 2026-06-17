@@ -37,12 +37,13 @@ const REQUIRED_ACKNOWLEDGEMENTS = [
 ] as const;
 
 import {
-  DEFAULT_RULES_TEMPLATE,
+  DEFAULT_AGREEMENT_TEMPLATE,
+  DEFAULT_TERMS_AND_CONDITIONS,
   getActiveTemplateAndSyncRuleVersion,
   interpolateRulesContent
 } from "../../utils/default-rules";
 
-const DEFAULT_RULE_CONTENT = DEFAULT_RULES_TEMPLATE;
+const DEFAULT_RULE_CONTENT = DEFAULT_AGREEMENT_TEMPLATE;
 
 
 function dateOnly(value?: Date | string | null) {
@@ -175,8 +176,8 @@ export class ActivationWorkflowService {
       hostel_id: hostelId,
       version: `v${template.version_number}`,
       title: template.title,
-      content: template.rules_content || DEFAULT_RULES_TEMPLATE,
-      content_snapshot: template.rules_content || DEFAULT_RULES_TEMPLATE,
+      content: template.rules_content || DEFAULT_AGREEMENT_TEMPLATE,
+      content_snapshot: template.rules_content || DEFAULT_AGREEMENT_TEMPLATE,
       is_active: true,
       active: true,
     };
@@ -428,9 +429,10 @@ export class ActivationWorkflowService {
             tenant_name: variables.TENANT_NAME,
             owner_name: activeTemplate.owner_name,
             custom_rules: activeTemplate.custom_rules || "",
-            raw_rules: activeTemplate.rules_content || DEFAULT_RULES_TEMPLATE,
-            interpolated_rules: interpolateRulesContent(activeTemplate.rules_content || DEFAULT_RULES_TEMPLATE, variables),
-            hostel_rules: interpolateRulesContent(activeTemplate.rules_content || DEFAULT_RULES_TEMPLATE, variables),
+            terms_and_conditions: (activeTemplate.rules_content as any)?.terms_and_conditions || DEFAULT_TERMS_AND_CONDITIONS,
+            raw_rules: activeTemplate.rules_content || DEFAULT_AGREEMENT_TEMPLATE,
+            interpolated_rules: interpolateRulesContent(activeTemplate.rules_content || DEFAULT_AGREEMENT_TEMPLATE, variables),
+            hostel_rules: interpolateRulesContent(activeTemplate.rules_content || DEFAULT_AGREEMENT_TEMPLATE, variables),
           }
         },
       });
@@ -805,9 +807,10 @@ export class ActivationWorkflowService {
           tenant_name: variables.TENANT_NAME,
           owner_name: template.owner_name,
           custom_rules: template.custom_rules || "",
-          raw_rules: template.rules_content || DEFAULT_RULES_TEMPLATE,
-          interpolated_rules: interpolateRulesContent(template.rules_content || DEFAULT_RULES_TEMPLATE, variables, true),
-          hostel_rules: interpolateRulesContent(template.rules_content || DEFAULT_RULES_TEMPLATE, variables, true),
+          terms_and_conditions: (template.rules_content as any)?.terms_and_conditions || DEFAULT_TERMS_AND_CONDITIONS,
+          raw_rules: template.rules_content || DEFAULT_AGREEMENT_TEMPLATE,
+          interpolated_rules: interpolateRulesContent(template.rules_content || DEFAULT_AGREEMENT_TEMPLATE, variables, true),
+          hostel_rules: interpolateRulesContent(template.rules_content || DEFAULT_AGREEMENT_TEMPLATE, variables, true),
         },
       },
     });

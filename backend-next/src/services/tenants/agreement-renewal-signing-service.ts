@@ -3,7 +3,7 @@ import { eventLog } from "@/lib/services/event-log-service";
 import { AgreementGenerationService, DEFAULT_RULE_CONTENT } from "./agreement-generation-service";
 import { AGREEMENT_ACTIVITY_EVENTS, isCurrentAgreementStatus } from "./agreement-status";
 import { assertAgreementLifecycleComplete } from "./agreement-lifecycle-completeness";
-import { getActiveTemplateAndSyncRuleVersion, DEFAULT_RULES_TEMPLATE, interpolateRulesContent } from "../../utils/default-rules";
+import { getActiveTemplateAndSyncRuleVersion, DEFAULT_AGREEMENT_TEMPLATE, DEFAULT_TERMS_AND_CONDITIONS, interpolateRulesContent } from "../../utils/default-rules";
 
 type AgreementRenewalSigningErrorCode =
   | "RENEWAL_AGREEMENT_NOT_FOUND"
@@ -207,7 +207,7 @@ export class AgreementRenewalSigningService {
       }
 
       // Fetch active template and sync rule version
-      const template = await getActiveTemplateAndSyncRuleVersion(tx, renewalAgreement.tenant.hostel_id, "RENEWAL");
+      const template = await getActiveTemplateAndSyncRuleVersion(tx, renewalAgreement.tenant.hostel_id, "RESIDENCY");
       const ruleVersion = await tx.ruleVersion.findUnique({
         where: { id: template.id },
       });
@@ -226,7 +226,7 @@ export class AgreementRenewalSigningService {
         JOINING_DATE: (renewalAgreement.content_snapshot as any)?.joining_date || "",
       };
 
-      const rawRules = template.rules_content || DEFAULT_RULES_TEMPLATE;
+      const rawRules = template.rules_content || DEFAULT_AGREEMENT_TEMPLATE;
       const interpolatedRules = interpolateRulesContent(rawRules, variables, true);
 
       const rulesSnapshot = ruleVersion
@@ -272,6 +272,7 @@ export class AgreementRenewalSigningService {
             raw_rules: rawRules,
             interpolated_rules: interpolatedRules,
             hostel_rules: interpolatedRules,
+            terms_and_conditions: (template.rules_content as any)?.terms_and_conditions || DEFAULT_TERMS_AND_CONDITIONS,
           },
         },
       });

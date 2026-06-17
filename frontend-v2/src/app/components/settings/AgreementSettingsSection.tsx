@@ -1,5 +1,29 @@
 import { useState, useEffect, useRef } from "react";
-import { Upload, X, ShieldAlert, FileText, CheckCircle2, PenTool, Image as ImageIcon, RotateCw, Plus, Trash2, Eye } from "lucide-react";
+import {
+  Upload,
+  X,
+  ShieldAlert,
+  FileText,
+  CheckCircle2,
+  PenTool,
+  Image as ImageIcon,
+  RotateCw,
+  Plus,
+  Trash2,
+  Eye,
+  ArrowUp,
+  ArrowDown,
+  RotateCcw,
+  Home,
+  DollarSign,
+  Clock,
+  Shield,
+  Wifi,
+  DoorOpen,
+  Lock,
+  Scale,
+  HelpCircle
+} from "lucide-react";
 import { toast } from "sonner";
 import { ownerService } from "@features/owners/api";
 import { SignaturePad } from "@shared/ui/inputs";
@@ -28,8 +52,10 @@ const PLACEHOLDERS = [
   { label: "Hostel Name", value: "{{hostelName}}" },
 ];
 
+const DEFAULT_TERM_IDS = ["residential_use", "rent_payment", "security_deposit", "notice_period", "hostel_rules_compliance"];
+const DEFAULT_CATEGORY_IDS = ["payments", "facilities", "discipline", "safety", "vacating", "rights"];
+
 export function AgreementSettingsSection({ hostelId }: Props) {
-  const [templateType, setTemplateType] = useState<"RESIDENCY" | "RENEWAL" | "MOVE_OUT">("RESIDENCY");
   const [local, setLocal] = useState<TemplateData>({
     title: "",
     owner_name: "",
@@ -57,18 +83,39 @@ export function AgreementSettingsSection({ hostelId }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const res = await ownerService.getAgreementTemplate(hostelId, templateType);
+      const res = await ownerService.getAgreementTemplate(hostelId, "RESIDENCY");
       const data = res?.data ?? res;
       
       // Prefer draft if exists, else active
       const template = data?.draft || data?.active;
       
+      let hostelRules = template?.rules_content || data?.default_template;
+      if (hostelRules && typeof hostelRules === "object") {
+        if (!hostelRules.terms_and_conditions || !Array.isArray(hostelRules.terms_and_conditions)) {
+          hostelRules = {
+            ...hostelRules,
+            terms_and_conditions: data?.default_terms || data?.default_template?.terms_and_conditions || [],
+          };
+        }
+        if (!hostelRules.categories || !Array.isArray(hostelRules.categories)) {
+          hostelRules = {
+            ...hostelRules,
+            categories: data?.default_rules?.categories || data?.default_template?.categories || [],
+          };
+        }
+      } else {
+        hostelRules = {
+          terms_and_conditions: data?.default_terms || [],
+          categories: data?.default_rules?.categories || [],
+        };
+      }
+
       const mapped: TemplateData = {
-        title: template?.title || (templateType === "RESIDENCY" ? "Standard Tenant Agreement" : templateType === "RENEWAL" ? "Renewal Agreement" : "Move-out Agreement"),
+        title: template?.title || "Standard Tenant Agreement",
         owner_name: template?.owner_name || "",
         owner_signature_url: template?.owner_signature_url || null,
         custom_rules: template?.custom_rules || "",
-        hostel_rules: template?.rules_content || data?.default_rules || null,
+        hostel_rules: hostelRules,
       };
 
       setLocal(mapped);
@@ -82,7 +129,7 @@ export function AgreementSettingsSection({ hostelId }: Props) {
     }
   };
 
-  // Load template on mount, hostelId change, or templateType change
+  // Load template on mount or hostelId change
   useEffect(() => {
     fetchTemplate();
     
@@ -92,7 +139,7 @@ export function AgreementSettingsSection({ hostelId }: Props) {
       setPdfBlobUrl(null);
     }
     setPreviewTab("html");
-  }, [hostelId, templateType]);
+  }, [hostelId]);
 
   // Clean up PDF blob URL on unmount
   useEffect(() => {
@@ -120,7 +167,7 @@ export function AgreementSettingsSection({ hostelId }: Props) {
     try {
       await ownerService.updateAgreementTemplate(hostelId, {
         action,
-        type: templateType,
+        type: "RESIDENCY",
         title: local.title,
         owner_name: local.owner_name,
         custom_rules: local.custom_rules,
@@ -140,6 +187,61 @@ export function AgreementSettingsSection({ hostelId }: Props) {
   const handleReset = () => {
     setLocal(snap.current);
     setError(null);
+  };
+
+  const handleResetSection = async (sectionType: "term" | "category", sectionId: string) => {
+    if (!window.confirm(`Are you sure you want to reset this ${sectionType === "term" ? "Term" : "Category"} to system defaults?`)) {
+      return;
+    }
+    try {
+      const res = await ownerService.updateAgreementTemplate(hostelId, {
+        action: "reset_section",
+        section_type: sectionType,
+        section_id: sectionId,
+      });
+      const data = res?.data ?? res;
+      if (data?.default) {
+        setLocal((prev) => {
+          const rules = { ...prev.hostel_rules };
+          if (sectionType === "term") {
+            const terms = (rules.terms_and_conditions || []).map((t: any) =>
+              t.id === sectionId ? data.default : t
+            );
+            rules.terms_and_conditions = terms;
+          } else {
+            const categories = (rules.categories || []).map((c: any) =>
+              c.id === sectionId ? data.default : c
+            );
+            rules.categories = categories;
+          }
+          return { ...prev, hostel_rules: rules };
+        });
+        toast.success(`Reset ${sectionType === "term" ? "term" : "category"} to system default`);
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error?.message || "Failed to reset section to default");
+    }
+  };
+
+  const handleResetAll = async () => {
+    if (!window.confirm("Are you sure you want to reset all terms and categories to system defaults? Any custom changes will be lost.")) {
+      return;
+    }
+    try {
+      const res = await ownerService.updateAgreementTemplate(hostelId, {
+        action: "reset_all",
+      });
+      const data = res?.data ?? res;
+      if (data?.default_template) {
+        setLocal((prev) => ({
+          ...prev,
+          hostel_rules: data.default_template,
+        }));
+        toast.success("Reset all sections to defaults successfully.");
+      }
+    } catch (err: any) {
+      toast.error("Failed to reset template to defaults");
+    }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -259,6 +361,59 @@ export function AgreementSettingsSection({ hostelId }: Props) {
     }, 0);
   };
 
+  // Terms and conditions state updates
+  const updateTermTitle = (termId: string, title: string) => {
+    setLocal((prev) => {
+      const terms = (prev.hostel_rules?.terms_and_conditions || []).map((t: any) =>
+        t.id === termId ? { ...t, title } : t
+      );
+      return { ...prev, hostel_rules: { ...prev.hostel_rules, terms_and_conditions: terms } };
+    });
+  };
+
+  const updateTermContent = (termId: string, content: string) => {
+    setLocal((prev) => {
+      const terms = (prev.hostel_rules?.terms_and_conditions || []).map((t: any) =>
+        t.id === termId ? { ...t, content } : t
+      );
+      return { ...prev, hostel_rules: { ...prev.hostel_rules, terms_and_conditions: terms } };
+    });
+  };
+
+  const addTerm = () => {
+    setLocal((prev) => {
+      const terms = [
+        ...(prev.hostel_rules?.terms_and_conditions || []),
+        {
+          id: `term-${Date.now()}`,
+          title: "New Term",
+          content: "Enter residency terms & conditions description here...",
+        },
+      ];
+      return { ...prev, hostel_rules: { ...prev.hostel_rules, terms_and_conditions: terms } };
+    });
+  };
+
+  const removeTerm = (termId: string) => {
+    setLocal((prev) => {
+      const terms = (prev.hostel_rules?.terms_and_conditions || []).filter((t: any) => t.id !== termId);
+      return { ...prev, hostel_rules: { ...prev.hostel_rules, terms_and_conditions: terms } };
+    });
+  };
+
+  const moveTerm = (idx: number, direction: "up" | "down") => {
+    const terms = [...(local.hostel_rules?.terms_and_conditions || [])];
+    const targetIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= terms.length) return;
+    const temp = terms[idx];
+    terms[idx] = terms[targetIdx];
+    terms[targetIdx] = temp;
+    setLocal((prev) => ({
+      ...prev,
+      hostel_rules: { ...prev.hostel_rules, terms_and_conditions: terms },
+    }));
+  };
+
   // Structured Categories state updates
   const updateCategoryTitle = (catId: string, title: string) => {
     setLocal((prev) => {
@@ -367,11 +522,24 @@ export function AgreementSettingsSection({ hostelId }: Props) {
     });
   };
 
+  const moveCategory = (idx: number, direction: "up" | "down") => {
+    const categories = [...(local.hostel_rules?.categories || [])];
+    const targetIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= categories.length) return;
+    const temp = categories[idx];
+    categories[idx] = categories[targetIdx];
+    categories[targetIdx] = temp;
+    setLocal((prev) => ({
+      ...prev,
+      hostel_rules: { ...prev.hostel_rules, categories },
+    }));
+  };
+
   const generatePdfPreview = async () => {
     setLoadingPdf(true);
     try {
       const responseData = await ownerService.getAgreementTemplatePreview(hostelId, {
-        type: templateType,
+        type: "RESIDENCY",
         title: local.title,
         owner_name: local.owner_name,
         owner_signature_url: local.owner_signature_url,
@@ -380,7 +548,6 @@ export function AgreementSettingsSection({ hostelId }: Props) {
       });
 
       // Wrap the response in a Blob explicitly setting type to application/pdf.
-      // This guarantees the browser's native viewer handles it correctly as a PDF document.
       const pdfBlob = new Blob([responseData], { type: "application/pdf" });
       const url = URL.createObjectURL(pdfBlob);
       
@@ -397,14 +564,50 @@ export function AgreementSettingsSection({ hostelId }: Props) {
     }
   };
 
+  const getTermIcon = (id: string) => {
+    switch (id) {
+      case "residential_use":
+        return <Home className="w-4 h-4 text-blue-500" />;
+      case "rent_payment":
+        return <DollarSign className="w-4 h-4 text-emerald-500" />;
+      case "security_deposit":
+        return <Scale className="w-4 h-4 text-amber-500" />;
+      case "notice_period":
+        return <Clock className="w-4 h-4 text-indigo-500" />;
+      case "hostel_rules_compliance":
+        return <Shield className="w-4 h-4 text-purple-500" />;
+      default:
+        return <FileText className="w-4 h-4 text-slate-500" />;
+    }
+  };
+
+  const getCategoryIcon = (id: string) => {
+    switch (id) {
+      case "payments":
+        return <DollarSign className="w-4 h-4 text-emerald-500" />;
+      case "facilities":
+        return <Wifi className="w-4 h-4 text-sky-500" />;
+      case "discipline":
+        return <Shield className="w-4 h-4 text-rose-500" />;
+      case "safety":
+        return <Lock className="w-4 h-4 text-amber-500" />;
+      case "vacating":
+        return <DoorOpen className="w-4 h-4 text-violet-500" />;
+      case "rights":
+        return <Scale className="w-4 h-4 text-indigo-500" />;
+      default:
+        return <HelpCircle className="w-4 h-4 text-slate-500" />;
+    }
+  };
+
   if (loading) {
     return <SkeletonSection />;
   }
 
   return (
     <SectionShell
-      title={`${templateType === "RESIDENCY" ? "Residency" : templateType === "RENEWAL" ? "Renewal" : "Move-out"} Agreement Template`}
-      description="Configure default contract templates, custom house rules, and signature stamps for automatic tenant onboarding PDFs."
+      title="Master Residency Agreement Template"
+      description="Configure your unified master agreement, house rules, custom terms, and landlord signature. All move-in and renewal workflows will dynamically draw from this template."
       isDirty={isDirty}
       saving={saving}
       onSave={() => handleSave("save_draft")}
@@ -412,40 +615,17 @@ export function AgreementSettingsSection({ hostelId }: Props) {
       error={error}
     >
       <div className="space-y-6">
-        {/* Template Type Tabs */}
-        <div className="flex gap-2 p-1 bg-secondary/50 border border-border/80 rounded-xl w-fit">
+        {/* Actions Bar */}
+        <div className="flex justify-between items-center bg-secondary/30 border border-border/60 p-3 rounded-xl">
+          <div className="text-xs text-muted-foreground">
+            Unified Master Residency Template config active.
+          </div>
           <button
             type="button"
-            onClick={() => setTemplateType("RESIDENCY")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              templateType === "RESIDENCY"
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
+            onClick={handleResetAll}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary hover:bg-secondary/80 border border-border text-xs font-semibold rounded-lg shadow-sm transition-all text-muted-foreground hover:text-foreground"
           >
-            Residency Agreement
-          </button>
-          <button
-            type="button"
-            onClick={() => setTemplateType("RENEWAL")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              templateType === "RENEWAL"
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Renewal Agreement
-          </button>
-          <button
-            type="button"
-            onClick={() => setTemplateType("MOVE_OUT")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              templateType === "MOVE_OUT"
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Move-out Agreement
+            <RotateCcw className="w-3.5 h-3.5" /> Reset All to Default
           </button>
         </div>
 
@@ -456,7 +636,7 @@ export function AgreementSettingsSection({ hostelId }: Props) {
               <ShieldAlert className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
               <div className="text-xs text-foreground/80 leading-relaxed">
                 <span className="font-semibold text-amber-500 block">Unpublished Draft version</span>
-                You have unsaved changes in draft mode. New tenants will continue signing the old version until you publish this draft.
+                You have unsaved changes in draft mode. New tenants and renewals will continue signing the old version until you publish this draft.
               </div>
             </div>
             <button
@@ -475,7 +655,7 @@ export function AgreementSettingsSection({ hostelId }: Props) {
           <FileText className="w-5 h-5 text-accent shrink-0 mt-0.5" />
           <div className="text-xs text-foreground/80 leading-relaxed">
             <span className="font-semibold text-accent block mb-0.5">Immutable PDF Agreement Flow</span>
-            During onboarding, tenants will review and sign this agreement. A legally compliant PDF snapshot will be generated with rent details, deposits, custom rules, and signatures, and then stored permanently in Supabase Storage.
+            During onboarding and renewal, tenants will review and sign this agreement. A legally compliant PDF snapshot will be generated with rent details, deposits, custom rules, and signatures, and stored permanently.
           </div>
         </div>
 
@@ -502,15 +682,107 @@ export function AgreementSettingsSection({ hostelId }: Props) {
           </Field>
         </div>
 
-        {/* Structured Categories Editor */}
+        {/* Section A: Terms & Conditions Editor */}
         <div className="border-t border-border pt-5 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                Structured Rules Categories
+                Section A: Terms & Conditions
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed mt-0.5">
-                Organize rules into distinct sections. Each section can have bullet points (rules) and optional bold highlights.
+                Core residency terms of the lease agreement. Edit, reorder, or reset terms individually.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={addTerm}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary hover:bg-secondary/80 border border-border text-xs font-semibold rounded-lg shadow-sm transition-all sm:self-auto self-start"
+            >
+              <Plus className="w-3.5 h-3.5" /> Add Term Clause
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            {(local.hostel_rules?.terms_and_conditions || []).map((term: any, tIdx: number) => (
+              <div key={term.id || tIdx} className="bg-secondary/15 border border-border/80 rounded-xl p-4 space-y-3 relative group">
+                <div className="absolute top-4 right-4 flex items-center gap-1.5">
+                  {/* Reorder Buttons */}
+                  <button
+                    type="button"
+                    onClick={() => moveTerm(tIdx, "up")}
+                    disabled={tIdx === 0}
+                    className="text-muted-foreground hover:text-foreground p-1 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                    title="Move Up"
+                  >
+                    <ArrowUp className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveTerm(tIdx, "down")}
+                    disabled={tIdx === (local.hostel_rules?.terms_and_conditions || []).length - 1}
+                    className="text-muted-foreground hover:text-foreground p-1 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                    title="Move Down"
+                  >
+                    <ArrowDown className="w-3.5 h-3.5" />
+                  </button>
+
+                  {/* Reset Button (Only for default terms) */}
+                  {DEFAULT_TERM_IDS.includes(term.id) && (
+                    <button
+                      type="button"
+                      onClick={() => handleResetSection("term", term.id)}
+                      className="text-muted-foreground hover:text-accent p-1 transition-colors"
+                      title="Reset clause to system default"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+
+                  {/* Delete Button */}
+                  <button
+                    type="button"
+                    onClick={() => removeTerm(term.id)}
+                    className="text-muted-foreground hover:text-destructive p-1 transition-colors"
+                    title="Remove Clause"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2 max-w-[75%] border-b border-border/40 pb-1.5 mb-1">
+                  {getTermIcon(term.id)}
+                  <input
+                    type="text"
+                    className="bg-transparent border-0 font-semibold text-xs text-foreground focus:ring-0 focus:outline-none p-0 w-full"
+                    value={term.title}
+                    onChange={(e) => updateTermTitle(term.id, e.target.value)}
+                    placeholder="Term Title"
+                  />
+                </div>
+
+                <Field label="Clause Content">
+                  <textarea
+                    rows={3}
+                    className={`${inp} py-2 text-xs`}
+                    value={term.content}
+                    onChange={(e) => updateTermContent(term.id, e.target.value)}
+                    placeholder="Enter the lease term/clause description here..."
+                  />
+                </Field>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Section B: House Rules Editor */}
+        <div className="border-t border-border pt-5 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Section B: House Rules & Regulations
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed mt-0.5">
+                Organize guidelines into categories. Each category contains rule lists and optional highlighted summary bullet points.
               </p>
             </div>
             <button
@@ -518,32 +790,66 @@ export function AgreementSettingsSection({ hostelId }: Props) {
               onClick={addCategory}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary hover:bg-secondary/80 border border-border text-xs font-semibold rounded-lg shadow-sm transition-all sm:self-auto self-start"
             >
-              <Plus className="w-3.5 h-3.5" /> Add Category
+              <Plus className="w-3.5 h-3.5" /> Add Rule Category
             </button>
           </div>
 
           <div className="space-y-4">
             {(local.hostel_rules?.categories || []).map((cat: any, cIdx: number) => (
-              <div key={cat.id || cIdx} className="bg-secondary/20 border border-border rounded-xl p-4 space-y-4 relative">
-                <button
-                  type="button"
-                  onClick={() => removeCategory(cat.id)}
-                  className="absolute top-4 right-4 text-muted-foreground hover:text-destructive transition-colors"
-                  title="Remove Category"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+              <div key={cat.id || cIdx} className="bg-secondary/10 border border-border rounded-xl p-4 space-y-4 relative group">
+                <div className="absolute top-4 right-4 flex items-center gap-1.5">
+                  {/* Reorder Buttons */}
+                  <button
+                    type="button"
+                    onClick={() => moveCategory(cIdx, "up")}
+                    disabled={cIdx === 0}
+                    className="text-muted-foreground hover:text-foreground p-1 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                    title="Move Up"
+                  >
+                    <ArrowUp className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveCategory(cIdx, "down")}
+                    disabled={cIdx === (local.hostel_rules?.categories || []).length - 1}
+                    className="text-muted-foreground hover:text-foreground p-1 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                    title="Move Down"
+                  >
+                    <ArrowDown className="w-3.5 h-3.5" />
+                  </button>
 
-                <div className="max-w-[85%]">
-                  <Field label={`Category ${cIdx + 1} Title`}>
-                    <input
-                      type="text"
-                      className={inp}
-                      value={cat.title}
-                      onChange={(e) => updateCategoryTitle(cat.id, e.target.value)}
-                      placeholder="Category Title"
-                    />
-                  </Field>
+                  {/* Reset Category (Only for default categories) */}
+                  {DEFAULT_CATEGORY_IDS.includes(cat.id) && (
+                    <button
+                      type="button"
+                      onClick={() => handleResetSection("category", cat.id)}
+                      className="text-muted-foreground hover:text-accent p-1 transition-colors"
+                      title="Reset category to system default"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+
+                  {/* Delete Button */}
+                  <button
+                    type="button"
+                    onClick={() => removeCategory(cat.id)}
+                    className="text-muted-foreground hover:text-destructive p-1 transition-colors"
+                    title="Remove Category"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2 max-w-[75%] border-b border-border/40 pb-1.5 mb-1">
+                  {getCategoryIcon(cat.id)}
+                  <input
+                    type="text"
+                    className="bg-transparent border-0 font-semibold text-xs text-foreground focus:ring-0 focus:outline-none p-0 w-full"
+                    value={cat.title}
+                    onChange={(e) => updateCategoryTitle(cat.id, e.target.value)}
+                    placeholder="Category Title"
+                  />
                 </div>
 
                 {/* Highlights */}
@@ -643,7 +949,7 @@ export function AgreementSettingsSection({ hostelId }: Props) {
 
             <textarea
               ref={textareaRef}
-              className={`${inp} min-h-[160px] font-mono text-xs leading-relaxed`}
+              className={`${inp} min-h-[120px] font-mono text-xs leading-relaxed`}
               value={local.custom_rules}
               onChange={(e) => upd("custom_rules", e.target.value)}
               placeholder="E.g.,&#10;1. Monthly rent must be paid on or before the 5th of each calendar month.&#10;2. Security deposit is refundable only upon serving a 30-day notice period.&#10;3. External visitors/guests are not allowed inside rooms after 8:00 PM."
@@ -857,13 +1163,19 @@ export function AgreementSettingsSection({ hostelId }: Props) {
                 2. Terms of Residency & Rules Compliance
               </h5>
               <ul className="list-disc pl-4 space-y-1.5 text-muted-foreground">
-                <li>The Tenant shall use the allocated room solely for residential purposes. Sub-letting or transferring the room to any other person is strictly prohibited.</li>
-                <li>The Tenant agrees to pay the monthly rent on or before the due date as defined by the hostel policy. Late payments may attract fees or lead to suspension of access.</li>
-                <li>A refundable security deposit is deposited with the management, which will be settled/refunded upon successful move-out compliance checks, subject to clearance of all pending dues and room inspection for damages.</li>
-                <li>Either party must provide at least 30 days written notice prior to terminating this residency agreement.</li>
-                <li className="text-slate-800 font-medium bg-amber-500/5 p-2 rounded border border-amber-500/10">
-                  <strong>Hostel Rules Binding Clause:</strong> The Tenant explicitly agrees to follow, comply with, and be legally bound by each and every rule, policy, and regulation of the hostel. This includes all guidelines concerning fee refunds, hostel discipline, guest policies, late fee obligations, and property damage liabilities. Any breach of these rules constitutes a violation of this residency agreement and may result in immediate termination of stay.
-                </li>
+                {(local.hostel_rules?.terms_and_conditions || []).map((term: any, tIdx: number) => (
+                  <li key={term.id || tIdx} className={term.id === "hostel_rules_compliance" ? "text-slate-800 font-medium bg-amber-500/5 p-2 rounded border border-amber-500/10 list-none" : ""}>
+                    {term.id === "hostel_rules_compliance" ? (
+                      <>
+                        <strong>{term.title}:</strong> {term.content}
+                      </>
+                    ) : (
+                      <>
+                        <strong>{term.title}</strong> — {term.content}
+                      </>
+                    )}
+                  </li>
+                ))}
               </ul>
 
               {local.hostel_rules?.categories && (

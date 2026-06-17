@@ -204,7 +204,7 @@ describe("Residency Agreement Rules Snapshot Mechanism", () => {
         owner_signature_url: "https://sig.com",
         hostel_id: "hostel-1",
         status: "PUBLISHED",
-        type: "RENEWAL",
+        type: "RESIDENCY",
         rules_content: mockRuleVersion.content,
         version_number: 3,
         version: "v3.0",

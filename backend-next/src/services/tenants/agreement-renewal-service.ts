@@ -162,12 +162,22 @@ export class AgreementRenewalService {
         );
       }
 
+      const activeTemplate = await tx.agreementTemplate.findFirst({
+        where: {
+          hostel_id: sourceAgreement.hostel_id,
+          type: "RESIDENCY",
+          status: "PUBLISHED",
+          is_active: true,
+        },
+      });
+      const templateId = activeTemplate?.id || sourceAgreement.template_id;
+
       const renewalDraft = await tx.agreement.create({
         data: {
           id: randomUUID(),
           tenant_id: sourceAgreement.tenant_id,
           hostel_id: sourceAgreement.hostel_id,
-          template_id: sourceAgreement.template_id,
+          template_id: templateId,
           renewed_from_agreement_id: sourceAgreement.id,
           status: "DRAFT",
           agreement_version: nextVersion,

@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession, apiError } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { AgreementTemplateType } from "@prisma/client";
-import { DEFAULT_RULES_TEMPLATE } from "@/src/utils/default-rules";
+import { DEFAULT_AGREEMENT_TEMPLATE } from "@/src/utils/default-rules";
 import { AgreementGenerationService } from "@/src/services/tenants/agreement-generation-service";
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const owner_name = String(body.owner_name || hostel.profiles?.name || hostel.name).trim();
     const owner_signature_url = body.owner_signature_url ? String(body.owner_signature_url).trim() : null;
     const custom_rules = String(body.custom_rules || "").trim();
-    const rules_content = body.rules_content || DEFAULT_RULES_TEMPLATE;
+    const rules_content = body.rules_content || DEFAULT_AGREEMENT_TEMPLATE;
 
     // Build mock agreement data matching AgreementData structure for preview
     const mockData = {
