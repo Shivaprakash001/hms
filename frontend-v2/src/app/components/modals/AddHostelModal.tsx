@@ -19,14 +19,28 @@ export function AddHostelModal({ onClose }: AddHostelModalProps) {
     city: '',
     state: '',
     pincode: '',
-    totalFloors: '',
-    totalRooms: '',
     contactNumber: '',
   });
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
 
   const mutation = useMutation({
-    mutationFn: (payload: Record<string, unknown>) => ownerService.createHostel(payload),
+    mutationFn: async (payload: { data: Record<string, unknown>; file: File | null }) => {
+      const result = await ownerService.createHostel(payload.data);
+      const anyData = result as Record<string, unknown>;
+      const newId = anyData?.id ?? (anyData?.hostel as Record<string, unknown>)?.id;
+      
+      if (payload.file && newId) {
+        try {
+          await ownerService.uploadLogo(payload.file, newId);
+        } catch (uploadError) {
+          console.error('[AddHostelModal] Photo upload failed:', uploadError);
+          toast.error('Hostel created, but photo upload failed. You can upload it from settings.');
+        }
+      }
+      return result;
+    },
     onSuccess: (data: Record<string, unknown>) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.owner.hostels() });
       toast.success('Hostel created successfully');
@@ -50,15 +64,39 @@ export function AddHostelModal({ onClose }: AddHostelModalProps) {
     e.preventDefault();
     setApiError(null);
     mutation.mutate({
-      name: formData.hostelName,
-      address: formData.address,
-      city: formData.city,
-      state: formData.state,
-      pincode: formData.pincode,
-      total_floors: formData.totalFloors ? Number(formData.totalFloors) : undefined,
-      total_rooms: formData.totalRooms ? Number(formData.totalRooms) : undefined,
-      phone: formData.contactNumber,
+      data: {
+        name: formData.hostelName,
+        address: formData.address,
+        city: formData.city,
+        state: formData.state,
+        pincode: formData.pincode,
+        phone: formData.contactNumber,
+      },
+      file: selectedFile,
     });
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        toast.error('File size exceeds 2MB limit');
+        return;
+      }
+      setSelectedFile(file);
+      const url = URL.createObjectURL(file);
+      setPreviewUrl(url);
+    }
+  };
+
+  const handleRemoveFile = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setSelectedFile(null);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
   };
 
   const handleChange = (field: string, value: string) => {
@@ -81,10 +119,45 @@ export function AddHostelModal({ onClose }: AddHostelModalProps) {
           {/* Photo Upload */}
           <div>
             <label className="block text-sm font-medium text-foreground mb-2">Hostel Photo</label>
-            <div className="border-2 border-dashed border-border rounded-xl p-8 text-center">
-              <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">Tap to upload hostel photo</p>
-            </div>
+            <input
+              type="file"
+              id="hostel-photo-input"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+            {previewUrl ? (
+              <div className="relative border border-border rounded-xl overflow-hidden aspect-video max-h-48 group">
+                <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => document.getElementById('hostel-photo-input')?.click()}
+                    className="p-2 bg-background/90 hover:bg-background rounded-lg text-foreground transition-colors text-xs font-medium flex items-center gap-1.5"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    Change
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRemoveFile}
+                    className="p-2 bg-destructive/90 hover:bg-destructive rounded-lg text-destructive-foreground transition-colors text-xs font-medium flex items-center gap-1.5"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div
+                onClick={() => document.getElementById('hostel-photo-input')?.click()}
+                className="border-2 border-dashed border-border hover:border-accent/50 rounded-xl p-8 text-center cursor-pointer transition-colors bg-card hover:bg-secondary/20"
+              >
+                <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">Tap to upload hostel photo</p>
+                <p className="text-xs text-muted-foreground/60 mt-1">PNG, JPG, or WEBP up to 2MB</p>
+              </div>
+            )}
           </div>
 
           {/* Basic Information */}
@@ -105,36 +178,8 @@ export function AddHostelModal({ onClose }: AddHostelModalProps) {
                 placeholder="e.g. Sri Adithya Boys Hostel"
               />
             </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1.5">Total Floors *</label>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  value={formData.totalFloors}
-                  onChange={(e) => handleChange('totalFloors', e.target.value)}
-                  className="w-full px-4 py-3 bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
-                  placeholder="0"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1.5">Total Rooms *</label>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  value={formData.totalRooms}
-                  onChange={(e) => handleChange('totalRooms', e.target.value)}
-                  className="w-full px-4 py-3 bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
-                  placeholder="0"
-                />
-              </div>
-            </div>
           </div>
 
-          {/* Location Details */}
           <div className="space-y-4">
             <h3 className="text-sm font-medium text-foreground flex items-center gap-2">
               <MapPin className="w-4 h-4 text-accent" />
@@ -222,7 +267,11 @@ export function AddHostelModal({ onClose }: AddHostelModalProps) {
             className="w-full bg-accent text-accent-foreground py-4 rounded-xl font-medium active:scale-95 transition-transform disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {mutation.isPending ? (
-              <><Loader2 className="w-4 h-4 animate-spin" /> Creating...</>
+              selectedFile ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Uploading Photo...</>
+              ) : (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Creating...</>
+              )
             ) : 'Create Hostel'}
           </button>
         </form>

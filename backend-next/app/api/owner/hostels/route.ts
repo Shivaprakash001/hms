@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
     const name = body.name || body.hostel_name || "New Hostel";
     const phone = body.phone || body.hostel_phone || "";
     
-    await prisma.hostels.create({
+    const hostel = await prisma.hostels.create({
       data: {
         owner_id: session.sub,
         name,
@@ -136,7 +136,11 @@ export async function POST(req: NextRequest) {
     });
 
     const result = await propertyService.getOwnerProfile(session.sub);
-    return apiResponse(result);
+    return apiResponse({
+      ...result,
+      hostel,
+      id: hostel.id,
+    });
   } catch (error: any) {
     const msg = typeof error === "string" ? error : (error && typeof error.message === "string" ? error.message : String(error));
     if (msg.startsWith("PLAN_LIMIT:")) {
