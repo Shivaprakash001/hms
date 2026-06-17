@@ -31,7 +31,7 @@ interface Props {
 }
 
 function BedsLabel({ active, capacity, vacant }: { active: number; capacity: number; vacant: number }) {
-  if (capacity === 0) return <span className="text-muted-foreground">—</span>;
+  if (capacity === 0 || isNaN(capacity)) return <span className="text-muted-foreground">0</span>;
   if (vacant === 0)
     return <span className="font-semibold text-success text-sm">Full · {active}/{capacity}</span>;
   return (

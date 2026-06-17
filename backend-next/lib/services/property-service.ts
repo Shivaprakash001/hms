@@ -233,6 +233,42 @@ export class PropertyService {
     if (data.gst_number !== undefined) mapped.gst_number = data.gst_number;
 
     const hostelId = data.hostel_id || data.hostelId;
+
+    if (mapped.name) {
+      mapped.name = String(mapped.name).trim();
+      let targetHostelId = hostelId;
+      if (!targetHostelId) {
+        const existingHostels = await prisma.hostels.findMany({
+          where: { owner_id: userId, is_active: true },
+          select: { id: true },
+          orderBy: { created_at: "asc" },
+          take: 2,
+        });
+        if (existingHostels.length === 1) {
+          targetHostelId = existingHostels[0].id;
+        }
+      }
+
+      const duplicate = await prisma.hostels.findFirst({
+        where: {
+          owner_id: userId,
+          is_active: true,
+          name: {
+            equals: mapped.name,
+            mode: "insensitive",
+          },
+          ...(targetHostelId && {
+            NOT: {
+              id: targetHostelId,
+            },
+          }),
+        },
+      });
+      if (duplicate) {
+        throw new Error("VALIDATION: A hostel with this name already exists");
+      }
+    }
+
     if (hostelId) {
       const updated = await prisma.hostels.updateMany({
         where: { id: hostelId, owner_id: userId, is_active: true },

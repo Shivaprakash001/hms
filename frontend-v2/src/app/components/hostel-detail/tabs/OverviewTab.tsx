@@ -251,7 +251,9 @@ export function OverviewTab({ hostelId }: { hostelId: string }) {
         <div className="grid grid-cols-3 divide-x divide-border">
           <div className="text-center">
             <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">Beds</div>
-            <div className="text-base font-bold text-foreground">{occupiedBeds} / {totalCapacity}</div>
+            <div className="text-base font-bold text-foreground">
+              {totalCapacity === 0 || isNaN(totalCapacity) ? '0' : `${occupiedBeds} / ${totalCapacity}`}
+            </div>
           </div>
           <div className="text-center">
             <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1">Due</div>
@@ -269,7 +271,10 @@ export function OverviewTab({ hostelId }: { hostelId: string }) {
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-foreground">Occupancy</h3>
           <span className="text-xs text-muted-foreground font-semibold">
-            {occupiedBeds} / {totalCapacity} occupied · {vacantBeds} beds vacant
+            {totalCapacity === 0 || isNaN(totalCapacity)
+              ? '0 beds'
+              : `${occupiedBeds} / ${totalCapacity} occupied · ${vacantBeds} beds vacant`
+            }
           </span>
         </div>
 

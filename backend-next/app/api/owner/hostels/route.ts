@@ -120,8 +120,23 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { propertyService } = await import("@/lib/services/property-service");
     
-    const name = body.name || body.hostel_name || "New Hostel";
+    const name = (body.name || body.hostel_name || "New Hostel").trim();
     const phone = body.phone || body.hostel_phone || "";
+
+    // Owner-scoped duplicate hostel check
+    const existing = await prisma.hostels.findFirst({
+      where: {
+        owner_id: session.sub,
+        is_active: true,
+        name: {
+          equals: name,
+          mode: "insensitive",
+        },
+      },
+    });
+    if (existing) {
+      return apiError("A hostel with this name already exists", "VALIDATION_ERROR", 400);
+    }
     
     const hostel = await prisma.hostels.create({
       data: {
