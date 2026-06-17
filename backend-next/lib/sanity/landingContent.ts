@@ -88,6 +88,7 @@ export type FaqContent = {
 
 export type AdmissionStepContent = {
   step: number;
+  stepNumber?: number;
   title: string;
   description: string;
   icon?: string;

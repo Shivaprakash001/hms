@@ -39,6 +39,7 @@ const combinedQuery = `{
       description
     },
     admissionSteps[] {
+      step,
       stepNumber,
       title,
       description
@@ -180,11 +181,15 @@ export async function getLandingMarketingContent(previewToken?: string): Promise
           }))
         : fallbackLandingContent.gallery,
       admissionSteps: hostel.admissionSteps && hostel.admissionSteps.length
-        ? hostel.admissionSteps.map((step: any) => ({
-            stepNumber: step.stepNumber,
-            title: step.title,
-            description: step.description,
-          }))
+        ? hostel.admissionSteps.map((step: any) => {
+            const stepVal = step.step || step.stepNumber;
+            return {
+              step: stepVal,
+              stepNumber: stepVal,
+              title: step.title,
+              description: step.description,
+            };
+          })
         : fallbackLandingContent.admissionSteps,
       footer: {
         title: settings.title || fallbackLandingContent.footer.title,

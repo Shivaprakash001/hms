@@ -161,11 +161,15 @@ function compactStats(stats: any[] | undefined) {
 function compactAdmissionSteps(steps: any[] | undefined) {
   return (Array.isArray(steps) ? steps : [])
     .filter((step) => step && Number.isFinite(Number(step.step ?? step.stepNumber)) && hasText(step.title) && hasText(step.description))
-    .map((step) => ({ 
-      ...step, 
-      step: Number(step.step ?? step.stepNumber),
-      icon: step.icon 
-    }));
+    .map((step) => {
+      const stepVal = Number(step.step ?? step.stepNumber);
+      return { 
+        ...step, 
+        step: stepVal,
+        stepNumber: stepVal,
+        icon: step.icon 
+      };
+    });
 }
 
 function activeAnnouncements(announcements: any[] | undefined) {

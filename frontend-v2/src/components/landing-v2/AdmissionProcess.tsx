@@ -12,7 +12,7 @@ export function AdmissionProcess({
   steps?: AdmissionStepContent[];
   hostelProfile?: HostelProfileContent;
 }) {
-  const safeSteps = steps.filter((step) => step?.stepNumber && step?.title && step?.description);
+  const safeSteps = steps.filter((step) => (step?.stepNumber || step?.step) && step?.title && step?.description);
   if (!safeSteps.length) return null;
 
   const cleanPhone = hostelProfile?.phone?.replace(/\D/g, '') || '919392433422';
@@ -48,7 +48,7 @@ export function AdmissionProcess({
                     )}
 
                     <div className={`w-12 h-12 rounded-full ${isFinal ? 'bg-[#1B2D5B]' : 'bg-[#F07B1D]'} text-white flex items-center justify-center font-bold text-xl mb-4 relative z-10 shadow-md`}>
-                      {step.stepNumber}
+                      {step.stepNumber ?? step.step}
                     </div>
 
                     <div className={`w-14 h-14 rounded-full ${isFinal ? 'bg-[#1B2D5B]/10' : 'bg-[#F07B1D]/10'} flex items-center justify-center mb-3 transition-transform hover:scale-105 duration-300`}>
@@ -76,9 +76,9 @@ export function AdmissionProcess({
                   const isFinal = index === safeSteps.length - 1;
                   const Icon = getLandingIcon(step.icon || derivedIcons[index] || 'phone', 'phone');
                   return (
-                    <div key={step.stepNumber} className="relative flex items-center gap-3 rounded-xl bg-[#FFFDF5] px-3 py-3">
+                    <div key={step.stepNumber ?? step.step} className="relative flex items-center gap-3 rounded-xl bg-[#FFFDF5] px-3 py-3">
                       <div className={`relative z-10 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full ${isFinal ? 'bg-[#1B2D5B]' : 'bg-[#F07B1D]'} text-sm font-bold text-white shadow-sm`}>
-                        {step.stepNumber}
+                        {step.stepNumber ?? step.step}
                       </div>
                       <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full ${isFinal ? 'bg-[#1B2D5B]/10' : 'bg-[#F07B1D]/10'}`}>
                         <Icon className={`h-4 w-4 ${isFinal ? 'text-[#1B2D5B]' : 'text-[#F07B1D]'}`} />
