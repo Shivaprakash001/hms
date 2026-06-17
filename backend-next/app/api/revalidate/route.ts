@@ -10,6 +10,8 @@ const DOCUMENT_TYPE_TO_TAG: Record<string, string> = {
   testimonial: 'testimonial',
   faq: 'faq',
   categoryRating: 'categoryRating',
+  food: 'food',
+  parentTrust: 'parentTrust',
 }
 
 export async function POST(req: NextRequest) {

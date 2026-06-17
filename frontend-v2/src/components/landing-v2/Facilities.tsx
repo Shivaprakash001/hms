@@ -6,15 +6,31 @@ export function Facilities({ facilities = [] }: { facilities?: FacilityContent[]
   const safeFacilities = facilities.filter((facility) => facility?.title && facility?.icon);
   if (!safeFacilities.length) return null;
 
-  // Elevate "Meals Included" or "Food" to the first position
+  // Elevate "Meals Included" to first and "Lift" to second position
   let sortedFacilities = [...safeFacilities];
   const mealIndex = sortedFacilities.findIndex(f =>
     f.title.toLowerCase().includes('meal') ||
     f.title.toLowerCase().includes('food') ||
     f.title.toLowerCase().includes('dining')
   );
+  let mealItem: FacilityContent | null = null;
   if (mealIndex > -1) {
-    const [mealItem] = sortedFacilities.splice(mealIndex, 1);
+    [mealItem] = sortedFacilities.splice(mealIndex, 1);
+  }
+
+  const liftIndex = sortedFacilities.findIndex(f =>
+    f.title.toLowerCase().includes('lift') ||
+    f.icon.toLowerCase().includes('lift')
+  );
+  let liftItem: FacilityContent | null = null;
+  if (liftIndex > -1) {
+    [liftItem] = sortedFacilities.splice(liftIndex, 1);
+  }
+
+  if (liftItem) {
+    sortedFacilities.unshift(liftItem);
+  }
+  if (mealItem) {
     sortedFacilities.unshift(mealItem);
   }
 
@@ -39,14 +55,14 @@ export function Facilities({ facilities = [] }: { facilities?: FacilityContent[]
         </ScrollReveal>
 
         <StaggerReveal staggerDelay={0.08}>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
             {sortedFacilities.map((facility, index) => {
               const Icon = getLandingIcon(facility.icon, 'wifi');
               const isLastItem = index === totalCount - 1;
 
               return (
-                <StaggerItem key={index} className={`block ${isLastItem && isOdd ? "col-span-2 md:col-span-1" : ""}`}>
-                  <div className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-all duration-300 flex flex-col items-center text-center border border-[#F07B1D]/10 h-full">
+                <StaggerItem key={index} className={`block ${isLastItem && isOdd ? "col-span-2 md:col-span-1 lg:col-span-1" : ""}`}>
+                  <div className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-all duration-300 flex flex-col items-center text-center border border-[#F07B1D]/10 h-full hover:-translate-y-1">
                     <div className="w-14 h-14 bg-[#F07B1D]/10 rounded-full flex items-center justify-center mb-4">
                       <Icon className="w-7 h-7 text-[#F07B1D]" />
                     </div>

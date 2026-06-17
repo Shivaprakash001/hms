@@ -51,6 +51,8 @@ export type HeroContent = {
   highlights: string[];
   primaryCta?: LandingCta;
   secondaryCta?: LandingCta;
+  primaryCtaText?: string;
+  secondaryCtaText?: string;
   ownerImage?: MarketingImage;
   carouselImages: MarketingImage[];
   tourVideos?: TourVideoContent[];
@@ -61,6 +63,7 @@ export type FeatureContent = {
   description: string;
   icon: string;
   image?: MarketingImage;
+  bulletPoints?: string[];
 };
 
 export type FacilityContent = {
@@ -74,6 +77,7 @@ export type TestimonialContent = {
   role?: string;
   review: string;
   rating: number;
+  type?: 'student' | 'parent';
   image?: MarketingImage;
 };
 
@@ -83,9 +87,10 @@ export type FaqContent = {
 };
 
 export type AdmissionStepContent = {
-  stepNumber: number;
+  step: number;
   title: string;
   description: string;
+  icon?: string;
 };
 
 export type SeoContent = {
@@ -114,6 +119,19 @@ export type LandingMarketingContent = {
   gallery: GalleryImageContent[];
   admissionSteps: AdmissionStepContent[];
   footer: FooterContent;
+  announcementBarEnabled?: boolean;
+  announcementBarText?: string;
+  announcementBarLinkText?: string;
+  statsStrip?: { value: string; label: string }[];
+  roomInclusions?: string[];
+  totalCostClarityText?: string;
+  contactFormButtonText?: string;
+  roomTypeTitle?: string;
+  roomImage?: MarketingImage;
+  hostelAvailability?: {
+    bedsAvailable: number | null;
+    intakeMonth: string | null;
+  };
 };
 
 export type GalleryImageContent = MarketingImage & {
@@ -130,7 +148,7 @@ const fallbackImages = {
 export const fallbackLandingContent: LandingMarketingContent = {
   hostelProfile: {
     name: 'Sri Adithya Boys Hostel',
-    phone: '9392433422',
+    phone: '07901070333',
     whatsappNumber: '919392433422',
     email: 'sriadithyahostels@gmail.com',
     shortLocation: 'Yamnampet, Secunderabad',
@@ -295,5 +313,9 @@ export const fallbackLandingContent: LandingMarketingContent = {
       { label: 'Tenant / Owner Login', href: '/login' },
     ],
     copyright: '© 2026 Sri Adithya Boys Hostel. All rights reserved.',
+  },
+  hostelAvailability: {
+    bedsAvailable: 40,
+    intakeMonth: 'July',
   },
 };

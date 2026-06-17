@@ -4,6 +4,7 @@ import { admissionsPublicService } from '@features/admissions/api';
 import { queryKeys } from '@lib/queryKeys';
 import { AdmissionProcess } from '@/components/landing-v2/AdmissionProcess';
 import { AnnouncementBanner } from '@/components/landing-v2/AnnouncementBanner';
+import { AnnouncementBar } from '@/components/landing-v2/AnnouncementBar';
 import { EnquiryForm } from '@/components/landing-v2/EnquiryForm';
 import { Facilities } from '@/components/landing-v2/Facilities';
 import { Footer } from '@/components/landing-v2/Footer';
@@ -24,16 +25,8 @@ import { fallbackLandingContent, getLandingMarketingContent } from '@lib/sanity/
 
 const PRIMARY_VISIT_SLUG = String(import.meta.env.VITE_PRIMARY_VISIT_SLUG || '').trim();
 
-function availableBeds(room: any) {
-  return Number(room?.available_beds || room?.vacant_count || 0);
-}
-
 function roomPrice(room: any) {
   return Number(room?.pricing?.monthly_rent || room?.monthly_rent || 0);
-}
-
-function currentIntakeMonth() {
-  return new Intl.DateTimeFormat('en-IN', { month: 'long' }).format(new Date());
 }
 
 export function HomePage() {
@@ -52,22 +45,24 @@ export function HomePage() {
     retry: 1,
   });
 
+  const content = marketingContent || fallbackLandingContent;
+
   const landingAvailability = useMemo<LandingAvailability>(() => {
     const rooms = Array.isArray(availability?.rooms) ? availability.rooms : [];
-    const bedsAvailable = rooms.reduce((sum: number, room: any) => sum + availableBeds(room), 0);
     const roomStartingPrice = rooms.map(roomPrice).filter(Boolean).sort((a: number, b: number) => a - b)[0];
     const startingPrice = roomStartingPrice || availability?.hostel?.starting_price || null;
 
+    const sanityBeds = content?.hostelAvailability?.bedsAvailable;
+    const sanityIntake = content?.hostelAvailability?.intakeMonth;
+
     return {
-      bedsAvailable: bedsAvailable > 0 ? bedsAvailable : null,
-      intakeMonth: currentIntakeMonth(),
+      bedsAvailable: typeof sanityBeds === 'number' && sanityBeds > 0 ? sanityBeds : null,
+      intakeMonth: sanityIntake || '',
       startingPrice,
       visitUrl: PRIMARY_VISIT_SLUG ? `/visit/${PRIMARY_VISIT_SLUG}` : '',
-      hasLiveAvailability: bedsAvailable > 0,
+      hasLiveAvailability: typeof sanityBeds === 'number' && sanityBeds > 0,
     };
-  }, [availability]);
-
-  const content = marketingContent || fallbackLandingContent;
+  }, [availability, content]);
 
   useEffect(() => {
     document.title = content.seo.title;
@@ -87,21 +82,39 @@ export function HomePage() {
     <div className="min-h-screen">
       <TopBar hostelProfile={content.hostelProfile} />
       <Navbar hostelProfile={content.hostelProfile} />
+      {content.announcementBarEnabled && content.announcementBarText && (
+        <AnnouncementBar
+          text={content.announcementBarText}
+          linkText={content.announcementBarLinkText}
+        />
+      )}
       <GoogleTrustBar />
       <AnnouncementBanner announcements={content.announcements} />
       <Hero availability={landingAvailability} content={content.hero} />
-      <StatsStrip availability={landingAvailability} />
+      <StatsStrip stats={content.statsStrip} availability={landingAvailability} />
       <WhyChooseUs features={content.features} />
       <Facilities facilities={content.facilities} />
       <GallerySection images={content.gallery} />
       <Testimonials testimonials={content.testimonials} />
-      <AdmissionProcess steps={content.admissionSteps} />
-      <RoomPricing availability={landingAvailability} facilities={content.facilities} />
+      <AdmissionProcess steps={content.admissionSteps} hostelProfile={content.hostelProfile} />
+      <RoomPricing
+        availability={landingAvailability}
+        facilities={content.facilities}
+        roomInclusions={content.roomInclusions}
+        totalCostClarityText={content.totalCostClarityText}
+        roomTypeTitle={content.roomTypeTitle}
+        roomImage={content.roomImage}
+      />
       <Location hostelProfile={content.hostelProfile} />
       <FaqSection faqs={content.faqs} />
-      <EnquiryForm availability={landingAvailability} hostelProfile={content.hostelProfile} visitSlug={PRIMARY_VISIT_SLUG} />
+      <EnquiryForm
+        availability={landingAvailability}
+        hostelProfile={content.hostelProfile}
+        visitSlug={PRIMARY_VISIT_SLUG}
+        buttonText={content.contactFormButtonText}
+      />
       <Footer content={content.footer} hostelProfile={content.hostelProfile} />
-      <WhatsAppFAB />
+      <WhatsAppFAB hostelProfile={content.hostelProfile} />
     </div>
   );
 }

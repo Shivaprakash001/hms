@@ -49,7 +49,7 @@ export function FaqSection({ faqs = [] }: { faqs?: FaqContent[] }) {
 
   const safeFaqs = combinedFaqs.filter((faq) => faq?.question && faq?.answer);
 
-  // Pre-select/expand the 'Meals & Food Quality' question by default
+  // Pre-select/expand the 'Meals & Food Quality' question by default, or fallback to the first FAQ
   const defaultOpenFaq = safeFaqs.find(
     f => f.question.toLowerCase().includes('food') || f.question.toLowerCase().includes('meal')
   )?.question || safeFaqs[0]?.question || null;
@@ -77,15 +77,21 @@ export function FaqSection({ faqs = [] }: { faqs?: FaqContent[] }) {
 
         <StaggerReveal staggerDelay={0.08}>
           <div className="space-y-3">
-            {safeFaqs.map((faq) => {
+            {safeFaqs.map((faq, index) => {
               const isOpen = openQuestion === faq.question;
+              const buttonId = `faq-btn-${index}`;
+              const panelId = `faq-panel-${index}`;
+
               return (
                 <StaggerItem key={faq.question}>
                   <article className="rounded-xl border border-[#F07B1D]/15 bg-white shadow-sm overflow-hidden transition-all duration-300">
                     <button
+                      id={buttonId}
                       type="button"
+                      aria-expanded={isOpen}
+                      aria-controls={panelId}
                       onClick={() => setOpenQuestion(isOpen ? null : faq.question)}
-                      className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left hover:bg-[#FFFDF5]/40 transition-colors"
+                      className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left hover:bg-[#FFFDF5]/40 transition-colors focus:outline-none focus:ring-2 focus:ring-[#F07B1D] focus:ring-offset-2"
                     >
                       <div>
                         <h3 className="font-bold text-[#1B2D5B] text-sm md:text-base">{faq.question}</h3>
@@ -93,9 +99,14 @@ export function FaqSection({ faqs = [] }: { faqs?: FaqContent[] }) {
                       <ChevronDown className={`h-5 w-5 flex-shrink-0 text-[#F07B1D] transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
                     </button>
                     {isOpen && (
-                      <p className="border-t border-[#F07B1D]/10 px-5 py-4 text-xs md:text-sm leading-6 text-[#2C2C2A]/85 bg-[#FFFDF5]/20 font-medium">
+                      <div
+                        id={panelId}
+                        role="region"
+                        aria-labelledby={buttonId}
+                        className="border-t border-[#F07B1D]/10 px-5 py-4 text-xs md:text-sm leading-6 text-[#2C2C2A]/85 bg-[#FFFDF5]/20 font-medium"
+                      >
                         {faq.answer}
-                      </p>
+                      </div>
                     )}
                   </article>
                 </StaggerItem>

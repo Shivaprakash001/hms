@@ -31,7 +31,7 @@ export function LocationPage() {
             Near Sreenidhi Institute of Science and Technology (SNIST)
           </address>
           <a
-            href="https://www.google.com/maps/place/Sri+Adithya+Boys+Hostel/@17.4542729,78.6602748,17z/data=!3m1!4b1!4m6!3m5!1s0x3bcb770dd641583b:0xde3e95b9afb8c1b1!8m2!3d17.4542678!4d78.6628497"
+            href="https://www.google.com/maps/dir/?api=1&destination=Sri+Adithya+Boys+Hostel+Yamnampet&destination_place_id=ChIJW1hB1g13yzsRscG4r7mVPt4"
             target="_blank"
             rel="noopener noreferrer"
             className="no-underline inline-block mt-6 font-bold text-sm px-6 py-2.5 rounded-lg hover:opacity-90 transition-opacity"

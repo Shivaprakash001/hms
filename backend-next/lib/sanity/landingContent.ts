@@ -51,6 +51,8 @@ export type HeroContent = {
   highlights: string[];
   primaryCta?: LandingCta;
   secondaryCta?: LandingCta;
+  primaryCtaText?: string;
+  secondaryCtaText?: string;
   ownerImage?: MarketingImage;
   carouselImages: MarketingImage[];
   tourVideos?: TourVideoContent[];
@@ -61,6 +63,7 @@ export type FeatureContent = {
   description: string;
   icon: string;
   image?: MarketingImage;
+  bulletPoints?: string[];
 };
 
 export type FacilityContent = {
@@ -74,6 +77,7 @@ export type TestimonialContent = {
   role?: string;
   review: string;
   rating: number;
+  type?: 'student' | 'parent';
   image?: MarketingImage;
 };
 
@@ -83,9 +87,10 @@ export type FaqContent = {
 };
 
 export type AdmissionStepContent = {
-  stepNumber: number;
+  step: number;
   title: string;
   description: string;
+  icon?: string;
 };
 
 export type SeoContent = {
@@ -147,6 +152,15 @@ export type LandingMarketingContent = {
   footer: FooterContent;
   food?: FoodContent;
   parentTrust?: ParentTrustContent;
+  announcementBarEnabled?: boolean;
+  announcementBarText?: string;
+  announcementBarLinkText?: string;
+  statsStrip?: { value: string; label: string }[];
+  roomInclusions?: string[];
+  totalCostClarityText?: string;
+  contactFormButtonText?: string;
+  roomTypeTitle?: string;
+  roomImage?: MarketingImage;
 };
 
 export type GalleryImageContent = MarketingImage & {

@@ -4,6 +4,7 @@ import { visionTool } from '@sanity/vision'
 import { structure } from './sanity/structure'
 import {
   siteSettings,
+  hostel,
   testimonial,
   faq,
   categoryRating,
@@ -23,6 +24,6 @@ export default defineConfig({
     visionTool(),
   ],
   schema: {
-    types: [siteSettings, testimonial, faq, categoryRating, food, parentTrust, landingHostel],
+    types: [siteSettings, hostel, testimonial, faq, categoryRating, food, parentTrust, landingHostel],
   },
 })

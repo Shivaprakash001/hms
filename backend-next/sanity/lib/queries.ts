@@ -41,10 +41,20 @@ export const SITE_SETTINGS_QUERY = `
 export const LANDING_HOSTEL_QUERY = `
   *[_type == "landingHostel"][0] {
     name,
+    announcementBarEnabled,
+    announcementBarText,
+    announcementBarLinkText,
     heroTitle,
     heroSubtitle,
     heroSupportingCopy,
     heroHighlights,
+    heroTrustedBadgeText,
+    heroPrimaryCtaText,
+    heroSecondaryCtaText,
+    statsStrip[] {
+      value,
+      label
+    },
     gallery[] {
       image,
       caption,
@@ -66,17 +76,22 @@ export const LANDING_HOSTEL_QUERY = `
       description,
       icon,
       image,
-      highlights
+      highlights,
+      bulletPoints
     },
     facilities[] {
       title,
       icon,
       description
     },
+    roomInclusions,
+    totalCostClarityText,
+    contactFormButtonText,
     admissionSteps[] {
-      stepNumber,
+      step,
       title,
-      description
+      description,
+      icon
     },
     roomTypesImages[] {
       roomType,

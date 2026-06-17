@@ -1,8 +1,8 @@
 import { defineType, defineField } from 'sanity'
 
-export const landingHostel = defineType({
-  name: 'landingHostel',
-  title: 'Landing Page Hostel Copy',
+export const hostel = defineType({
+  name: 'hostel',
+  title: 'Hostel',
   type: 'document',
   fields: [
     defineField({
@@ -10,6 +10,34 @@ export const landingHostel = defineType({
       title: 'Hostel Name',
       type: 'string',
       validation: Rule => Rule.required(),
+    }),
+    defineField({
+      name: 'slug',
+      title: 'Slug',
+      type: 'slug',
+      options: { source: 'name' },
+      validation: Rule => Rule.required(),
+    }),
+    defineField({
+      name: 'bedsAvailable',
+      title: 'Beds Available',
+      type: 'number',
+      description: 'Update this every week. This drives the scarcity signal across the entire page.',
+      validation: Rule => Rule.required().min(0).max(50).integer(),
+    }),
+    defineField({
+      name: 'intakeMonth',
+      title: 'Intake Month',
+      type: 'string',
+      description: 'Example: July, August. Shown as "4 beds left for July"',
+      validation: Rule => Rule.required(),
+    }),
+    defineField({
+      name: 'startingPrice',
+      title: 'Starting Price (₹ per month)',
+      type: 'number',
+      description: 'Shown as ₹8,000/month across the page.',
+      validation: Rule => Rule.required().min(1000).integer(),
     }),
     defineField({
       name: 'heroTitle',
@@ -22,12 +50,6 @@ export const landingHostel = defineType({
       title: 'Hero Section Subtitle',
       type: 'string',
       description: 'Sub-heading on the landing page. E.g., "Comfortable boys hostel rooms designed for focus and peace of mind"',
-    }),
-    defineField({
-      name: 'heroSupportingCopy',
-      title: 'Hero Supporting Copy override',
-      type: 'string',
-      description: 'Optional supporting text below subtitle. E.g., "Join senior SNIST students at Sri Adithya."',
     }),
     defineField({
       name: 'heroHighlights',
@@ -155,14 +177,6 @@ export const landingHostel = defineType({
               type: 'array',
               of: [{ type: 'string' }],
             },
-            {
-              name: 'bulletPoints',
-              title: 'Bullet Points',
-              type: 'array',
-              description: 'Optional checklist items shown below the card description (max 4)',
-              of: [{ type: 'string' }],
-              validation: Rule => Rule.max(4),
-            },
           ],
         },
       ],
@@ -190,10 +204,9 @@ export const landingHostel = defineType({
         {
           type: 'object',
           fields: [
-            { name: 'step', type: 'number', title: 'Step Number' },
+            { name: 'stepNumber', type: 'number', title: 'Step Number' },
             { name: 'title', type: 'string', title: 'Title' },
             { name: 'description', type: 'text', title: 'Description', rows: 2 },
-            { name: 'icon', type: 'string', title: 'Icon (e.g. phone, building, bed, file-check, key)' },
           ],
         },
       ],
@@ -286,91 +299,11 @@ export const landingHostel = defineType({
         },
       ],
     }),
-    defineField({
-      name: 'announcementBarEnabled',
-      title: 'Show Announcement Bar',
-      type: 'boolean',
-      description: 'Toggle the scarcity/announcement strip above the hero on or off.',
-      initialValue: true,
-    }),
-    defineField({
-      name: 'announcementBarText',
-      title: 'Announcement Bar Text',
-      type: 'string',
-      description: 'Full text for the announcement bar. Example: "🔴 Admissions Open — Only 40 beds available for July. Filling fast."',
-      validation: Rule => Rule.max(120),
-    }),
-    defineField({
-      name: 'announcementBarLinkText',
-      title: 'Announcement Bar Link Text',
-      type: 'string',
-      description: 'Clickable text at end of announcement bar. Example: "Reserve now →"',
-      initialValue: 'Reserve now →',
-    }),
-    defineField({
-      name: 'heroTrustedBadgeText',
-      title: 'Hero Trusted Badge',
-      type: 'string',
-      description: 'Small pill badge text above headline. Example: "Trusted by SNIST students since 2019"',
-    }),
-    defineField({
-      name: 'heroPrimaryCtaText',
-      title: 'Hero Primary CTA Button Text',
-      type: 'string',
-      description: 'Example: "Book a Room Visit"',
-      initialValue: 'Book a Room Visit',
-    }),
-    defineField({
-      name: 'heroSecondaryCtaText',
-      title: 'Hero Secondary CTA Button Text',
-      type: 'string',
-      description: 'Example: "Check Availability on WhatsApp"',
-      initialValue: 'Check Availability on WhatsApp',
-    }),
-    defineField({
-      name: 'statsStrip',
-      title: 'Stats Strip',
-      type: 'array',
-      description: 'The 5 stats in the saffron strip below hero. Order matters.',
-      of: [{
-        type: 'object',
-        fields: [
-          { name: 'value', title: 'Value', type: 'string',
-            description: 'Example: "78+" or "₹8,000+"' },
-          { name: 'label', title: 'Label', type: 'string',
-            description: 'Example: "Students Staying" or "Starting Price"' },
-        ],
-        preview: {
-          select: { title: 'value', subtitle: 'label' },
-        },
-      }],
-    }),
-    defineField({
-      name: 'roomInclusions',
-      title: 'Room Inclusions List',
-      type: 'array',
-      description: 'Checklist items shown in the Rooms & Pricing card under "What\'s Included"',
-      of: [{ type: 'string' }],
-    }),
-    defineField({
-      name: 'totalCostClarityText',
-      title: 'Total Cost Clarity Text',
-      type: 'text',
-      rows: 2,
-      description: 'Text inside the cost clarity box in room card. Example: "No hidden fees. Current rent is confirmed from live HMS room pricing..."',
-    }),
-    defineField({
-      name: 'contactFormButtonText',
-      title: 'Contact Form Submit Button Text',
-      type: 'string',
-      description: 'Example: "Send Enquiry via WhatsApp"',
-      initialValue: 'Send Enquiry via WhatsApp',
-    }),
   ],
   preview: {
-    select: { title: 'name' },
-    prepare({ title }) {
-      return { title: title || 'Landing Page Copy', subtitle: 'Single Source of Truth' }
+    select: { title: 'name', subtitle: 'bedsAvailable' },
+    prepare({ title, subtitle }) {
+      return { title, subtitle: `${subtitle} beds available` }
     },
   },
 })

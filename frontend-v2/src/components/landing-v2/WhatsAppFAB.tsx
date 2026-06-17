@@ -1,4 +1,15 @@
-export function WhatsAppFAB() {
+import type { HostelProfileContent } from '@lib/sanity/landingContent';
+import { fallbackLandingContent } from '@lib/sanity/client';
+
+export function WhatsAppFAB({ hostelProfile }: { hostelProfile?: HostelProfileContent }) {
+  const profile = { ...fallbackLandingContent.hostelProfile, ...hostelProfile };
+  const whatsappNumber = profile.whatsappNumber || '919392433422';
+  const ownerName = profile.ownerName || 'Srinivasa Rao';
+  const hostelName = profile.name || 'Sri Adithya Hostel';
+
+  const text = encodeURIComponent(`Hi ${ownerName}, I'm interested in reserving a bed at ${hostelName}.`);
+  const whatsappUrl = `https://api.whatsapp.com/send?phone=${whatsappNumber}&text=${text}`;
+
   return (
     <>
       <style dangerouslySetInnerHTML={{__html: `
@@ -17,7 +28,7 @@ export function WhatsAppFAB() {
         }
       `}} />
       <a
-        href="https://wa.me/919392433422?text=Hi%20Srinivasa%20Rao%2C%20I%27m%20interested%20in%20reserving%20a%20bed%20at%20Sri%20Adithya%20Hostel"
+        href={whatsappUrl}
         target="_blank"
         rel="noopener noreferrer"
         className="fixed bottom-6 right-6 z-[999] flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-xl transition-all duration-300 hover:scale-110 active:scale-95 animate-whatsapp-pulse"

@@ -1,4 +1,5 @@
 export { siteSettings } from './siteSettings'
+export { hostel } from './hostel'
 export { testimonial } from './testimonial'
 export { faq } from './faq'
 export { categoryRating } from './categoryRating'

@@ -7,10 +7,20 @@ const apiVersion = String(import.meta.env.VITE_SANITY_API_VERSION || '2026-06-01
 const landingQuery = `{
   "landingHostel": *[_type == "landingHostel"][0]{
     name,
+    announcementBarEnabled,
+    announcementBarText,
+    announcementBarLinkText,
     heroTitle,
     heroSubtitle,
     heroSupportingCopy,
     heroHighlights,
+    heroTrustedBadgeText,
+    heroPrimaryCtaText,
+    heroSecondaryCtaText,
+    statsStrip[] {
+      value,
+      label
+    },
     gallery[] {
       "url": image.asset->url,
       caption,
@@ -32,17 +42,22 @@ const landingQuery = `{
       description,
       icon,
       "image": image { "url": asset->url, alt },
-      highlights
+      highlights,
+      bulletPoints
     },
     facilities[] {
       title,
       icon,
       description
     },
+    roomInclusions,
+    totalCostClarityText,
+    contactFormButtonText,
     admissionSteps[] {
-      stepNumber,
+      step,
       title,
-      description
+      description,
+      icon
     },
     roomTypesImages[] {
       roomType,
@@ -55,6 +70,10 @@ const landingQuery = `{
       "videoFileUrl": videoFile.asset->url,
       icon
     }
+  },
+  "hostel": *[_type == "hostel" && _id == "hostel-1"][0]{
+    bedsAvailable,
+    intakeMonth
   },
   "siteSettings": *[_type == "siteSettings"][0]{
     phoneNumber,
@@ -80,6 +99,7 @@ const landingQuery = `{
   },
   "testimonials": *[_type == "testimonial" && isActive != false] | order(order asc) {
     name,
+    type,
     "role": coalesce(role, type),
     "review": coalesce(quote, review),
     rating,
@@ -100,9 +120,14 @@ function hasText(value: unknown) {
 }
 
 function compactFeatures(features: any[] | undefined) {
-  return (Array.isArray(features) ? features : []).filter(
-    (feature) => feature && hasText(feature.title) && hasText(feature.description) && hasText(feature.icon),
-  );
+  return (Array.isArray(features) ? features : [])
+    .filter(
+      (feature) => feature && hasText(feature.title) && hasText(feature.description) && hasText(feature.icon),
+    )
+    .map((feature) => ({
+      ...feature,
+      bulletPoints: Array.isArray(feature.bulletPoints) ? feature.bulletPoints : [],
+    }));
 }
 
 function compactFacilities(facilities: any[] | undefined) {
@@ -129,8 +154,12 @@ function compactFaqs(faqs: any[] | undefined) {
 
 function compactAdmissionSteps(steps: any[] | undefined) {
   return (Array.isArray(steps) ? steps : [])
-    .filter((step) => step && Number.isFinite(Number(step.stepNumber)) && hasText(step.title) && hasText(step.description))
-    .map((step) => ({ ...step, stepNumber: Number(step.stepNumber) }));
+    .filter((step) => step && Number.isFinite(Number(step.step ?? step.stepNumber)) && hasText(step.title) && hasText(step.description))
+    .map((step) => ({ 
+      ...step, 
+      step: Number(step.step ?? step.stepNumber),
+      icon: step.icon 
+    }));
 }
 
 function activeAnnouncements(announcements: any[] | undefined) {
@@ -152,7 +181,9 @@ function mergeLandingContent(result: any): LandingMarketingContent {
     hostelProfile: {
       name: h?.name || fallbackLandingContent.hostelProfile.name,
       phone: s?.phoneNumber || fallbackLandingContent.hostelProfile.phone,
-      whatsappNumber: s?.whatsappNumber || fallbackLandingContent.hostelProfile.whatsappNumber,
+      whatsappNumber: s?.whatsappNumber
+        ? (s.whatsappNumber.startsWith('91') ? s.whatsappNumber : '91' + s.whatsappNumber.replace(/\D/g, ''))
+        : fallbackLandingContent.hostelProfile.whatsappNumber,
       email: s?.email || fallbackLandingContent.hostelProfile.email,
       shortLocation: h?.shortLocation || fallbackLandingContent.hostelProfile.shortLocation,
       addressLines: h?.shortLocation ? [h.name, h.shortLocation] : fallbackLandingContent.hostelProfile.addressLines,
@@ -175,7 +206,9 @@ function mergeLandingContent(result: any): LandingMarketingContent {
       title: h?.heroTitle || (import.meta.env.DEV ? '[CMS Hero Title missing]' : fallbackLandingContent.hero.title),
       subtitle: h?.heroSubtitle || (import.meta.env.DEV ? '[CMS Hero Subtitle missing]' : fallbackLandingContent.hero.subtitle),
       supportingCopy: h?.heroSupportingCopy || fallbackLandingContent.hero.supportingCopy,
-      trustBadge: fallbackLandingContent.hero.trustBadge,
+      trustBadge: h?.heroTrustedBadgeText || fallbackLandingContent.hero.trustBadge,
+      primaryCtaText: h?.heroPrimaryCtaText,
+      secondaryCtaText: h?.heroSecondaryCtaText,
       highlights: h?.heroHighlights || fallbackLandingContent.hero.highlights,
       ownerImage: hasImage(s?.ownerPhoto) ? s.ownerPhoto : undefined,
       carouselImages: h?.gallery && h.gallery.length > 0 ? h.gallery : fallbackLandingContent.hero.carouselImages,
@@ -200,6 +233,18 @@ function mergeLandingContent(result: any): LandingMarketingContent {
       description: fallbackLandingContent.footer.description,
       quickLinks: fallbackLandingContent.footer.quickLinks,
       copyright: `© ${new Date().getFullYear()} ${h?.name || fallbackLandingContent.footer.title}. All rights reserved.`,
+    },
+    announcementBarEnabled: h?.announcementBarEnabled,
+    announcementBarText: h?.announcementBarText,
+    announcementBarLinkText: h?.announcementBarLinkText,
+    roomInclusions: h?.roomInclusions,
+    totalCostClarityText: h?.totalCostClarityText,
+    contactFormButtonText: h?.contactFormButtonText,
+    roomTypeTitle: h?.roomTypeTitle,
+    roomImage: hasImage(h?.roomImage) ? h.roomImage : undefined,
+    hostelAvailability: {
+      bedsAvailable: typeof result?.hostel?.bedsAvailable === 'number' ? result.hostel.bedsAvailable : null,
+      intakeMonth: result?.hostel?.intakeMonth || null,
     },
   };
 }

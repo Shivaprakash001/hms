@@ -11,8 +11,7 @@ export function Location({
   const profile = { ...fallbackLandingContent.hostelProfile, ...hostelProfile };
   const addressLines = profile.addressLines?.length ? profile.addressLines : fallbackLandingContent.hostelProfile.addressLines || [];
   
-  // Direct working Google Maps and Search Review URLs
-  const directionsUrl = "https://www.google.com/maps/place/Sri+Adithya+Boys+Hostel/@17.4542729,78.6602748,17z/data=!3m1!4b1!4m6!3m5!1s0x3bcb770dd641583b:0xde3e95b9afb8c1b1!8m2!3d17.4542678!4d78.6628497";
+  const directionsUrl = profile.googleMapsUrl || "https://maps.app.goo.gl/tUrcbuFmST7Zyt1c9";
   const readReviewsUrl = "https://search.google.com/local/reviews?placeid=ChIJW1hB1g13yzsRscG4r7mVPt4";
   const writeReviewUrl = "https://search.google.com/local/writereview?placeid=ChIJW1hB1g13yzsRscG4r7mVPt4";
   const embedUrl = profile.googleMapsEmbedUrl || fallbackLandingContent.hostelProfile.googleMapsEmbedUrl || '';

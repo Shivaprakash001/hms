@@ -53,7 +53,9 @@ export function WhyChooseUs({ features = [] }: { features?: FeatureContent[] }) 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
           {safeFeatures.map((feature, index) => {
             const Icon = getLandingIcon(feature.icon);
-            const highlights = getFeatureHighlights(feature.title);
+            const highlights = feature.bulletPoints && feature.bulletPoints.length > 0
+              ? feature.bulletPoints
+              : getFeatureHighlights(feature.title);
 
             return (
               <ScrollReveal key={feature.title} delay={index * 0.15}>
