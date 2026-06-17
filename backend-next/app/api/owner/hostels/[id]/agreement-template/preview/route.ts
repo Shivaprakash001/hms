@@ -25,7 +25,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const body = await req.json();
     const typeParam = body.type || "RESIDENCY";
 
-    if (!["RESIDENCY", "RENEWAL", "MOVE_OUT"].includes(typeParam)) {
+    if (typeParam !== "RESIDENCY") {
       return apiError("Invalid template type", "VALIDATION_ERROR", 400);
     }
 

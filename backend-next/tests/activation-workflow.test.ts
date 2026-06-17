@@ -8,7 +8,7 @@ import { prisma } from "@/lib/db";
 vi.mock("@/lib/db", () => {
   const mockPrisma = {
     tenants: {
-      update: vi.fn(),
+      update: vi.fn().mockResolvedValue({}),
       findUnique: vi.fn().mockImplementation((args) => {
         return Promise.resolve({
           id: args?.where?.id || "tenant-1",
@@ -19,12 +19,12 @@ vi.mock("@/lib/db", () => {
       }),
     },
     profile: {
-      update: vi.fn(),
+      update: vi.fn().mockResolvedValue({}),
       findUnique: vi.fn(),
     },
     tenant_invitations: {
       findUnique: vi.fn(),
-      update: vi.fn(),
+      update: vi.fn().mockResolvedValue({}),
     },
     ruleVersion: {
       findFirst: vi.fn().mockResolvedValue({ id: "template-1", title: "Rules", content: {} } as any),
@@ -33,6 +33,19 @@ vi.mock("@/lib/db", () => {
     },
     agreementTemplate: {
       findFirst: vi.fn().mockResolvedValue({
+        id: "template-1",
+        version: "v1",
+        title: "Agreement",
+        custom_rules: [],
+        owner_name: "Owner",
+        owner_signature_url: "http://sig.com",
+        rules_content: { categories: [] },
+        type: "RESIDENCY",
+        status: "PUBLISHED",
+        version_number: 1,
+        is_active: true,
+      } as any),
+      findUnique: vi.fn().mockResolvedValue({
         id: "template-1",
         version: "v1",
         title: "Agreement",
@@ -61,8 +74,23 @@ vi.mock("@/lib/db", () => {
     },
     agreement: {
       findFirst: vi.fn(),
+      findUnique: vi.fn().mockImplementation((args) => {
+        return Promise.resolve({
+          id: args?.where?.id || "agreement-1",
+          status: "DRAFT",
+          content_snapshot: {},
+          tenant_id: "tenant-1",
+          tenant: {
+            id: "tenant-1",
+            joined_on: new Date(),
+            profile: { name: "Tenant", phone: "918008046952" },
+          },
+          hostel: { name: "Hostel 1" },
+          template: { title: "Agreement Template" },
+        });
+      }),
       create: vi.fn(),
-      update: vi.fn(),
+      update: vi.fn().mockResolvedValue({}),
     },
     roomAllocation: {
       count: vi.fn(),
@@ -250,5 +278,153 @@ describe("ActivationWorkflowService OTP Hardening", () => {
 
     const res = await activationService.mutate("test-token", "ACCOUNT", { otp: "123456", email: "tenant@gmail.com" }, { ip: "127.0.0.1", userAgent: "test" });
     expect(res).toBeDefined();
+  });
+
+  it("should use agreement_duration_months and agreement_start_date from invitation in getContext", async () => {
+    const mockTenant = {
+      id: "tenant-1",
+      status: "INVITED",
+      phone_1: "918008046952",
+      hostel_id: "hostel-1",
+      hostels: { name: "Hostel 1", rent_cycle: "MONTHLY", auto_rent_day: 1, preferences: {} },
+      rule_acceptances: [],
+      agreements: [], // No existing draft agreements
+      room_allocations: [],
+      joined_on: new Date(),
+      billing_start_date: new Date(),
+      monthly_rent: 5000,
+      security_deposit: 10000,
+      maintenance_charge: 500,
+      maintenance_type: "MONTHLY",
+      payment_frequency: "MONTHLY",
+    };
+    const mockProfile = { id: "profile-1", phone: "918008046952" };
+    const customStartDate = new Date("2026-08-01T00:00:00.000Z");
+    const mockInvitation = {
+      id: "invite-1",
+      email: "tenant@example.com",
+      phone: "918008046952",
+      reservations: [],
+      agreement_duration_months: 6,
+      agreement_start_date: customStartDate,
+    };
+
+    vi.mocked(tenantInvitationLifecycleService.resolveByToken).mockResolvedValue({
+      source: "tenant_invitations",
+      invitation: mockInvitation,
+      profile: mockProfile,
+      tenant: mockTenant,
+      token: "test-token",
+    } as any);
+
+    vi.mocked(prisma.roomAllocation.count).mockResolvedValue(0);
+    vi.mocked(prisma.ruleVersion.findFirst).mockResolvedValue({ id: "rule-1", title: "Rules", content: {} } as any);
+    vi.mocked(prisma.agreementTemplate.findFirst).mockResolvedValue({
+      id: "template-1",
+      title: "Agreement",
+      custom_rules: [],
+      owner_name: "Owner",
+      owner_signature_url: "http://sig.com",
+    } as any);
+
+    vi.mocked(prisma.agreement.create).mockImplementation(async (args: any) => {
+      return {
+        id: "agreement-1",
+        status: "DRAFT",
+        content_snapshot: {},
+        agreement_duration_months: args.data.agreement_duration_months,
+        agreement_start_date: args.data.agreement_start_date,
+      } as any;
+    });
+
+    const ctx = await activationService.getContext("test-token");
+    expect(ctx.agreement).toBeDefined();
+    expect(prisma.agreement.create).toHaveBeenCalled();
+    const callArgs = vi.mocked(prisma.agreement.create).mock.calls[0][0];
+    expect(callArgs.data.agreement_duration_months).toBe(6);
+    expect(new Date(callArgs.data.agreement_start_date).toISOString()).toBe(customStartDate.toISOString());
+  });
+
+  it("should use agreement_duration_months and agreement_start_date from invitation in signAgreement during mutate", async () => {
+    const mockTenant = {
+      id: "tenant-1",
+      status: "INVITED",
+      phone_1: "918008046952",
+      hostel_id: "hostel-1",
+      hostels: { name: "Hostel 1", rent_cycle: "MONTHLY", auto_rent_day: 1, preferences: {} },
+      rule_acceptances: [],
+      agreements: [
+        {
+          id: "agreement-1",
+          status: "DRAFT",
+          generated_at: new Date(),
+        }
+      ],
+      room_allocations: [],
+      joined_on: new Date(),
+      billing_start_date: new Date(),
+      monthly_rent: 5000,
+      security_deposit: 10000,
+      maintenance_charge: 500,
+      maintenance_type: "MONTHLY",
+      payment_frequency: "MONTHLY",
+    };
+    const mockProfile = { id: "profile-1", phone: "918008046952" };
+    const customStartDate = new Date("2026-09-01T00:00:00.000Z");
+    const mockInvitation = {
+      id: "invite-1",
+      email: "tenant@example.com",
+      phone: "918008046952",
+      reservations: [],
+      agreement_duration_months: 9,
+      agreement_start_date: customStartDate,
+    };
+
+    vi.mocked(tenantInvitationLifecycleService.resolveByToken).mockResolvedValue({
+      source: "tenant_invitations",
+      invitation: mockInvitation,
+      profile: mockProfile,
+      tenant: mockTenant,
+      token: "test-token",
+    } as any);
+
+    vi.mocked(prisma.roomAllocation.count).mockResolvedValue(0);
+    vi.mocked(prisma.ruleVersion.findFirst).mockResolvedValue({ id: "rule-1", title: "Rules", content: {} } as any);
+    vi.mocked(prisma.agreementTemplate.findFirst).mockResolvedValue({
+      id: "template-1",
+      title: "Agreement",
+      custom_rules: [],
+      owner_name: "Owner",
+      owner_signature_url: "http://sig.com",
+    } as any);
+
+    vi.mocked(prisma.agreement.findFirst).mockResolvedValue({
+      id: "agreement-1",
+      status: "DRAFT",
+      content_snapshot: {},
+    } as any);
+
+    vi.mocked(prisma.agreement.update).mockImplementation(async (args: any) => {
+      return {
+        id: "agreement-1",
+        status: "SIGNED",
+        content_snapshot: {},
+      } as any;
+    });
+
+    await activationService.mutate(
+      "test-token",
+      "AGREEMENT",
+      {
+        tenant_signature_url: "http://tenant-sig.png",
+        tenant_signature_name: "John Doe Signature",
+      },
+      { ip: "127.0.0.1", userAgent: "test" }
+    );
+
+    expect(prisma.agreement.update).toHaveBeenCalled();
+    const callArgs = vi.mocked(prisma.agreement.update).mock.calls[0][0];
+    expect(callArgs.data.agreement_duration_months).toBe(9);
+    expect(new Date(callArgs.data.agreement_start_date).toISOString()).toBe(customStartDate.toISOString());
   });
 });

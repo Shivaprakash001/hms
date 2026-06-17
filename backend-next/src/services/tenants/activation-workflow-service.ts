@@ -375,7 +375,7 @@ export class ActivationWorkflowService {
     let activeAgreement = (tenant.agreements || []).find((a: any) => a.status === "DRAFT" || isCurrentAgreementStatus(a.status));
     if (!activeAgreement) {
       const lifecycle = buildOnboardingAgreementLifecycle({
-        joiningDate: tenant.joined_on,
+        joiningDate: invitation?.agreement_start_date || tenant.joined_on,
         billingStartDate: tenant.billing_start_date,
         monthlyRent: tenant.monthly_rent,
         roomBaseRent: room?.base_rent,
@@ -383,6 +383,7 @@ export class ActivationWorkflowService {
         maintenanceCharge: tenant.maintenance_charge,
         maintenanceType: tenant.maintenance_type,
         paymentFrequency: tenant.payment_frequency,
+        durationMonths: invitation?.agreement_duration_months || 12,
       });
 
       const variables = {
@@ -621,7 +622,7 @@ export class ActivationWorkflowService {
       await this.acceptRules(profile, tenant, data, context);
     }
     if (step === "AGREEMENT") {
-      await this.signAgreement(profile, tenant, data, context);
+      await this.signAgreement(profile, tenant, data, context, invitation);
     }
     if (step === "PROFILE") {
       await this.saveProfile(profile, tenant, data);
@@ -686,7 +687,7 @@ export class ActivationWorkflowService {
     }
   }
 
-  private async signAgreement(profile: any, tenant: any, data: any, context: { ip: string; userAgent: string }) {
+  private async signAgreement(profile: any, tenant: any, data: any, context: { ip: string; userAgent: string }, invitation?: any) {
     const tenantSigUrl = String(data?.tenant_signature_url || "").trim();
     const tenantSigName = String(data?.tenant_signature_name || "").trim();
 
@@ -735,7 +736,7 @@ export class ActivationWorkflowService {
     const activeAllocation = tenant.room_allocations?.[0] || null;
     const room = activeAllocation?.room || null;
     const lifecycle = buildOnboardingAgreementLifecycle({
-      joiningDate: tenant.joined_on,
+      joiningDate: invitation?.agreement_start_date || tenant.joined_on,
       billingStartDate: tenant.billing_start_date,
       monthlyRent: tenant.monthly_rent,
       roomBaseRent: room?.base_rent,
@@ -743,6 +744,7 @@ export class ActivationWorkflowService {
       maintenanceCharge: tenant.maintenance_charge,
       maintenanceType: tenant.maintenance_type,
       paymentFrequency: tenant.payment_frequency,
+      durationMonths: invitation?.agreement_duration_months || 12,
     });
     assertAgreementLifecycleComplete({ ...draft, ...lifecycle }, { agreementId: draft.id });
 

@@ -160,6 +160,9 @@ export const InvitationSchema = z.object({
   maintenance_amount: z.number().min(0).max(MAX_AMOUNT_INR).optional(),
   joining_date: z.string().max(30).optional(),
   maintenance_type: z.enum(["MONTHLY", "ONE_TIME", "NONE"]).optional(),
+  agreement_duration_months: z.number().int().positive().max(120).optional(),
+  agreement_start_date: z.string().max(30).optional(),
+  payment_frequency: z.enum(["MONTHLY", "QUARTERLY", "HALF_YEARLY", "ACADEMIC_YEARLY", "CUSTOM_INSTALLMENTS"]).optional(),
 });
 
 export const InvitationUpdateSchema = z.object({
@@ -169,6 +172,9 @@ export const InvitationUpdateSchema = z.object({
   room_id: z.string().uuid(),
   monthly_rent: z.coerce.number().nonnegative().max(MAX_AMOUNT_INR),
   joining_date: z.string().max(30).optional(),
+  agreement_duration_months: z.number().int().positive().max(120).optional(),
+  agreement_start_date: z.string().max(30).optional(),
+  payment_frequency: z.enum(["MONTHLY", "QUARTERLY", "HALF_YEARLY", "ACADEMIC_YEARLY", "CUSTOM_INSTALLMENTS"]).optional(),
 });
 
 export const ActivationSchema = z.object({

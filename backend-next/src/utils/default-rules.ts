@@ -1,6 +1,38 @@
 import crypto from "crypto";
 import { AgreementTemplateType } from "@prisma/client";
 
+/**
+ * Default Terms & Conditions — previously hardcoded in agreement-generation-service.ts.
+ * Each term is a structured object that owners can edit, reorder, and reset individually.
+ */
+export const DEFAULT_TERMS_AND_CONDITIONS = [
+  {
+    id: "residential_use",
+    title: "Residential Use Only",
+    content: "The Lessee shall use the allocated room solely for residential purposes. Sub-letting or transferring the room to any other person is strictly prohibited.",
+  },
+  {
+    id: "rent_payment",
+    title: "Rent Payment",
+    content: "Monthly rent is payable in advance as per the agreed rent cycle. Late payments may attract fees or lead to suspension of access.",
+  },
+  {
+    id: "security_deposit",
+    title: "Security Deposit",
+    content: "The security deposit is refundable upon vacating the premises, subject to clearance of all pending dues and room inspection for damages.",
+  },
+  {
+    id: "notice_period",
+    title: "Notice Period",
+    content: "Notice Period: Either party must provide at least 30 days written notice prior to terminating this agreement.",
+  },
+  {
+    id: "hostel_rules_compliance",
+    title: "Hostel Rules Compliance",
+    content: "Hostel Rules Compliance: The Lessee explicitly agrees to comply fully with, follow, and be bound by each and every rule, policy, and regulation of the hostel as set forth in the hostel rules snapshot incorporated herein. The Lessee acknowledges that the specific rule version accepted during account activation is legally binding and forms an integral part of this residency agreement.",
+  },
+];
+
 export const DEFAULT_RULES_TEMPLATE = {
   categories: [
     {
@@ -93,6 +125,29 @@ export const DEFAULT_RULES_TEMPLATE = {
     }
   ]
 };
+
+/**
+ * Unified default agreement template combining Terms & Conditions + Hostel Rules.
+ * This is the master default used when creating new templates or resetting to defaults.
+ */
+export const DEFAULT_AGREEMENT_TEMPLATE = {
+  terms_and_conditions: DEFAULT_TERMS_AND_CONDITIONS,
+  categories: DEFAULT_RULES_TEMPLATE.categories,
+};
+
+/**
+ * Retrieve a single default term by ID for per-section reset.
+ */
+export function getDefaultTermById(termId: string) {
+  return DEFAULT_TERMS_AND_CONDITIONS.find((t) => t.id === termId) || null;
+}
+
+/**
+ * Retrieve a single default category by ID for per-section reset.
+ */
+export function getDefaultCategoryById(categoryId: string) {
+  return DEFAULT_RULES_TEMPLATE.categories.find((c) => c.id === categoryId) || null;
+}
 
 export function interpolateText(text: string, variables: Record<string, any>, isFinal: boolean = false): string {
   if (!text) return "";

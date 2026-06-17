@@ -35,7 +35,7 @@ function formatAgreementDateTime(dateInput: Date | string | null | undefined): s
 }
 
 
-import { DEFAULT_RULES_TEMPLATE } from "../../utils/default-rules";
+import { DEFAULT_RULES_TEMPLATE, DEFAULT_TERMS_AND_CONDITIONS } from "../../utils/default-rules";
 
 export const DEFAULT_RULE_CONTENT = DEFAULT_RULES_TEMPLATE;
 
@@ -74,6 +74,12 @@ export interface AgreementData {
   guardianUserAgent?: string | null;
 
   ownerSignedAt?: Date | string | null;
+
+  // Overhaul simplification fields
+  agreementStartDate?: Date | string | null;
+  agreementEndDate?: Date | string | null;
+  agreementDurationMonths?: number | null;
+  termsAndConditions?: { id: string; title: string; content: string; }[] | null;
 }
 
 // WinAnsi character encoding helper
@@ -167,6 +173,27 @@ export class AgreementGenerationService {
       template?.rules_content ||
       DEFAULT_RULE_CONTENT;
 
+    // Support for configurable agreement duration and dynamic date calculation
+    const agreementStartDate = agreement.agreement_start_date || snapshot.agreement_start_date || tenant.joined_on || null;
+    const agreementEndDate = agreement.agreement_end_date || snapshot.agreement_end_date || null;
+    const agreementDurationMonths = agreement.agreement_duration_months || snapshot.agreement_duration_months || null;
+
+    // Resolve Terms & Conditions
+    let termsAndConditions = snapshot.terms_and_conditions || 
+      template?.rules_content?.terms_and_conditions || 
+      null;
+
+    if (!termsAndConditions && template?.rules_content && typeof template.rules_content === "object") {
+      const parsedRules = template.rules_content as any;
+      if (Array.isArray(parsedRules.terms_and_conditions)) {
+        termsAndConditions = parsedRules.terms_and_conditions;
+      }
+    }
+
+    if (!termsAndConditions || !Array.isArray(termsAndConditions) || termsAndConditions.length === 0) {
+      termsAndConditions = DEFAULT_TERMS_AND_CONDITIONS;
+    }
+
     return {
       hostelName: snapshot.hostel_name || hostel.name,
       hostelAddress: [hostel.address, hostel.city, hostel.state, hostel.pincode].filter(Boolean).join(", "),
@@ -200,6 +227,11 @@ export class AgreementGenerationService {
       guardianUserAgent: agreement.guardian_user_agent,
 
       ownerSignedAt: agreement.owner_signed_at,
+
+      agreementStartDate,
+      agreementEndDate,
+      agreementDurationMonths,
+      termsAndConditions,
     };
   }
 
@@ -388,11 +420,13 @@ export class AgreementGenerationService {
 
     const gridItems = [
       { label: "Room Allocated", value: data.roomNo || "N/A" },
-      { label: "Joining Date", value: formatAgreementDate(data.joiningDate) },
+      { label: "Agreement Duration", value: data.agreementDurationMonths ? `${data.agreementDurationMonths} Months` : "12 Months" },
       { label: "Monthly Rent", value: `Rs. ${data.monthlyRent.toLocaleString("en-IN")}` },
-      { label: "Payment Frequency", value: data.paymentFrequency },
+      { label: "Agreement Start", value: formatAgreementDate(data.agreementStartDate || data.joiningDate) },
       { label: "Security Deposit", value: `Rs. ${data.advanceDeposit.toLocaleString("en-IN")}` },
+      { label: "Agreement End", value: formatAgreementDate(data.agreementEndDate) },
       { label: "Maintenance Fee", value: data.maintenanceCharge > 0 ? `Rs. ${data.maintenanceCharge.toLocaleString("en-IN")} (${data.maintenanceType})` : "N/A" },
+      { label: "Payment Frequency", value: data.paymentFrequency },
     ];
 
     let gridY = currentY;
@@ -438,18 +472,12 @@ export class AgreementGenerationService {
     });
     currentY -= 20;
 
-    const standardRules = [
-      "The Lessee shall use the allocated room solely for residential purposes. Sub-letting or transferring the room to any other person is strictly prohibited.",
-      "Monthly rent is payable in advance as per the agreed rent cycle. Late payments may attract fees or lead to suspension of access.",
-      "The security deposit is refundable upon vacating the premises, subject to clearance of all pending dues and room inspection for damages.",
-      "Notice Period: Either party must provide at least 30 days written notice prior to terminating this agreement.",
-      "Hostel Rules Compliance: The Lessee explicitly agrees to comply fully with, follow, and be bound by each and every rule, policy, and regulation of the hostel as set forth in the hostel rules snapshot incorporated herein. The Lessee acknowledges that the specific rule version accepted during account activation is legally binding and forms an integral part of this residency agreement.",
-    ];
+    const termsList = data.termsAndConditions || DEFAULT_TERMS_AND_CONDITIONS;
 
-    standardRules.forEach((rule, idx) => {
-      const ruleWrapped = wrapText(`${idx + 1}. ${rule}`, contentWidth, fontRegular, 9);
-      checkPageBreak(ruleWrapped.length * 12 + 10);
-      ruleWrapped.forEach((line) => {
+    termsList.forEach((term, idx) => {
+      const termWrapped = wrapText(`${idx + 1}. ${term.title}: ${term.content}`, contentWidth, fontRegular, 9);
+      checkPageBreak(termWrapped.length * 12 + 10);
+      termWrapped.forEach((line) => {
         page.drawText(sanitizeText(line), {
           x: margin,
           y: currentY,

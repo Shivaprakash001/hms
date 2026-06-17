@@ -28,6 +28,10 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
   const [roomId, setRoomId]           = useState(preselectedRoomId ?? '');
   const [loadedRoomId, setLoadedRoomId] = useState<string | null>(null);
   const [joiningDate, setJoiningDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [agreementStartDate, setAgreementStartDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [isStartDateOverridden, setIsStartDateOverridden] = useState(false);
+  const [agreementDuration, setAgreementDuration] = useState('12');
+  const [customDuration, setCustomDuration] = useState('');
   const [paymentFrequency, setPaymentFrequency] = useState('MONTHLY');
   const [monthlyRent, setMonthlyRent] = useState('');
   const [advanceDeposit, setAdvanceDeposit] = useState('');
@@ -87,6 +91,13 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
       setLoadedRoomId(null);
     }
   }, [preselectedRoomId]);
+
+  // Sync agreement start date to joining date if not manually overridden
+  useEffect(() => {
+    if (!isStartDateOverridden) {
+      setAgreementStartDate(joiningDate);
+    }
+  }, [joiningDate, isStartDateOverridden]);
 
   // ── Available rooms (ACTIVE + has free beds) ─────────────────────────────
   const { data: roomsRaw = [] } = useQuery({
@@ -198,6 +209,8 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
       advance_amount:     advanceDeposit ? Number(advanceDeposit) : undefined,
       maintenance_amount: maintenanceCharge ? Number(maintenanceCharge) : undefined,
       maintenance_type:   maintenanceType,
+      agreement_start_date: agreementStartDate || undefined,
+      agreement_duration_months: agreementDuration === 'custom' ? Number(customDuration) : Number(agreementDuration),
     });
   };
 
@@ -470,6 +483,56 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
                   <option value="ACADEMIC_YEARLY">Academic Yearly</option>
                 </select>
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">
+                    <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> Agreement Start *</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={agreementStartDate}
+                    onChange={(e) => {
+                      setAgreementStartDate(e.target.value);
+                      setIsStartDateOverridden(true);
+                    }}
+                    required
+                    className={inp}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Agreement Duration *</label>
+                  <select
+                    value={agreementDuration}
+                    onChange={(e) => setAgreementDuration(e.target.value)}
+                    required
+                    className={inp}
+                  >
+                    <option value="1">1 Month</option>
+                    <option value="3">3 Months</option>
+                    <option value="6">6 Months</option>
+                    <option value="9">9 Months</option>
+                    <option value="11">11 Months</option>
+                    <option value="12">12 Months (1 Year)</option>
+                    <option value="24">24 Months (2 Years)</option>
+                    <option value="custom">Custom...</option>
+                  </select>
+                </div>
+              </div>
+              {agreementDuration === 'custom' && (
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Custom Duration (Months) *</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={120}
+                    value={customDuration}
+                    onChange={(e) => setCustomDuration(e.target.value)}
+                    required
+                    placeholder="e.g. 18"
+                    className={inp}
+                  />
+                </div>
+              )}
             </div>
           </div>
 

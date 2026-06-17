@@ -48,6 +48,8 @@ export const InvitationSchema = z.object({
   maintenance_amount: z.number().min(0).optional(),
   joining_date: z.string().optional(),            // ISO date string, defaults to today
   maintenance_type: z.enum(["MONTHLY", "ONE_TIME", "NONE"]).optional(), // defaults to hostel billing policy
+  agreement_duration_months: z.number().int().positive().max(120).optional(),
+  agreement_start_date: z.string().max(30).optional(),
   payment_frequency: z.enum(["MONTHLY", "QUARTERLY", "HALF_YEARLY", "ACADEMIC_YEARLY", "CUSTOM_INSTALLMENTS"]).optional(),
 });
 
@@ -58,6 +60,8 @@ export const InvitationUpdateSchema = z.object({
   room_id: z.string().uuid(),
   monthly_rent: z.coerce.number().nonnegative(),
   joining_date: z.string().optional(),
+  agreement_duration_months: z.number().int().positive().max(120).optional(),
+  agreement_start_date: z.string().max(30).optional(),
   payment_frequency: z.enum(["MONTHLY", "QUARTERLY", "HALF_YEARLY", "ACADEMIC_YEARLY", "CUSTOM_INSTALLMENTS"]).optional(),
 });
 

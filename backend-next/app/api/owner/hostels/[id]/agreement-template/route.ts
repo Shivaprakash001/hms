@@ -5,10 +5,13 @@ import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { eventSystem } from "@/lib/events";
-import { AgreementTemplateType } from "@prisma/client";
 import {
   getActiveTemplateAndSyncRuleVersion,
   DEFAULT_RULES_TEMPLATE,
+  DEFAULT_AGREEMENT_TEMPLATE,
+  DEFAULT_TERMS_AND_CONDITIONS,
+  getDefaultTermById,
+  getDefaultCategoryById,
 } from "@/src/utils/default-rules";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
@@ -18,14 +21,6 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
 
   const hostelId = params.id;
-  const { searchParams } = new URL(req.url);
-  const typeParam = searchParams.get("type") || "RESIDENCY";
-
-  if (!["RESIDENCY", "RENEWAL", "MOVE_OUT"].includes(typeParam)) {
-    return apiError("Invalid template type", "VALIDATION_ERROR", 400);
-  }
-
-  const type = typeParam as AgreementTemplateType;
 
   try {
     const hostel = await prisma.hostels.findFirst({
@@ -33,14 +28,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     });
     if (!hostel) return apiError("Hostel not found", "NOT_FOUND", 404);
 
-    // Resolve current active template of this type
-    const activeTemplate = await getActiveTemplateAndSyncRuleVersion(prisma, hostelId, type);
+    // Always resolve the single RESIDENCY template
+    const activeTemplate = await getActiveTemplateAndSyncRuleVersion(prisma, hostelId, "RESIDENCY");
 
-    // Find if there is an unsaved draft of this type
+    // Find if there is an unsaved draft
     const draftTemplate = await prisma.agreementTemplate.findFirst({
       where: {
         hostel_id: hostelId,
-        type,
+        type: "RESIDENCY",
         status: "DRAFT",
       },
       orderBy: { created_at: "desc" },
@@ -50,6 +45,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       active: activeTemplate,
       draft: draftTemplate,
       default_rules: DEFAULT_RULES_TEMPLATE,
+      default_terms: DEFAULT_TERMS_AND_CONDITIONS,
+      default_template: DEFAULT_AGREEMENT_TEMPLATE,
     });
   } catch (error: any) {
     return apiError(error.message || "Failed to fetch agreement template");
@@ -71,23 +68,49 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (!hostel) return apiError("Hostel not found", "NOT_FOUND", 404);
 
     const body = await req.json();
-    const action = String(body.action || "save_draft"); // "save_draft" | "publish"
-    const typeParam = body.type || "RESIDENCY";
+    const action = String(body.action || "save_draft"); // "save_draft" | "publish" | "reset_section" | "reset_all"
 
-    if (!["RESIDENCY", "RENEWAL", "MOVE_OUT"].includes(typeParam)) {
-      return apiError("Invalid template type", "VALIDATION_ERROR", 400);
+    // ── Reset Section Action ──────────────────────────────────────
+    if (action === "reset_section") {
+      const sectionType = String(body.section_type || "").trim();
+      const sectionId = String(body.section_id || "").trim();
+      if (!["term", "category"].includes(sectionType)) {
+        return apiError("section_type must be 'term' or 'category'", "VALIDATION_ERROR", 400);
+      }
+      if (!sectionId) return apiError("section_id is required", "VALIDATION_ERROR", 400);
+
+      const defaultSection = sectionType === "term"
+        ? getDefaultTermById(sectionId)
+        : getDefaultCategoryById(sectionId);
+
+      if (!defaultSection) {
+        return apiError(`Default ${sectionType} '${sectionId}' not found`, "NOT_FOUND", 404);
+      }
+
+      return apiResponse({ section_type: sectionType, section_id: sectionId, default: defaultSection });
     }
-    const type = typeParam as AgreementTemplateType;
 
+    // ── Reset All Action ──────────────────────────────────────────
+    if (action === "reset_all") {
+      return apiResponse({ default_template: DEFAULT_AGREEMENT_TEMPLATE });
+    }
+
+    // ── Save Draft / Publish ──────────────────────────────────────
+    const type = "RESIDENCY" as const;
     const title = String(body.title || "Standard Tenant Agreement").trim();
     const owner_name = String(body.owner_name || hostel.profiles?.name || hostel.name).trim();
     const owner_signature_url = body.owner_signature_url ? String(body.owner_signature_url).trim() : null;
     const custom_rules = String(body.custom_rules || "").trim();
-    const rules_content = body.rules_content || DEFAULT_RULES_TEMPLATE;
+    const rules_content = body.rules_content || DEFAULT_AGREEMENT_TEMPLATE;
 
-    // Validate rules_content structure to protect template-level constraints and category deletion safety
+    // Validate rules_content structure
     if (rules_content) {
-      if (typeof rules_content !== "object" || !Array.isArray(rules_content.categories)) {
+      if (typeof rules_content !== "object") {
+        return apiError("Invalid rules structure", "VALIDATION_ERROR", 400);
+      }
+
+      // Validate categories (required)
+      if (!Array.isArray(rules_content.categories)) {
         return apiError("Invalid rules structure: categories must be an array", "VALIDATION_ERROR", 400);
       }
       if (rules_content.categories.length === 0) {
@@ -108,6 +131,24 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         }
         if (cat.highlights && !Array.isArray(cat.highlights)) {
           return apiError(`Category '${cat.title || cat.id}' highlights must be an array of strings`, "VALIDATION_ERROR", 400);
+        }
+      }
+
+      // Validate terms_and_conditions (optional — backward compat)
+      if (rules_content.terms_and_conditions) {
+        if (!Array.isArray(rules_content.terms_and_conditions)) {
+          return apiError("terms_and_conditions must be an array", "VALIDATION_ERROR", 400);
+        }
+        for (const term of rules_content.terms_and_conditions) {
+          if (!term || typeof term !== "object") {
+            return apiError("Invalid term format", "VALIDATION_ERROR", 400);
+          }
+          if (!term.id || typeof term.id !== "string" || !term.id.trim()) {
+            return apiError("Term ID is required", "VALIDATION_ERROR", 400);
+          }
+          if (!term.content || typeof term.content !== "string" || !term.content.trim()) {
+            return apiError("Term content is required", "VALIDATION_ERROR", 400);
+          }
         }
       }
     }
@@ -163,7 +204,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         });
         const nextVersion = lastPublished ? lastPublished.version_number + 1 : 1;
 
-        // Archive previous active template(s) of this type
+        // Archive previous active template(s)
         await tx.agreementTemplate.updateMany({
           where: { hostel_id: hostelId, type, status: "PUBLISHED" },
           data: { status: "ARCHIVED", is_active: false },
@@ -205,16 +246,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
             hostel_id: hostelId,
             version: `v${publishedTemplate.version_number}`,
             title: publishedTemplate.title,
-            content: publishedTemplate.rules_content || DEFAULT_RULES_TEMPLATE,
-            content_snapshot: publishedTemplate.rules_content || DEFAULT_RULES_TEMPLATE,
+            content: publishedTemplate.rules_content || DEFAULT_AGREEMENT_TEMPLATE,
+            content_snapshot: publishedTemplate.rules_content || DEFAULT_AGREEMENT_TEMPLATE,
             is_active: true,
             active: true,
           },
           update: {
             version: `v${publishedTemplate.version_number}`,
             title: publishedTemplate.title,
-            content: publishedTemplate.rules_content || DEFAULT_RULES_TEMPLATE,
-            content_snapshot: publishedTemplate.rules_content || DEFAULT_RULES_TEMPLATE,
+            content: publishedTemplate.rules_content || DEFAULT_AGREEMENT_TEMPLATE,
+            content_snapshot: publishedTemplate.rules_content || DEFAULT_AGREEMENT_TEMPLATE,
             is_active: true,
             active: true,
           },

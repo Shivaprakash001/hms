@@ -1314,6 +1314,8 @@ model tenant_invitations {
   activation_started_at DateTime? @db.Timestamptz(6)
   activated_at        DateTime? @db.Timestamptz(6)
   cancelled_at        DateTime? @db.Timestamptz(6)
+  agreement_duration_months Int?
+  agreement_start_date    DateTime? @db.Date
   created_at          DateTime  @default(now()) @db.Timestamptz(6)
   updated_at          DateTime? @db.Timestamptz(6)
   tenant              tenants   @relation(fields: [tenant_id], references: [id])

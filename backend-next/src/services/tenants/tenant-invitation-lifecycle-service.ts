@@ -295,6 +295,8 @@ export class TenantInvitationLifecycleService {
           token,
           expires_at: expiresAt,
           status: "PENDING",
+          agreement_duration_months: data.agreement_duration_months ? Number(data.agreement_duration_months) : null,
+          agreement_start_date: data.agreement_start_date ? new Date(data.agreement_start_date) : null,
         },
       });
 
@@ -432,6 +434,8 @@ export class TenantInvitationLifecycleService {
           ...(overrides?.name ? { name: String(overrides.name).trim() } : {}),
           ...(typeof overrides?.phone !== "undefined" ? { phone: normalizeIndianPhone(overrides.phone) || invitation.phone } : {}),
           ...(overrides?.email ? { email: normalizeEmail(overrides.email) } : {}),
+          ...(typeof overrides?.agreement_duration_months !== "undefined" ? { agreement_duration_months: overrides.agreement_duration_months ? Number(overrides.agreement_duration_months) : null } : {}),
+          ...(typeof overrides?.agreement_start_date !== "undefined" ? { agreement_start_date: overrides.agreement_start_date ? new Date(overrides.agreement_start_date) : null } : {}),
           updated_at: new Date(),
         },
       });
