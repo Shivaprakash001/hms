@@ -152,6 +152,12 @@ function compactFaqs(faqs: any[] | undefined) {
   );
 }
 
+function compactStats(stats: any[] | undefined) {
+  return (Array.isArray(stats) ? stats : []).filter(
+    (stat) => stat && hasText(stat.value) && hasText(stat.label)
+  );
+}
+
 function compactAdmissionSteps(steps: any[] | undefined) {
   return (Array.isArray(steps) ? steps : [])
     .filter((step) => step && Number.isFinite(Number(step.step ?? step.stepNumber)) && hasText(step.title) && hasText(step.description))
@@ -237,6 +243,7 @@ function mergeLandingContent(result: any): LandingMarketingContent {
     announcementBarEnabled: h?.announcementBarEnabled,
     announcementBarText: h?.announcementBarText,
     announcementBarLinkText: h?.announcementBarLinkText,
+    statsStrip: compactStats(h?.statsStrip),
     roomInclusions: h?.roomInclusions,
     totalCostClarityText: h?.totalCostClarityText,
     contactFormButtonText: h?.contactFormButtonText,
