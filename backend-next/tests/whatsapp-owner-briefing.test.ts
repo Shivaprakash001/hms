@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, beforeAll } from "vitest";
 import { prisma } from "@/lib/db";
 import { whatsappWebhookEventService } from "@/lib/services/notifications/whatsapp-webhook-event-service";
 import { MetaWhatsAppProvider } from "@/lib/services/notifications/providers/whatsapp/meta-provider";
@@ -13,11 +13,14 @@ const mockSendTextMessage = vi.spyOn(MetaWhatsAppProvider.prototype, "sendTextMe
 });
 
 describe("WhatsApp Owner Briefing Integration Tests", () => {
-  beforeEach(async () => {
-    vi.clearAllMocks();
+  beforeAll(async () => {
     await prisma.$executeRaw`TRUNCATE TABLE "test"."profiles" CASCADE`;
     await prisma.$executeRaw`TRUNCATE TABLE "test"."owner_daily_briefings" CASCADE`;
     await prisma.$executeRaw`TRUNCATE TABLE "test"."owner_whatsapp_identities" CASCADE`;
+  });
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
   });
 
   async function seedOwnerWithBriefing(params: {
@@ -28,10 +31,11 @@ describe("WhatsApp Owner Briefing Integration Tests", () => {
     const ownerId = crypto.randomUUID();
     const hostelId = crypto.randomUUID();
 
+    const email = `owner-${crypto.randomUUID()}@example.com`;
     // 1. Create Owner Profile
     await prisma.$executeRaw`
       INSERT INTO "test"."profiles" (id, email, name, role)
-      VALUES (${ownerId}::uuid, 'owner@example.com', 'Briefing Owner', 'OWNER')
+      VALUES (${ownerId}::uuid, ${email}, 'Briefing Owner', 'OWNER')
     `;
 
     // 2. Create Hostel
@@ -125,9 +129,10 @@ describe("WhatsApp Owner Briefing Integration Tests", () => {
     const ownerPhone = "919000000001";
     // We only create verified identity, but NO briefings
     const ownerId = crypto.randomUUID();
+    const email = `owner-${crypto.randomUUID()}@example.com`;
     await prisma.$executeRaw`
       INSERT INTO "test"."profiles" (id, email, name, role)
-      VALUES (${ownerId}::uuid, 'owner@example.com', 'Briefing Owner', 'OWNER')
+      VALUES (${ownerId}::uuid, ${email}, 'Briefing Owner', 'OWNER')
     `;
     await prisma.$executeRaw`
       INSERT INTO "test"."owner_whatsapp_identities" (id, owner_id, phone_number, is_verified, verified_at, updated_at)
@@ -214,20 +219,21 @@ describe("WhatsApp Owner Briefing Integration Tests", () => {
     // Seed an invited tenant
     const profileId = crypto.randomUUID();
     const tenantId = crypto.randomUUID();
+    const tenantEmail = `invited-${crypto.randomUUID()}@example.com`;
+    const tenantPhone = `91${crypto.randomInt(9000000000, 9999999999)}`;
     await prisma.$executeRaw`
       INSERT INTO "test"."profiles" (id, email, name, phone, role)
-      VALUES (${profileId}::uuid, 'invited@example.com', 'Invited Tenant', '919999999999', 'TENANT')
+      VALUES (${profileId}::uuid, ${tenantEmail}, 'Invited Tenant', ${tenantPhone}, 'TENANT')
     `;
     await prisma.$executeRaw`
       INSERT INTO "test"."tenants" (id, profile_id, hostel_id, owner_id, status, phone_1, guardian_name, joined_on)
-      VALUES (${tenantId}::uuid, ${profileId}::uuid, ${hostelId}::uuid, ${ownerId}::uuid, 'INVITED'::"TenantStatus", '919999999999', 'Guardian Name', '2026-06-01'::date)
+      VALUES (${tenantId}::uuid, ${profileId}::uuid, ${hostelId}::uuid, ${ownerId}::uuid, 'INVITED'::"TenantStatus", ${tenantPhone}, 'Guardian Name', '2026-06-01'::date)
     `;
-
     // Seed a tenant invitation linked to the room
     const invitationId = crypto.randomUUID();
     await prisma.$executeRaw`
       INSERT INTO "test"."tenant_invitations" (id, tenant_id, owner_id, hostel_id, room_id, name, phone, status, expires_at, token)
-      VALUES (${invitationId}::uuid, ${tenantId}::uuid, ${ownerId}::uuid, ${hostelId}::uuid, ${roomId}::uuid, 'Invited Tenant', '919999999999', 'PENDING', now() + interval '24 hours', 'test-token-12345')
+      VALUES (${invitationId}::uuid, ${tenantId}::uuid, ${ownerId}::uuid, ${hostelId}::uuid, ${roomId}::uuid, 'Invited Tenant', ${tenantPhone}, 'PENDING', now() + interval '24 hours', 'test-token-12345')
     `;
 
     const { eventId, payload } = makeWebhookPayload(ownerPhone, "⚡ Quick Action");
@@ -345,13 +351,15 @@ describe("WhatsApp Owner Briefing Integration Tests", () => {
     const profileId = crypto.randomUUID();
     const tenantId = crypto.randomUUID();
     const moveOutId = crypto.randomUUID();
+    const tenantEmail = `moveout-${crypto.randomUUID()}@example.com`;
+    const tenantPhone = `91${crypto.randomInt(9000000000, 9999999999)}`;
     await prisma.$executeRaw`
       INSERT INTO "test"."profiles" (id, email, name, phone, role)
-      VALUES (${profileId}::uuid, 'moveout@example.com', 'Rahul', '919999999988', 'TENANT')
+      VALUES (${profileId}::uuid, ${tenantEmail}, 'Rahul', ${tenantPhone}, 'TENANT')
     `;
     await prisma.$executeRaw`
       INSERT INTO "test"."tenants" (id, profile_id, hostel_id, owner_id, status, phone_1, guardian_name, joined_on)
-      VALUES (${tenantId}::uuid, ${profileId}::uuid, ${hostelId}::uuid, ${ownerId}::uuid, 'ACTIVE'::"TenantStatus", '919999999988', 'Guardian Name', '2026-06-01'::date)
+      VALUES (${tenantId}::uuid, ${profileId}::uuid, ${hostelId}::uuid, ${ownerId}::uuid, 'ACTIVE'::"TenantStatus", ${tenantPhone}, 'Guardian Name', '2026-06-01'::date)
     `;
     await prisma.$executeRaw`
       INSERT INTO "test"."move_out_requests" (id, tenant_id, hostel_id, owner_id, status, reason, planned_exit_date, initiated_by)

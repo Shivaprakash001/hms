@@ -24,16 +24,7 @@ export async function GET(req: NextRequest) {
     if (session.role === "OWNER") {
       const history = await renewalDecisionService.getAgreementHistory({
         tenantId,
-        ownerId: session.owner_id || session.sub,
-      });
-      return apiResponse({ agreements: history });
-    }
-
-    if (session.role === "ADMIN") {
-      const ownerId = req.nextUrl.searchParams.get("ownerId");
-      const history = await renewalDecisionService.getAgreementHistory({
-        tenantId,
-        ownerId,
+        ownerId: session.sub,
       });
       return apiResponse({ agreements: history });
     }

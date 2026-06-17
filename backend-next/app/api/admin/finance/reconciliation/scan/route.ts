@@ -2,8 +2,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import type { NextRequest } from "next/server";
-import { apiResponse, apiError } from "@/lib/auth";
-import { requireAdmin } from "@/lib/auth/admin-ctx";
+import { apiResponse, apiError, getSession } from "@/lib/auth";
 import { financialReconciliationService } from "@/lib/services/financial-reconciliation-service";
 import { mapServiceError } from "@/lib/api/admin-error";
 import { readJson } from "@/lib/api/admin-error";
@@ -18,12 +17,13 @@ import { readJson } from "@/lib/api/admin-error";
  * writing the deduped issues into `financial_reconciliation_issues`
  * (the partial unique index on fingerprint handles dedupe).
  *
- * This route is strictly ADMIN-only and lives under /api/admin/finance/**
- * to keep reconciliation tooling firewalled away from owner surfaces.
+ * This route requires OWNER access.
  */
 export async function POST(req: NextRequest) {
-  const ctx = await requireAdmin(req);
-  if (!ctx) return apiError("Admin access required", "FORBIDDEN", 403);
+  const session = await getSession(req);
+  if (!session || session.role !== "OWNER") {
+    return apiError("Owner access required", "FORBIDDEN", 403);
+  }
 
   const body = await readJson<{ limit?: number; persist?: boolean }>(req);
   const limit = body?.limit;
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   try {
     const report = await financialReconciliationService.detectAll({ limit });
     const persistResult = persist
-      ? await financialReconciliationService.persistIssues(report, { actorId: ctx.adminId })
+      ? await financialReconciliationService.persistIssues(report, { actorId: session.sub })
       : null;
     return apiResponse({
       report: {

@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
       email: profile.email,
       role: profile.role,
       tenant_id: tenantId,
-      is_admin: profile.role === "ADMIN",
+      is_admin: false,
       is_owner: profile.role === "OWNER",
       is_tenant: profile.role === "TENANT",
       ...extra

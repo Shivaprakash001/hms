@@ -13,8 +13,8 @@ export async function POST(req: Request) {
     if (!user) {
       return apiError("Unauthorized", "UNAUTHORIZED", 401);
     }
-    if (user.role !== "OWNER" && user.role !== "ADMIN") {
-      return apiError("Only owner/admin can reconcile attempts", "FORBIDDEN", 403);
+    if (user.role !== "OWNER") {
+      return apiError("Only owner can reconcile attempts", "FORBIDDEN", 403);
     }
 
     const body = await req.json().catch(() => ({} as any));
@@ -24,25 +24,20 @@ export async function POST(req: Request) {
       ? body.payment_ids.filter((v: any) => typeof v === "string" && v.trim().length > 0)
       : [];
 
-    if (user.role === "OWNER") {
-      if (!hostelId) {
-        return apiError("hostelId is required for owner reconciliation", "BAD_REQUEST", 400);
-      }
-      const hostel = await prisma.hostels.findUnique({
-        where: { id: hostelId },
-        select: { id: true, owner_id: true },
-      });
-      if (!hostel || hostel.owner_id !== user.id) {
-        return apiError("Hostel not found or access denied", "FORBIDDEN", 403);
-      }
+    if (!hostelId) {
+      return apiError("hostelId is required for reconciliation", "BAD_REQUEST", 400);
     }
-    if (user.role === "ADMIN" && !domain) {
-      return apiError("paymentDomain is required for admin reconciliation", "BAD_REQUEST", 400);
+    const hostel = await prisma.hostels.findUnique({
+      where: { id: hostelId },
+      select: { id: true, owner_id: true },
+    });
+    if (!hostel || hostel.owner_id !== user.id) {
+      return apiError("Hostel not found or access denied", "FORBIDDEN", 403);
     }
 
     const result = await paymentService.reconcilePendingAttempts({
-      ownerId: user.role === "OWNER" ? user.id : undefined,
-      hostelId: hostelId || null,
+      ownerId: user.id,
+      hostelId: hostelId,
       paymentDomain: domain,
       attemptIds: ids,
     });

@@ -82,32 +82,6 @@ export async function resolveOwnerOrAdminScopeForHostel(session: AuthPayload | n
   const isUuid = hostelId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(hostelId);
   const cleanHostelId = isUuid ? hostelId : null;
 
-  if (session.role === "ADMIN") {
-    if (cleanHostelId) {
-      const hostel = await prisma.hostels.findUnique({
-        where: { id: cleanHostelId },
-        select: { owner_id: true }
-      });
-      if (!hostel) {
-        const err: any = new Error("HOSTEL_NOT_FOUND: Hostel not found");
-        err.code = "HOSTEL_NOT_FOUND";
-        throw err;
-      }
-      if (session.owner_id && hostel.owner_id !== session.owner_id) {
-        const err: any = new Error("FORBIDDEN: Admin does not have access to this hostel");
-        err.code = "FORBIDDEN";
-        throw err;
-      }
-      return hostel.owner_id;
-    }
-    if (session.owner_id) {
-      return session.owner_id;
-    }
-    const err: any = new Error("HOSTEL_CONTEXT_REQUIRED: hostelId is required");
-    err.code = "HOSTEL_CONTEXT_REQUIRED";
-    throw err;
-  }
-
   if (session.role === "OWNER") {
     if (!session.owner_id) {
       const err: any = new Error("UNAUTHORIZED: OWNER token missing owner_id");
@@ -125,7 +99,7 @@ export async function resolveOwnerOrAdminScopeForHostel(session: AuthPayload | n
     return session.owner_id;
   }
 
-  const err: any = new Error("FORBIDDEN: Owner or Admin access required");
+  const err: any = new Error("FORBIDDEN: Owner access required");
   err.code = "FORBIDDEN";
   throw err;
 }
@@ -141,26 +115,7 @@ export async function resolveHostelContext(
   }
 
   let ownerId: string;
-  if (session.role === "ADMIN") {
-    if (session.owner_id) {
-      ownerId = session.owner_id;
-    } else if (hostelId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(hostelId)) {
-      const hostel = await prisma.hostels.findUnique({
-        where: { id: hostelId },
-        select: { owner_id: true }
-      });
-      if (!hostel) {
-        const err: any = new Error("HOSTEL_NOT_FOUND: Hostel not found");
-        err.code = "HOSTEL_NOT_FOUND";
-        throw err;
-      }
-      ownerId = hostel.owner_id;
-    } else {
-      const err: any = new Error("HOSTEL_CONTEXT_REQUIRED: hostelId is required");
-      err.code = "HOSTEL_CONTEXT_REQUIRED";
-      throw err;
-    }
-  } else if (session.role === "OWNER") {
+  if (session.role === "OWNER") {
     if (!session.owner_id) {
       const err: any = new Error("UNAUTHORIZED: OWNER token missing owner_id");
       err.code = "UNAUTHORIZED";
@@ -173,7 +128,7 @@ export async function resolveHostelContext(
     }
     ownerId = session.owner_id;
   } else {
-    const err: any = new Error("FORBIDDEN: Owner or Admin access required");
+    const err: any = new Error("FORBIDDEN: Owner access required");
     err.code = "FORBIDDEN";
     throw err;
   }

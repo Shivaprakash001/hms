@@ -56,7 +56,7 @@ export async function POST(req: Request) {
     }
 
     // Owners can record payments for their tenants
-    if (user.role === "OWNER" || user.role === "ADMIN") {
+    if (user.role === "OWNER") {
       if (!tenantId) {
         return apiError("tenant_id is required", "VALIDATION_ERROR", 400);
       }
@@ -65,13 +65,15 @@ export async function POST(req: Request) {
         select: { owner_id: true, hostel_id: true },
       });
       if (!tenant) return apiError("Tenant not found", "NOT_FOUND", 404);
-      if (user.role === "OWNER" && tenant.owner_id !== user.id) {
+      if (tenant.owner_id !== user.id) {
         return apiError("Forbidden: not your tenant", "FORBIDDEN", 403);
       }
       if (!hostelId) return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
       if (tenant.hostel_id !== hostelId) {
         return apiError("Tenant does not belong to requested hostel", "HOSTEL_ACCESS_DENIED", 403);
       }
+    } else if (user.role !== "TENANT") {
+      return apiError("Forbidden", "FORBIDDEN", 403);
     }
 
     const amountPaid = Number(body.amount_paid);

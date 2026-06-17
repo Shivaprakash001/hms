@@ -44,7 +44,7 @@ export async function POST(req: Request) {
       return apiError("Unauthorized", "UNAUTHORIZED", 401);
     }
     
-    if (user.role !== "OWNER" && user.role !== "ADMIN") {
+    if (user.role !== "OWNER") {
       console.warn(`[confirm-identity] Forbidden access attempt by ${user.role} ${user.id}`);
       return apiError("Only owners can perform this action", "FORBIDDEN", 403);
     }

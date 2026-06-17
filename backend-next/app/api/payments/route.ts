@@ -15,7 +15,7 @@ import { prisma } from "@/lib/db";
 export async function GET(req: NextRequest) {
   try {
     const session = await getSession(req);
-    if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
+    if (!session || session.role !== "OWNER") {
       return ApiResponse.error(ApiError.forbidden("Unauthorized"));
     }
 
@@ -30,19 +30,9 @@ export async function GET(req: NextRequest) {
     const isUuid = hostelId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(hostelId);
     if (!isUuid) return ApiResponse.error(ApiError.badRequest("hostelId must be a valid UUID"));
 
-    if (session.role === "ADMIN") {
-      const hostel = await prisma.hostels.findUnique({
-        where: { id: hostelId },
-        select: { owner_id: true }
-      });
-      if (!hostel) {
-        return ApiResponse.error(ApiError.notFound("Hostel not found"));
-      }
-      ownerId = hostel.owner_id;
-    } else {
-      const scope = resolveOwnerScope(session);
-      ownerId = scope.owner_id;
-    }
+    const scope = resolveOwnerScope(session);
+    ownerId = scope.owner_id;
+    await requireHostelBelongsToOwner(ownerId, hostelId);
 
     const result = await paymentService.getAllPayments(
       ownerId,
@@ -66,7 +56,7 @@ export async function POST(req: NextRequest) {
     if (!session) {
       return ApiResponse.error(ApiError.unauthorized("Unauthorized"));
     }
-    if (session.role !== "OWNER" && session.role !== "ADMIN") {
+    if (session.role !== "OWNER") {
       return ApiResponse.error(ApiError.forbidden("Only owners can record manual payments"));
     }
 
@@ -81,21 +71,9 @@ export async function POST(req: NextRequest) {
       return ApiResponse.error(ApiError.badRequest("hostelId must be a valid UUID"));
     }
 
-    let ownerId: string;
-    if (session.role === "ADMIN") {
-      const hostel = await prisma.hostels.findUnique({
-        where: { id: hostelId },
-        select: { owner_id: true }
-      });
-      if (!hostel) {
-        return ApiResponse.error(ApiError.notFound("Hostel not found"));
-      }
-      ownerId = hostel.owner_id;
-    } else {
-      const scope = resolveOwnerScope(session);
-      ownerId = scope.owner_id;
-      await requireHostelBelongsToOwner(ownerId, hostelId);
-    }
+    const scope = resolveOwnerScope(session);
+    ownerId = scope.owner_id;
+    await requireHostelBelongsToOwner(ownerId, hostelId);
 
     // ── Zod validation ─────────────────────────────────────────────────────
     const validated = RecordPaymentSchema.safeParse(data);

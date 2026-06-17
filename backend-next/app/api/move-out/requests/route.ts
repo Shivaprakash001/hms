@@ -16,7 +16,7 @@ import { safePagination, assertBodySize } from "@/lib/security/api-guard";
  */
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
-  if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
+  if (!session || session.role !== "OWNER") {
     return apiError("Forbidden", "FORBIDDEN", 403);
   }
 
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
     let resolvedTenantId = tenantId;
     let resolvedHostelId = hostelId;
     let resolvedOwnerId: string;
-    let initiatedByRole: "TENANT" | "OWNER" | "WARDEN" = "TENANT";
+    let initiatedByRole: "TENANT" | "OWNER" = "TENANT";
 
     if (session.role === "TENANT") {
       // Tenant self-service
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
       resolvedHostelId = tenant.hostel_id;
       resolvedOwnerId = tenant.owner_id!;
       initiatedByRole = "TENANT";
-    } else if (["OWNER", "ADMIN"].includes(session.role)) {
+    } else if (session.role === "OWNER") {
       // Owner-initiated (eviction or on behalf)
       const scope = resolveOwnerScope(session);
       if (!resolvedTenantId) return apiError("tenantId is required for owner-initiated move-out", "VALIDATION_ERROR", 400);

@@ -9,22 +9,17 @@ import { backendUrl } from "@/lib/config/domains";
 export async function GET(req: NextRequest) {
   try {
     const session = await getSession(req);
-    if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
+    if (!session || session.role !== "OWNER") {
       return NextResponse.json({ error: { message: "Unauthorized" } }, { status: 401 });
     }
 
     const { searchParams } = new URL(req.url);
     const hostelId = searchParams.get("hostelId");
 
-    const ownerScopedTenant =
-      session.role === "ADMIN"
-        ? {
-            ...(hostelId ? { hostel_id: hostelId } : {}),
-          }
-        : {
-            owner_id: session.sub,
-            ...(hostelId ? { hostel_id: hostelId } : {}),
-          };
+    const ownerScopedTenant = {
+      owner_id: session.sub,
+      ...(hostelId ? { hostel_id: hostelId } : {}),
+    };
 
     const documents = await prisma.identificationDocument.findMany({
       where: {

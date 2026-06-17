@@ -51,7 +51,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         if (!hostel || hostel.owner_id !== session.sub) {
           return ApiResponse.error(ApiError.forbidden("Forbidden"));
         }
-      } else if (session.role !== "ADMIN") {
+      } else {
         return ApiResponse.error(ApiError.forbidden("Forbidden"));
       }
 
@@ -97,7 +97,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       if (!hostel || hostel.owner_id !== session.sub) {
         return ApiResponse.error(ApiError.forbidden("Forbidden"));
       }
-    } else if (session.role !== "ADMIN") {
+    } else {
       return ApiResponse.error(ApiError.forbidden("Forbidden"));
     }
 

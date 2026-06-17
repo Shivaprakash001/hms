@@ -7,8 +7,8 @@ import { googleFormPromptService } from "@/lib/services/google-form-prompt-servi
 
 export async function POST(req: NextRequest) {
   const session = await getSession(req);
-  if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
-    return apiError("Only owners/admins can generate onboarding prompts", "FORBIDDEN", 403);
+  if (!session || session.role !== "OWNER") {
+    return apiError("Only owners can generate onboarding prompts", "FORBIDDEN", 403);
   }
 
   try {
@@ -20,10 +20,9 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await googleFormPromptService.generateTenantOnboardingPrompt({
-      ownerId: session.owner_id || session.sub,
+      ownerId: session.sub,
       hostelId,
       notes: body?.notes,
-      isAdmin: session.role === "ADMIN",
     });
 
     return apiResponse(result);

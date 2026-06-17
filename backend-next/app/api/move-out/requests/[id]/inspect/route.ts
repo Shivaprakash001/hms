@@ -10,7 +10,7 @@ import { moveOutActorFromSession, moveOutService } from "@/lib/services/move-out
  */
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession(req);
-  if (!session || !["OWNER", "ADMIN", "WARDEN"].includes(session.role)) {
+  if (!session || session.role !== "OWNER") {
     return apiError("Forbidden", "FORBIDDEN", 403);
   }
 

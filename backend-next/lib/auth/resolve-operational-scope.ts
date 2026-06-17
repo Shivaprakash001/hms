@@ -15,11 +15,6 @@ export type TenantScope = {
   role: "TENANT";
 };
 
-export type AdminScope = {
-  actor_id: string;
-  role: "ADMIN";
-};
-
 function forbidden(message: string) {
   const err: any = new Error(`FORBIDDEN: ${message}`);
   err.code = "FORBIDDEN";
@@ -71,9 +66,3 @@ export async function resolveTenantScope(session: AuthPayload | null): Promise<T
   };
 }
 
-/** Admin bypass is explicit and should only be used from /api/admin/** routes. */
-export function resolveAdminScope(session: AuthPayload | null): AdminScope {
-  if (!session) throw unauthorized("Authentication required");
-  if (session.role !== "ADMIN") throw forbidden("Admin access required");
-  return { actor_id: session.sub, role: "ADMIN" };
-}

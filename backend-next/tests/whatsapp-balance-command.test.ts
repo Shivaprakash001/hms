@@ -184,7 +184,7 @@ describe("WhatsApp Balance Command Integration Tests", () => {
 
     for (let i = 0; i < params.tenants.length; i++) {
       const tenantInfo = params.tenants[i];
-      const tenantPhone = `91800000000${i}`;
+      const tenantPhone = `9180000${crypto.randomInt(100000, 999999)}`;
       const profileId = crypto.randomUUID();
       const tenantId = crypto.randomUUID();
       tenantIds.push(tenantId);
@@ -497,27 +497,29 @@ describe("WhatsApp Balance Command Integration Tests", () => {
   it("Scenario 4: triggers guardian selection workflow if phone number matches multiple active records", async () => {
     const sharedPhone = "919000000004";
     
-    // Seed tenant 1
+    // Seed tenant 1 with unique tenant phone but shared guardian phone
     const { ownerId, hostelId } = await seedTestData({
-      tenantPhone: sharedPhone,
+      tenantPhone: "919000000041",
       tenantStatus: "ACTIVE",
+      guardianPhone: sharedPhone,
     });
 
-    // Seed tenant 2 sharing the same phone
+    // Seed tenant 2 sharing the same guardian phone
     const profileId2 = crypto.randomUUID();
     const tenantId2 = crypto.randomUUID();
     await prisma.$executeRaw`
       INSERT INTO "test"."profiles" (id, email, name, phone, role)
-      VALUES (${profileId2}::uuid, 'tenant2@example.com', 'Resident Two', ${sharedPhone}, 'TENANT')
+      VALUES (${profileId2}::uuid, 'tenant2@example.com', 'Resident Two', '919000000042', 'TENANT')
     `;
     await prisma.$executeRaw`
-      INSERT INTO "test"."tenants" (id, profile_id, hostel_id, owner_id, status, phone_1, joined_on)
+      INSERT INTO "test"."tenants" (id, profile_id, hostel_id, owner_id, status, phone_1, guardian_phone, joined_on)
       VALUES (
         ${tenantId2}::uuid,
         ${profileId2}::uuid,
         ${hostelId}::uuid,
         ${ownerId}::uuid,
         'ACTIVE'::"TenantStatus",
+        '919000000042',
         ${sharedPhone},
         '2025-02-01'::date
       )

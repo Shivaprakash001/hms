@@ -2,8 +2,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import type { NextRequest } from "next/server";
-import { apiResponse, apiError } from "@/lib/auth";
-import { requireAdmin } from "@/lib/auth/admin-ctx";
+import { apiResponse, apiError, getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { readJson } from "@/lib/api/admin-error";
 
@@ -28,8 +27,10 @@ const ALLOWED_TRANSITIONS: Record<string, string[]> = {
  * unique index `udx_fri_fingerprint_open`.
  */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ issueId: string }> }) {
-  const ctx = await requireAdmin(req);
-  if (!ctx) return apiError("Admin access required", "FORBIDDEN", 403);
+  const session = await getSession(req);
+  if (!session || session.role !== "OWNER") {
+    return apiError("Owner access required", "FORBIDDEN", 403);
+  }
 
   const { issueId } = await params;
   const body = await readJson<{ status?: string; notes?: string }>(req);
@@ -53,10 +54,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ is
   const patch: Record<string, any> = { status: body.status };
   if (body.status === "INVESTIGATING") {
     patch.acknowledged_at = now;
-    patch.acknowledged_by = ctx.adminId;
+    patch.acknowledged_by = session.sub;
   } else if (body.status === "RESOLVED" || body.status === "IGNORED") {
     patch.resolved_at = now;
-    patch.resolved_by = ctx.adminId;
+    patch.resolved_by = session.sub;
     if (body.notes) patch.resolution_notes = body.notes;
   }
 

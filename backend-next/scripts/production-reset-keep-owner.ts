@@ -145,23 +145,20 @@ async function validatePreservedConfigurations(db: DbClient = prisma) {
   console.log("✅ Preserved configurations validation passed.");
 }
 
+async function getRoleCounts(db: DbClient = prisma): Promise<Record<string, number>> {
+  const roles = await db.$queryRaw<Array<{ role: string; count: bigint }>>`
+    select role::text as role, count(*)::bigint as count from "profiles" group by role
+  `;
+  const counts: Record<string, number> = { OWNER: 0, ADMIN: 0, WARDEN: 0, TENANT: 0 };
+  for (const r of roles) {
+    counts[r.role] = Number(r.count);
+  }
+  return counts;
+}
+
 async function runFinalRoleAudit(db: DbClient = prisma) {
   console.log("=== Running Final Role Audit ===");
-  const roles = await db.profile.groupBy({
-    by: ['role'],
-    _count: true
-  });
-
-  const auditResult: Record<string, number> = {
-    OWNER: 0,
-    ADMIN: 0,
-    WARDEN: 0,
-    TENANT: 0
-  };
-
-  for (const r of roles) {
-    auditResult[r.role] = r._count;
-  }
+  const auditResult = await getRoleCounts(db);
 
   console.log(JSON.stringify(auditResult, null, 2));
 
@@ -181,12 +178,13 @@ async function main() {
   const tables = await getTablesToDelete();
   const orderedTables = await deletionOrder(tables);
 
+  const initialRoleCounts = await getRoleCounts(prisma);
   const beforeCounts: Record<string, number> = {
     profiles_total: await countTable("profiles"),
-    profiles_OWNER: await prisma.profile.count({ where: { role: "OWNER" } }),
-    profiles_ADMIN: await prisma.profile.count({ where: { role: "ADMIN" } }),
-    profiles_WARDEN: await prisma.profile.count({ where: { role: "WARDEN" } }),
-    profiles_TENANT: await prisma.profile.count({ where: { role: "TENANT" } }),
+    profiles_OWNER: initialRoleCounts.OWNER,
+    profiles_ADMIN: initialRoleCounts.ADMIN,
+    profiles_WARDEN: initialRoleCounts.WARDEN,
+    profiles_TENANT: initialRoleCounts.TENANT,
   };
 
   for (const table of tables) {
@@ -272,12 +270,13 @@ async function main() {
     await validatePreservedConfigurations(tx);
     await runFinalRoleAudit(tx);
 
+    const finalRoleCounts = await getRoleCounts(tx);
     const afterCounts: Record<string, number> = {
       profiles_total: await countTable("profiles", tx),
-      profiles_OWNER: await tx.profile.count({ where: { role: "OWNER" } }),
-      profiles_ADMIN: await tx.profile.count({ where: { role: "ADMIN" } }),
-      profiles_WARDEN: await tx.profile.count({ where: { role: "WARDEN" } }),
-      profiles_TENANT: await tx.profile.count({ where: { role: "TENANT" } }),
+      profiles_OWNER: finalRoleCounts.OWNER,
+      profiles_ADMIN: finalRoleCounts.ADMIN,
+      profiles_WARDEN: finalRoleCounts.WARDEN,
+      profiles_TENANT: finalRoleCounts.TENANT,
     };
     for (const table of tables) {
       afterCounts[table] = await countTable(table, tx);

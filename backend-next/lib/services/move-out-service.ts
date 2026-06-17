@@ -21,7 +21,7 @@ const logger = getLogger("move-out");
 // ─── Types ─────────────────────────────────────────────────────
 export interface CreateMoveOutParams {
   tenantId: string; hostelId: string; ownerId: string;
-  initiatedBy: string; initiatedByRole: "TENANT" | "OWNER" | "WARDEN";
+  initiatedBy: string; initiatedByRole: "TENANT" | "OWNER";
   reason: MoveOutReason; reasonText?: string; plannedExitDate: string;
   actor: MoveOutActor;
   isEviction?: boolean; evictionReason?: string;
@@ -65,8 +65,6 @@ type RequestAuthPolicy = {
   action: string;
   allowTenant?: boolean;
   allowOwner?: boolean;
-  allowAdmin?: boolean;
-  allowWarden?: boolean;
 };
 
 const ACTIVE_DISPUTE_STATUSES = ["OPEN", "UNDER_REVIEW"];
@@ -120,8 +118,6 @@ export class MoveOutService {
     const req = await this.getRequestForAuthorization(requestId);
     const role = this.normalizeRole(actor);
 
-    if (role === "ADMIN" && policy.allowAdmin) return req;
-
     if (role === "TENANT" && policy.allowTenant) {
       const ownsByProfile = req.tenant?.profile_id === actor.id;
       const ownsByTenantId = Boolean(actor.tenantId && actor.tenantId === req.tenant_id);
@@ -131,14 +127,6 @@ export class MoveOutService {
     if (role === "OWNER" && policy.allowOwner) {
       const ownerId = actor.ownerId;
       if (ownerId && ownerId === actor.id && req.owner_id === ownerId) return req;
-    }
-
-    if (role === "WARDEN" && policy.allowWarden) {
-      const profile = await prisma.profile.findUnique({
-        where: { id: actor.id },
-        select: { owner_id: true },
-      });
-      if (profile?.owner_id && profile.owner_id === req.owner_id) return req;
     }
 
     this.forbidden(policy.action);
@@ -160,7 +148,6 @@ export class MoveOutService {
     const req = dispute.request;
     const role = this.normalizeRole(actor);
 
-    if (role === "ADMIN" && policy.allowAdmin) return { dispute, request: req };
     if (role === "TENANT" && policy.allowTenant && req.tenant?.profile_id === actor.id) return { dispute, request: req };
     if (role === "OWNER" && policy.allowOwner && actor.ownerId && actor.ownerId === actor.id && req.owner_id === actor.ownerId) {
       return { dispute, request: req };
@@ -230,7 +217,7 @@ export class MoveOutService {
       if (!actor.ownerId || actor.ownerId !== actor.id || ownerId !== actor.ownerId || initiatedBy !== actor.id || initiatedByRole !== "OWNER") {
         this.forbidden("create this move-out request");
       }
-    } else if (role !== "ADMIN") {
+    } else {
       this.forbidden("create this move-out request");
     }
 
@@ -281,7 +268,6 @@ export class MoveOutService {
       action: "cancel this move-out request",
       allowTenant: true,
       allowOwner: true,
-      allowAdmin: true,
     });
     assertTransition(req.status as MoveOutStatus, "REJECTED");
     return prisma.$transaction(async (tx: Tx) => {
@@ -300,7 +286,6 @@ export class MoveOutService {
     const req = await this.requireRequestActor(requestId, actor, {
       action: "reject this move-out request",
       allowOwner: true,
-      allowAdmin: true,
     });
     assertTransition(req.status as MoveOutStatus, "REJECTED");
     return prisma.$transaction(async (tx: Tx) => {
@@ -319,8 +304,6 @@ export class MoveOutService {
     const req = await this.requireRequestActor(params.requestId, params.actor, {
       action: "inspect this move-out request",
       allowOwner: true,
-      allowAdmin: true,
-      allowWarden: true,
     });
     assertTransition(req.status as MoveOutStatus, "SETTLEMENT_PENDING");
     const totalDeductions = (params.damagesAmount || 0) + (params.cleaningFee || 0) + (params.missingItemsFee || 0) + (params.otherDeductions || 0);
@@ -436,7 +419,6 @@ export class MoveOutService {
     const req = await this.requireRequestActor(requestId, actor, {
       action: "approve this move-out settlement",
       allowOwner: true,
-      allowAdmin: true,
     });
     const preview = applyConfirmedSettlement(
       await this.calculateSettlementPreview(requestId),
@@ -470,7 +452,6 @@ export class MoveOutService {
     const req = await this.requireRequestActor(requestId, actor, {
       action: "vacate this move-out request",
       allowOwner: true,
-      allowAdmin: true,
     });
     assertTransition(req.status as MoveOutStatus, "PHYSICALLY_VACATED" as MoveOutStatus);
 
@@ -533,7 +514,6 @@ export class MoveOutService {
     await this.requireRequestActor(params.requestId, params.actor, {
       action: "complete this move-out request",
       allowOwner: true,
-      allowAdmin: true,
     });
     const req = await prisma.move_out_requests.findUnique({ where: { id: params.requestId }, include: { settlement: true } });
     if (!req) throw new Error("NOT_FOUND: Move-out request not found");
@@ -574,7 +554,6 @@ export class MoveOutService {
       action: "raise a dispute on this move-out request",
       allowTenant: true,
       allowOwner: true,
-      allowAdmin: true,
     });
     const dispute = await prisma.$transaction(async (tx: Tx) => {
       const existing = await tx.exit_disputes.findFirst({
@@ -610,7 +589,6 @@ export class MoveOutService {
     const { dispute, request } = await this.requireDisputeActor(disputeId, actor, {
       action: "review this move-out dispute",
       allowOwner: true,
-      allowAdmin: true,
     });
     if (!ACTIVE_DISPUTE_STATUSES.includes(dispute.status)) {
       throw new Error(`VALIDATION: Dispute is already ${dispute.status}`);
@@ -643,7 +621,6 @@ export class MoveOutService {
     const { dispute, request } = await this.requireDisputeActor(disputeId, actor, {
       action: "resolve this move-out dispute",
       allowOwner: true,
-      allowAdmin: true,
     });
     if (!ACTIVE_DISPUTE_STATUSES.includes(dispute.status)) {
       throw new Error(`VALIDATION: Dispute is already ${dispute.status}`);
@@ -669,7 +646,6 @@ export class MoveOutService {
     const { dispute, request } = await this.requireDisputeActor(disputeId, actor, {
       action: "reject this move-out dispute",
       allowOwner: true,
-      allowAdmin: true,
     });
     if (!ACTIVE_DISPUTE_STATUSES.includes(dispute.status)) {
       throw new Error(`VALIDATION: Dispute is already ${dispute.status}`);
@@ -707,7 +683,6 @@ export class MoveOutService {
       action: "submit feedback for this move-out request",
       allowTenant: true,
       allowOwner: true,
-      allowAdmin: true,
     });
     if (req.status !== "COMPLETED") throw new Error("VALIDATION: Feedback only after completion");
     const existing = await prisma.exit_feedbacks.findUnique({ where: { request_id: params.requestId } });

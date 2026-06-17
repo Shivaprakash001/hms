@@ -2,8 +2,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import type { NextRequest } from "next/server";
-import { apiResponse, apiError } from "@/lib/auth";
-import { requireAdmin } from "@/lib/auth/admin-ctx";
+import { apiResponse, apiError, getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
 const ALLOWED_STATUS = new Set(["OPEN", "INVESTIGATING", "RESOLVED", "IGNORED"]);
@@ -20,11 +19,13 @@ const ALLOWED_SEVERITY = new Set(["LOW", "MEDIUM", "HIGH", "CRITICAL"]);
  *
  * Lists persisted reconciliation issues. Sorted by severity (CRITICAL
  * first) then detected_at DESC so the loudest fires float to the top.
- * Admin-only.
+ * Owner-accessible.
  */
 export async function GET(req: NextRequest) {
-  const ctx = await requireAdmin(req);
-  if (!ctx) return apiError("Admin access required", "FORBIDDEN", 403);
+  const session = await getSession(req);
+  if (!session || session.role !== "OWNER") {
+    return apiError("Owner access required", "FORBIDDEN", 403);
+  }
 
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status") || "OPEN";

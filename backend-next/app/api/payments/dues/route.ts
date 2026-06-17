@@ -15,7 +15,7 @@ export async function GET(req: Request) {
     if (!user) {
       return ApiResponse.error(ApiError.unauthorized("Unauthorized"));
     }
-    if (!["OWNER", "ADMIN"].includes(user.role)) {
+    if (user.role !== "OWNER") {
       console.warn(`[payments.dues.GET] Forbidden access attempt by ${user?.role} ${user?.id}`);
       return ApiResponse.error(ApiError.forbidden("Unauthorized"));
     }
@@ -29,20 +29,8 @@ export async function GET(req: Request) {
       return ApiResponse.error(new ApiError("hostelId is required", 400, "HOSTEL_CONTEXT_REQUIRED"));
     }
 
-    let ownerId: string;
-    if (user.role === "ADMIN") {
-      const hostel = await prisma.hostels.findUnique({
-        where: { id: hostelId },
-        select: { owner_id: true }
-      });
-      if (!hostel) {
-        return ApiResponse.error(ApiError.notFound("Hostel not found"));
-      }
-      ownerId = hostel.owner_id;
-    } else {
-      ownerId = user.id;
-      await requireHostelBelongsToOwner(ownerId, hostelId);
-    }
+    const ownerId = user.id;
+    await requireHostelBelongsToOwner(ownerId, hostelId);
 
     const result = await paymentService.getDuesReport(
       ownerId,

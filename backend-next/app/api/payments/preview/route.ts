@@ -47,7 +47,7 @@ export async function GET(req: Request) {
       if (count !== obligationIds.length) {
         return ApiResponse.error(ApiError.forbidden("All obligations must belong to the requested hostel"));
       }
-    } else if (user.role !== "ADMIN") {
+    } else {
       return ApiResponse.error(ApiError.forbidden("Forbidden"));
     }
 

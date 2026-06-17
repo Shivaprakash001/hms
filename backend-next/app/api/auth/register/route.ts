@@ -17,7 +17,7 @@ const OTP_ACTION  = "registration";
  */
 export async function POST(req: NextRequest) {
   const session = await getSession(req);
-  if (!session || session.role !== "ADMIN") {
+  if (!session || session.role !== "OWNER") {
     return apiError("Owner self-registration is disabled. Contact your administrator.", "FORBIDDEN", 403);
   }
 

@@ -4,14 +4,16 @@ import { v4 as uuidv4 } from 'uuid';
 export async function createTestTenant(ownerId: string, hostelId: string, overrides: any = {}) {
   const profileId = uuidv4();
   
+  const { name, email, phone, role, ...tenantOverrides } = overrides;
+
   // Create profile for tenant
   const profile = await prisma.profile.create({
     data: {
       id: profileId,
-      name: `Tenant ${profileId.substring(0, 5)}`,
-      email: `tenant-${profileId}@test.com`,
-      phone: '1234567890',
-      role: 'TENANT',
+      name: name || `Tenant ${profileId.substring(0, 5)}`,
+      email: email || `tenant-${profileId}@test.com`,
+      phone: phone || Math.floor(1000000000 + Math.random() * 9000000000).toString(),
+      role: role || 'TENANT',
     },
   });
 
@@ -22,7 +24,7 @@ export async function createTestTenant(ownerId: string, hostelId: string, overri
       hostel_id: hostelId,
       status: 'ACTIVE',
       personal_email: profile.email,
-      ...overrides,
+      ...tenantOverrides,
     },
   });
 

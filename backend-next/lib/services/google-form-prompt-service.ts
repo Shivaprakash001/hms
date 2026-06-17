@@ -92,12 +92,11 @@ export class GoogleFormPromptService {
     ownerId: string;
     hostelId: string;
     notes?: unknown;
-    isAdmin?: boolean;
   }) {
     const hostel = await prisma.hostels.findFirst({
       where: {
         id: input.hostelId,
-        ...(input.isAdmin ? {} : { owner_id: input.ownerId }),
+        owner_id: input.ownerId,
         is_active: true,
       },
       select: {
@@ -112,7 +111,7 @@ export class GoogleFormPromptService {
     });
 
     if (!hostel) {
-      throw new Error(input.isAdmin ? "NOT_FOUND: Hostel not found" : "FORBIDDEN: Hostel is not owned by the authenticated owner");
+      throw new Error("FORBIDDEN: Hostel is not owned by the authenticated owner");
     }
 
     const roomNumbers = hostel.rooms.map((room) => room.room_no);

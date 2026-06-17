@@ -109,11 +109,11 @@ describe("Owner registration is bootstrap-only", () => {
     expect(methodBody).toContain("OWNER_CREATION_BLOCKED");
   });
 
-  it("register route requires ADMIN role", () => {
+  it("register route requires OWNER role", () => {
     const registerRoute = read("app/api/auth/register/route.ts");
 
-    expect(registerRoute).toContain("ADMIN");
-    expect(registerRoute).toMatch(/role.*ADMIN|session.*role/);
+    expect(registerRoute).toContain("OWNER");
+    expect(registerRoute).toMatch(/role.*OWNER|session.*role/);
   });
 });
 

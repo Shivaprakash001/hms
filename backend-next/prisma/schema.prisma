@@ -1547,9 +1547,7 @@ enum BillingTransitionStrategy {
 }
 
 enum Role {
-  ADMIN
   OWNER
-  WARDEN
   TENANT
 }
 

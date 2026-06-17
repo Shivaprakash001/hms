@@ -43,7 +43,7 @@ function addDays(date: Date, days: number) {
 }
 
 function absoluteExpiryFor(role: string, now = new Date()) {
-  if (role === "OWNER" || role === "ADMIN") {
+  if (role === "OWNER") {
     return new Date(now.getTime() + OWNER_ABSOLUTE_MS);
   }
   return addDays(now, TENANT_REFRESH_DAYS);
