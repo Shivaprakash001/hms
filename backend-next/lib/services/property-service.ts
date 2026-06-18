@@ -4,6 +4,7 @@ import { roomCapacityService } from "./room-capacity-service";
 import crypto from "crypto";
 import { authOtpService } from "@/lib/services/auth/auth-otp-service";
 import { normalizeWhatsAppPhone } from "@/lib/services/notifications/providers/whatsapp";
+import { eventLog } from "@/lib/services/event-log-service";
 
 
 export class PropertyService {
@@ -12,7 +13,7 @@ export class PropertyService {
       where: { id: userId },
       include: {
         hostels: {
-          where: { is_active: true },
+          where: { status: { in: ["ACTIVE", "INACTIVE"] } },
           orderBy: { created_at: "asc" },
         }
       }
@@ -47,6 +48,7 @@ export class PropertyService {
         upi_id: hostel.upi_id,
         gst_number: hostel.gst_number,
         logo_url: hostel.logo_url,
+        status: hostel.status,
       })),
       // Compatibility shape only for single-hostel bootstrap screens. Multi-hostel
       // settings must fetch /api/hostels/:id/preferences explicitly.
@@ -232,6 +234,14 @@ export class PropertyService {
     if (data.upi_id !== undefined) mapped.upi_id = data.upi_id;
     if (data.gst_number !== undefined) mapped.gst_number = data.gst_number;
 
+    if (data.status !== undefined) {
+      if (!["ACTIVE", "INACTIVE", "ARCHIVED"].includes(data.status)) {
+        throw new Error("VALIDATION: Invalid hostel status");
+      }
+      mapped.status = data.status;
+      mapped.is_active = data.status !== "ARCHIVED";
+    }
+
     const hostelId = data.hostel_id || data.hostelId;
 
     if (mapped.name) {
@@ -239,7 +249,7 @@ export class PropertyService {
       let targetHostelId = hostelId;
       if (!targetHostelId) {
         const existingHostels = await prisma.hostels.findMany({
-          where: { owner_id: userId, is_active: true },
+          where: { owner_id: userId, status: { in: ["ACTIVE", "INACTIVE"] } },
           select: { id: true },
           orderBy: { created_at: "asc" },
           take: 2,
@@ -252,7 +262,7 @@ export class PropertyService {
       const duplicate = await prisma.hostels.findFirst({
         where: {
           owner_id: userId,
-          is_active: true,
+          status: { in: ["ACTIVE", "INACTIVE"] },
           name: {
             equals: mapped.name,
             mode: "insensitive",
@@ -270,24 +280,132 @@ export class PropertyService {
     }
 
     if (hostelId) {
-      const updated = await prisma.hostels.updateMany({
-        where: { id: hostelId, owner_id: userId, is_active: true },
+      const currentHostel = await prisma.hostels.findFirst({
+        where: { owner_id: userId, id: hostelId },
+      });
+      if (!currentHostel) {
+        throw new Error("FORBIDDEN: Hostel is not owned by the authenticated owner");
+      }
+
+      // If already archived, restrict changes unless restoring
+      if (currentHostel.status === "ARCHIVED") {
+        const isRestoring = data.status === "ACTIVE" || data.status === "INACTIVE";
+        if (!isRestoring) {
+          throw new Error("VALIDATION: Cannot modify an archived hostel");
+        }
+      }
+
+      // If archiving, check active allocations
+      if (data.status === "ARCHIVED" && currentHostel.status !== "ARCHIVED") {
+        const activeAllocationsCount = await prisma.roomAllocation.count({
+          where: {
+            hostel_id: hostelId,
+            is_active: true,
+          },
+        });
+        if (activeAllocationsCount > 0) {
+          throw new Error("VALIDATION: Cannot archive hostel with active tenant allocations");
+        }
+      }
+
+      // Populate lifecycle metadata for status transitions
+      const previousStatus = currentHostel.status;
+      if (data.status && data.status !== previousStatus) {
+        if (data.status === "ARCHIVED") {
+          mapped.archived_at = new Date();
+          mapped.archived_by = userId;
+          mapped.archive_reason = data.archive_reason || null;
+        } else if (previousStatus === "ARCHIVED") {
+          // Restoring — clear archive metadata
+          mapped.archived_at = null;
+          mapped.archived_by = null;
+          mapped.archive_reason = null;
+        }
+      }
+
+      await prisma.hostels.update({
+        where: { id: hostelId },
         data: mapped,
       });
-      if (updated.count !== 1) throw new Error("FORBIDDEN: Hostel is not owned by the authenticated owner");
+
+      // Log lifecycle transition events
+      if (data.status && data.status !== previousStatus) {
+        const lifecycleEvent = resolveLifecycleEvent(previousStatus, data.status);
+        if (lifecycleEvent) {
+          await eventLog.log(lifecycleEvent, userId, {
+            hostel_id: hostelId,
+            hostel_name: currentHostel.name,
+            previous_status: previousStatus,
+            new_status: data.status,
+            ...(data.archive_reason ? { archive_reason: data.archive_reason } : {}),
+          });
+        }
+      }
     } else {
       const existingHostels = await prisma.hostels.findMany({
-        where: { owner_id: userId, is_active: true },
+        where: { owner_id: userId, status: { in: ["ACTIVE", "INACTIVE"] } },
         select: { id: true },
         orderBy: { created_at: "asc" },
         take: 2,
       });
 
       if (existingHostels.length === 1) {
+        const targetId = existingHostels[0].id;
+        const currentHostel = await prisma.hostels.findUnique({
+          where: { id: targetId },
+        });
+
+        if (currentHostel?.status === "ARCHIVED") {
+          const isRestoring = data.status === "ACTIVE" || data.status === "INACTIVE";
+          if (!isRestoring) {
+            throw new Error("VALIDATION: Cannot modify an archived hostel");
+          }
+        }
+
+        if (data.status === "ARCHIVED" && currentHostel?.status !== "ARCHIVED") {
+          const activeAllocationsCount = await prisma.roomAllocation.count({
+            where: {
+              hostel_id: targetId,
+              is_active: true,
+            },
+          });
+          if (activeAllocationsCount > 0) {
+            throw new Error("VALIDATION: Cannot archive hostel with active tenant allocations");
+          }
+        }
+
+        // Populate lifecycle metadata for status transitions
+        const previousStatus = currentHostel?.status;
+        if (data.status && data.status !== previousStatus) {
+          if (data.status === "ARCHIVED") {
+            mapped.archived_at = new Date();
+            mapped.archived_by = userId;
+            mapped.archive_reason = data.archive_reason || null;
+          } else if (previousStatus === "ARCHIVED") {
+            mapped.archived_at = null;
+            mapped.archived_by = null;
+            mapped.archive_reason = null;
+          }
+        }
+
         await prisma.hostels.update({
-          where: { id: existingHostels[0].id },
+          where: { id: targetId },
           data: mapped,
         });
+
+        // Log lifecycle transition events
+        if (data.status && data.status !== previousStatus) {
+          const lifecycleEvent = resolveLifecycleEvent(previousStatus || "ACTIVE", data.status);
+          if (lifecycleEvent) {
+            await eventLog.log(lifecycleEvent, userId, {
+              hostel_id: targetId,
+              hostel_name: currentHostel?.name,
+              previous_status: previousStatus,
+              new_status: data.status,
+              ...(data.archive_reason ? { archive_reason: data.archive_reason } : {}),
+            });
+          }
+        }
       } else if (existingHostels.length > 1) {
         throw new Error("VALIDATION: hostel_id is required for existing hostel updates");
       } else {
@@ -297,6 +415,8 @@ export class PropertyService {
             name: mapped.name || "My Hostel",
             phone: mapped.phone || "",
             address: mapped.address || "",
+            status: mapped.status || "ACTIVE",
+            is_active: mapped.is_active !== undefined ? mapped.is_active : true,
             ...mapped,
           },
         });
@@ -406,7 +526,7 @@ export class PropertyService {
           FROM hostels h
           WHERE h.id = ${hostelId}::uuid
             AND h.owner_id = ${ownerId}::uuid
-            AND h.is_active = true
+            AND h.status != 'ARCHIVED'
         ) AS allowed
       ),
       floor_rows AS (
@@ -446,6 +566,8 @@ export class PropertyService {
   async createFloor(ownerId: string, hostelId: string, data: { name: string; sort_order?: number }) {
     const hostel = await prisma.hostels.findUnique({ where: { id: hostelId } });
     if (!hostel || hostel.owner_id !== ownerId) throw new Error("NOT_FOUND: Hostel not found");
+    if (hostel.status === "ARCHIVED") throw new Error("VALIDATION: Cannot modify rooms/floors of an archived hostel");
+    if (hostel.status === "INACTIVE") throw new Error("VALIDATION: Cannot modify rooms/floors of an inactive hostel");
 
     return await prisma.floors.create({
       data: {
@@ -460,9 +582,11 @@ export class PropertyService {
   async updateFloor(floorId: string, ownerId: string, data: { name?: string; sort_order?: number }) {
     const floor = await prisma.floors.findUnique({
       where: { id: floorId },
-      include: { hostel: { select: { owner_id: true } } },
+      include: { hostel: { select: { owner_id: true, status: true } } },
     });
     if (!floor || floor.hostel.owner_id !== ownerId) throw new Error("NOT_FOUND: Floor not found");
+    if (floor.hostel.status === "ARCHIVED") throw new Error("VALIDATION: Cannot modify rooms/floors of an archived hostel");
+    if (floor.hostel.status === "INACTIVE") throw new Error("VALIDATION: Cannot modify rooms/floors of an inactive hostel");
 
     const updateData: any = {};
     if (data.name !== undefined) updateData.name = data.name.trim();
@@ -476,11 +600,13 @@ export class PropertyService {
     const floor = await prisma.floors.findUnique({
       where: { id: floorId },
       include: {
-        hostel: { select: { owner_id: true } },
+        hostel: { select: { owner_id: true, status: true } },
         rooms: { where: { is_active: true }, select: { id: true } },
       },
     });
     if (!floor || floor.hostel.owner_id !== ownerId) throw new Error("NOT_FOUND: Floor not found");
+    if (floor.hostel.status === "ARCHIVED") throw new Error("VALIDATION: Cannot modify rooms/floors of an archived hostel");
+    if (floor.hostel.status === "INACTIVE") throw new Error("VALIDATION: Cannot modify rooms/floors of an inactive hostel");
     if (floor.rooms.length > 0) throw new Error("VALIDATION: Cannot delete floor with active rooms");
 
     await prisma.floors.delete({ where: { id: floorId } });
@@ -675,10 +801,12 @@ export class PropertyService {
   async updateRoom(roomId: string, data: any, ownerId: string) {
     const room = await prisma.rooms.findUnique({
       where: { id: roomId },
-      include: { hostels: { select: { owner_id: true } } },
+      include: { hostels: { select: { owner_id: true, status: true } } },
     });
 
     if (!room || room.hostels.owner_id !== ownerId) throw new Error("NOT_FOUND: Room not found");
+    if (room.hostels.status === "ARCHIVED") throw new Error("VALIDATION: Cannot modify rooms of an archived hostel");
+    if (room.hostels.status === "INACTIVE") throw new Error("VALIDATION: Cannot modify rooms of an inactive hostel");
 
     const capacitySnapshot = await roomCapacityService.getRoomCapacitySnapshot(roomId, { ownerId });
 
@@ -741,6 +869,23 @@ export class PropertyService {
 function cleanNullable(value: unknown) {
   const cleaned = String(value ?? "").trim();
   return cleaned || null;
+}
+
+/**
+ * Maps hostel status transitions to named lifecycle events.
+ * These events form the audit trail for hostel lifecycle changes.
+ */
+function resolveLifecycleEvent(from: string, to: string): string | null {
+  const key = `${from}->${to}`;
+  const eventMap: Record<string, string> = {
+    "ACTIVE->ARCHIVED":   "HOSTEL_ARCHIVED",
+    "INACTIVE->ARCHIVED": "HOSTEL_ARCHIVED",
+    "ARCHIVED->ACTIVE":   "HOSTEL_RESTORED",
+    "ARCHIVED->INACTIVE": "HOSTEL_RESTORED",
+    "ACTIVE->INACTIVE":   "HOSTEL_DEACTIVATED",
+    "INACTIVE->ACTIVE":   "HOSTEL_ACTIVATED",
+  };
+  return eventMap[key] || null;
 }
 
 export const propertyService = new PropertyService();

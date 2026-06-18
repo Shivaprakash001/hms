@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
       where: {
         id: hostelId,
         owner_id: session.sub,
-        is_active: true,
+        status: "ACTIVE",
       },
     });
 

@@ -13,7 +13,7 @@ const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024;
 
 async function assertOwnedHostel(hostelId: string, ownerId: string) {
   const hostel = await prisma.hostels.findFirst({
-    where: { id: hostelId, owner_id: ownerId, is_active: true },
+    where: { id: hostelId, owner_id: ownerId, status: { in: ["ACTIVE", "INACTIVE"] } },
     select: { id: true },
   });
   if (!hostel) throw new Error("FORBIDDEN: Hostel is not owned by the authenticated owner");

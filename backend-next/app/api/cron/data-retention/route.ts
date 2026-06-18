@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const hostels = await prisma.hostels.findMany({
-      where: { is_active: true },
+      where: { status: { in: ["ACTIVE", "INACTIVE"] } },
       select: {
         id: true,
         owner_id: true,

@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     let activeHostelId = hostelId;
     if (!activeHostelId) {
       const firstHostel = await prisma.hostels.findFirst({
-        where: { owner_id: scope.owner_id, is_active: true },
+        where: { owner_id: scope.owner_id, status: { in: ["ACTIVE", "INACTIVE"] } },
         select: { id: true }
       });
       if (!firstHostel) {

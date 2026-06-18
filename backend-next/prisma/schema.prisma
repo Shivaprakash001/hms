@@ -227,6 +227,7 @@ model hostels {
   upi_id              String?
   gst_number          String?
   is_active           Boolean                  @default(true)
+  status              HostelStatus             @default(ACTIVE)
   currency            String                   @default("INR") @db.VarChar(3)
   rent_cycle          String                   @default("MONTHLY")
   receipt_prefix      String                   @default("SAH")
@@ -238,6 +239,9 @@ model hostels {
   admission_photos    Json?
   created_at          DateTime                 @default(now()) @db.Timestamptz(6)
   updated_at          DateTime?                @db.Timestamptz(6)
+  archived_at         DateTime?                @db.Timestamptz(6)
+  archived_by         String?                  @db.Uuid
+  archive_reason      String?
   logo_url            String?
   preferences_config  Json?
   bulk_import_batches bulk_import_batches[]
@@ -2018,4 +2022,10 @@ model payment_link_tokens {
   @@index([obligation_id])
   @@index([tenant_id])
   @@index([expires_at])
+}
+
+enum HostelStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
 }

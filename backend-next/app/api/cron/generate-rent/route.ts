@@ -30,7 +30,7 @@ async function resolveSingleOperationalOwnerId(explicitOwnerId: string | null) {
 
   const ownerRows = await prisma.hostels.findMany({
     where: {
-      is_active: true,
+      status: "ACTIVE",
       room_allocations: {
         some: {
           is_active: true,
@@ -88,7 +88,7 @@ export async function GET(req: NextRequest) {
 
     const hostels = await prisma.hostels.findMany({
       where: {
-        is_active: true,
+        status: "ACTIVE",
         owner_id: ownerId,
         ...(cursor ? { id: { gt: cursor } } : {}),
         ...(includeEmptyHostels

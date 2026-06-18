@@ -1868,7 +1868,7 @@ export class OwnerWhatsAppAssistantService {
       const rows = await prisma.hostels.findMany({
         where: {
           owner_id: ownerId,
-          is_active: true,
+          status: { in: ["ACTIVE", "INACTIVE"] },
           name: { contains: query, mode: "insensitive" },
         },
         select: { id: true, name: true },
@@ -2721,9 +2721,9 @@ export class OwnerWhatsAppAssistantService {
   private async sendHostelCard(ownerId: string, phone: string, message: string, hostelId: string): Promise<InboundOwnerResult> {
     const hostel = await prisma.hostels.findUnique({
       where: { id: hostelId },
-      select: { id: true, name: true, owner_id: true, is_active: true },
+      select: { id: true, name: true, owner_id: true, status: true },
     });
-    if (!hostel || hostel.owner_id !== ownerId || !hostel.is_active) {
+    if (!hostel || hostel.owner_id !== ownerId || hostel.status === "ARCHIVED") {
       return this.respondAndLog({
         ownerId,
         phone,
@@ -3072,7 +3072,7 @@ export class OwnerWhatsAppAssistantService {
       LEFT JOIN room_allocations ra ON ra.room_id = r.id AND ra.is_active = true AND ra.end_date IS NULL
       LEFT JOIN room_allocations prev ON prev.room_id = r.id AND prev.end_date IS NOT NULL
       WHERE h.owner_id = ${ownerId}::uuid
-        AND h.is_active = true
+        AND h.status = 'ACTIVE'
         AND r.is_active = true
       GROUP BY r.id, r.room_no, h.name, r.capacity, r.base_rent, r.created_at
       HAVING r.capacity - COUNT(DISTINCT ra.id) > 0
@@ -4287,7 +4287,7 @@ export class OwnerWhatsAppAssistantService {
         COUNT(*) FILTER (WHERE converted_to_payment = true)::int AS converted_count
       FROM reminder_logs
       WHERE hostel_id IN (
-        SELECT id FROM hostels WHERE owner_id = ${ownerId}::uuid AND is_active = true
+        SELECT id FROM hostels WHERE owner_id = ${ownerId}::uuid AND status != 'ARCHIVED'
       )
         AND sent_at >= now() - interval '90 days'
       GROUP BY COALESCE(reminder_type, 'REMINDER')
@@ -4301,7 +4301,7 @@ export class OwnerWhatsAppAssistantService {
         COUNT(*) FILTER (WHERE converted_to_payment = true)::int AS converted_count
       FROM reminder_logs
       WHERE hostel_id IN (
-        SELECT id FROM hostels WHERE owner_id = ${ownerId}::uuid AND is_active = true
+        SELECT id FROM hostels WHERE owner_id = ${ownerId}::uuid AND status != 'ARCHIVED'
       )
         AND sent_at >= now() - interval '90 days'
       GROUP BY trim(to_char(sent_at, 'Day')), EXTRACT(ISODOW FROM sent_at)
@@ -6416,7 +6416,7 @@ export class OwnerWhatsAppAssistantService {
         }
 
         const hostels: any[] = await prisma.hostels.findMany({
-          where: { owner_id: ownerId, is_active: true },
+          where: { owner_id: ownerId, status: "ACTIVE" },
           orderBy: { name: "asc" },
         });
 
@@ -6522,7 +6522,7 @@ export class OwnerWhatsAppAssistantService {
 
       case "AWAITING_HOSTEL": {
         const hostels: any[] = await prisma.hostels.findMany({
-          where: { owner_id: ownerId, is_active: true },
+          where: { owner_id: ownerId, status: "ACTIVE" },
           orderBy: { name: "asc" },
         });
 
@@ -6878,7 +6878,7 @@ export class OwnerWhatsAppAssistantService {
     }
 
     const hostels: any[] = await prisma.hostels.findMany({
-      where: { owner_id: ownerId, is_active: true },
+      where: { owner_id: ownerId, status: "ACTIVE" },
       orderBy: { name: "asc" },
     });
 

@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
 
         // 2. Fetch owner's active hostels to determine timezone
         const hostels = await prisma.hostels.findMany({
-          where: { owner_id: ownerId, is_active: true },
+          where: { owner_id: ownerId, status: { in: ["ACTIVE", "INACTIVE"] } },
         });
 
         // Fallback to "Asia/Kolkata" if no timezone configured

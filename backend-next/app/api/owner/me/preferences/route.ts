@@ -23,7 +23,7 @@ async function resolveLegacyHostelId(ownerId: string, hostelId: string | null) {
   if (hostelId) return hostelId;
 
   const activeHostels = await prisma.hostels.findMany({
-    where: { owner_id: ownerId, is_active: true },
+    where: { owner_id: ownerId, status: { in: ["ACTIVE", "INACTIVE"] } },
     select: { id: true },
     orderBy: { created_at: "asc" },
     take: 2,

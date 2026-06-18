@@ -16,7 +16,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const hostelId = params.id;
   try {
     const hostel = await prisma.hostels.findFirst({
-      where: { id: hostelId, owner_id: session.sub, is_active: true },
+      where: { id: hostelId, owner_id: session.sub, status: { in: ["ACTIVE", "INACTIVE"] } },
     });
     if (!hostel) return apiError("Hostel not found", "NOT_FOUND", 404);
 
