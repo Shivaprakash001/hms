@@ -45,7 +45,7 @@ export class BriefingEngine {
 
     // 2. Fetch active hostels
     const hostels = await prisma.hostels.findMany({
-      where: { owner_id: ownerId, is_active: true },
+      where: { owner_id: ownerId, status: { in: ["ACTIVE", "INACTIVE"] } },
       order: { name: "asc" } as any, // fallback ordering if raw client
     });
 

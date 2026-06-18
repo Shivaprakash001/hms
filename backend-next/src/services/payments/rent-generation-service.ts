@@ -95,6 +95,18 @@ export class RentGenerationService {
     }
 
     try {
+      // Verify hostel is ACTIVE
+      const hostel = await prisma.hostels.findUnique({
+        where: { id: hostelId },
+        select: { status: true, owner_id: true }
+      });
+      if (!hostel || hostel.owner_id !== ownerId) {
+        throw new Error(`HOSTEL_NOT_FOUND: Hostel ${hostelId} does not exist or access denied.`);
+      }
+      if (hostel.status !== "ACTIVE") {
+        throw new Error(`HOSTEL_NOT_ACTIVE: Rent generation is only allowed for ACTIVE hostels.`);
+      }
+
       const lastDay = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 0)).getUTCDate();
       const monthEndDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), lastDay, 23, 59, 59, 999));
 
@@ -134,7 +146,7 @@ export class RentGenerationService {
       // This keeps multi-hostel owners from leaking one hostel's billing config into another.
       const hostelIds = Array.from(new Set(allocations.map(a => (a.room as any).hostel_id).filter(Boolean))) as string[];
       const hostelPrefs: any[] = await prisma.hostels.findMany({
-        where: { id: { in: hostelIds }, is_active: true },
+        where: { id: { in: hostelIds }, status: "ACTIVE" },
       });
       const prefsMap = new Map(hostelPrefs.map((p: any) => [p.id, p]));
 
@@ -654,6 +666,17 @@ export class RentGenerationService {
   async previewMonthlyRent(targetDate: Date | undefined, ownerId: string, hostelId: string) {
     if (!ownerId || !hostelId) {
       throw new Error("HOSTEL_CONTEXT_REQUIRED: Rent preview requires ownerId and hostelId");
+    }
+
+    const hostel = await prisma.hostels.findUnique({
+      where: { id: hostelId },
+      select: { status: true, owner_id: true }
+    });
+    if (!hostel || hostel.owner_id !== ownerId) {
+      throw new Error(`HOSTEL_NOT_FOUND: Hostel ${hostelId} does not exist or access denied.`);
+    }
+    if (hostel.status !== "ACTIVE") {
+      throw new Error(`HOSTEL_NOT_ACTIVE: Rent preview is only allowed for ACTIVE hostels.`);
     }
 
     const now = targetDate || new Date();

@@ -1,24 +1,38 @@
-import { useState } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { Search, Plus, SlidersHorizontal, Loader2, Building2, Settings } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Search, Plus, SlidersHorizontal, Loader2, Building2 } from 'lucide-react';
 import { AddHostelModal } from '../modals/AddHostelModal';
 import { FilterModal, FilterOptions } from '../modals/FilterModal';
 import { EditHostelSheet } from '../modals/EditHostelSheet';
+import { CloseHostelModal } from '../modals/CloseHostelModal';
+import { PauseHostelModal } from '../modals/PauseHostelModal';
+import { RestoreHostelModal } from '../modals/RestoreHostelModal';
 import { ownerService } from '@features/owners/api';
 import { queryKeys } from '@lib/queryKeys';
+import { HostelStatusBadge, type HostelStatus } from '../hostel/HostelStatusBadge';
+import { HostelActionMenu } from '../hostel/HostelActionMenu';
+import { HostelFilterChips, computeFilterCounts, applyHostelFilter, type HostelFilter } from '../hostel/HostelFilterChips';
+import { toast } from 'sonner';
 
 export function HostelsView() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddHostel, setShowAddHostel] = useState(false);
   const [showFilter, setShowFilter] = useState(false);
   const [editingHostelId, setEditingHostelId] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterOptions>({ occupancy: [], revenue: [], alerts: [] });
+  const [hostelFilter, setHostelFilter] = useState<HostelFilter>('all');
+
+  // Lifecycle modal state
+  const [closingHostel, setClosingHostel] = useState<{ id: string; name: string } | null>(null);
+  const [pausingHostel, setPausingHostel] = useState<{ id: string; name: string } | null>(null);
+  const [restoringHostel, setRestoringHostel] = useState<{ id: string; name: string; archived_at?: string | null; archive_reason?: string | null } | null>(null);
 
   const { data: hostelsData, isLoading } = useQuery({
     queryKey: queryKeys.owner.hostels(),
-    queryFn: ownerService.getHostels,
+    queryFn: () => ownerService.getHostels({ include_archived: true }),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -30,15 +44,52 @@ export function HostelsView() {
     ? (hostelsData as any).hostels
     : [];
 
-  const filteredHostels = hostels.filter(h => {
-    const name = String(h.name ?? '').toLowerCase();
-    const city = String(h.city ?? h.address ?? '').toLowerCase();
-    const q = searchQuery.toLowerCase();
-    return name.includes(q) || city.includes(q);
-  });
+  const filterCounts = useMemo(() => computeFilterCounts(hostels as any[]), [hostels]);
+
+  const filteredHostels = useMemo(() => {
+    const statusFiltered = applyHostelFilter(hostels as any[], hostelFilter);
+    return statusFiltered.filter(h => {
+      const name = String(h.name ?? '').toLowerCase();
+      const city = String(h.city ?? h.address ?? '').toLowerCase();
+      const q = searchQuery.toLowerCase();
+      return name.includes(q) || city.includes(q);
+    });
+  }, [hostels, searchQuery, hostelFilter]);
 
   const editingHostel = editingHostelId ? hostels.find(h => String(h.id) === editingHostelId) : null;
   const activeFilterCount = filters.occupancy.length + filters.revenue.length + filters.alerts.length;
+
+  // ─── Lifecycle handlers ────────────────────────────────────────────
+  const invalidateAll = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.owner.hostels() });
+  }, [queryClient]);
+
+  const handleCloseHostel = useCallback(async (hostelId: string, reason: string) => {
+    await ownerService.updateHostel({ status: 'ARCHIVED', archive_reason: reason }, hostelId);
+    toast.success(`"${closingHostel?.name}" has been closed`);
+    setClosingHostel(null);
+    invalidateAll();
+  }, [closingHostel, invalidateAll]);
+
+  const handlePauseHostel = useCallback(async (hostelId: string) => {
+    await ownerService.updateHostel({ status: 'INACTIVE' }, hostelId);
+    toast.success(`"${pausingHostel?.name}" has been temporarily closed`);
+    setPausingHostel(null);
+    invalidateAll();
+  }, [pausingHostel, invalidateAll]);
+
+  const handleResumeHostel = useCallback(async (hostelId: string, hostelName: string) => {
+    await ownerService.updateHostel({ status: 'ACTIVE' }, hostelId);
+    toast.success(`"${hostelName}" is now running`);
+    invalidateAll();
+  }, [invalidateAll]);
+
+  const handleRestoreHostel = useCallback(async (hostelId: string, targetStatus: 'ACTIVE' | 'INACTIVE') => {
+    await ownerService.updateHostel({ status: targetStatus }, hostelId);
+    toast.success(`"${restoringHostel?.name}" has been restored`);
+    setRestoringHostel(null);
+    invalidateAll();
+  }, [restoringHostel, invalidateAll]);
 
   return (
     <div className="px-4 py-6 space-y-6 pb-24">
@@ -77,6 +128,11 @@ export function HostelsView() {
         </button>
       </div>
 
+      {/* Filter chips */}
+      {hostels.length > 0 && (
+        <HostelFilterChips active={hostelFilter} onChange={setHostelFilter} counts={filterCounts} />
+      )}
+
       {/* Add CTA */}
       <button
         onClick={() => setShowAddHostel(true)}
@@ -112,17 +168,29 @@ export function HostelsView() {
             const name = String(hostel.name ?? '');
             const city = String(hostel.city ?? hostel.address ?? '');
             const logo = hostel.logo_url ? String(hostel.logo_url) : null;
-            const occupancy = Number(hostel.occupancy_rate ?? hostel.occupancy ?? 0);
-            const occupiedRooms = Number(hostel.occupied_rooms ?? hostel.occupiedRooms ?? 0);
-            const totalRooms = Number(hostel.total_rooms ?? hostel.totalRooms ?? 0);
-            const tenants = String(hostel.active_tenants ?? hostel.tenant_count ?? '—');
-            const alerts = hostel.alert_count != null ? String(hostel.alert_count) : null;
-            const hasOccupancy = totalRooms > 0;
+            const status = (String(hostel.status ?? 'ACTIVE')) as HostelStatus;
+            const isArchived = status === 'ARCHIVED';
+            const isInactive = status === 'INACTIVE';
+            const stats = (hostel.stats ?? {}) as Record<string, number>;
+            const occupancy = Number(stats.occupancy_rate ?? hostel.occupancy_rate ?? hostel.occupancy ?? 0);
+            const totalCapacity = Number(stats.total_capacity ?? hostel.total_rooms ?? hostel.totalRooms ?? 0);
+            const occupiedBeds = Number(stats.occupied_beds ?? hostel.occupied_rooms ?? hostel.occupiedRooms ?? 0);
+            const tenants = String(hostel.active_tenants ?? stats.occupied_beds ?? '—');
+            const hasOccupancy = totalCapacity > 0 && !isArchived;
             const initials = name.split(' ').map((w: string) => w[0]).filter(Boolean).join('').slice(0, 2).toUpperCase() || 'H';
             const occColor = occupancy >= 70 ? 'text-emerald-500' : occupancy >= 40 ? 'text-amber-500' : 'text-muted-foreground';
 
+            // Card styling per status
+            const cardBorder = isArchived
+              ? 'border-l-4 border-l-slate-300 dark:border-l-slate-600 opacity-60'
+              : isInactive
+              ? 'border-l-4 border-l-amber-400 dark:border-l-amber-500 opacity-80'
+              : '';
+
+            const ctaLabel = isArchived ? 'View Records' : 'Manage Property';
+
             return (
-              <div key={id} className="bg-card border border-border rounded-2xl overflow-hidden">
+              <div key={id} className={`bg-card border border-border rounded-2xl overflow-hidden ${cardBorder}`}>
 
                 {/* ── Header row ─── */}
                 <div className="px-4 pt-4 pb-3 flex items-start gap-3">
@@ -137,17 +205,29 @@ export function HostelsView() {
                     <p className="text-xs text-muted-foreground mt-0.5 truncate">
                       {city || <span className="opacity-40">No location set</span>}
                     </p>
+                    <HostelStatusBadge status={status} className="mt-1.5" />
                   </div>
-                  <button
-                    onClick={() => setEditingHostelId(id)}
-                    className="p-2 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition-colors shrink-0"
-                    title="Edit hostel"
-                  >
-                    <Settings className="w-4 h-4" />
-                  </button>
+                  <HostelActionMenu
+                    hostelId={id}
+                    hostelName={name}
+                    status={status}
+                    onNavigate={(hid) => navigate(`/hostels/${hid}`)}
+                    onEdit={setEditingHostelId}
+                    onPause={(hid, hname) => setPausingHostel({ id: hid, name: hname })}
+                    onClose={(hid, hname) => setClosingHostel({ id: hid, name: hname })}
+                    onResume={handleResumeHostel}
+                    onRestore={(hid, hname) => {
+                      setRestoringHostel({
+                        id: hid,
+                        name: hname,
+                        archived_at: hostel.archived_at ? String(hostel.archived_at) : null,
+                        archive_reason: hostel.archive_reason ? String(hostel.archive_reason) : null,
+                      });
+                    }}
+                  />
                 </div>
 
-                {/* ── Occupancy bar ─── */}
+                {/* ── Occupancy bar — hidden for archived ─── */}
                 {hasOccupancy && (
                   <div className="px-4 pb-3">
                     <div className="flex items-center justify-between mb-1.5">
@@ -165,25 +245,27 @@ export function HostelsView() {
                   </div>
                 )}
 
-                {/* ── Metrics ─── */}
-                <div className="px-4 pb-3 grid grid-cols-3 gap-3 border-t border-border/50 pt-3">
-                  <div>
-                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Rooms</div>
-                    <div className="text-sm font-semibold text-foreground mt-0.5">
-                      {hasOccupancy ? `${occupiedRooms}/${totalRooms}` : '—'}
+                {/* ── Metrics — vary by status ─── */}
+                {!isArchived && (
+                  <div className="px-4 pb-3 grid grid-cols-3 gap-3 border-t border-border/50 pt-3">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Beds</div>
+                      <div className="text-sm font-semibold text-foreground mt-0.5">
+                        {totalCapacity > 0 ? `${occupiedBeds}/${totalCapacity}` : '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Tenants</div>
+                      <div className="text-sm font-semibold text-foreground mt-0.5">{tenants}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Status</div>
+                      <div className="text-sm font-semibold text-foreground mt-0.5">
+                        {isInactive ? 'Paused' : 'Active'}
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Tenants</div>
-                    <div className="text-sm font-semibold text-foreground mt-0.5">{tenants}</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Alerts</div>
-                    <div className={`text-sm font-semibold mt-0.5 ${alerts && alerts !== '0' ? 'text-amber-500' : 'text-foreground'}`}>
-                      {alerts ?? '—'}
-                    </div>
-                  </div>
-                </div>
+                )}
 
                 {/* ── CTA ─── */}
                 <div className="px-3 pb-3">
@@ -191,7 +273,7 @@ export function HostelsView() {
                     onClick={() => navigate(`/hostels/${id}`)}
                     className="w-full py-2.5 bg-accent/10 hover:bg-accent/20 active:scale-[0.98] text-accent text-sm font-medium rounded-xl transition-colors touch-manipulation"
                   >
-                    Manage Property
+                    {ctaLabel}
                   </button>
                 </div>
               </div>
@@ -199,8 +281,15 @@ export function HostelsView() {
           })}
 
           {filteredHostels.length === 0 && hostels.length > 0 && (
-            <div className="text-center py-12">
-              <p className="text-sm text-muted-foreground">No hostels match your search</p>
+            <div className="text-center py-12 space-y-2">
+              <Building2 className="w-10 h-10 text-muted-foreground mx-auto opacity-50" />
+              <p className="text-sm text-muted-foreground">
+                {hostelFilter === 'running'
+                  ? 'No running hostels'
+                  : hostelFilter === 'closed'
+                  ? 'No closed hostels'
+                  : 'No hostels match your search'}
+              </p>
             </div>
           )}
 
@@ -228,6 +317,34 @@ export function HostelsView() {
           hostelId={editingHostelId}
           hostelName={String(editingHostel.name ?? '')}
           onClose={() => setEditingHostelId(null)}
+        />
+      )}
+
+      {/* Lifecycle modals */}
+      {closingHostel && (
+        <CloseHostelModal
+          hostelId={closingHostel.id}
+          hostelName={closingHostel.name}
+          onClose={() => setClosingHostel(null)}
+          onConfirm={handleCloseHostel}
+        />
+      )}
+      {pausingHostel && (
+        <PauseHostelModal
+          hostelId={pausingHostel.id}
+          hostelName={pausingHostel.name}
+          onClose={() => setPausingHostel(null)}
+          onConfirm={handlePauseHostel}
+        />
+      )}
+      {restoringHostel && (
+        <RestoreHostelModal
+          hostelId={restoringHostel.id}
+          hostelName={restoringHostel.name}
+          archivedAt={restoringHostel.archived_at}
+          archiveReason={restoringHostel.archive_reason}
+          onClose={() => setRestoringHostel(null)}
+          onConfirm={handleRestoreHostel}
         />
       )}
     </div>

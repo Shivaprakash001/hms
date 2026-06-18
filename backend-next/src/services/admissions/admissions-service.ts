@@ -140,7 +140,7 @@ export class AdmissionsService {
     const cacheKey = redisKeys.admissions.publicHostel(slug);
     return getOrSetJson(cacheKey, 180, async () => {
       const hostel = await prisma.hostels.findFirst({
-        where: { public_slug: slug, is_active: true },
+        where: { public_slug: slug, status: "ACTIVE" },
         include: {
           rooms: {
             where: { is_active: true },
@@ -176,7 +176,7 @@ export class AdmissionsService {
       const currentVacancyCount = safeRooms.reduce((sum: number, room: any) => sum + Number(room.available_beds || 0), 0);
 
       const siblingHostels = await prisma.hostels.findMany({
-        where: { owner_id: hostel.owner_id, is_active: true, admissions_enabled: true, id: { not: hostel.id } },
+        where: { owner_id: hostel.owner_id, status: "ACTIVE", admissions_enabled: true, id: { not: hostel.id } },
         include: {
           rooms: {
             where: { is_active: true },
@@ -267,7 +267,7 @@ export class AdmissionsService {
     });
     if (!limit.allowed) throw new ApiError("Please wait before submitting again", 429, "TOO_MANY_REQUESTS", { retry_after_seconds: limit.retryAfterSeconds });
 
-    const hostel = await prisma.hostels.findFirst({ where: { public_slug: slug, is_active: true } });
+    const hostel = await prisma.hostels.findFirst({ where: { public_slug: slug, status: "ACTIVE" } });
     if (!hostel || !hostel.admissions_enabled) throw ApiError.notFound("This admissions link is not active");
 
     const studentName = cleanString(input.student_name, 120);
@@ -336,7 +336,7 @@ export class AdmissionsService {
 
     // Verify hostel belongs to the owner
     const hostel = await prisma.hostels.findFirst({
-      where: { id: hostelId, owner_id: ownerId, is_active: true }
+      where: { id: hostelId, owner_id: ownerId, status: "ACTIVE" }
     });
     if (!hostel) throw ApiError.notFound("Hostel not found or access denied");
 

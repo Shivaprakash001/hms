@@ -1,6 +1,6 @@
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Search, SlidersHorizontal, Building2, ArrowRight,
   CheckCircle, IndianRupee, TrendingUp, Users, Phone, Bell,
@@ -10,9 +10,12 @@ import {
 import { useAuth } from '@context/AuthContext';
 import { portfolioService } from '@features/dashboard/api';
 import { agreementService } from '@features/agreements/api';
+import { ownerService } from '@features/owners/api';
 import { queryKeys } from '@lib/queryKeys';
 import { HostelPerformanceCard } from '@/app/components/portfolio/HostelPerformanceCard';
+import { HostelFilterChips, computeFilterCounts, applyHostelFilter, type HostelFilter } from '@/app/components/hostel/HostelFilterChips';
 import type { FilterOptions } from '@/app/components/modals/FilterModal';
+import { toast } from 'sonner';
 
 const PortfolioRevenueChart = lazy(() =>
   import('@/app/components/portfolio/PortfolioRevenueChart').then((m) => ({ default: m.PortfolioRevenueChart }))
@@ -25,6 +28,15 @@ const FilterModal = lazy(() =>
 );
 const EditHostelSheet = lazy(() =>
   import('@/app/components/modals/EditHostelSheet').then((m) => ({ default: m.EditHostelSheet }))
+);
+const CloseHostelModal = lazy(() =>
+  import('@/app/components/modals/CloseHostelModal').then((m) => ({ default: m.CloseHostelModal }))
+);
+const PauseHostelModal = lazy(() =>
+  import('@/app/components/modals/PauseHostelModal').then((m) => ({ default: m.PauseHostelModal }))
+);
+const RestoreHostelModal = lazy(() =>
+  import('@/app/components/modals/RestoreHostelModal').then((m) => ({ default: m.RestoreHostelModal }))
 );
 const SettingsView = lazy(() =>
   import('@/app/components/views/SettingsView').then((m) => ({ default: m.SettingsView }))
@@ -57,6 +69,7 @@ function Skeleton() {
 export function PortfolioView() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddHostel, setShowAddHostel] = useState(false);
   const [showFilter, setShowFilter] = useState(false);
@@ -64,6 +77,12 @@ export function PortfolioView() {
   const [filters, setFilters] = useState<FilterOptions>({ occupancy: [], revenue: [], alerts: [] });
   const [showSettings, setShowSettings] = useState(false);
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
+  const [hostelFilter, setHostelFilter] = useState<HostelFilter>('all');
+
+  // Lifecycle modal state
+  const [closingHostel, setClosingHostel] = useState<{ id: string; name: string } | null>(null);
+  const [pausingHostel, setPausingHostel] = useState<{ id: string; name: string } | null>(null);
+  const [restoringHostel, setRestoringHostel] = useState<{ id: string; name: string; archived_at?: string | null; archive_reason?: string | null } | null>(null);
 
   const userInitials = user?.name
     ? user.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
@@ -88,13 +107,18 @@ export function PortfolioView() {
   const topPerformer = rankings.find((h: { is_top_performer?: boolean }) => h.is_top_performer);
 
   const filteredRankings = useMemo(
-    () => rankings.filter((h: { hostel_name: string; city?: string | null }) => {
-      const q = searchQuery.toLowerCase();
-      if (!q) return true;
-      return h.hostel_name.toLowerCase().includes(q) || String(h.city ?? '').toLowerCase().includes(q);
-    }),
-    [rankings, searchQuery]
+    () => {
+      const statusFiltered = applyHostelFilter(rankings, hostelFilter);
+      return statusFiltered.filter((h: { hostel_name: string; city?: string | null }) => {
+        const q = searchQuery.toLowerCase();
+        if (!q) return true;
+        return h.hostel_name.toLowerCase().includes(q) || String(h.city ?? '').toLowerCase().includes(q);
+      });
+    },
+    [rankings, searchQuery, hostelFilter]
   );
+
+  const filterCounts = useMemo(() => computeFilterCounts(rankings), [rankings]);
 
   const editingHostel = editingHostelId
     ? rankings.find((h: { hostel_id: string }) => h.hostel_id === editingHostelId)
@@ -167,6 +191,38 @@ export function PortfolioView() {
     return 'Good night';
   })();
   const monthLabel = new Date().toLocaleString('en-IN', { month: 'long' });
+
+  // ─── Lifecycle action handlers ─────────────────────────────────────
+  const invalidateAll = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.portfolio.shell(6) });
+  }, [queryClient]);
+
+  const handleCloseHostel = useCallback(async (hostelId: string, reason: string) => {
+    await ownerService.updateHostel({ status: 'ARCHIVED', archive_reason: reason }, hostelId);
+    toast.success(`"${closingHostel?.name}" has been closed`);
+    setClosingHostel(null);
+    invalidateAll();
+  }, [closingHostel, invalidateAll]);
+
+  const handlePauseHostel = useCallback(async (hostelId: string) => {
+    await ownerService.updateHostel({ status: 'INACTIVE' }, hostelId);
+    toast.success(`"${pausingHostel?.name}" has been temporarily closed`);
+    setPausingHostel(null);
+    invalidateAll();
+  }, [pausingHostel, invalidateAll]);
+
+  const handleResumeHostel = useCallback(async (hostelId: string, hostelName: string) => {
+    await ownerService.updateHostel({ status: 'ACTIVE' }, hostelId);
+    toast.success(`"${hostelName}" is now running`);
+    invalidateAll();
+  }, [invalidateAll]);
+
+  const handleRestoreHostel = useCallback(async (hostelId: string, targetStatus: 'ACTIVE' | 'INACTIVE') => {
+    await ownerService.updateHostel({ status: targetStatus }, hostelId);
+    toast.success(`"${restoringHostel?.name}" has been restored`);
+    setRestoringHostel(null);
+    invalidateAll();
+  }, [restoringHostel, invalidateAll]);
 
   return (
     <div className="px-4 py-5 space-y-5 min-w-0 max-w-5xl mx-auto pb-24 md:pb-8">
@@ -536,11 +592,25 @@ export function PortfolioView() {
                 <Plus className="w-3.5 h-3.5" /> Add hostel
               </button>
             </div>
+
+            {/* Filter chips */}
+            {rankings.length > 0 && (
+              <div className="mb-3">
+                <HostelFilterChips active={hostelFilter} onChange={setHostelFilter} counts={filterCounts} />
+              </div>
+            )}
+
             {filteredRankings.length === 0 ? (
               <div className="text-center py-16 space-y-4 border border-dashed border-border rounded-xl">
                 <Building2 className="w-10 h-10 text-muted-foreground mx-auto opacity-50" />
                 <p className="text-sm text-muted-foreground">
-                  {rankings.length === 0 ? 'No properties yet' : 'No matches'}
+                  {rankings.length === 0
+                    ? 'No properties yet'
+                    : hostelFilter === 'running'
+                    ? 'No running hostels'
+                    : hostelFilter === 'closed'
+                    ? 'No closed hostels'
+                    : 'No matches'}
                 </p>
                 {rankings.length === 0 && (
                   <button type="button" onClick={() => setShowAddHostel(true)}
@@ -548,12 +618,30 @@ export function PortfolioView() {
                     Add first hostel
                   </button>
                 )}
+                {hostelFilter === 'closed' && rankings.length > 0 && (
+                  <p className="text-xs text-muted-foreground">All your hostels are currently running.</p>
+                )}
+                {hostelFilter === 'running' && rankings.length > 0 && (
+                  <p className="text-xs text-muted-foreground">All your hostels are currently closed. Restore one to get started.</p>
+                )}
               </div>
             ) : (
               <div className="space-y-3">
                 {filteredRankings.map(
                   (hostel: Parameters<typeof HostelPerformanceCard>[0]['hostel'], i: number) => (
-                    <HostelPerformanceCard key={hostel.hostel_id} hostel={hostel} rank={i + 1} onEdit={setEditingHostelId} />
+                    <HostelPerformanceCard
+                      key={hostel.hostel_id}
+                      hostel={hostel}
+                      rank={i + 1}
+                      onEdit={setEditingHostelId}
+                      onPause={(id, name) => setPausingHostel({ id, name })}
+                      onClose={(id, name) => setClosingHostel({ id, name })}
+                      onResume={handleResumeHostel}
+                      onRestore={(id, name) => {
+                        const h = rankings.find((r: any) => r.hostel_id === id);
+                        setRestoringHostel({ id, name, archived_at: h?.archived_at, archive_reason: h?.archive_reason });
+                      }}
+                    />
                   )
                 )}
               </div>
@@ -575,6 +663,40 @@ export function PortfolioView() {
       {editingHostelId && editingHostel && (
         <Suspense fallback={null}>
           <EditHostelSheet hostelId={editingHostelId} hostelName={editingHostel.hostel_name} onClose={() => setEditingHostelId(null)} />
+        </Suspense>
+      )}
+
+      {/* Lifecycle modals */}
+      {closingHostel && (
+        <Suspense fallback={null}>
+          <CloseHostelModal
+            hostelId={closingHostel.id}
+            hostelName={closingHostel.name}
+            onClose={() => setClosingHostel(null)}
+            onConfirm={handleCloseHostel}
+          />
+        </Suspense>
+      )}
+      {pausingHostel && (
+        <Suspense fallback={null}>
+          <PauseHostelModal
+            hostelId={pausingHostel.id}
+            hostelName={pausingHostel.name}
+            onClose={() => setPausingHostel(null)}
+            onConfirm={handlePauseHostel}
+          />
+        </Suspense>
+      )}
+      {restoringHostel && (
+        <Suspense fallback={null}>
+          <RestoreHostelModal
+            hostelId={restoringHostel.id}
+            hostelName={restoringHostel.name}
+            archivedAt={restoringHostel.archived_at}
+            archiveReason={restoringHostel.archive_reason}
+            onClose={() => setRestoringHostel(null)}
+            onConfirm={handleRestoreHostel}
+          />
         </Suspense>
       )}
 

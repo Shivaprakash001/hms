@@ -54,7 +54,6 @@ export async function GET(req: NextRequest) {
           FROM hostels h
           WHERE h.id = ${hostelId}::uuid
             AND h.owner_id = ${scope.owner_id}::uuid
-            AND h.is_active = true
         ) AS allowed
       ),
       room_rows AS (
@@ -189,6 +188,13 @@ export async function POST(req: NextRequest) {
     if (!hostel) {
       console.warn(`[rooms.POST] Hostel context missing for owner ${scope.owner_id}`);
       return ApiResponse.error(ApiError.notFound("No hostel found. Please complete hostel setup first."));
+    }
+
+    if (hostel.status === "ARCHIVED") {
+      return ApiResponse.error(ApiError.forbidden("Cannot perform operational actions on an archived hostel"));
+    }
+    if (hostel.status === "INACTIVE") {
+      return ApiResponse.error(ApiError.forbidden("Cannot perform operational actions on an inactive hostel"));
     }
 
     // Check for duplicate room number

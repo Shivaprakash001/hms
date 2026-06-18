@@ -1,68 +1,30 @@
 import { prisma } from "../lib/db";
 
 async function main() {
-  const hostels = await prisma.hostels.findMany({
-    include: {
-      rooms: {
-        include: {
-          room_allocations: {
-            where: { is_active: true, end_date: null, tenant: { status: "ACTIVE" } }
-          },
-          room_reservations: {
-            where: { status: "ACTIVE", reserved_until: { gt: new Date() } }
-          },
-          tenant_invitation_reservations: {
-            where: { status: "ACTIVE", expires_at: { gt: new Date() } }
-          }
-        }
+  try {
+    const ownerId = 'c39676a0-c867-4435-9660-a060b8bceab6';
+    const hostels = await prisma.hostels.findMany({
+      where: { owner_id: ownerId }
+    });
+    console.log(`\n=== HOSTELS (${hostels.length}) ===`);
+    for (const h of hostels) {
+      console.log(`- ID: ${h.id}, Name: "${h.name}", IsActive: ${h.is_active}`);
+      const rooms = await prisma.rooms.findMany({
+        where: { hostel_id: h.id }
+      });
+      console.log(`  Rooms count: ${rooms.length}`);
+      for (const r of rooms) {
+        const allocations = await prisma.roomAllocation.findMany({
+          where: { room_id: r.id, is_active: true }
+        });
+        console.log(`    Room "${r.room_no}": capacity = ${r.capacity}, active allocations = ${allocations.length}`);
       }
     }
-  });
-
-  console.log("=== Hostels and Rooms ===");
-  for (const h of hostels) {
-    console.log(`Hostel: ${h.name} (${h.public_slug})`);
-    const rooms = h.rooms || [];
-    console.log(`Total Rooms: ${rooms.length}`);
-    
-    // Group rooms by sharing type (room_type)
-    const groups: Record<string, any> = {};
-    for (const r of rooms) {
-      const type = r.room_type || "Standard";
-      if (!groups[type]) {
-        groups[type] = {
-          count: 0,
-          capacity: 0,
-          occupied: 0,
-          reserved: 0,
-          available: 0,
-          prices: new Set<number>()
-        };
-      }
-      const occupied = r.room_allocations.length;
-      const reserved = r.room_reservations.length + r.tenant_invitation_reservations.length;
-      const available = Math.max(0, r.capacity - occupied - reserved);
-
-      groups[type].count++;
-      groups[type].capacity += r.capacity;
-      groups[type].occupied += occupied;
-      groups[type].reserved += reserved;
-      groups[type].available += available;
-      if (r.base_rent) {
-        groups[type].prices.add(r.base_rent);
-      }
-    }
-
-    for (const [type, data] of Object.entries(groups)) {
-      console.log(`  - Type: ${type}`);
-      console.log(`    Rooms Count: ${data.count}`);
-      console.log(`    Beds Capacity: ${data.capacity}`);
-      console.log(`    Occupied Beds: ${data.occupied}`);
-      console.log(`    Reserved Beds: ${data.reserved}`);
-      console.log(`    Available Beds: ${data.available}`);
-      console.log(`    Rents: ${Array.from(data.prices).join(", ")}`);
-    }
+  } catch (err: any) {
+    console.error("Error:", err);
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
-main().catch(console.error);
+main();

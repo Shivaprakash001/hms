@@ -106,8 +106,8 @@ export class ActivationAnalyticsService {
       rentGenCount,
       paymentCount,
     ] = await Promise.all([
-      prisma.hostels.count({ where: { is_active: true } }),
-      prisma.hostels.count({ where: { is_active: true, auto_rent_day: { gt: 0 } } }),
+      prisma.hostels.count({ where: { status: { in: ["ACTIVE", "INACTIVE"] } } }),
+      prisma.hostels.count({ where: { status: { in: ["ACTIVE", "INACTIVE"] }, auto_rent_day: { gt: 0 } } }),
       // Owners with at least 1 room
       prisma.$queryRaw<{count: bigint}[]>`
         SELECT COUNT(DISTINCT h.owner_id) AS count
@@ -166,7 +166,7 @@ export class ActivationAnalyticsService {
             ORDER BY EXTRACT(EPOCH FROM (h.created_at - p.created_at)) / 3600
           )::float AS median_hours
         FROM hostels h JOIN profiles p ON p.id = h.owner_id
-        WHERE h.is_active = true`,
+        WHERE h.status IN ('ACTIVE', 'INACTIVE')`,
       prisma.$queryRaw<{avg_hours: number | null; median_hours: number | null}[]>`
         SELECT
           AVG(EXTRACT(EPOCH FROM (t.created_at - p.created_at)) / 3600)::float AS avg_hours,

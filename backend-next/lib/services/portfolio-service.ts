@@ -7,6 +7,7 @@ export interface HostelCard {
   name: string;
   city: string | null;
   is_active: boolean;
+  status: string;
   active_tenants: number;
   total_capacity: number;
   occupancy_rate: number;
@@ -39,8 +40,8 @@ export class PortfolioService {
 
   async getPortfolioSummary(ownerId: string): Promise<PortfolioSummary> {
     const hostels = await prisma.hostels.findMany({
-      where: { owner_id: ownerId, is_active: true },
-      select: { id: true, name: true, city: true, is_active: true },
+      where: { owner_id: ownerId, status: { in: ["ACTIVE", "INACTIVE"] } },
+      select: { id: true, name: true, city: true, is_active: true, status: true },
       orderBy: { name: "asc" },
     });
 
@@ -71,6 +72,7 @@ export class PortfolioService {
         name:              h.name,
         city:              h.city,
         is_active:         h.is_active,
+        status:            h.status,
         active_tenants:    activeTenants,
         total_capacity:    capacity,
         occupancy_rate:    occupancyRate,
@@ -103,7 +105,7 @@ export class PortfolioService {
    */
   async forceRefresh(ownerId: string): Promise<void> {
     const hostels = await prisma.hostels.findMany({
-      where: { owner_id: ownerId, is_active: true },
+      where: { owner_id: ownerId, status: { in: ["ACTIVE", "INACTIVE"] } },
       select: { id: true },
     });
 

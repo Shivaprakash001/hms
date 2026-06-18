@@ -109,11 +109,11 @@ export class DashboardService {
       floor_occupancy: Array<{ floor: string; capacity: number; occupied: number; occupancy_rate: number }> | null;
     }>>`
       WITH selected_hostel AS (
-        SELECT id, name, city, address, phone, is_active
+        SELECT id, name, city, address, phone, is_active, status
         FROM hostels
         WHERE id = ${hostelId}::uuid
           AND owner_id = ${userId}::uuid
-          AND is_active = true
+          AND status != 'ARCHIVED'
         LIMIT 1
       ),
       tenant_counts AS (
@@ -295,6 +295,7 @@ export class DashboardService {
         sh.address,
         sh.phone,
         sh.is_active,
+        sh.status,
         COALESCE(tc.total_tenants, 0)::int AS total_tenants,
         COALESCE(tc.active_tenants, 0)::int AS active_tenants,
         COALESCE(tc.pending_invites, 0)::int AS pending_invites,
@@ -500,7 +501,7 @@ export class DashboardService {
         name: row.hostel_name || "Hostel",
         location: row.city || row.address || "",
         phone: row.phone || null,
-        status: row.is_active ? "Active" : "Inactive",
+        status: row.status === "ACTIVE" ? "Active" : row.status === "INACTIVE" ? "Inactive" : "Archived",
       },
       total_rooms: Number(row.total_rooms || 0),
       occupied_rooms: Number(row.occupied_rooms || 0),
@@ -1036,7 +1037,7 @@ export class DashboardService {
     ] = await Promise.all([
       prisma.hostels.findUnique({
         where: { id: hostelId },
-        select: { id: true, name: true, city: true, state: true, address: true, phone: true, is_active: true, owner_id: true },
+        select: { id: true, name: true, city: true, state: true, address: true, phone: true, is_active: true, status: true, owner_id: true },
       }),
       prisma.payments.aggregate({
         where: { owner_id: userId, hostel_id: hostelId, payment_date: { gte: previousMonthStart, lt: monthStart } },
@@ -1204,7 +1205,7 @@ export class DashboardService {
       }),
     ]);
 
-    const hostel = (hostelRaw && hostelRaw.owner_id === userId && hostelRaw.is_active) ? hostelRaw : null;
+    const hostel = (hostelRaw && hostelRaw.owner_id === userId && hostelRaw.status !== "ARCHIVED") ? hostelRaw : null;
 
     const expectedRevenue = Number(currentExpected._sum.total_amount || 0);
     const previousRevenue = Number(previousPayments._sum.amount_paid || 0);
@@ -1432,7 +1433,7 @@ export class DashboardService {
         name: hostel?.name || "Hostel",
         location: hostel?.city || hostel?.address || "",
         phone: hostel?.phone || null,
-        status: hostel?.is_active ? "Active" : "Inactive",
+        status: hostel?.status === "ACTIVE" ? "Active" : hostel?.status === "INACTIVE" ? "Inactive" : "Archived",
       },
       total_rooms: Number(roomStats[0]?.total_rooms ?? 0),
       occupied_rooms: Number(Array.isArray(occupiedRoomCount) ? occupiedRoomCount[0]?.count || 0 : occupiedRoomCount || 0),

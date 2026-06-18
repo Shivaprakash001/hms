@@ -139,12 +139,17 @@ export class HostelBillingPreferencesService {
     const hostel = await prisma.hostels.findFirst({
       where: {
         id: hostelId,
-        is_active: true,
         ...(ownerId ? { owner_id: ownerId } : {}),
       },
-      select: { id: true, owner_id: true, preferences_config: true },
+      select: { id: true, owner_id: true, status: true, preferences_config: true },
     });
     if (!hostel) throw new Error(ownerId ? "FORBIDDEN: Hostel is not owned by the authenticated owner" : "NOT_FOUND: Hostel not found");
+    if (hostel.status === "ARCHIVED") {
+      throw new Error("FORBIDDEN: Cannot perform operational actions on an archived hostel");
+    }
+    if (hostel.status === "INACTIVE") {
+      throw new Error("FORBIDDEN: Cannot perform operational actions on an inactive hostel");
+    }
 
     const existingConfig = asConfig(hostel.preferences_config);
     const current = normalizeBillingDefaults(existingConfig);
@@ -176,7 +181,11 @@ export class HostelBillingPreferencesService {
       where: {
         id: roomId,
         is_active: true,
-        ...(ownerId ? { hostels: { owner_id: ownerId, is_active: true } } : {}),
+        ...(ownerId ? {
+          hostels: {
+            owner_id: ownerId,
+          },
+        } : {}),
       },
       select: {
         id: true,
@@ -187,6 +196,7 @@ export class HostelBillingPreferencesService {
           select: {
             id: true,
             owner_id: true,
+            status: true,
             preferences_config: true,
           },
         },
@@ -195,6 +205,12 @@ export class HostelBillingPreferencesService {
 
     if (!room) throw new Error(ownerId ? "FORBIDDEN: Room is not owned by the authenticated owner" : "NOT_FOUND: Room not found");
     if (!room.hostels) throw new Error("NOT_FOUND: Associated hostel not found");
+    if (room.hostels.status === "ARCHIVED") {
+      throw new Error("VALIDATION_ERROR: Cannot resolve defaults for an archived hostel");
+    }
+    if (room.hostels.status === "INACTIVE") {
+      throw new Error("VALIDATION_ERROR: Cannot resolve defaults for an inactive hostel");
+    }
 
     const billingDefaults = normalizeBillingDefaults(room.hostels.preferences_config);
     const maintenanceCharge = billingDefaults.maintenance_type === "NONE"

@@ -67,7 +67,7 @@ export class InvitationService {
 
     // 2. Room and Owner check
     const room = await prisma.rooms.findFirst({
-      where: { id: room_id, hostels: { owner_id: ownerId, is_active: true } },
+      where: { id: room_id, hostels: { owner_id: ownerId, status: "ACTIVE" } },
       include: {
         hostels: true,
         room_allocations: {
@@ -592,7 +592,7 @@ export class InvitationService {
     }
 
     const targetRoom = await prisma.rooms.findFirst({
-      where: { id: data.room_id, is_active: true, hostels: { owner_id: ownerId, is_active: true } },
+      where: { id: data.room_id, is_active: true, hostels: { owner_id: ownerId, status: "ACTIVE" } },
       include: {
         hostels: true,
         room_allocations: {

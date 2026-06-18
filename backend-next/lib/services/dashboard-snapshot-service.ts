@@ -109,7 +109,7 @@ export class DashboardSnapshotService {
 
     try {
       const hostels = await prisma.hostels.findMany({
-        where: { owner_id: ownerId, is_active: true },
+        where: { owner_id: ownerId, status: { in: ["ACTIVE", "INACTIVE"] } },
         select: { id: true },
       });
 
@@ -159,7 +159,7 @@ export class DashboardSnapshotService {
 
       const roomCounts = await prisma.rooms.groupBy({
         by: ["hostel_id"],
-        where: { hostels: { owner_id: ownerId, is_active: true }, is_active: true },
+        where: { hostels: { owner_id: ownerId, status: { in: ["ACTIVE", "INACTIVE"] } }, is_active: true },
         _sum: { capacity: true },
         _count: { id: true },
       });

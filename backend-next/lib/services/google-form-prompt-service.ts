@@ -97,7 +97,7 @@ export class GoogleFormPromptService {
       where: {
         id: input.hostelId,
         owner_id: input.ownerId,
-        is_active: true,
+        status: "ACTIVE",
       },
       select: {
         id: true,

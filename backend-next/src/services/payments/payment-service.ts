@@ -2642,7 +2642,7 @@ export class PaymentService {
           FROM hostels h
           WHERE h.id = ${hostelId}::uuid
             AND h.owner_id = ${ownerId}::uuid
-            AND h.is_active = true
+            AND h.status != 'ARCHIVED'
         ) AS allowed
       ),
       base AS (

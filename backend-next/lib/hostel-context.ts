@@ -37,6 +37,7 @@ export interface HostelOperationalContext {
     receipt_prefix: string | null;
     timezone: string | null;
     currency: string | null;
+    status: "ACTIVE" | "INACTIVE" | "ARCHIVED";
     is_active: boolean;
   };
   /** Fully resolved preferences for this hostel (typed, defaulted) */
@@ -87,6 +88,7 @@ export async function getHostelOperationalContext(
       receipt_prefix: true,
       timezone: true,
       currency: true,
+      status: true,
       is_active: true,
       // Preferences blob + typed columns needed for resolvePreferences
       preferences_config: true,
@@ -95,8 +97,8 @@ export async function getHostelOperationalContext(
     },
   });
 
-  if (!hostel || !hostel.is_active) {
-    const err: any = new Error(`HOSTEL_NOT_FOUND: Hostel ${hostelId} does not exist or is not active.`);
+  if (!hostel || hostel.status === "ARCHIVED") {
+    const err: any = new Error(`HOSTEL_NOT_FOUND: Hostel ${hostelId} does not exist or is archived.`);
     err.code = "HOSTEL_NOT_FOUND";
     throw err;
   }
@@ -108,7 +110,10 @@ export async function getHostelOperationalContext(
   }
 
   return {
-    hostel: hostel as HostelOperationalContext["hostel"],
+    hostel: {
+      ...hostel,
+      is_active: hostel.status === "ACTIVE",
+    } as HostelOperationalContext["hostel"],
     prefs: resolvePreferences(hostel),
   };
 }
@@ -278,7 +283,7 @@ export async function batchGetHostelContexts(
   const hostels = await prisma.hostels.findMany({
     where: {
       id: { in: uniqueIds },
-      is_active: true,
+      status: { in: ["ACTIVE", "INACTIVE"] },
       ...(ownerId ? { owner_id: ownerId } : {}),
     },
     select: {
@@ -296,6 +301,7 @@ export async function batchGetHostelContexts(
       receipt_prefix: true,
       timezone: true,
       currency: true,
+      status: true,
       is_active: true,
       preferences_config: true,
       rent_cycle: true,
@@ -306,7 +312,10 @@ export async function batchGetHostelContexts(
   const map = new Map<string, HostelOperationalContext>();
   for (const hostel of hostels) {
     map.set(hostel.id, {
-      hostel: hostel as HostelOperationalContext["hostel"],
+      hostel: {
+        ...hostel,
+        is_active: hostel.status === "ACTIVE",
+      } as HostelOperationalContext["hostel"],
       prefs: resolvePreferences(hostel),
     });
   }

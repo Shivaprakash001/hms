@@ -83,7 +83,7 @@ export class ActivationService {
       await Promise.all([
         // Hostel + billing config
         prisma.hostels.findFirst({
-          where:  { owner_id: ownerId, is_active: true },
+          where:  { owner_id: ownerId, status: { in: ["ACTIVE", "INACTIVE"] } },
           select: { id: true, name: true, auto_rent_day: true, upi_id: true, phonepe_merchant_id: true },
         }),
         // Room count

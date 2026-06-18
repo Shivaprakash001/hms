@@ -295,7 +295,7 @@ export class RentReconciliationService {
     const startTime = Date.now();
 
     const hostels = await prisma.hostels.findMany({
-      where: { owner_id: ownerId, is_active: true },
+      where: { owner_id: ownerId, status: { in: ["ACTIVE", "INACTIVE"] } },
       select: { id: true },
     });
 
@@ -370,7 +370,7 @@ export class RentReconciliationService {
 
     // Get all distinct owner IDs that have active hostels
     const activeHostels = await prisma.hostels.findMany({
-      where: { is_active: true },
+      where: { status: { in: ["ACTIVE", "INACTIVE"] } },
       select: { id: true, owner_id: true },
     });
 

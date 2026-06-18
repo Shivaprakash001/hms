@@ -26,6 +26,9 @@ export interface PortfolioPerformanceRanking {
   hostel_id: string;
   hostel_name: string;
   city: string | null;
+  status: string;
+  archived_at: string | null;
+  archive_reason: string | null;
   revenue: number;
   expenses: number;
   profit: number;
@@ -103,6 +106,15 @@ export class PortfolioPerformanceService {
     const firstRange = ranges[0];
     const lastRange = ranges[ranges.length - 1];
 
+    // Fetch all hostels including archived for lifecycle-aware UI
+    const hostelStatusRows = await prisma.hostels.findMany({
+      where: { owner_id: ownerId },
+      select: { id: true, status: true, archived_at: true, archive_reason: true },
+    });
+    const hostelStatusMap = new Map(
+      hostelStatusRows.map((h) => [h.id, { status: h.status, archived_at: h.archived_at, archive_reason: h.archive_reason }])
+    );
+
     const [activeTenantRows, cashflowGrid, expenseGrid, moveOutResult, pendingInviteResult] = (await Promise.all([
       prisma.$queryRaw<Array<{ hostel_id: string; active_tenants: number }>>`
         SELECT
@@ -113,7 +125,7 @@ export class PortfolioPerformanceService {
           ON t.hostel_id = h.id
           AND t.owner_id = ${ownerId}::uuid
           AND t.status = 'ACTIVE'
-        WHERE h.owner_id = ${ownerId}::uuid AND h.is_active = true
+        WHERE h.owner_id = ${ownerId}::uuid AND h.status != 'ARCHIVED'
         GROUP BY h.id
       `,
       prisma.$queryRaw<Array<{
@@ -132,7 +144,7 @@ export class PortfolioPerformanceService {
         ), active_hostels AS (
           SELECT id, name, city
           FROM hostels
-          WHERE owner_id = ${ownerId}::uuid AND is_active = true
+          WHERE owner_id = ${ownerId}::uuid AND status != 'ARCHIVED'
         ), pay_agg AS (
           SELECT obligation_id, SUM(amount_paid)::float AS total_paid
           FROM payments
@@ -339,10 +351,14 @@ export class PortfolioPerformanceService {
       const occupiedBeds = capacity?.occupiedBeds ?? 0;
       const reservedBeds = capacity?.reservedBeds ?? 0;
       const totalCapacity = capacity?.totalCapacity ?? 0;
+      const hostelStatus = hostelStatusMap.get(h.id);
       return {
         hostel_id: h.id,
         hostel_name: h.name,
         city: h.city,
+        status: hostelStatus?.status ?? 'ACTIVE',
+        archived_at: hostelStatus?.archived_at?.toISOString() ?? null,
+        archive_reason: hostelStatus?.archive_reason ?? null,
         revenue,
         expenses,
         profit: revenue - expenses,

@@ -742,7 +742,7 @@ export class HostelPolicyService {
     const hostel = await prisma.hostels.findFirst({
       where: {
         id: hostelId,
-        is_active: true,
+        status: { in: ["ACTIVE", "INACTIVE", "ARCHIVED"] },
         ...(ownerId ? { owner_id: ownerId } : {}),
       },
       select: {
@@ -790,10 +790,11 @@ export class HostelPolicyService {
 
   async updateHostelPolicy(hostelId: string, ownerId: string, patch: Record<string, any>, changedBy: string): Promise<HostelPolicyResponse> {
     const hostel = await prisma.hostels.findFirst({
-      where: { id: hostelId, owner_id: ownerId, is_active: true },
+      where: { id: hostelId, owner_id: ownerId },
       select: {
         id: true,
         owner_id: true,
+        status: true,
         name: true,
         phone: true,
         address: true,
@@ -813,6 +814,12 @@ export class HostelPolicyService {
       },
     });
     if (!hostel) throw new Error("FORBIDDEN: Hostel is not owned by the authenticated owner");
+    if (hostel.status === "ARCHIVED") {
+      throw new Error("FORBIDDEN: Cannot perform operational actions on an archived hostel");
+    }
+    if (hostel.status === "INACTIVE") {
+      throw new Error("FORBIDDEN: Cannot perform operational actions on an inactive hostel");
+    }
 
     const current = normalizeHostelPolicy(hostel);
     const next = mergePolicy(current, patch);

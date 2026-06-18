@@ -98,8 +98,15 @@ export async function DELETE(
     // Verify ownership
     const existing = await prisma.rooms.findFirst({
       where: { id: params.id, hostels: { owner_id: scope.owner_id } },
+      include: { hostels: { select: { status: true } } },
     });
     if (!existing) return apiError("Room not found", "NOT_FOUND", 404);
+    if (existing.hostels.status === "ARCHIVED") {
+      return apiError("Cannot perform operational actions on an archived hostel", "VALIDATION_ERROR", 400);
+    }
+    if (existing.hostels.status === "INACTIVE") {
+      return apiError("Cannot perform operational actions on an inactive hostel", "VALIDATION_ERROR", 400);
+    }
 
     // Check for active allocations
     const activeAllocations = await prisma.roomAllocation.count({

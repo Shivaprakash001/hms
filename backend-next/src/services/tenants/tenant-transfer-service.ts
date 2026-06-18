@@ -133,7 +133,7 @@ export class TenantTransferService {
     const targetRoom = await prisma.rooms.findUnique({
       where: { id: targetRoomId },
       include: {
-        hostel: { select: { id: true, owner_id: true, name: true, is_active: true } },
+        hostel: { select: { id: true, owner_id: true, name: true, status: true } },
         room_allocations: { where: { is_active: true, end_date: null, tenant: { status: "ACTIVE" } } },
       },
     });
@@ -141,8 +141,11 @@ export class TenantTransferService {
     if (!targetRoom) {
       throw new Error("NOT_FOUND: Target room not found");
     }
-    if (!targetRoom.hostel.is_active) {
-      throw new Error("VALIDATION_ERROR: Target hostel is not active");
+    if (targetRoom.hostel.status === "ARCHIVED") {
+      throw new Error("VALIDATION_ERROR: Target hostel is archived");
+    }
+    if (targetRoom.hostel.status === "INACTIVE") {
+      throw new Error("VALIDATION_ERROR: Target hostel is inactive");
     }
 
     const toHostelId = targetRoom.hostel_id;

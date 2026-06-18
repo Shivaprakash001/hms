@@ -1,30 +1,35 @@
-import { PrismaClient } from "@prisma/client";
-import { resolvePreferences } from "../lib/preferences";
-
-const prisma = new PrismaClient();
+import { prisma } from "../lib/db";
 
 async function main() {
-  const hostels = await prisma.hostels.findMany({
-    select: { id: true, name: true, is_active: true, preferences_config: true }
-  });
-  console.log("=== Hostels ===");
-  for (const h of hostels) {
-    const prefs = resolvePreferences(h);
-    console.log(`Hostel ID: ${h.id}`);
-    console.log(`Name: ${h.name}`);
-    console.log(`Active: ${h.is_active}`);
-    console.log(`advance_enabled in prefs: ${prefs.advance_enabled}`);
-    console.log(`preferences_config:`, JSON.stringify(h.preferences_config, null, 2));
-    console.log("-------------------");
+  try {
+    console.log("Listing all hostels in the database...");
+    const hostels = await prisma.hostels.findMany({
+      include: {
+        _count: {
+          select: {
+            rooms: true,
+            tenants: true,
+            room_allocations: true,
+          }
+        }
+      }
+    });
+    
+    console.log(`\nFound ${hostels.length} hostels:`);
+    hostels.forEach(h => {
+      console.log(`- ID: ${h.id}`);
+      console.log(`  Name: "${h.name}"`);
+      console.log(`  Rooms Count: ${h._count.rooms}`);
+      console.log(`  Tenants Count: ${h._count.tenants}`);
+      console.log(`  Room Allocations Count: ${h._count.room_allocations}`);
+      console.log(`  Owner ID: ${h.owner_id}`);
+      console.log(`-----------------------------------`);
+    });
+  } catch (err: any) {
+    console.error("Error during inspection:", err);
+  } finally {
+    await prisma.$disconnect();
   }
-
-  const tenants = await prisma.tenants.findMany({
-    select: { id: true, hostel_id: true, owner_id: true, status: true, profiles: { select: { name: true } } }
-  });
-  console.log("=== Tenants ===");
-  console.log(JSON.stringify(tenants, null, 2));
 }
 
-main()
-  .catch(console.error)
-  .finally(() => prisma.$disconnect());
+main();

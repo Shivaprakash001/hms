@@ -183,6 +183,29 @@ export class TenantInvitationLifecycleService {
     if (!normalizedPhone) throw new Error("VALIDATION_ERROR: Valid phone is required");
     if (!roomId) throw new Error("VALIDATION_ERROR: Room is required");
 
+    const roomWithHostel = await prisma.rooms.findFirst({
+      where: {
+        id: roomId,
+        is_active: true,
+      },
+      include: {
+        hostels: true,
+      },
+    });
+
+    if (!roomWithHostel) {
+      throw new Error("NOT_FOUND: Room not found");
+    }
+    if (roomWithHostel.hostels.owner_id !== ownerId) {
+      throw new Error("FORBIDDEN: Cannot invite tenant to another owner's room");
+    }
+    if (roomWithHostel.hostels.status === "ARCHIVED") {
+      throw new Error("VALIDATION_ERROR: Cannot invite tenant to an archived hostel");
+    }
+    if (roomWithHostel.hostels.status === "INACTIVE") {
+      throw new Error("VALIDATION_ERROR: Cannot invite tenant to an inactive hostel");
+    }
+
     const today = startOfToday();
     const joiningDate = data.joining_date ? new Date(data.joining_date) : today;
     if (Number.isNaN(joiningDate.getTime())) throw new Error("VALIDATION_ERROR: Invalid joining date");
@@ -255,6 +278,12 @@ export class TenantInvitationLifecycleService {
       const capacity = await this.getRoomCapacitySnapshot(tx, roomId);
       if (capacity.room.hostels.owner_id !== ownerId) {
         throw new Error("FORBIDDEN: Cannot invite tenant to another owner's room");
+      }
+      if (capacity.room.hostels.status === "ARCHIVED") {
+        throw new Error("VALIDATION_ERROR: Cannot invite tenant to an archived hostel");
+      }
+      if (capacity.room.hostels.status === "INACTIVE") {
+        throw new Error("VALIDATION_ERROR: Cannot invite tenant to an inactive hostel");
       }
       if (capacity.available <= 0) {
         throw new Error("CAPACITY_EXCEEDED: Room is already full including active reservations");
@@ -371,6 +400,12 @@ export class TenantInvitationLifecycleService {
       },
     });
     if (!invitation || !invitation.tenant) throw new Error("NOT_FOUND: Invitation not found");
+    if (invitation.room.hostels.status === "ARCHIVED") {
+      throw new Error("VALIDATION_ERROR: Cannot resend invitation for an archived hostel");
+    }
+    if (invitation.room.hostels.status === "INACTIVE") {
+      throw new Error("VALIDATION_ERROR: Cannot resend invitation for an inactive hostel");
+    }
     if (actor?.role === "OWNER" && invitation.owner_id !== actor.id) {
       throw new Error("FORBIDDEN: You can only resend your own invitations");
     }
@@ -528,6 +563,12 @@ export class TenantInvitationLifecycleService {
 
     if (!invitation || !invitation.tenant) {
       return this.resolveLegacyProfileToken(normalizedToken);
+    }
+    if (invitation.tenant.hostels?.status === "ARCHIVED") {
+      throw new Error("FORBIDDEN: Cannot activate tenant in an archived hostel");
+    }
+    if (invitation.tenant.hostels?.status === "INACTIVE") {
+      throw new Error("FORBIDDEN: Cannot activate tenant in an inactive hostel");
     }
     if (invitation.status === "ACTIVATED" || invitation.tenant.status === "ACTIVE") {
       throw new Error("ALREADY_ACTIVE: Account already active");
@@ -788,6 +829,12 @@ export class TenantInvitationLifecycleService {
       },
     });
     if (!profile || !profile.tenants) throw new Error("INVALID: Activation link expired or already used");
+    if (profile.tenants.hostels?.status === "ARCHIVED") {
+      throw new Error("FORBIDDEN: Cannot activate tenant in an archived hostel");
+    }
+    if (profile.tenants.hostels?.status === "INACTIVE") {
+      throw new Error("FORBIDDEN: Cannot activate tenant in an inactive hostel");
+    }
     if (profile.tenants.status === "ACTIVE") throw new Error("ALREADY_ACTIVE: Account already active");
     if (profile.tenants.status === "CANCELLED") throw new Error("CANCELLED: Invitation was cancelled");
     if (profile.tenants.status === "EXPIRED") throw new Error("EXPIRED: Invitation expired");

@@ -16,7 +16,7 @@ export async function dailyReconciliation() {
     paymentDomain: PAYMENT_DOMAIN.PLATFORM_BILLING,
   });
   const hostels = await prisma.hostels.findMany({
-    where: { is_active: true },
+    where: { status: { in: ["ACTIVE", "INACTIVE"] } },
     select: { id: true, owner_id: true },
   });
   let processed = platform.processed || 0;
@@ -34,7 +34,7 @@ export async function dailyReconciliation() {
 export async function monthlyRentGeneration() {
   console.log("[Job] Starting monthly rent generation...");
   const hostels = await prisma.hostels.findMany({
-    where: { is_active: true },
+    where: { status: "ACTIVE" },
     select: { id: true, owner_id: true },
   });
 

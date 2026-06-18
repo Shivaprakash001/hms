@@ -21,8 +21,14 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const url = new URL(req.url);
+    const includeArchived = url.searchParams.get("include_archived") === "true";
+
     const hostels = await prisma.hostels.findMany({
-      where: { owner_id: session.sub, is_active: true },
+      where: { 
+        owner_id: session.sub, 
+        ...(includeArchived ? {} : { status: { in: ["ACTIVE", "INACTIVE"] } })
+      },
       orderBy: { created_at: "asc" },
       select: {
         id: true,
@@ -36,6 +42,7 @@ export async function GET(req: NextRequest) {
         public_slug: true,
         admissions_enabled: true,
         is_active: true,
+        status: true,
         created_at: true,
         rooms: {
           where: { is_active: true },
@@ -86,6 +93,7 @@ export async function GET(req: NextRequest) {
           public_slug: slug,
           admissions_enabled: hostel.admissions_enabled,
           is_active: hostel.is_active,
+          status: hostel.status,
           created_at: hostel.created_at,
           stats: {
             total_rooms: totalRooms,
@@ -127,7 +135,7 @@ export async function POST(req: NextRequest) {
     const existing = await prisma.hostels.findFirst({
       where: {
         owner_id: session.sub,
-        is_active: true,
+        status: { in: ["ACTIVE", "INACTIVE"] },
         name: {
           equals: name,
           mode: "insensitive",
@@ -147,6 +155,8 @@ export async function POST(req: NextRequest) {
         city: body.city || null,
         state: body.state || null,
         pincode: body.pincode || null,
+        status: "ACTIVE",
+        is_active: true,
       },
     });
 

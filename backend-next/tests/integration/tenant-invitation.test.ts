@@ -181,4 +181,129 @@ describe('Tenant Onboarding Integration Flow', () => {
     });
     expect(Number(dbTenant?.monthly_rent)).toBe(0);
   });
+
+  describe('Hostel Status Hardening on Invitations', () => {
+    it('should reject invitation creation when hostel is ARCHIVED or INACTIVE', async () => {
+      // 1. ARCHIVED
+      await prisma.hostels.update({
+        where: { id: hostel.id },
+        data: { status: 'ARCHIVED', is_active: false },
+      });
+
+      await expect(
+        tenantInvitationLifecycleService.createInvitation({
+          name: 'Blocked Tenant',
+          phone: '9876543220',
+          room_id: room.id,
+          monthly_rent: 8000,
+        }, owner.id)
+      ).rejects.toThrow('VALIDATION_ERROR: Cannot invite tenant to an archived hostel');
+
+      // 2. INACTIVE
+      await prisma.hostels.update({
+        where: { id: hostel.id },
+        data: { status: 'INACTIVE', is_active: false },
+      });
+
+      await expect(
+        tenantInvitationLifecycleService.createInvitation({
+          name: 'Blocked Tenant',
+          phone: '9876543220',
+          room_id: room.id,
+          monthly_rent: 8000,
+        }, owner.id)
+      ).rejects.toThrow('VALIDATION_ERROR: Cannot invite tenant to an inactive hostel');
+    });
+
+    it('should reject resending invitation when hostel is ARCHIVED or INACTIVE', async () => {
+      // Restore status to active to create initial invitation
+      await prisma.hostels.update({
+        where: { id: hostel.id },
+        data: { status: 'ACTIVE', is_active: true },
+      });
+
+      sendInvitationSpy.mockResolvedValueOnce({
+        providerMessageId: 'wamid.resend_test',
+        attempts: 1,
+      });
+
+      const initial: any = await tenantInvitationLifecycleService.createInvitation({
+        name: 'Resend Test Tenant',
+        phone: '9876543221',
+        room_id: room.id,
+        monthly_rent: 8000,
+      }, owner.id);
+
+      // 1. ARCHIVED
+      await prisma.hostels.update({
+        where: { id: hostel.id },
+        data: { status: 'ARCHIVED', is_active: false },
+      });
+
+      await expect(
+        tenantInvitationLifecycleService.resendInvitation(
+          initial.invitation_id,
+          { id: owner.id, role: 'OWNER' }
+        )
+      ).rejects.toThrow('VALIDATION_ERROR: Cannot resend invitation for an archived hostel');
+
+      // 2. INACTIVE
+      await prisma.hostels.update({
+        where: { id: hostel.id },
+        data: { status: 'INACTIVE', is_active: false },
+      });
+
+      await expect(
+        tenantInvitationLifecycleService.resendInvitation(
+          initial.invitation_id,
+          { id: owner.id, role: 'OWNER' }
+        )
+      ).rejects.toThrow('VALIDATION_ERROR: Cannot resend invitation for an inactive hostel');
+    });
+
+    it('should reject resolving token (activation) when hostel is ARCHIVED or INACTIVE', async () => {
+      // Restore status to active to create initial invitation
+      await prisma.hostels.update({
+        where: { id: hostel.id },
+        data: { status: 'ACTIVE', is_active: true },
+      });
+
+      sendInvitationSpy.mockResolvedValueOnce({
+        providerMessageId: 'wamid.resolve_test',
+        attempts: 1,
+      });
+
+      const initial: any = await tenantInvitationLifecycleService.createInvitation({
+        name: 'Resolve Test Tenant',
+        phone: '9876543222',
+        room_id: room.id,
+        monthly_rent: 8000,
+      }, owner.id);
+
+      const dbInvite = await prisma.tenant_invitations.findUnique({
+        where: { id: initial.invitation_id },
+      });
+      const token = dbInvite!.token;
+
+      // 1. ARCHIVED
+      await prisma.hostels.update({
+        where: { id: hostel.id },
+        data: { status: 'ARCHIVED', is_active: false },
+      });
+
+      await expect(
+        tenantInvitationLifecycleService.resolveByToken(token)
+      ).rejects.toThrow('FORBIDDEN: Cannot activate tenant in an archived hostel');
+
+      // 2. INACTIVE
+      await prisma.hostels.update({
+        where: { id: hostel.id },
+        data: { status: 'INACTIVE', is_active: false },
+      });
+
+      await expect(
+        tenantInvitationLifecycleService.resolveByToken(token)
+      ).rejects.toThrow('FORBIDDEN: Cannot activate tenant in an inactive hostel');
+    });
+  });
 });

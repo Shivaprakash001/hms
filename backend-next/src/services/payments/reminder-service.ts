@@ -50,7 +50,7 @@ export class ReminderService {
     // Canonical source: one hostel partition at a time. No background path may
     // sweep operational state without deterministic hostel scope.
     const hostels = await prisma.hostels.findMany({
-      where: { is_active: true },
+      where: { status: "ACTIVE" },
       select: { id: true, owner_id: true },
     });
     const overdueByHostel = await Promise.all(
