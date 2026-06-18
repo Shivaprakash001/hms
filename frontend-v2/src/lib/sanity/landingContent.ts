@@ -129,6 +129,9 @@ export type LandingMarketingContent = {
   contactFormButtonText?: string;
   roomTypeTitle?: string;
   roomImage?: MarketingImage;
+  startingPrice?: number;
+  bedsAvailable?: number;
+  intakeMonth?: string;
   hostelAvailability?: {
     bedsAvailable: number | null;
     intakeMonth: string | null;
@@ -315,6 +318,7 @@ export const fallbackLandingContent: LandingMarketingContent = {
     ],
     copyright: '© 2026 Sri Adithya Boys Hostel. All rights reserved.',
   },
+  startingPrice: 8000,
   hostelAvailability: {
     bedsAvailable: 40,
     intakeMonth: 'July',

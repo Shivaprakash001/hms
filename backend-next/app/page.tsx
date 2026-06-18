@@ -258,6 +258,16 @@ export default async function HomePage() {
     throw err;
   }
 
+  // Override with marketing page copy config if defined in CMS
+  if (hostel) {
+    if (typeof hostel.bedsAvailable === "number") {
+      availability.bedsAvailable = hostel.bedsAvailable;
+    }
+    if (hostel.intakeMonth) {
+      availability.intakeMonth = hostel.intakeMonth;
+    }
+  }
+
   const latency = Date.now() - startTime;
   console.log(`[CMS Debug] Fetch completed in ${latency}ms`);
   console.log(`[CMS Debug Query Result] hostel:`, hostel);

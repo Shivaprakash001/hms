@@ -162,6 +162,9 @@ export type LandingMarketingContent = {
   contactFormButtonText?: string;
   roomTypeTitle?: string;
   roomImage?: MarketingImage;
+  startingPrice?: number;
+  bedsAvailable?: number;
+  intakeMonth?: string;
 };
 
 export type GalleryImageContent = MarketingImage & {
@@ -369,5 +372,6 @@ export const fallbackLandingContent: LandingMarketingContent = {
       { title: 'WhatsApp Parent Updates', description: 'Immediate WhatsApp alerts for attendance, admissions, or any operational updates.', icon: 'whatsapp' },
       { title: 'Emergency Medical Support', description: 'First-aid kit on-site and tied-up vehicle/hospital support for any medical emergencies.', icon: 'emergency' }
     ]
-  }
+  },
+  startingPrice: 8000,
 };

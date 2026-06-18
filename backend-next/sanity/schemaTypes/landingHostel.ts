@@ -107,6 +107,26 @@ export const landingHostel = defineType({
       description: 'The room image shown in the Rooms & Pricing section',
     }),
     defineField({
+      name: 'startingPrice',
+      title: 'Starting Rent Price (₹ per month)',
+      type: 'number',
+      description: 'Used for starting price in room pricing section. E.g. 8000. If left empty, it will fall back to live admissions database pricing or ₹8,000.',
+      validation: Rule => Rule.min(1000).integer(),
+    }),
+    defineField({
+      name: 'bedsAvailable',
+      title: 'Beds Available Scarcity Count',
+      type: 'number',
+      description: 'The number of beds available to show in the scarcity banner. E.g., 40. If left empty, it will fall back to standard hostel settings or live data.',
+      validation: Rule => Rule.min(0).max(100).integer(),
+    }),
+    defineField({
+      name: 'intakeMonth',
+      title: 'Intake Month',
+      type: 'string',
+      description: 'The month to show in the scarcity banner. E.g., July. If left empty, it will fall back to standard hostel settings or live data.',
+    }),
+    defineField({
       name: 'locationTitle',
       title: 'Location Section Title',
       type: 'string',

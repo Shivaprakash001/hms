@@ -32,6 +32,9 @@ const landingQuery = `{
     amenitiesCount,
     roomTypeTitle,
     "roomImage": roomImage { "url": asset->url, alt },
+    startingPrice,
+    bedsAvailable,
+    intakeMonth,
     locationTitle,
     locationDescription,
     distanceTitle,
@@ -253,9 +256,12 @@ function mergeLandingContent(result: any): LandingMarketingContent {
     contactFormButtonText: h?.contactFormButtonText,
     roomTypeTitle: h?.roomTypeTitle,
     roomImage: hasImage(h?.roomImage) ? h.roomImage : undefined,
+    startingPrice: typeof h?.startingPrice === 'number' ? h.startingPrice : undefined,
     hostelAvailability: {
-      bedsAvailable: typeof result?.hostel?.bedsAvailable === 'number' ? result.hostel.bedsAvailable : null,
-      intakeMonth: result?.hostel?.intakeMonth || null,
+      bedsAvailable: typeof h?.bedsAvailable === 'number'
+        ? h.bedsAvailable
+        : (typeof result?.hostel?.bedsAvailable === 'number' ? result.hostel.bedsAvailable : null),
+      intakeMonth: h?.intakeMonth || result?.hostel?.intakeMonth || null,
     },
   };
 }

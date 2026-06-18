@@ -45,7 +45,9 @@ export function RoomPricing({
             : 'max-w-6xl grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
         }`}>
           {roomTypes.map((room, idx) => {
-            const cleanPrice = room.baseRent;
+            const cleanPrice = (room.roomType.includes('4-Sharing') || roomTypes.length === 1) && typeof hostel?.startingPrice === 'number'
+              ? hostel.startingPrice 
+              : room.baseRent;
             const formattedPrice = `₹${Number(cleanPrice).toLocaleString('en-IN')}`;
             const whatsappMessage = template
               .replace("{sharingType}", room.roomType)

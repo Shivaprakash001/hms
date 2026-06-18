@@ -50,7 +50,7 @@ export function HomePage() {
   const landingAvailability = useMemo<LandingAvailability>(() => {
     const rooms = Array.isArray(availability?.rooms) ? availability.rooms : [];
     const roomStartingPrice = rooms.map(roomPrice).filter(Boolean).sort((a: number, b: number) => a - b)[0];
-    const startingPrice = roomStartingPrice || availability?.hostel?.starting_price || null;
+    const startingPrice = content?.startingPrice || roomStartingPrice || availability?.hostel?.starting_price || 8000;
 
     const sanityBeds = content?.hostelAvailability?.bedsAvailable;
     const sanityIntake = content?.hostelAvailability?.intakeMonth;

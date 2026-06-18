@@ -19,6 +19,27 @@ export const structure = (S: StructureBuilder) =>
             .documentId('landingHostel')
         ),
       S.listItem()
+        .title('🏢 Hostel Settings (Availability)')
+        .child(
+          S.document()
+            .schemaType('hostel')
+            .documentId('hostel-1')
+        ),
+      S.listItem()
+        .title('🥗 Food & Dining')
+        .child(
+          S.document()
+            .schemaType('food')
+            .documentId('food')
+        ),
+      S.listItem()
+        .title('👨‍👩‍👦 Parent Trust')
+        .child(
+          S.document()
+            .schemaType('parentTrust')
+            .documentId('parentTrust')
+        ),
+      S.listItem()
         .title('⭐ Testimonials')
         .child(
           S.documentTypeList('testimonial')
