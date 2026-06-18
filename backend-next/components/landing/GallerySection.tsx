@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect } from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ScrollReveal, StaggerReveal, StaggerItem } from './ScrollReveal';
