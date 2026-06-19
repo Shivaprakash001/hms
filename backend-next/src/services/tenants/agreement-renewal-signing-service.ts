@@ -230,8 +230,8 @@ export class AgreementRenewalSigningService {
       const interpolatedRules = interpolateRulesContent(rawRules, variables, true);
 
       const rulesSnapshot = ruleVersion
-        ? (ruleVersion.content || ruleVersion.content_snapshot || rawRules)
-        : rawRules;
+        ? interpolateRulesContent(ruleVersion.content || ruleVersion.content_snapshot || rawRules, variables, true)
+        : interpolatedRules;
 
       const ruleVersionId = ruleVersion?.id || template.id;
       const ruleVersionNumber = ruleVersion?.version || `v${template.version_number}`;

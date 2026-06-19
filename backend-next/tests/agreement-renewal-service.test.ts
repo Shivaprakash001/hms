@@ -76,6 +76,13 @@ function createDb(overrides: Partial<typeof sourceAgreement> = {}, activeMoveOut
       update: vi.fn(),
       updateMany: vi.fn(),
     },
+    agreementTemplate: {
+      findFirst: vi.fn().mockResolvedValue({
+        id: "template-1",
+        owner_name: "Owner",
+        owner_signature_url: "sig-url",
+      }),
+    },
     tenant_billing_plans: {
       create: vi.fn(),
       updateMany: vi.fn(),

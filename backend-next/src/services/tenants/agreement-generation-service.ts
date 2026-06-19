@@ -5,37 +5,102 @@ import axios from "axios";
 
 const IST_TIMEZONE = "Asia/Kolkata";
 
-function formatAgreementDate(dateInput: Date | string | null | undefined): string {
+export function formatAgreementDate(dateInput: Date | string | null | undefined): string {
   if (!dateInput) return "N/A";
   const date = new Date(dateInput);
   if (isNaN(date.getTime())) return "N/A";
 
-  return date.toLocaleDateString("en-IN", {
+  const formatted = date.toLocaleDateString("en-IN", {
     day: "2-digit",
-    month: "short",
+    month: "2-digit",
     year: "numeric",
     timeZone: IST_TIMEZONE,
   });
+  return formatted.replace(/\//g, "-");
 }
 
-function formatAgreementDateTime(dateInput: Date | string | null | undefined): string {
+export function formatAgreementDateTime(dateInput: Date | string | null | undefined): string {
   if (!dateInput) return "N/A";
   const date = new Date(dateInput);
   if (isNaN(date.getTime())) return "N/A";
 
-  return date.toLocaleString("en-IN", {
+  const formatted = date.toLocaleString("en-IN", {
     day: "2-digit",
-    month: "short",
+    month: "2-digit",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    second: "2-digit",
     hour12: false,
     timeZone: IST_TIMEZONE,
   });
+  return `${formatted.replace(/\//g, "-")} IST`;
+}
+
+export function sanitizeIp(ip: string | null | undefined): string {
+  if (!ip || ip === "unknown") return "N/A";
+  if (ip.includes(",")) {
+    return ip.split(",")[0].trim();
+  }
+  return ip.trim();
+}
+
+export function parseUserAgent(ua: string | null | undefined): { device: string; os: string; browser: string } {
+  if (!ua || ua === "unknown" || ua === "N/A") {
+    return { device: "Unknown Device", os: "Unknown OS", browser: "Unknown Browser" };
+  }
+
+  let device = "Desktop";
+  let os = "Unknown OS";
+  let browser = "Unknown Browser";
+
+  const uaLower = ua.toLowerCase();
+
+  // Detect Device Type
+  if (/mobi|android|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(uaLower)) {
+    if (/ipad|tablet/i.test(uaLower)) {
+      device = "Tablet";
+    } else {
+      device = "Mobile";
+    }
+  }
+
+  // Detect OS
+  if (/android/i.test(uaLower)) {
+    os = "Android";
+    const match = ua.match(/Android\s+([0-9\.]+)/i);
+    if (match) os += ` ${match[1]}`;
+  } else if (/iphone|ipad|ipod/i.test(uaLower)) {
+    os = "iOS";
+    const match = ua.match(/OS\s+([0-9_]+)/i);
+    if (match) os += ` ${match[1].replace(/_/g, ".")}`;
+  } else if (/windows/i.test(uaLower)) {
+    os = "Windows";
+    if (/phone/i.test(uaLower)) os = "Windows Phone";
+  } else if (/macintosh|mac os x/i.test(uaLower)) {
+    os = "macOS";
+  } else if (/linux/i.test(uaLower)) {
+    os = "Linux";
+  }
+
+  // Detect Browser
+  if (/edg/i.test(uaLower)) {
+    browser = "Edge";
+  } else if (/chrome|crios/i.test(uaLower)) {
+    browser = "Chrome";
+  } else if (/safari/i.test(uaLower)) {
+    browser = "Safari";
+  } else if (/firefox|fxios/i.test(uaLower)) {
+    browser = "Firefox";
+  } else if (/opr/i.test(uaLower)) {
+    browser = "Opera";
+  }
+
+  return { device, os, browser };
 }
 
 
-import { DEFAULT_RULES_TEMPLATE, DEFAULT_TERMS_AND_CONDITIONS } from "../../utils/default-rules";
+import { DEFAULT_RULES_TEMPLATE, DEFAULT_TERMS_AND_CONDITIONS, interpolateRulesContent, interpolateText } from "../../utils/default-rules";
 
 export const DEFAULT_RULE_CONTENT = DEFAULT_RULES_TEMPLATE;
 
@@ -159,7 +224,7 @@ export class AgreementGenerationService {
       throw new Error(`Agreement not found: ${agreementId}`);
     }
 
-    const snapshot = agreement.content_snapshot as any;
+    const snapshot = (agreement.content_snapshot as any) || {};
     const tenant = agreement.tenant;
     const hostel = agreement.hostel;
     const template = agreement.template;
@@ -167,11 +232,32 @@ export class AgreementGenerationService {
     const joiningDate = snapshot.joining_date || tenant.joined_on || new Date();
     const formattedJoiningDate = formatAgreementDate(joiningDate);
 
-    const hostelRules = (agreement.rules_snapshot as any) ||
+    const monthlyRent = Number(snapshot.monthly_rent || tenant.monthly_rent || 0);
+    const advanceDeposit = Number(snapshot.advance_deposit || tenant.security_deposit || 0);
+    const maintenanceCharge = Number(snapshot.maintenance_charge || tenant.maintenance_charge || 0);
+    const ownerName = snapshot.owner_name || template?.owner_name || "Hostel Owner";
+    const tenantName = snapshot.tenant_name || tenant.profiles?.name || tenant.personal_email || "N/A";
+    const roomNo = snapshot.room_number || "N/A";
+    const hostelName = snapshot.hostel_name || hostel.name;
+
+    const variables = {
+      TENANT_NAME: tenantName,
+      ROOM_NUMBER: roomNo,
+      MONTHLY_RENT: monthlyRent,
+      SECURITY_DEPOSIT_AMOUNT: advanceDeposit,
+      MAINTENANCE_CHARGE_AMOUNT: maintenanceCharge,
+      HOSTEL_NAME: hostelName,
+      OWNER_NAME: ownerName,
+      JOINING_DATE: formattedJoiningDate,
+    };
+
+    const rawHostelRules = (agreement.rules_snapshot as any) ||
       snapshot.interpolated_rules ||
       snapshot.hostel_rules ||
       template?.rules_content ||
       DEFAULT_RULE_CONTENT;
+
+    const hostelRules = interpolateRulesContent(rawHostelRules, variables, true);
 
     // Support for configurable agreement duration and dynamic date calculation
     const agreementStartDate = agreement.agreement_start_date || snapshot.agreement_start_date || tenant.joined_on || null;
@@ -179,38 +265,44 @@ export class AgreementGenerationService {
     const agreementDurationMonths = agreement.agreement_duration_months || snapshot.agreement_duration_months || null;
 
     // Resolve Terms & Conditions
-    let termsAndConditions = snapshot.terms_and_conditions || 
+    let rawTermsAndConditions = snapshot.terms_and_conditions || 
       template?.rules_content?.terms_and_conditions || 
       null;
 
-    if (!termsAndConditions && template?.rules_content && typeof template.rules_content === "object") {
+    if (!rawTermsAndConditions && template?.rules_content && typeof template.rules_content === "object") {
       const parsedRules = template.rules_content as any;
       if (Array.isArray(parsedRules.terms_and_conditions)) {
-        termsAndConditions = parsedRules.terms_and_conditions;
+        rawTermsAndConditions = parsedRules.terms_and_conditions;
       }
     }
 
-    if (!termsAndConditions || !Array.isArray(termsAndConditions) || termsAndConditions.length === 0) {
-      termsAndConditions = DEFAULT_TERMS_AND_CONDITIONS;
+    if (!rawTermsAndConditions || !Array.isArray(rawTermsAndConditions) || rawTermsAndConditions.length === 0) {
+      rawTermsAndConditions = DEFAULT_TERMS_AND_CONDITIONS;
     }
 
+    // Interpolate placeholders inside terms & conditions content
+    const termsAndConditions = rawTermsAndConditions.map((term: any) => ({
+      ...term,
+      content: interpolateText(term.content || "", variables, true),
+    }));
+
     return {
-      hostelName: snapshot.hostel_name || hostel.name,
+      hostelName: hostelName,
       hostelAddress: [hostel.address, hostel.city, hostel.state, hostel.pincode].filter(Boolean).join(", "),
-      ownerName: snapshot.owner_name || template.owner_name || "Hostel Owner",
-      ownerSignatureUrl: template.owner_signature_url,
-      tenantName: snapshot.tenant_name || tenant.personal_email || "N/A",
+      ownerName: ownerName,
+      ownerSignatureUrl: template?.owner_signature_url || null,
+      tenantName: tenantName,
       tenantEmail: tenant.personal_email || "",
       tenantPhone: tenant.phone_1 || "",
       permanentAddress: tenant.permanent_address || "N/A",
-      roomNo: snapshot.room_number || "N/A",
-      monthlyRent: Number(snapshot.monthly_rent || tenant.monthly_rent || 0),
-      advanceDeposit: Number(snapshot.advance_deposit || tenant.security_deposit || 0),
-      maintenanceCharge: Number(snapshot.maintenance_charge || tenant.maintenance_charge || 0),
+      roomNo: roomNo,
+      monthlyRent,
+      advanceDeposit,
+      maintenanceCharge,
       maintenanceType: snapshot.maintenance_type || tenant.maintenance_type || "MONTHLY",
       joiningDate: formattedJoiningDate,
       paymentFrequency: snapshot.payment_frequency || tenant.payment_frequency || "MONTHLY",
-      customRules: snapshot.custom_rules || template.custom_rules,
+      customRules: snapshot.custom_rules || template?.custom_rules || null,
       hostelRules,
 
       tenantSignatureUrl: agreement.tenant_signature_url,
@@ -760,6 +852,8 @@ export class AgreementGenerationService {
     const metaY = sigYStart - 55;
 
     // Tenant details
+    const tenantIpClean = sanitizeIp(data.tenantIp);
+    const tenantUAInfo = parseUserAgent(data.tenantUserAgent);
     page.drawText(sanitizeText(`Name: ${hasTenantSigner ? (data.tenantSignatureName || data.tenantName) : "N/A"}`), {
       x: margin,
       y: metaY,
@@ -774,18 +868,25 @@ export class AgreementGenerationService {
       font: fontRegular,
       color: COLORS.textMuted,
     });
-    page.drawText(sanitizeText(`IP: ${data.tenantIp || "N/A"}`), {
+    page.drawText(sanitizeText(`IP: ${tenantIpClean}`), {
       x: margin,
       y: metaY - 18,
       size: 7,
       font: fontRegular,
       color: COLORS.textMuted,
     });
-    const wrappedUA = wrapText(data.tenantUserAgent || "N/A", colWidth - 10, fontRegular, 6);
-    page.drawText(sanitizeText(`UA: ${wrappedUA[0] || "N/A"}`), {
+    page.drawText(sanitizeText(`Device: ${tenantUAInfo.device} (${tenantUAInfo.os}, ${tenantUAInfo.browser})`), {
       x: margin,
       y: metaY - 26,
-      size: 6,
+      size: 7,
+      font: fontRegular,
+      color: COLORS.textMuted,
+    });
+    const wrappedUA = wrapText(data.tenantUserAgent || "N/A", colWidth - 10, fontRegular, 5);
+    page.drawText(sanitizeText(`UA: ${wrappedUA[0] || "N/A"}`), {
+      x: margin,
+      y: metaY - 34,
+      size: 5,
       font: fontRegular,
       color: COLORS.textMuted,
     });
@@ -793,6 +894,8 @@ export class AgreementGenerationService {
     // Guardian details
     if (hasGuardianSigner) {
       const gX = margin + colWidth;
+      const guardianIpClean = sanitizeIp(data.guardianIp);
+      const guardianUAInfo = parseUserAgent(data.guardianUserAgent);
       page.drawText(sanitizeText(`Name: ${data.guardianSignatureName || "N/A"}`), {
         x: gX,
         y: metaY,
@@ -807,18 +910,25 @@ export class AgreementGenerationService {
         font: fontRegular,
         color: COLORS.textMuted,
       });
-      page.drawText(sanitizeText(`IP: ${data.guardianIp || "N/A"}`), {
+      page.drawText(sanitizeText(`IP: ${guardianIpClean}`), {
         x: gX,
         y: metaY - 18,
         size: 7,
         font: fontRegular,
         color: COLORS.textMuted,
       });
-      const wrappedGUA = wrapText(data.guardianUserAgent || "N/A", colWidth - 10, fontRegular, 6);
-      page.drawText(sanitizeText(`UA: ${wrappedGUA[0] || "N/A"}`), {
+      page.drawText(sanitizeText(`Device: ${guardianUAInfo.device} (${guardianUAInfo.os}, ${guardianUAInfo.browser})`), {
         x: gX,
         y: metaY - 26,
-        size: 6,
+        size: 7,
+        font: fontRegular,
+        color: COLORS.textMuted,
+      });
+      const wrappedGUA = wrapText(data.guardianUserAgent || "N/A", colWidth - 10, fontRegular, 5);
+      page.drawText(sanitizeText(`UA: ${wrappedGUA[0] || "N/A"}`), {
+        x: gX,
+        y: metaY - 34,
+        size: 5,
         font: fontRegular,
         color: COLORS.textMuted,
       });

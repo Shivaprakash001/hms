@@ -1,7 +1,13 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { ActivationWorkflowService } from "@/src/services/tenants/activation-workflow-service";
 import { AgreementRenewalSigningService } from "@/src/services/tenants/agreement-renewal-signing-service";
-import { AgreementGenerationService } from "@/src/services/tenants/agreement-generation-service";
+import { 
+  AgreementGenerationService,
+  formatAgreementDate,
+  formatAgreementDateTime,
+  sanitizeIp,
+  parseUserAgent
+} from "@/src/services/tenants/agreement-generation-service";
 import { prisma } from "@/lib/db";
 
 // Mock the database client
@@ -458,6 +464,54 @@ describe("Residency Agreement Rules Snapshot Mechanism", () => {
           }),
         })
       );
+    });
+  });
+
+  describe("Audit Logs & Formatting Helpers", () => {
+    it("should sanitize proxied IP lists to client IP", () => {
+      expect(sanitizeIp("103.43.12.33, 172.68.22.45")).toBe("103.43.12.33");
+      expect(sanitizeIp("  192.168.1.1  ")).toBe("192.168.1.1");
+      expect(sanitizeIp(null)).toBe("N/A");
+      expect(sanitizeIp("unknown")).toBe("N/A");
+    });
+
+    it("should parse browser user agent strings into human-readable device info", () => {
+      const mobileUA = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36";
+      const desktopUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36";
+      const tabletUA = "Mozilla/5.0 (iPad; CPU OS 15_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.6 Mobile/15E148 Safari/604.1";
+
+      expect(parseUserAgent(mobileUA)).toEqual({
+        device: "Mobile",
+        os: "Android 10",
+        browser: "Chrome",
+      });
+
+      expect(parseUserAgent(desktopUA)).toEqual({
+        device: "Desktop",
+        os: "Windows",
+        browser: "Chrome",
+      });
+
+      expect(parseUserAgent(tabletUA)).toEqual({
+        device: "Tablet",
+        os: "iOS 15.6",
+        browser: "Safari",
+      });
+
+      expect(parseUserAgent(null)).toEqual({
+        device: "Unknown Device",
+        os: "Unknown OS",
+        browser: "Unknown Browser",
+      });
+    });
+
+    it("should format dates and times to Indian locale standards (IST)", () => {
+      const date = new Date("2026-06-19T13:10:00.000Z");
+
+      expect(formatAgreementDate(date)).toBe("19-06-2026");
+      expect(formatAgreementDateTime(date)).toBe("19-06-2026, 18:40:00 IST");
+      expect(formatAgreementDate(null)).toBe("N/A");
+      expect(formatAgreementDateTime(null)).toBe("N/A");
     });
   });
 });

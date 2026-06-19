@@ -784,7 +784,9 @@ export class ActivationWorkflowService {
         owner_signature_name: template.owner_name,
         owner_signed_at: now,
 
-        rules_snapshot: ruleVersion ? (ruleVersion.content || ruleVersion.content_snapshot || DEFAULT_RULE_CONTENT) : DEFAULT_RULE_CONTENT,
+        rules_snapshot: ruleVersion 
+          ? interpolateRulesContent(ruleVersion.content || ruleVersion.content_snapshot || DEFAULT_RULE_CONTENT, variables, true) 
+          : interpolateRulesContent(DEFAULT_RULE_CONTENT, variables, true),
         rule_version_id: ruleVersion?.id || null,
         rule_version_number: ruleVersion?.version || null,
 
