@@ -30,10 +30,7 @@ export class ReservationStatusService {
     const reservationPolicy = tenant.reservation_policy ?? "FULL_DEPOSIT";
     const minimumReservationDeposit = Number(tenant.minimum_reservation_deposit ?? 0);
 
-    const threshold =
-      reservationPolicy === "PARTIAL_DEPOSIT"
-        ? Math.min(financialStatus.requiredDeposit, minimumReservationDeposit)
-        : financialStatus.requiredDeposit;
+    const threshold = financialStatus.depositActivationThreshold;
 
     let status: "PAYMENT_PENDING" | "RESERVED" | "MOVE_IN_READY" = "PAYMENT_PENDING";
 

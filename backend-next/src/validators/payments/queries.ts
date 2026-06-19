@@ -7,14 +7,14 @@ export const PaginationSchema = z.object({
 
 export const PaymentHistoryFilterSchema = z.object({
   tenantId: z.string().uuid().optional(),
-  status: z.enum(["PAID", "PENDING", "PARTIAL", "OVERDUE", "WAIVED", "ALL"]).optional(),
+  status: z.enum(["UPCOMING", "PAID", "PENDING", "PARTIAL", "OVERDUE", "WAIVED", "ALL"]).optional(),
   method: z.string().optional(),
   month: z.string().regex(/^\d{4}-\d{2}$/, "Must be YYYY-MM").optional(),
 }).merge(PaginationSchema);
 
 export const DuesReportQuerySchema = z.object({
   rent_month: z.string().regex(/^\d{4}-\d{2}$/, "Must be YYYY-MM").optional(),
-  status: z.enum(["PENDING", "PARTIAL", "PAID", "OVERDUE", "WAIVED"]).optional(),
+  status: z.enum(["UPCOMING", "PENDING", "PARTIAL", "PAID", "OVERDUE", "WAIVED"]).optional(),
   hostelId: z.string().uuid().optional(),
 });
 

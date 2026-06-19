@@ -1,5 +1,4 @@
 import { getLogger } from "@/lib/logger";
-import { tenantFinancialLedgerService } from "./tenant-financial-ledger-service";
 
 const logger = getLogger("obligation-engine");
 
@@ -172,8 +171,6 @@ export class ObligationEngine {
           obligation_type: obligationType,
         },
       });
-
-      await tenantFinancialLedgerService.autoApplyAdvanceToDuesInTx(tx, tenantId, ownerId, ownerId);
 
       return true;
     } catch (err: any) {

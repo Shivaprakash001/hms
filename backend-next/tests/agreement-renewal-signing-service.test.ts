@@ -4,6 +4,12 @@ import {
   AgreementRenewalSigningService,
 } from "@/src/services/tenants/agreement-renewal-signing-service";
 
+vi.mock("@/src/services/payments/agreement-rent-schedule-service", () => ({
+  agreementRentScheduleService: {
+    generateForAgreementInTx: vi.fn().mockResolvedValue({ created: 0, updated: 0, skipped: 0, months: [] }),
+  },
+}));
+
 const predecessorBase = {
   id: "agreement-1",
   tenant_id: "tenant-1",

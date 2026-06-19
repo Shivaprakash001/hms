@@ -6,7 +6,6 @@ import { randomUUID } from "crypto";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
-import { tenantFinancialLedgerService } from "@/src/services/payments/tenant-financial-ledger-service";
 
 const ALLOWED_MANUAL_TYPES = ["MAINTENANCE", "FINE", "EXTRA_CHARGE", "OTHER"];
 
@@ -97,24 +96,20 @@ export async function POST(req: NextRequest) {
     // Create the obligation
     // Note: @@unique([allocation_id, rent_month, obligation_type]) prevents duplicate
     // maintenance charges for the same month+allocation. This is intentional.
-    const obligation = await prisma.$transaction(async (tx) => {
-      const obl = await tx.rent_obligations.create({
-        data: {
-          id: randomUUID(),
-          tenant_id,
-          owner_id: ownerId,
-          hostel_id: tenant.hostel_id,
-          allocation_id: activeAllocationId,
-          obligation_type,
-          amount,
-          total_amount: amount,
-          rent_month: rentMonthDate,
-          due_date: dueDateDate,
-          status: "PENDING",
-        },
-      });
-      await tenantFinancialLedgerService.autoApplyAdvanceToDuesInTx(tx, tenant_id, ownerId, ownerId);
-      return obl;
+    const obligation = await prisma.rent_obligations.create({
+      data: {
+        id: randomUUID(),
+        tenant_id,
+        owner_id: ownerId,
+        hostel_id: tenant.hostel_id,
+        allocation_id: activeAllocationId,
+        obligation_type,
+        amount,
+        total_amount: amount,
+        rent_month: rentMonthDate,
+        due_date: dueDateDate,
+        status: "PENDING",
+      },
     });
 
     return apiResponse(obligation, 201);

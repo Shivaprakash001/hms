@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/db";
-import { billingScheduleService, type PaymentFrequency } from "@/lib/services/billing-schedule-service";
+import type { PaymentFrequency } from "@/lib/services/billing-schedule-service";
 import { hostelPolicyService } from "@/lib/services/hostel-policy-service";
-import { tenantFinancialLedgerService } from "@/src/services/payments/tenant-financial-ledger-service";
 
 function money(value: unknown) {
   return Math.round((Number(value) || 0) * 100) / 100;
@@ -41,11 +40,9 @@ export class BillingTimelineService {
     if (!tenant) throw new Error("TENANT_NOT_FOUND");
     if (ownerId && tenant.owner_id !== ownerId) throw new Error("TENANT_NOT_FOUND");
 
-    const [policyResponse, advanceSummary] = await Promise.all([
+    const [policyResponse] = await Promise.all([
       hostelPolicyService.getHostelPolicy(tenant.hostel_id).catch(() => null),
-      tenantFinancialLedgerService.getBalance(tenant.id, tenant.owner_id).catch(() => null),
     ]);
-    const policy = billingScheduleService.normalizePolicy(policyResponse?.policy);
     // Extract billing schedule settings from the full policy (NOT just payment_frequency)
     const billingPrefs = (policyResponse?.policy?.billing ?? {}) as {
       due_day?: number; auto_rent_day?: number; grace_days?: number;
@@ -56,7 +53,7 @@ export class BillingTimelineService {
     const obligations = await prisma.rent_obligations.findMany({
       where: {
         tenant_id: tenantId,
-        status: { in: ["PENDING", "PARTIAL", "PAID", "WAIVED"] },
+        status: { in: ["UPCOMING", "PENDING", "PARTIAL", "PAID", "OVERDUE", "WAIVED"] },
         is_superseded: false,
       },
       include: { payments: true },
@@ -115,79 +112,7 @@ export class BillingTimelineService {
     });
 
     const activeFrequency = (tenant.payment_frequency || "MONTHLY") as PaymentFrequency;
-    const nextStart = billingScheduleService.getNextCleanBillingPeriodDate(new Date(), activeFrequency, policy);
-    const futureSchedule = billingScheduleService.previewSchedule({
-      frequency: activeFrequency,
-      startDate: nextStart,
-      monthlyRent: money(tenant.monthly_rent),
-      maintenanceAmount: String(tenant.maintenance_type || "MONTHLY") === "MONTHLY" ? money(tenant.maintenance_charge) : 0,
-      periods: 6,
-      policy,
-      dueDay,
-      autoRentDay,
-    });
-    const existingPeriodKeys = new Set(
-      obligations.map((ob: any) => `${new Date(ob.billing_period_start || ob.rent_month).toISOString().slice(0, 10)}:${ob.obligation_type}`)
-    );
-    let previewRentAdvance = money((advanceSummary as any)?.available_rent_advance);
-    const applyPreviewAdvance = (amount: number) => {
-      const covered = money(Math.min(previewRentAdvance, amount));
-      previewRentAdvance = money(Math.max(previewRentAdvance - covered, 0));
-      return {
-        coveredByAdvance: covered,
-        remaining: money(Math.max(amount - covered, 0)),
-      };
-    };
-
-    const projectedItems = futureSchedule.flatMap((slot) => {
-      const startKey = slot.period_start.toISOString().slice(0, 10);
-      const rows: any[] = [];
-      if (!existingPeriodKeys.has(`${startKey}:RENT`) && slot.amount > 0) {
-        const amount = money(slot.amount);
-        const preview = applyPreviewAdvance(amount);
-        rows.push({
-          obligation_id: null,
-          timeline_id: `projected:rent:${startKey}`,
-          type: "PROJECTED_RENT",
-          billing_plan_id: null,
-          period_start: slot.period_start,
-          period_end: slot.period_end,
-          rent_month: slot.period_start,
-          label: slot.installment_label,
-          installment_sequence: slot.installment_sequence,
-          amount,
-          paid: preview.coveredByAdvance,
-          remaining: preview.remaining,
-          covered_by_advance: preview.coveredByAdvance,
-          due_date: slot.due_date,
-          status: "PROJECTED",
-          state: preview.remaining <= 0 ? "covered" : "upcoming",
-        });
-      }
-      if (!existingPeriodKeys.has(`${startKey}:MAINTENANCE`) && slot.maintenance_amount > 0) {
-        const amount = money(slot.maintenance_amount);
-        const preview = applyPreviewAdvance(amount);
-        rows.push({
-          obligation_id: null,
-          timeline_id: `projected:maintenance:${startKey}`,
-          type: "PROJECTED_MAINTENANCE",
-          billing_plan_id: null,
-          period_start: slot.period_start,
-          period_end: slot.period_end,
-          rent_month: slot.period_start,
-          label: `${slot.installment_label} maintenance`,
-          installment_sequence: slot.installment_sequence,
-          amount,
-          paid: preview.coveredByAdvance,
-          remaining: preview.remaining,
-          covered_by_advance: preview.coveredByAdvance,
-          due_date: slot.due_date,
-          status: "PROJECTED",
-          state: preview.remaining <= 0 ? "covered" : "upcoming",
-        });
-      }
-      return rows;
-    });
+    const projectedItems: any[] = [];
 
     const paymentItems = payments.map((payment: any) => ({
       obligation_id: payment.obligation_id,
@@ -230,7 +155,7 @@ export class BillingTimelineService {
       notes: entry.notes,
     }));
 
-    const timeline = [...items, ...paymentItems, ...rentAdvanceItems, ...projectedItems].sort((a: any, b: any) => {
+    const timeline = [...items, ...paymentItems, ...rentAdvanceItems].sort((a: any, b: any) => {
       const aDate = new Date(a.due_date || a.period_start || 0).getTime();
       const bDate = new Date(b.due_date || b.period_start || 0).getTime();
       if (aDate !== bDate) return aDate - bDate;

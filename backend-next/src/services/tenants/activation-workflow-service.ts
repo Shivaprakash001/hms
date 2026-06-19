@@ -18,6 +18,7 @@ import { eventSystem } from "../../../lib/events";
 import { tenantInvitationLifecycleService } from "./tenant-invitation-lifecycle-service";
 import { AgreementGenerationService } from "./agreement-generation-service";
 import { currentAgreementWhere, isCurrentAgreementStatus, isSignedAgreementStatus } from "./agreement-status";
+import { agreementRentScheduleService } from "../payments/agreement-rent-schedule-service";
 import { authOtpService } from "../../../lib/services/auth/auth-otp-service";
 import { getActivationFinancialStatus } from "./activation-financial-status-service";
 import {
@@ -183,13 +184,42 @@ export class ActivationWorkflowService {
     };
   }
 
-  private rulePayload(ruleVersion: any) {
+  private async getInterpolationVariables(profile: any, tenant: any, invitation: any) {
+    const activeAllocation = tenant.room_allocations?.[0] || null;
+    const room = activeAllocation?.room || invitation?.reservations?.[0]?.room || invitation?.room || null;
+    const template = await getActiveTemplateAndSyncRuleVersion(prisma, tenant.hostel_id, "RESIDENCY");
+    const lifecycle = buildOnboardingAgreementLifecycle({
+      joiningDate: invitation?.agreement_start_date || tenant.joined_on,
+      billingStartDate: tenant.billing_start_date,
+      monthlyRent: tenant.monthly_rent,
+      roomBaseRent: room?.base_rent,
+      advanceDeposit: tenant.security_deposit,
+      maintenanceCharge: tenant.maintenance_charge,
+      maintenanceType: tenant.maintenance_type,
+      paymentFrequency: tenant.payment_frequency,
+      durationMonths: invitation?.agreement_duration_months || 12,
+    });
+
+    return {
+      TENANT_NAME: profile?.name || tenant.name || invitation?.name || "Tenant",
+      ROOM_NUMBER: room?.room_no ?? "N/A",
+      MONTHLY_RENT: Number(lifecycle.contract_rent ?? 0),
+      SECURITY_DEPOSIT_AMOUNT: Number(lifecycle.contract_security_deposit ?? 0),
+      MAINTENANCE_CHARGE_AMOUNT: Number(lifecycle.contract_maintenance ?? 0),
+      HOSTEL_NAME: tenant.hostels?.name || "Hostel",
+      OWNER_NAME: template.owner_name,
+      JOINING_DATE: dateOnly(lifecycle.agreement_start_date) || "",
+    };
+  }
+
+  private rulePayload(ruleVersion: any, variables?: Record<string, any>) {
     const content = ruleVersion.content ?? ruleVersion.content_snapshot ?? DEFAULT_RULE_CONTENT;
+    const interpolated = variables ? interpolateRulesContent(content, variables) : content;
     return {
       id: ruleVersion.id,
       version: ruleVersion.version,
       title: ruleVersion.title ?? "Standard Hostel Rules",
-      content,
+      content: interpolated,
       required_acknowledgements: REQUIRED_ACKNOWLEDGEMENTS,
     };
   }
@@ -310,7 +340,8 @@ export class ActivationWorkflowService {
     if (ruleVersion) {
       const latestAcceptance = (tenant.rule_acceptances || []).find((a: any) => a.rule_version_id === ruleVersion.id);
       if (!latestAcceptance) {
-        const rulesSnapshot = this.rulePayload(ruleVersion);
+        const variables = await this.getInterpolationVariables(profile, tenant, invitation);
+        const rulesSnapshot = this.rulePayload(ruleVersion, variables);
         try {
           if (prisma.tenantPolicyAcceptance) {
             await prisma.tenantPolicyAcceptance.create({
@@ -588,7 +619,8 @@ export class ActivationWorkflowService {
     if (ruleVersion) {
       const latestAcceptance = (tenant.rule_acceptances || []).find((a: any) => a.rule_version_id === ruleVersion.id);
       if (!latestAcceptance) {
-        const rulesSnapshot = this.rulePayload(ruleVersion);
+        const variables = await this.getInterpolationVariables(profile, tenant, invitation);
+        const rulesSnapshot = this.rulePayload(ruleVersion, variables);
         try {
           if (prisma.tenantPolicyAcceptance) {
             await prisma.tenantPolicyAcceptance.create({
@@ -621,7 +653,7 @@ export class ActivationWorkflowService {
       await this.saveAccount(profile, tenant, data, token, invitation);
     }
     if (step === "RULES") {
-      await this.acceptRules(profile, tenant, data, context);
+      await this.acceptRules(profile, tenant, data, context, invitation);
     }
     if (step === "AGREEMENT") {
       await this.signAgreement(profile, tenant, data, context, invitation);
@@ -761,71 +793,76 @@ export class ActivationWorkflowService {
       JOINING_DATE: dateOnly(lifecycle.agreement_start_date) || "",
     };
 
-    const signedAgreement = await prisma.agreement.update({
-      where: { id: draft.id },
-      data: {
-        status: "SIGNED",
-        ...lifecycle,
-        signed_at: now,
-        tenant_signature_url: hasTenantSignature ? tenantSigUrl : null,
-        tenant_signature_name: hasTenantSignature ? tenantSigName : null,
-        tenant_signed_at: hasTenantSignature ? now : null,
-        tenant_ip: hasTenantSignature ? context.ip : null,
-        tenant_user_agent: hasTenantSignature ? context.userAgent : null,
+    const signedAgreement = await prisma.$transaction(async (tx: any) => {
+      const agreement = await tx.agreement.update({
+        where: { id: draft.id },
+        data: {
+          status: "SIGNED",
+          ...lifecycle,
+          signed_at: now,
+          tenant_signature_url: hasTenantSignature ? tenantSigUrl : null,
+          tenant_signature_name: hasTenantSignature ? tenantSigName : null,
+          tenant_signed_at: hasTenantSignature ? now : null,
+          tenant_ip: hasTenantSignature ? context.ip : null,
+          tenant_user_agent: hasTenantSignature ? context.userAgent : null,
 
-        guardian_signature_url: hasGuardianSignature ? guardianSigUrl : null,
-        guardian_signature_name: hasGuardianSignature ? guardianSigName : null,
-        guardian_relation: hasGuardianSignature ? guardianRelation : null,
-        guardian_signed_at: hasGuardianSignature ? now : null,
-        guardian_ip: hasGuardianSignature ? context.ip : null,
-        guardian_user_agent: hasGuardianSignature ? context.userAgent : null,
+          guardian_signature_url: hasGuardianSignature ? guardianSigUrl : null,
+          guardian_signature_name: hasGuardianSignature ? guardianSigName : null,
+          guardian_relation: hasGuardianSignature ? guardianRelation : null,
+          guardian_signed_at: hasGuardianSignature ? now : null,
+          guardian_ip: hasGuardianSignature ? context.ip : null,
+          guardian_user_agent: hasGuardianSignature ? context.userAgent : null,
 
-        owner_signature_url: template.owner_signature_url,
-        owner_signature_name: template.owner_name,
-        owner_signed_at: now,
+          owner_signature_url: template.owner_signature_url,
+          owner_signature_name: template.owner_name,
+          owner_signed_at: now,
 
-        rules_snapshot: ruleVersion 
-          ? interpolateRulesContent(ruleVersion.content || ruleVersion.content_snapshot || DEFAULT_RULE_CONTENT, variables, true) 
-          : interpolateRulesContent(DEFAULT_RULE_CONTENT, variables, true),
-        rule_version_id: ruleVersion?.id || null,
-        rule_version_number: ruleVersion?.version || null,
+          rules_snapshot: ruleVersion
+            ? interpolateRulesContent(ruleVersion.content || ruleVersion.content_snapshot || DEFAULT_RULE_CONTENT, variables, true)
+            : interpolateRulesContent(DEFAULT_RULE_CONTENT, variables, true),
+          rule_version_id: ruleVersion?.id || null,
+          rule_version_number: ruleVersion?.version || null,
 
-        content_snapshot: {
-          ...(draft.content_snapshot as any || {}),
-          template_id: template.id,
-          template_version_number: template.version_number,
-          template_published_at: template.published_at,
-          template_name: template.title,
-          template_type: template.type,
-          monthly_rent: variables.MONTHLY_RENT,
-          advance_deposit: variables.SECURITY_DEPOSIT_AMOUNT,
-          maintenance_charge: variables.MAINTENANCE_CHARGE_AMOUNT,
-          maintenance_type: lifecycle.contract_maintenance_type,
-          joining_date: variables.JOINING_DATE,
-          agreement_start_date: dateOnly(lifecycle.agreement_start_date),
-          agreement_end_date: dateOnly(lifecycle.agreement_end_date),
-          agreement_duration_months: lifecycle.agreement_duration_months,
-          payment_frequency: lifecycle.contract_payment_frequency,
-          tenant_name: variables.TENANT_NAME,
-          owner_name: template.owner_name,
-          custom_rules: template.custom_rules || "",
-          terms_and_conditions: (template.rules_content as any)?.terms_and_conditions || DEFAULT_TERMS_AND_CONDITIONS,
-          raw_rules: template.rules_content || DEFAULT_AGREEMENT_TEMPLATE,
-          interpolated_rules: interpolateRulesContent(template.rules_content || DEFAULT_AGREEMENT_TEMPLATE, variables, true),
-          hostel_rules: interpolateRulesContent(template.rules_content || DEFAULT_AGREEMENT_TEMPLATE, variables, true),
+          content_snapshot: {
+            ...(draft.content_snapshot as any || {}),
+            template_id: template.id,
+            template_version_number: template.version_number,
+            template_published_at: template.published_at,
+            template_name: template.title,
+            template_type: template.type,
+            monthly_rent: variables.MONTHLY_RENT,
+            advance_deposit: variables.SECURITY_DEPOSIT_AMOUNT,
+            maintenance_charge: variables.MAINTENANCE_CHARGE_AMOUNT,
+            maintenance_type: lifecycle.contract_maintenance_type,
+            joining_date: variables.JOINING_DATE,
+            agreement_start_date: dateOnly(lifecycle.agreement_start_date),
+            agreement_end_date: dateOnly(lifecycle.agreement_end_date),
+            agreement_duration_months: lifecycle.agreement_duration_months,
+            payment_frequency: lifecycle.contract_payment_frequency,
+            tenant_name: variables.TENANT_NAME,
+            owner_name: template.owner_name,
+            custom_rules: template.custom_rules || "",
+            terms_and_conditions: (template.rules_content as any)?.terms_and_conditions || DEFAULT_TERMS_AND_CONDITIONS,
+            raw_rules: template.rules_content || DEFAULT_AGREEMENT_TEMPLATE,
+            interpolated_rules: interpolateRulesContent(template.rules_content || DEFAULT_AGREEMENT_TEMPLATE, variables, true),
+            hostel_rules: interpolateRulesContent(template.rules_content || DEFAULT_AGREEMENT_TEMPLATE, variables, true),
+          },
         },
-      },
-    });
-
-    if (hasGuardianSignature) {
-      await prisma.tenants.update({
-        where: { id: tenant.id },
-        data: compactObject({
-          guardian_name: guardianSigName,
-          guardian_relation: guardianRelation,
-        }),
       });
-    }
+
+      if (hasGuardianSignature) {
+        await tx.tenants.update({
+          where: { id: tenant.id },
+          data: compactObject({
+            guardian_name: guardianSigName,
+            guardian_relation: guardianRelation,
+          }),
+        });
+      }
+
+      await agreementRentScheduleService.generateForAgreementInTx(tx, agreement.id);
+      return agreement;
+    });
 
     try {
       const pdfUrl = await AgreementGenerationService.generateAndUploadPdf(signedAgreement.id);
@@ -1048,7 +1085,7 @@ export class ActivationWorkflowService {
     await eventLog.log("profile_completed", tenant.owner_id || null, { tenant_id: tenant.id, hostel_id: tenant.hostel_id }, tenant.id);
   }
 
-  private async acceptRules(profile: any, tenant: any, data: any, context: { ip: string; userAgent: string }) {
+  private async acceptRules(profile: any, tenant: any, data: any, context: { ip: string; userAgent: string }, invitation?: any | null) {
     if (!profile) throw new Error("INVALID_TRANSITION: Complete account setup before accepting rules");
     await eventLog.log("rules_viewed", tenant.owner_id || null, { tenant_id: tenant.id, hostel_id: tenant.hostel_id }, tenant.id);
     const acknowledgements = data?.acknowledgements || {};
@@ -1057,7 +1094,8 @@ export class ActivationWorkflowService {
       throw new Error(`VALIDATION_ERROR: Missing required rule acknowledgements: ${missing.join(", ")}`);
     }
     const ruleVersion = await this.getActiveRuleVersion(tenant.hostel_id);
-    const rulesSnapshot = this.rulePayload(ruleVersion);
+    const variables = await this.getInterpolationVariables(profile, tenant, invitation);
+    const rulesSnapshot = this.rulePayload(ruleVersion, variables);
     const existing = await prisma.tenantPolicyAcceptance.findUnique({
       where: {
         tenant_id_rule_version_id: {

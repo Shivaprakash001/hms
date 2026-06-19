@@ -50,7 +50,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { identity_token, obligation_id, amount_paid, payment_method, reference_number, payment_date, note } = body;
+    const { identity_token, obligation_id, tenant_id, amount_paid, payment_method, reference_number, payment_date, note } = body;
     const hostelId = body.hostelId || body.hostel_id;
     
     console.log(`[payments.record-offline] Recording payment for owner ${user.id}, hostel ${hostelId}`, body);
@@ -104,8 +104,8 @@ export async function POST(req: Request) {
     });
 
     // ── Input validation ───────────────────────────────────────────────────────
-    if (!obligation_id || typeof obligation_id !== "string") {
-      return apiError("obligation_id is required", "VALIDATION_ERROR", 400);
+    if ((!obligation_id || typeof obligation_id !== "string") && (!tenant_id || typeof tenant_id !== "string")) {
+      return apiError("obligation_id or tenant_id is required", "VALIDATION_ERROR", 400);
     }
     const parsedAmount = Number(amount_paid);
     if (!parsedAmount || parsedAmount <= 0) {
@@ -118,26 +118,40 @@ export async function POST(req: Request) {
     }
 
     // ── 5. Ownership check ─────────────────────────────────────────────────────
+    if (tenant_id && !obligation_id) {
+      const tenant = await prisma.tenants.findUnique({
+        where: { id: tenant_id },
+        select: { owner_id: true, hostel_id: true },
+      });
+      if (!tenant) return apiError("Tenant not found", "NOT_FOUND", 404);
+      if (tenant.owner_id !== user.owner_id && tenant.owner_id !== user.id) {
+        return apiError("You can only record payments for your own tenants", "FORBIDDEN", 403);
+      }
+      if (tenant.hostel_id !== hostelId) {
+        return apiError("Tenant does not belong to requested hostel", "HOSTEL_ACCESS_DENIED", 403);
+      }
+    }
+
     const obligation = await prisma.rent_obligations.findUnique({
-      where: { id: obligation_id },
+      where: { id: obligation_id || "00000000-0000-0000-0000-000000000000" },
       select: { owner_id: true, hostel_id: true, status: true },
     });
     
-    if (!obligation) return apiError("Obligation not found", "NOT_FOUND", 404);
-    if (obligation.owner_id !== user.owner_id && obligation.owner_id !== user.id) {
+    if (obligation_id && !obligation) return apiError("Obligation not found", "NOT_FOUND", 404);
+    if (obligation_id && obligation?.owner_id !== user.owner_id && obligation?.owner_id !== user.id) {
       logger.warn("payments.record_offline.cross_owner", {
         session_owner: user.owner_id ?? user.id,
-        obligation_owner: obligation.owner_id,
+        obligation_owner: obligation?.owner_id,
         obligation_id,
       });
       return apiError("You can only record payments for your own tenants", "FORBIDDEN", 403);
     }
-    if (obligation.hostel_id !== hostelId) {
+    if (obligation_id && obligation?.hostel_id !== hostelId) {
       return apiError("Obligation does not belong to requested hostel", "HOSTEL_ACCESS_DENIED", 403);
     }
 
     // ── 6. Idempotency — already fully paid ───────────────────────────────────
-    if (obligation.status === "PAID") {
+    if (obligation_id && obligation?.status === "PAID") {
       return apiResponse({
         success: true,
         message: "Obligation is already fully paid.",
@@ -179,35 +193,54 @@ export async function POST(req: Request) {
     // ── 7 + 8. Atomic: consume identity token + write payment in ONE transaction ─
     const parsedDate = payment_date ? new Date(payment_date) : undefined;
 
-    const result = await paymentService.recordOfflinePaymentWithToken(identity.jti, {
-      hostelId,
-      obligationId: obligation_id,
-      amountPaid: parsedAmount,
-      paymentMethod: method,
-      referenceNumber: reference_number || undefined,
-      paymentDate: parsedDate,
-      userId: user.id,
-      ownerId: user.owner_id || user.id,
-      offlineRecordedBy: user.id,
-      offlineRecordedAt: new Date(),
-      offlineRecordedIp: clientIp ?? undefined,
-      offlineNote: note || undefined,
-    });
+    const result = tenant_id && !obligation_id
+      ? await paymentService.recordTenantRentPaymentWithToken(identity.jti, {
+          hostelId,
+          tenantId: tenant_id,
+          amountPaid: parsedAmount,
+          paymentMethod: method,
+          referenceNumber: reference_number || undefined,
+          paymentDate: parsedDate,
+          userId: user.id,
+          ownerId: user.owner_id || user.id,
+          offlineRecordedBy: user.id,
+          offlineRecordedAt: new Date(),
+          offlineRecordedIp: clientIp ?? undefined,
+          offlineNote: note || undefined,
+          idempotencyKey: body.idempotency_key || undefined,
+        })
+      : await paymentService.recordOfflinePaymentWithToken(identity.jti, {
+          hostelId,
+          obligationId: obligation_id,
+          amountPaid: parsedAmount,
+          paymentMethod: method,
+          referenceNumber: reference_number || undefined,
+          paymentDate: parsedDate,
+          userId: user.id,
+          ownerId: user.owner_id || user.id,
+          offlineRecordedBy: user.id,
+          offlineRecordedAt: new Date(),
+          offlineRecordedIp: clientIp ?? undefined,
+          offlineNote: note || undefined,
+        });
 
     logger.info("payments.record_offline.success", {
       obligation_id,
-      payment_id: result.payment.id,
+      payment_id: (result as any).payment?.id || null,
       amount: parsedAmount,
       method,
-      new_status: result.newStatus,
+      new_status: (result as any).newStatus || (result as any).overallStatus,
     });
 
     console.log(`[payments.record-offline] Payment recorded successfully for obligation ${obligation_id}`);
     return apiResponse({
       success: true,
       message: "Payment recorded successfully.",
-      payment: result.payment,
-      obligation_status: result.newStatus,
+      payment: (result as any).payment || null,
+      obligation_status: (result as any).newStatus || (result as any).overallStatus,
+      payment_group_id: (result as any).groupId || null,
+      allocations: (result as any).allocations || undefined,
+      future_credit: (result as any).futureCredit || 0,
     });
   } catch (error: any) {
     console.error("Detailed API Error [payments.record-offline]:", error);

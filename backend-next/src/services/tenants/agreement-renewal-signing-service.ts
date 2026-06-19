@@ -4,6 +4,7 @@ import { AgreementGenerationService, DEFAULT_RULE_CONTENT } from "./agreement-ge
 import { AGREEMENT_ACTIVITY_EVENTS, isCurrentAgreementStatus } from "./agreement-status";
 import { assertAgreementLifecycleComplete } from "./agreement-lifecycle-completeness";
 import { getActiveTemplateAndSyncRuleVersion, DEFAULT_AGREEMENT_TEMPLATE, DEFAULT_TERMS_AND_CONDITIONS, interpolateRulesContent } from "../../utils/default-rules";
+import { agreementRentScheduleService } from "../payments/agreement-rent-schedule-service";
 
 type AgreementRenewalSigningErrorCode =
   | "RENEWAL_AGREEMENT_NOT_FOUND"
@@ -281,6 +282,8 @@ export class AgreementRenewalSigningService {
           renewalAgreementId: renewalAgreement.id,
         });
       }
+
+      await agreementRentScheduleService.generateForAgreementInTx(tx, renewalAgreement.id);
 
       const signedRenewal = await tx.agreement.findUnique({
         where: { id: renewalAgreement.id },

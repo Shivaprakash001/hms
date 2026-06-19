@@ -156,7 +156,6 @@ export class TenantInvitationLifecycleService {
       where: {
         phone: normalizedPhone,
         status: { in: ["PENDING", "OPENED", "ACTIVATION_STARTED"] },
-        expires_at: { gt: new Date() }
       },
       include: {
         hostel: true
@@ -279,6 +278,14 @@ export class TenantInvitationLifecycleService {
     }
     if (advanceDeposit < 0) throw new Error("VALIDATION_ERROR: Deposit cannot be negative");
     if (maintenanceCharge < 0) throw new Error("VALIDATION_ERROR: Maintenance charge cannot be negative");
+    const minimumDepositThreshold = data.minimum_deposit_threshold !== undefined && data.minimum_deposit_threshold !== null
+      ? moneyNumber(data.minimum_deposit_threshold)
+      : advanceDeposit;
+    if (minimumDepositThreshold < 0) throw new Error("VALIDATION_ERROR: minimum_deposit_threshold cannot be negative");
+    if (minimumDepositThreshold > advanceDeposit) {
+      throw new Error("VALIDATION_ERROR: minimum_deposit_threshold cannot exceed security deposit");
+    }
+    const reservationPolicy = minimumDepositThreshold < advanceDeposit ? "PARTIAL_DEPOSIT" : "FULL_DEPOSIT";
 
     const created = await prisma.$transaction(async (tx: any) => {
       await tx.$executeRaw`SELECT id FROM rooms WHERE id = ${roomId}::uuid FOR UPDATE`;
@@ -312,8 +319,8 @@ export class TenantInvitationLifecycleService {
           phone_1: normalizedPhone,
           personal_email: normalizedEmail,
           payment_frequency: data.payment_frequency || capacity.room.hostels.rent_cycle || "MONTHLY",
-          reservation_policy: resolved.reservation_policy ?? "FULL_DEPOSIT",
-          minimum_reservation_deposit: resolved.minimum_reservation_deposit ?? 0,
+          reservation_policy: reservationPolicy,
+          minimum_reservation_deposit: minimumDepositThreshold,
         },
       });
 
@@ -529,6 +536,21 @@ export class TenantInvitationLifecycleService {
       const email = overrides?.email;
       const paymentFrequency = overrides?.payment_frequency;
       const joiningDate = overrides?.joining_date ? new Date(overrides.joining_date) : (overrides?.joined_on ? new Date(overrides.joined_on) : undefined);
+      const nextSecurityDeposit = typeof securityDeposit !== "undefined"
+        ? securityDeposit
+        : Number(invitation.tenant.security_deposit || 0);
+      const nextMinimumDepositThreshold = typeof overrides?.minimum_deposit_threshold !== "undefined"
+        ? Number(overrides.minimum_deposit_threshold)
+        : (typeof securityDeposit !== "undefined"
+          ? nextSecurityDeposit
+          : Number(invitation.tenant.minimum_reservation_deposit || nextSecurityDeposit));
+      if (!Number.isFinite(nextMinimumDepositThreshold) || nextMinimumDepositThreshold < 0) {
+        throw new Error("VALIDATION_ERROR: minimum_deposit_threshold cannot be negative");
+      }
+      if (nextMinimumDepositThreshold > nextSecurityDeposit) {
+        throw new Error("VALIDATION_ERROR: minimum_deposit_threshold cannot exceed security deposit");
+      }
+      const nextReservationPolicy = nextMinimumDepositThreshold < nextSecurityDeposit ? "PARTIAL_DEPOSIT" : "FULL_DEPOSIT";
 
       // 4. Update profiles if profile_id exists
       if (invitation.tenant.profile_id) {
@@ -550,6 +572,8 @@ export class TenantInvitationLifecycleService {
           status: "INVITED",
           ...(typeof monthlyRent !== "undefined" ? { monthly_rent: monthlyRent } : {}),
           ...(typeof securityDeposit !== "undefined" ? { security_deposit: securityDeposit } : {}),
+          reservation_policy: nextReservationPolicy,
+          minimum_reservation_deposit: nextMinimumDepositThreshold,
           ...(typeof maintenanceCharge !== "undefined" ? { maintenance_charge: maintenanceCharge } : {}),
           ...(maintenanceType ? { maintenance_type: maintenanceType } : {}),
           ...(phone ? { phone_1: normalizeIndianPhone(phone) } : {}),

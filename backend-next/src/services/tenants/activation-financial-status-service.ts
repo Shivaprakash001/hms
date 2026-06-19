@@ -4,6 +4,9 @@ export type ActivationFinancialStatus = {
   requiredDeposit: number;
   paidDeposit: number;
   depositOutstanding: number;
+  depositActivationThreshold: number;
+  depositThresholdOutstanding: number;
+  isDepositFullyPaid: boolean;
   requiredMaintenance: number;
   paidMaintenance: number;
   maintenanceOutstanding: number;
@@ -31,6 +34,8 @@ export class ActivationFinancialStatusService {
       select: {
         id: true,
         security_deposit: true,
+        reservation_policy: true,
+        minimum_reservation_deposit: true,
         maintenance_charge: true,
         maintenance_type: true,
       },
@@ -89,6 +94,12 @@ export class ActivationFinancialStatusService {
 
     const paidDeposit = money(Number(depositCredits._sum.amount || 0) + paidAdvanceObligationSumOutsideLedger);
     const depositOutstanding = outstanding(requiredDeposit, paidDeposit);
+    const reservationPolicy = String((tenant as any).reservation_policy || "FULL_DEPOSIT");
+    const minimumReservationDeposit = money((tenant as any).minimum_reservation_deposit);
+    const depositActivationThreshold = reservationPolicy === "PARTIAL_DEPOSIT"
+      ? money(Math.min(requiredDeposit, Math.max(0, minimumReservationDeposit)))
+      : requiredDeposit;
+    const depositThresholdOutstanding = outstanding(depositActivationThreshold, paidDeposit);
 
     const maintenanceType = String(tenant.maintenance_type || "MONTHLY").toUpperCase();
     const requiredMaintenance = maintenanceType === "NONE" ? 0 : money(tenant.maintenance_charge);
@@ -100,17 +111,21 @@ export class ActivationFinancialStatusService {
     );
     const maintenanceOutstanding = outstanding(requiredMaintenance, paidMaintenance);
 
-    const isDepositCleared = depositOutstanding <= 0;
+    const isDepositCleared = depositThresholdOutstanding <= 0;
+    const isDepositFullyPaid = depositOutstanding <= 0;
     const isMaintenanceCleared = maintenanceOutstanding <= 0;
 
     return {
       requiredDeposit,
       paidDeposit,
       depositOutstanding,
+      depositActivationThreshold,
+      depositThresholdOutstanding,
       requiredMaintenance,
       paidMaintenance,
       maintenanceOutstanding,
       isDepositCleared,
+      isDepositFullyPaid,
       isMaintenanceCleared,
       isFinanciallyReady: isDepositCleared && isMaintenanceCleared,
     };

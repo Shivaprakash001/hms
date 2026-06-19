@@ -2,6 +2,7 @@ import { prisma } from "../db";
 import { reservationStatusService } from "../../src/services/tenants/reservation-status-service";
 
 type DbClient = typeof prisma | any;
+const ACTIVE_INVITE_STATUSES = ["PENDING", "OPENED", "ACTIVATION_STARTED"];
 
 export type RoomCapacitySnapshot = {
   room: any;
@@ -61,14 +62,12 @@ export class RoomCapacityService {
         where: {
           room_id: roomId,
           status: "ACTIVE",
-          expires_at: { gt: new Date() },
         },
       }),
       db.tenant_invitations.count({
         where: {
           room_id: roomId,
-          status: { in: ["PENDING", "SENT"] },
-          expires_at: { gt: new Date() },
+          status: { in: ACTIVE_INVITE_STATUSES },
         },
       }),
     ]);
@@ -95,13 +94,11 @@ export class RoomCapacityService {
             tenant_invitation_reservations: {
               where: {
                 status: "ACTIVE",
-                expires_at: { gt: new Date() },
               },
             },
             tenant_invitations: {
               where: {
-                status: { in: ["PENDING", "SENT"] },
-                expires_at: { gt: new Date() },
+                status: { in: ACTIVE_INVITE_STATUSES },
               },
             },
           },
@@ -176,17 +173,10 @@ export class RoomCapacityService {
 
       const requiredDeposit = Number(tenant.security_deposit || 0);
       const paidDeposit = depositCreditsMap.get(tenantId) || 0;
-      const depositOutstanding = Math.max(0, requiredDeposit - paidDeposit);
 
       const maintenanceType = String(tenant.maintenance_type || "MONTHLY").toUpperCase();
       const requiredMaintenance = maintenanceType === "NONE" ? 0 : Number(tenant.maintenance_charge || 0);
       const paidMaintenance = maintenancePaidMap.get(tenantId) || 0;
-
-      const isDepositCleared = depositOutstanding <= 0;
-      const isMaintenanceCleared = requiredMaintenance - paidMaintenance <= 0;
-      const isFinanciallyReady = isDepositCleared && isMaintenanceCleared;
-
-      if (isFinanciallyReady) return false;
 
       const reservationPolicy = tenant.reservation_policy || "FULL_DEPOSIT";
       const minimumReservationDeposit = Number(tenant.minimum_reservation_deposit || 0);

@@ -51,6 +51,14 @@ export async function POST(req: Request) {
       });
       if (!tenant) return apiError("Tenant enrollment not found", "NOT_FOUND", 404);
       tenantId = tenant.id;
+    } else if (user.role === "OWNER" && body.tenant_id) {
+      const tenant = await prisma.tenants.findUnique({
+        where: { id: String(body.tenant_id) },
+        select: { id: true, owner_id: true },
+      });
+      if (!tenant) return apiError("Tenant enrollment not found", "NOT_FOUND", 404);
+      if (tenant.owner_id !== user.id) return apiError("Forbidden", "FORBIDDEN", 403);
+      tenantId = tenant.id;
     }
 
     // ── ADVANCE / DEPOSIT payment intents ─────────────────────────────────
@@ -83,6 +91,28 @@ export async function POST(req: Request) {
             profileId: user.id,
           });
       logger.info("ledger_intent_ready", { attemptId: result.id, checkoutUrl: result.checkout_url ? "present" : "missing", payment_type });
+      return NextResponse.json(result);
+    }
+
+    if (payment_type === "RENT" && amount !== undefined && amount !== null) {
+      if (typeof amount !== "number" || amount <= 0) {
+        return apiError("amount must be a positive number for rent payments", "VALIDATION_ERROR", 400);
+      }
+      if (!tenantId) {
+        return apiError("tenant_id is required for custom rent amount payments", "VALIDATION_ERROR", 400);
+      }
+      const tenant = await prisma.tenants.findUnique({
+        where: { id: tenantId },
+        select: { owner_id: true },
+      });
+      if (!tenant?.owner_id) return apiError("Tenant has no owner assigned", "NOT_FOUND", 404);
+
+      const result = await paymentService.createTenantRentPaymentIntent({
+        tenantId,
+        ownerId: tenant.owner_id,
+        amount,
+        profileId: user.id,
+      });
       return NextResponse.json(result);
     }
 

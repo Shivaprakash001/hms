@@ -24,11 +24,12 @@ export async function GET(
 
   try {
     const scope = resolveOwnerScope(session);
-    const room = await prisma.rooms.findFirst({
-      where: { id: params.id, hostels: { owner_id: scope.owner_id } },
+    const room = await prisma.rooms.findUnique({
+      where: { id: params.id },
+      include: { hostels: { select: { owner_id: true } } },
     });
 
-    if (!room) return apiError("Room not found", "NOT_FOUND", 404);
+    if (!room || room.hostels.owner_id !== scope.owner_id) return apiError("Room not found", "NOT_FOUND", 404);
     return apiResponse(room);
   } catch (error: any) {
     return apiError(error.message || "Failed to fetch room");
@@ -96,11 +97,16 @@ export async function DELETE(
   try {
     const scope = resolveOwnerScope(session);
     // Verify ownership
-    const existing = await prisma.rooms.findFirst({
-      where: { id: params.id, hostels: { owner_id: scope.owner_id } },
+    const existing = await prisma.rooms.findUnique({
+      where: { id: params.id },
       include: { hostels: { select: { status: true } } },
     });
     if (!existing) return apiError("Room not found", "NOT_FOUND", 404);
+    const ownerRoom = await prisma.rooms.findUnique({
+      where: { id: params.id },
+      include: { hostels: { select: { owner_id: true } } },
+    });
+    if (!ownerRoom || ownerRoom.hostels.owner_id !== scope.owner_id) return apiError("Room not found", "NOT_FOUND", 404);
     if (existing.hostels.status === "ARCHIVED") {
       return apiError("Cannot perform operational actions on an archived hostel", "VALIDATION_ERROR", 400);
     }
@@ -116,7 +122,7 @@ export async function DELETE(
       return apiError("Cannot delete room with active tenants", "VALIDATION_ERROR", 400);
     }
     const activeReservations = await prisma.tenant_invitation_reservations.count({
-      where: { room_id: params.id, status: "ACTIVE", expires_at: { gt: new Date() } },
+      where: { room_id: params.id, status: "ACTIVE" },
     });
     if (activeReservations > 0) {
       return apiError("Cannot delete room with active invitation reservations", "VALIDATION_ERROR", 400);

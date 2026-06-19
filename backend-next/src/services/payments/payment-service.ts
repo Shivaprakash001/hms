@@ -246,6 +246,164 @@ export class PaymentService {
     return { payment, newStatus, tenantId: obligation.tenant_id, ownerId: obligation.owner_id, hostelId: obligation.hostel_id };
   }
 
+  private async _assertRentMinimumInTx(tx: any, tenantId: string, amountPaid: number) {
+    const tenant = await tx.tenants.findUnique({
+      where: { id: tenantId },
+      select: { id: true, monthly_rent: true, owner_id: true, hostel_id: true },
+    });
+    if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
+
+    const monthlyRent = Number(tenant.monthly_rent || 0);
+    if (monthlyRent > 0 && Math.round(amountPaid * 100) < Math.round(monthlyRent * 100)) {
+      throw new Error(`BAD_REQUEST: Rent payments below current monthly rent (${formatCurrency(monthlyRent)}) are not allowed`);
+    }
+    return { tenant, monthlyRent };
+  }
+
+  private async _settleTenantRentPaymentInTx(tx: any, data: {
+    hostelId: string;
+    tenantId: string;
+    amountPaid: number;
+    paymentMethod: string;
+    referenceNumber?: string;
+    paymentDate?: Date;
+    paymentAttemptId?: string;
+    idempotencyKey?: string;
+    userId?: string;
+    ownerId?: string;
+    offlineRecordedBy?: string;
+    offlineRecordedAt?: Date;
+    offlineRecordedIp?: string;
+    offlineNote?: string;
+  }, groupId: string) {
+    const hostelId = requireFinancialHostelId(data.hostelId, "tenant rent settlement");
+    await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${data.tenantId}::uuid FOR UPDATE`;
+    const { tenant } = await this._assertRentMinimumInTx(tx, data.tenantId, data.amountPaid);
+
+    if (tenant.hostel_id !== hostelId) {
+      throw new Error("HOSTEL_CONTEXT_MISMATCH: Tenant does not belong to requested hostel");
+    }
+    if (data.ownerId && tenant.owner_id !== data.ownerId) {
+      throw new Error("FORBIDDEN: Tenant does not belong to this owner");
+    }
+
+    const amountPaisa = Math.round(data.amountPaid * 100);
+    const lockedRows: { id: string }[] = await tx.$queryRaw`
+      SELECT id FROM rent_obligations
+      WHERE tenant_id = ${data.tenantId}::uuid
+        AND hostel_id = ${hostelId}::uuid
+        AND obligation_type = 'RENT'
+        AND status IN ('OVERDUE', 'PENDING', 'PARTIAL')
+      ORDER BY due_date ASC, rent_month ASC
+      FOR UPDATE
+    `;
+
+    const obligations = lockedRows.length > 0
+      ? await tx.rent_obligations.findMany({
+          where: { id: { in: lockedRows.map(r => r.id) } },
+          include: {
+            payments: { select: { amount_paid: true, hostel_id: true } },
+            tenants: { select: { id: true, hostel_id: true, owner_id: true } },
+            room_allocations: { select: { id: true, hostel_id: true } },
+          },
+        })
+      : [];
+
+    for (const ob of obligations) {
+      assertScopedEntityHostel("rent obligation", ob, hostelId);
+      assertSameFinancialHostel("tenant", (ob as any).tenants, "rent obligation", ob);
+      if ((ob as any).room_allocations) {
+        assertSameFinancialHostel("room allocation", (ob as any).room_allocations, "rent obligation", ob);
+      }
+      for (const payment of ob.payments) {
+        assertSameFinancialHostel("existing payment", payment, "rent obligation", ob);
+      }
+    }
+
+    obligations.sort((a: any, b: any) => {
+      const dateDiff = new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+      if (dateDiff !== 0) return dateDiff;
+      return new Date(a.rent_month).getTime() - new Date(b.rent_month).getTime();
+    });
+
+    const obData = obligations.map((ob: any) => {
+      const paidPaisa = ob.payments.reduce(
+        (s: number, p: any) => s + Math.round(Number(p.amount_paid) * 100), 0
+      );
+      const duePaisa = Math.round(Number(ob.amount) * 100);
+      return { ob, paidPaisa, duePaisa, outstandingPaisa: Math.max(duePaisa - paidPaisa, 0) };
+    });
+
+    let remainingPaisa = amountPaisa;
+    let totalDuePaisa = obData.reduce((sum: number, row: any) => sum + row.outstandingPaisa, 0);
+    const allocations: any[] = [];
+
+    for (const { ob, paidPaisa, duePaisa, outstandingPaisa } of obData) {
+      if (remainingPaisa <= 0) break;
+      if (outstandingPaisa <= 0) continue;
+
+      const allocPaisa = Math.min(remainingPaisa, outstandingPaisa);
+      const payment = await tx.payments.create({
+        data: {
+          obligation_id: ob.id,
+          tenant_id: data.tenantId,
+          owner_id: ob.owner_id,
+          amount_paid: allocPaisa / 100,
+          payment_method: data.paymentMethod,
+          reference_number: data.referenceNumber,
+          payment_date: data.paymentDate || new Date(),
+          payment_attempt_id: data.paymentAttemptId || null,
+          payment_group_id: groupId,
+          idempotency_key: allocations.length === 0 ? (data.idempotencyKey || null) : null,
+          offline_recorded_by: data.offlineRecordedBy || null,
+          offline_recorded_at: data.offlineRecordedAt || null,
+          offline_recorded_ip: data.offlineRecordedIp || null,
+          offline_note: data.offlineNote || null,
+          hostel_id: ob.hostel_id,
+        },
+      });
+      assertFinancialHostelMatch("created payment", payment.hostel_id, ob.hostel_id);
+
+      const newTotalPaidPaisa = paidPaisa + allocPaisa;
+      const newStatus = newTotalPaidPaisa >= duePaisa ? "PAID" : "PARTIAL";
+      await tx.rent_obligations.update({ where: { id: ob.id }, data: { status: newStatus } });
+
+      allocations.push({
+        payment_id: payment.id,
+        obligation_id: ob.id,
+        owner_id: payment.owner_id,
+        obligation_type: ob.obligation_type,
+        rent_month: ob.rent_month,
+        allocated: allocPaisa / 100,
+        new_status: newStatus,
+      });
+      remainingPaisa -= allocPaisa;
+    }
+
+    let futureCredit = 0;
+    if (remainingPaisa > 0) {
+      futureCredit = remainingPaisa / 100;
+      await tenantFinancialLedgerService.creditIdempotentInTx(tx, {
+        tenantId: data.tenantId,
+        ownerId: tenant.owner_id || data.ownerId || "",
+        createdBy: data.userId || data.offlineRecordedBy || tenant.owner_id || "SYSTEM",
+        amount: futureCredit,
+        referenceId: data.paymentAttemptId || groupId,
+        referenceType: data.paymentAttemptId ? "PAYMENT_ATTEMPT_REMAINDER" : "PAYMENT_GROUP_REMAINDER",
+        reason: "FUTURE_RENT_CREDIT_TOPUP",
+        notes: "Rent payment excess credited as future rent credit",
+      });
+      remainingPaisa = 0;
+    }
+
+    const totalPaid = amountPaisa / 100;
+    const totalDue = totalDuePaisa / 100;
+    const dueRemaining = Math.max(totalDuePaisa - Math.min(amountPaisa, totalDuePaisa), 0) / 100;
+    const overallStatus = dueRemaining <= 0 ? "PAID" : "PARTIAL";
+
+    return { allocations, totalDue, totalPaid, remaining: dueRemaining, futureCredit, overallStatus, groupId };
+  }
+
   /**
    * Secure offline payment recording — atomically consumes a single-use identity
    * token and records the payment in one DB transaction.
@@ -326,6 +484,71 @@ export class PaymentService {
 
       return res;
     });
+  }
+
+  async recordTenantRentPaymentWithToken(jti: string, data: {
+    hostelId: string;
+    tenantId: string;
+    amountPaid: number;
+    paymentMethod: string;
+    referenceNumber?: string;
+    paymentDate?: Date;
+    userId: string;
+    ownerId?: string;
+    offlineRecordedBy: string;
+    offlineRecordedAt: Date;
+    offlineRecordedIp?: string;
+    offlineNote?: string;
+    idempotencyKey?: string;
+  }) {
+    const groupId = data.idempotencyKey || crypto.randomUUID();
+    const res = await prisma.$transaction(async (tx: any) => {
+      const consumed = await tx.identity_tokens.updateMany({
+        where: {
+          jti,
+          used: false,
+          expires_at: { gt: new Date() },
+        },
+        data: { used: true, used_at: new Date() },
+      });
+      if (consumed.count === 0) {
+        throw new Error("FORBIDDEN: Identity token has already been used or has expired. Please re-confirm your password.");
+      }
+      return this._settleTenantRentPaymentInTx(tx, data, groupId);
+    });
+
+    for (const alloc of res.allocations) {
+      await eventSystem.trigger("payment_recorded", {
+        payment_id: alloc.payment_id,
+        obligation_id: alloc.obligation_id,
+        tenant_id: data.tenantId,
+        owner_id: alloc.owner_id,
+        hostel_id: data.hostelId,
+        amount: alloc.allocated,
+        method: data.paymentMethod,
+        group_id: res.groupId,
+      });
+    }
+
+    const firstPaymentId = res.allocations[0]?.payment_id;
+    if (firstPaymentId) {
+      receiptService.createReceipt(firstPaymentId).catch((err: any) =>
+        logger.error("recordTenantRentPaymentWithToken.receipt_failed", { err })
+      );
+    }
+
+    await eventLog.log("OFFLINE_TENANT_RENT_PAYMENT_RECORDED", data.userId, {
+      tenant_id: data.tenantId,
+      payment_group_id: res.groupId,
+      amount: data.amountPaid,
+      method: data.paymentMethod,
+      future_credit: res.futureCredit || 0,
+      jti,
+      ip: data.offlineRecordedIp || null,
+      note: data.offlineNote || null,
+    });
+
+    return res;
   }
 
   async recordPayment(data: {
@@ -422,9 +645,6 @@ export class PaymentService {
       throw new Error("BAD_REQUEST: amount_paid exceeds maximum allowed (₹1 crore)");
     }
 
-    // Convert to paisa for all arithmetic (prevents floating-point errors)
-    const amountPaisa = Math.round(data.amountPaid * 100);
-
     // ── 2. IDEMPOTENCY CHECK ──
     // If caller provides a key, check if this payment was already processed.
     // This prevents duplicate payments from retries, double-clicks, or network failures.
@@ -455,135 +675,31 @@ export class PaymentService {
           })),
         };
       }
+      const existingCredit = await prisma.tenant_financial_ledger.findFirst({
+        where: {
+          reference_id: data.idempotencyKey,
+          reference_type: "PAYMENT_GROUP_REMAINDER",
+          hostel_id: hostelId,
+        },
+        select: { amount: true, created_at: true },
+      });
+      if (existingCredit) {
+        return {
+          duplicate: true,
+          payment_group_id: data.idempotencyKey,
+          totalPaid: Number(existingCredit.amount),
+          payments: [],
+          futureCredit: Number(existingCredit.amount),
+        };
+      }
     }
 
     const groupId = crypto.randomUUID();
 
     // ── 3. ATOMIC TRANSACTION WITH ROW-LEVEL LOCKING ──
-    const txResult = await prisma.$transaction(async (tx: any) => {
-      // Lock ALL PENDING/PARTIAL obligations for this tenant.
-      // FOR UPDATE prevents any concurrent transaction from reading or modifying these rows
-      // until our transaction commits. This eliminates the double-pay race condition.
-      const lockedRows: { id: string }[] = await tx.$queryRaw`
-        SELECT id FROM rent_obligations
-        WHERE tenant_id = ${data.tenantId}::uuid
-          AND hostel_id = ${hostelId}::uuid
-          AND status IN ('PENDING', 'PARTIAL')
-        ORDER BY due_date ASC
-        FOR UPDATE
-      `;
-
-      if (lockedRows.length === 0) {
-        throw new Error("BAD_REQUEST: No unpaid obligations found for this tenant");
-      }
-
-      // Now read the full data (rows are locked, safe from concurrent modification)
-      const obligations = await tx.rent_obligations.findMany({
-        where: { id: { in: lockedRows.map(r => r.id) } },
-        include: {
-          payments: { select: { amount_paid: true, hostel_id: true } },
-          tenants: { select: { id: true, hostel_id: true, owner_id: true } },
-          room_allocations: { select: { id: true, hostel_id: true } },
-        },
-        orderBy: { due_date: "asc" },
-      });
-
-      for (const ob of obligations) {
-        assertScopedEntityHostel("rent obligation", ob, hostelId);
-        assertSameFinancialHostel("tenant", (ob as any).tenants, "rent obligation", ob);
-        if ((ob as any).room_allocations) {
-          assertSameFinancialHostel("room allocation", (ob as any).room_allocations, "rent obligation", ob);
-        }
-        for (const payment of ob.payments) {
-          assertSameFinancialHostel("existing payment", payment, "rent obligation", ob);
-        }
-      }
-
-      // Sort: FIFO by due_date, then RENT before LATE_FEE within same date
-      obligations.sort((a: any, b: any) => {
-        const dateDiff = new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
-        if (dateDiff !== 0) return dateDiff;
-        if (a.obligation_type === "RENT" && b.obligation_type !== "RENT") return -1;
-        if (a.obligation_type !== "RENT" && b.obligation_type === "RENT") return 1;
-        return 0;
-      });
-
-      // Calculate total outstanding IN PAISA
-      let totalDuePaisa = 0;
-      const obData = obligations.map((ob: any) => {
-        const paidPaisa = ob.payments.reduce(
-          (s: number, p: any) => s + Math.round(Number(p.amount_paid) * 100), 0
-        );
-        const duePaisa = Math.round(Number(ob.amount) * 100);
-        const outstandingPaisa = Math.max(duePaisa - paidPaisa, 0);
-        totalDuePaisa += outstandingPaisa;
-        return { ob, paidPaisa, duePaisa, outstandingPaisa };
-      });
-
-      // Reject overpayment (allow 1 paisa tolerance for decimal conversion edges)
-      if (amountPaisa > totalDuePaisa + 1) {
-        throw new Error(
-          `BAD_REQUEST: MAX_PAYABLE_EXCEEDED: Payment (${(amountPaisa / 100).toFixed(2)}) exceeds total due (${(totalDuePaisa / 100).toFixed(2)}). Please refresh dues and pay up to ₹${(totalDuePaisa / 100).toFixed(2)}.`
-        );
-      }
-
-      // ── 4. FIFO ALLOCATION ──
-      let remainingPaisa = Math.min(amountPaisa, totalDuePaisa);
-      const allocations: any[] = [];
-
-      for (const { ob, paidPaisa, duePaisa, outstandingPaisa } of obData) {
-        if (remainingPaisa <= 0) break;
-        if (outstandingPaisa <= 0) continue;
-
-        const allocPaisa = Math.min(remainingPaisa, outstandingPaisa);
-        const allocRupees = allocPaisa / 100;
-
-        const payment = await tx.payments.create({
-          data: {
-            obligation_id: ob.id,
-            tenant_id: data.tenantId,
-            owner_id: ob.owner_id,
-            amount_paid: allocRupees,
-            payment_method: data.paymentMethod,
-            reference_number: data.referenceNumber,
-            payment_date: data.paymentDate || new Date(),
-            payment_attempt_id: data.paymentAttemptId || null,
-            payment_group_id: groupId,
-            // Only first payment in group gets the idempotency key (unique constraint)
-            idempotency_key: allocations.length === 0 ? (data.idempotencyKey || null) : null,
-            hostel_id: ob.hostel_id,
-          },
-        });
-        assertFinancialHostelMatch("created payment", payment.hostel_id, ob.hostel_id);
-
-        const newTotalPaidPaisa = paidPaisa + allocPaisa;
-        const newStatus = newTotalPaidPaisa >= duePaisa ? "PAID" : "PARTIAL";
-
-        await tx.rent_obligations.update({
-          where: { id: ob.id },
-          data: { status: newStatus },
-        });
-
-        allocations.push({
-          payment_id: payment.id,
-          obligation_id: ob.id,
-          owner_id: payment.owner_id,
-          obligation_type: ob.obligation_type,
-          rent_month: ob.rent_month,
-          allocated: allocRupees,
-          new_status: newStatus,
-        });
-
-        remainingPaisa -= allocPaisa;
-      }
-
-      const totalPaid = amountPaisa / 100;
-      const totalDue = totalDuePaisa / 100;
-      const remaining = remainingPaisa / 100;
-      const overallStatus = remainingPaisa <= 0 && amountPaisa >= totalDuePaisa ? "PAID" : "PARTIAL";
-
-      return { allocations, totalDue, totalPaid, remaining, overallStatus, groupId };
-    });
+    const txResult = await prisma.$transaction((tx: any) =>
+      this._settleTenantRentPaymentInTx(tx, data, data.idempotencyKey || groupId)
+    );
 
     // ── 5. POST-TRANSACTION: Events, receipt, audit log ──
     // (Outside transaction — idempotent side-effects)
@@ -622,6 +738,7 @@ export class PaymentService {
         amount: a.allocated,
         status: a.new_status,
       })),
+      future_credit: txResult.futureCredit || 0,
       method: data.paymentMethod,
       idempotency_key: data.idempotencyKey || null,
     });
@@ -1155,6 +1272,158 @@ export class PaymentService {
         financialOwnerId: ownerId,
         hostelId,
         data: { raw_create_response: { error: String(error) } as any, settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE }
+      });
+      throw error;
+    }
+  }
+
+  async createTenantRentPaymentIntent(params: {
+    tenantId: string;
+    ownerId: string;
+    amount: number;
+    profileId: string;
+  }) {
+    const { tenantId, ownerId, amount, profileId } = params;
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new Error("BAD_REQUEST: Amount must be positive");
+    }
+
+    const tenant = await prisma.tenants.findUnique({
+      where: { id: tenantId },
+      include: { profiles: true },
+    });
+    if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
+    if (tenant.owner_id !== ownerId) throw new Error("FORBIDDEN: Tenant does not belong to this owner");
+
+    const hostelId = requireFinancialHostelId(tenant.hostel_id, "tenant rent payment intent");
+    const monthlyRent = Number(tenant.monthly_rent || 0);
+    if (monthlyRent > 0 && Math.round(amount * 100) < Math.round(monthlyRent * 100)) {
+      throw new Error(`BAD_REQUEST: Rent payments below current monthly rent (${formatCurrency(monthlyRent)}) are not allowed`);
+    }
+
+    const providerContext = await getProviderContext({
+      paymentDomain: PAYMENT_DOMAIN.RENT_COLLECTION,
+      flowType: PAYMENT_FLOW.RENT,
+      operationalOwnerId: ownerId,
+      financialOwnerId: ownerId,
+      hostelId,
+      scopeType: PAYMENT_SCOPE.HOSTEL,
+    });
+    const { provider, config } = providerContext;
+    const instance = PaymentProviderFactory.getProvider(provider, config);
+
+    const txResult = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"rent_intent:" + tenantId})::bigint)`;
+      await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId}::uuid FOR UPDATE`;
+
+      const existing = await tx.paymentAttempt.findFirst({
+        where: {
+          tenant_id: tenantId,
+          flow_type: PAYMENT_FLOW.RENT,
+          status: { in: ["CREATED", "PENDING"] },
+          obligations: { none: {} },
+        },
+        orderBy: { created_at: "desc" },
+      });
+      if (existing) {
+        const checkoutUrl = existing.checkout_url || "";
+        const twoMinAgo = new Date(Date.now() - 2 * 60 * 1000);
+        const isInFlight = existing.status === "CREATED" && existing.created_at > twoMinAgo;
+        const hasValidCheckout = checkoutUrl.length > 0 && !checkoutUrl.includes("/payment-return");
+        if (isInFlight || hasValidCheckout) {
+          return { attempt: this.mapAttemptWithRawResponse(existing), isReused: true as const };
+        }
+        await this.updateAttemptStatus(tx, {
+          attemptId: existing.id,
+          fromStatus: existing.status,
+          toStatus: "EXPIRED",
+          source: "CREATE_INTENT",
+          reason: "stale tenant rent checkout attempt expired before replacement",
+          operationalOwnerId: ownerId,
+          financialOwnerId: ownerId,
+          hostelId,
+          data: { settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE },
+        });
+      }
+
+      const merchantTxnId = `hms_rent_${crypto.randomBytes(6).toString("hex")}`;
+      const newAttempt = await tx.paymentAttempt.create({
+        data: {
+          id: crypto.randomUUID(),
+          tenant_id: tenantId,
+          owner_id: ownerId,
+          provider,
+          merchant_txn_id: merchantTxnId,
+          merchant_transaction_id: merchantTxnId,
+          amount,
+          status: "CREATED",
+          payment_type: "RENT",
+          hostel_id: hostelId,
+          payment_domain: providerContext.payment_domain,
+          scope_type: providerContext.scope_type,
+          flow_type: providerContext.flow_type,
+          merchant_context_type: providerContext.merchant_context_type,
+          merchant_context_id: providerContext.merchant_context_id,
+          settlement_status: SETTLEMENT_STATUS.NOT_SETTLED,
+          raw_create_response: { source: "tenant_rent_custom_amount", profile_id: profileId },
+        } as any,
+      });
+      await paymentStatusEventService.append(tx, {
+        attemptId: newAttempt.id,
+        fromStatus: null,
+        toStatus: "CREATED",
+        source: "CREATE_INTENT",
+        reason: "tenant rent payment attempt created",
+        operationalOwnerId: ownerId,
+        financialOwnerId: ownerId,
+        hostelId,
+      });
+      return { attempt: newAttempt, isReused: false as const };
+    });
+
+    if (txResult.isReused) return txResult.attempt;
+    const { attempt } = txResult;
+
+    try {
+      const result = await instance.createIntent({
+        amount,
+        merchant_txn_id: attempt.merchant_txn_id,
+        tenant_name: tenant.profiles?.name || "Tenant",
+        tenant_email: tenant.profiles?.email || "",
+        tenant_phone: tenant.profiles?.phone || "",
+        metadata: { tenant_id: tenantId, attempt_id: attempt.id, payment_type: "RENT" },
+      });
+
+      return await this.updateAttemptStatusOutsideTx({
+        attemptId: attempt.id,
+        fromStatus: "CREATED",
+        toStatus: "PENDING",
+        source: "CREATE_INTENT",
+        reason: "provider checkout created",
+        operationalOwnerId: ownerId,
+        financialOwnerId: ownerId,
+        hostelId,
+        data: {
+          gateway_txn_id: result.gateway_txn_id,
+          ...this.attemptIdentityData(attempt.merchant_txn_id, result),
+          upi_intent_url: result.upi_intent_url,
+          qr_payload: result.qr_payload,
+          checkout_url: result.checkout_url,
+          expires_at: result.expires_at,
+          raw_create_response: result.raw_response as any,
+        },
+      });
+    } catch (error) {
+      await this.updateAttemptStatusOutsideTx({
+        attemptId: attempt.id,
+        fromStatus: "CREATED",
+        toStatus: "FAILED",
+        source: "CREATE_INTENT",
+        reason: "provider checkout creation failed",
+        operationalOwnerId: ownerId,
+        financialOwnerId: ownerId,
+        hostelId,
+        data: { raw_create_response: { error: String(error) } as any, settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE },
       });
       throw error;
     }
@@ -2035,9 +2304,36 @@ export class PaymentService {
           paymentAttemptId: attempt.id,
         });
         appliedPayments.push(res);
+      } else if (attempt.tenant_id) {
+        const settlement = await this._settleTenantRentPaymentInTx(tx, {
+          hostelId: attemptHostelId,
+          tenantId: attempt.tenant_id,
+          amountPaid: Number(attempt.amount),
+          paymentMethod: "UPI",
+          referenceNumber: gatewayTxnId || attempt.merchant_txn_id,
+          paymentDate: new Date(),
+          paymentAttemptId: attempt.id,
+          userId: attempt.owner_id,
+          ownerId: attempt.owner_id,
+        }, attempt.id);
+        for (const allocation of settlement.allocations) {
+          appliedPayments.push({
+            payment: {
+              id: allocation.payment_id,
+              obligation_id: allocation.obligation_id,
+              tenant_id: attempt.tenant_id,
+              owner_id: allocation.owner_id,
+              hostel_id: attemptHostelId,
+              amount_paid: allocation.allocated,
+            },
+            newStatus: allocation.new_status,
+            tenantId: attempt.tenant_id,
+            ownerId: allocation.owner_id,
+          });
+        }
       }
       // If neither — invoice payment or no linkage (handled in billing path above)
-      if (appliedPayments.length === 0) {
+      if (appliedPayments.length === 0 && !attempt.tenant_id) {
         throw new Error("SETTLEMENT_FAILED: Rent payment attempt has no linked obligations to settle");
       }
       const finalized = await this.updateAttemptStatus(tx, {

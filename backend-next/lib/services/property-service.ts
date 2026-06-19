@@ -6,6 +6,28 @@ import { authOtpService } from "@/lib/services/auth/auth-otp-service";
 import { normalizeWhatsAppPhone } from "@/lib/services/notifications/providers/whatsapp";
 import { eventLog } from "@/lib/services/event-log-service";
 
+const ACTIVE_INVITE_STATUSES = ["PENDING", "OPENED", "ACTIVATION_STARTED"];
+
+function invitedOccupantsFromReservations(reservations: any[] = []) {
+  return reservations
+    .filter((reservation: any) => ACTIVE_INVITE_STATUSES.includes(String(reservation.invitation?.status || "")))
+    .map((reservation: any) => ({
+      tenant_id: reservation.tenant_id,
+      profile_id: reservation.tenant?.profile_id ?? null,
+      invitation_id: reservation.invitation_id,
+      name: reservation.invitation?.name ?? reservation.tenant?.profiles?.name ?? "Invited tenant",
+      email: reservation.invitation?.email ?? reservation.tenant?.personal_email ?? null,
+      phone: reservation.invitation?.phone ?? reservation.tenant?.phone_1 ?? null,
+      joined_date: reservation.tenant?.joined_on ?? reservation.reserved_at,
+      rent: Number(reservation.tenant?.monthly_rent || 0),
+      pending_dues: 0,
+      payment_status: "INVITED",
+      status: "INVITED",
+      invite_status: reservation.invitation?.status || "PENDING",
+      occupant_type: "INVITED",
+      badge: "Invited",
+    }));
+}
 
 export class PropertyService {
   async getOwnerProfile(userId: string) {
@@ -21,8 +43,7 @@ export class PropertyService {
 
     if (!profile) throw new Error("NOT_FOUND: Owner profile not found");
     
-    const [onlyHostel] = profile.hostels;
-    const singleHostel = profile.hostels.length === 1 ? onlyHostel : null;
+    const singleHostel = profile.hostels.length === 1 ? profile.hostels.at(0) : null;
 
     return {
       owner: {
@@ -255,11 +276,11 @@ export class PropertyService {
           take: 2,
         });
         if (existingHostels.length === 1) {
-          targetHostelId = existingHostels[0].id;
+          targetHostelId = existingHostels.at(0)?.id;
         }
       }
 
-      const duplicate = await prisma.hostels.findFirst({
+      const [duplicate] = await prisma.hostels.findMany({
         where: {
           owner_id: userId,
           status: { in: ["ACTIVE", "INACTIVE"] },
@@ -273,6 +294,7 @@ export class PropertyService {
             },
           }),
         },
+        take: 1,
       });
       if (duplicate) {
         throw new Error("VALIDATION: A hostel with this name already exists");
@@ -280,10 +302,10 @@ export class PropertyService {
     }
 
     if (hostelId) {
-      const currentHostel = await prisma.hostels.findFirst({
-        where: { owner_id: userId, id: hostelId },
+      const currentHostel = await prisma.hostels.findUnique({
+        where: { id: hostelId },
       });
-      if (!currentHostel) {
+      if (!currentHostel || currentHostel.owner_id !== userId) {
         throw new Error("FORBIDDEN: Hostel is not owned by the authenticated owner");
       }
 
@@ -350,7 +372,8 @@ export class PropertyService {
       });
 
       if (existingHostels.length === 1) {
-        const targetId = existingHostels[0].id;
+        const targetId = existingHostels.at(0)?.id;
+        if (!targetId) throw new Error("FORBIDDEN: Hostel context is required");
         const currentHostel = await prisma.hostels.findUnique({
           where: { id: targetId },
         });
@@ -641,6 +664,13 @@ export class PropertyService {
               },
             },
           },
+          tenant_invitation_reservations: {
+            where: { status: "ACTIVE" },
+            include: {
+              tenant: { include: { profiles: true } },
+              invitation: true,
+            },
+          },
         },
         orderBy: { room_no: "asc" },
       }),
@@ -672,6 +702,8 @@ export class PropertyService {
         };
       });
 
+      const invitedTenants = invitedOccupantsFromReservations(room.tenant_invitation_reservations);
+      const displayTenants = [...tenants, ...invitedTenants];
       const capacity = capacityMap.get(room.id);
       const roomEntry = {
         id: room.id,
@@ -686,7 +718,7 @@ export class PropertyService {
         available: capacity?.available ?? Math.max(Number(room.capacity || 0) - tenants.length, 0),
         status: capacity?.state ?? (tenants.length === 0 ? "vacant" : tenants.length >= Number(room.capacity || 0) ? "full" : "partial"),
         floor_id: room.floor_id ?? null,
-        tenants,
+        tenants: displayTenants,
         pending_dues: tenants.reduce((s: number, t: any) => s + t.pending_dues, 0),
       };
 
@@ -722,6 +754,13 @@ export class PropertyService {
               }
             }
           }
+        },
+        tenant_invitation_reservations: {
+          where: { status: "ACTIVE" },
+          include: {
+            tenant: { include: { profiles: true } },
+            invitation: true,
+          },
         }
       }
     });
@@ -763,6 +802,8 @@ export class PropertyService {
       };
     });
 
+    const invitedTenants = invitedOccupantsFromReservations((room as any).tenant_invitation_reservations);
+    const displayTenants = [...tenants, ...invitedTenants];
     const floorNum = room.floor ?? 0;
     const capacity = await roomCapacityService.getRoomCapacitySnapshot(room.id, { ownerId });
 
@@ -792,7 +833,7 @@ export class PropertyService {
         remaining_capacity: capacity.available,
         status: capacity.state === "full" ? "Full" : capacity.state === "vacant" ? "Vacant" : capacity.state === "reserved" ? "Reserved" : "Occupied"
       },
-      tenants,
+      tenants: displayTenants,
       payments,
       pending_dues: tenants.reduce((sum: number, t: any) => sum + t.pending_dues, 0)
     };

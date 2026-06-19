@@ -951,6 +951,7 @@ model rent_obligations {
   updated_at                  DateTime?                     @db.Timestamptz(6)
   obligation_type             String                        @default("RENT")
   hostel_id                   String                        @db.Uuid
+  agreement_id                String?                       @db.Uuid
   billing_period_start        DateTime?                     @db.Date
   billing_period_end          DateTime?                     @db.Date
   installment_label           String?
@@ -964,6 +965,7 @@ model rent_obligations {
   payments                    payments[]
   reminder_logs               reminder_logs[]
   room_allocations            roomAllocation?               @relation(fields: [allocation_id], references: [id])
+  agreement                   Agreement?                    @relation(fields: [agreement_id], references: [id], onDelete: SetNull)
   hostels                     hostels                       @relation(fields: [hostel_id], references: [id])
   tenants                     tenants                       @relation(fields: [tenant_id], references: [id])
   tenant_billing_plans        tenant_billing_plans?         @relation(fields: [billing_plan_id], references: [id])
@@ -971,12 +973,15 @@ model rent_obligations {
   payment_link_tokens         payment_link_tokens[]
 
   @@unique([allocation_id, rent_month, obligation_type])
+  @@unique([agreement_id, rent_month, obligation_type])
+  @@index([agreement_id])
   @@index([billing_plan_id])
   @@index([hostel_id])
   @@index([hostel_id, rent_month])
   @@index([hostel_id, status])
   @@index([is_superseded])
   @@index([owner_id])
+  @@index([tenant_id, status, due_date])
   @@index([tenant_id, billing_period_end])
   @@index([tenant_id, billing_period_start])
   @@index([tenant_id, rent_month])
@@ -1517,9 +1522,11 @@ enum AttemptStatus {
 }
 
 enum PaymentStatus {
+  UPCOMING
   PENDING
   PARTIAL
   PAID
+  OVERDUE
   WAIVED
 }
 
@@ -1995,6 +2002,7 @@ model Agreement {
   renewed_agreements      Agreement[]       @relation("AgreementRenewedFrom")
   renewed_to_agreement    Agreement?        @relation("AgreementRenewedTo", fields: [renewed_to_agreement_id], references: [id])
   renewed_previous_agreements Agreement[]   @relation("AgreementRenewedTo")
+  rent_obligations        rent_obligations[]
 
   @@index([tenant_id])
   @@index([tenant_id, status])

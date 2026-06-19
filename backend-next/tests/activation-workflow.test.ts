@@ -122,6 +122,12 @@ vi.mock("@/lib/db", () => {
   return { prisma: mockPrisma, supabase: {} };
 });
 
+vi.mock("@/src/services/payments/agreement-rent-schedule-service", () => ({
+  agreementRentScheduleService: {
+    generateForAgreementInTx: vi.fn().mockResolvedValue({ created: 0, updated: 0, skipped: 0, months: [] }),
+  },
+}));
+
 vi.mock("@/src/services/tenants/tenant-invitation-lifecycle-service", () => ({
   tenantInvitationLifecycleService: {
     resolveByToken: vi.fn(),

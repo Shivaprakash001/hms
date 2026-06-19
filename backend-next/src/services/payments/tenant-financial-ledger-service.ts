@@ -141,12 +141,8 @@ export class TenantFinancialLedgerService {
         },
       });
       
-      // Auto-apply future rent credit balance to any outstanding obligations!
-      await this.autoApplyFutureRentCreditToDuesInTx(tx, tenantId, ownerId, createdBy);
-      const balanceAfterApply = await this._computeBalance(tx, tenantId);
-
-      logger.info("financial-ledger.credit", { tenant_id: tenantId, reason, amount, new_balance: balanceAfterApply, entry_id: entry.id });
-      return { entry, balance: balanceAfterApply, hostelId: tenant.hostel_id };
+      logger.info("financial-ledger.credit", { tenant_id: tenantId, reason, amount, new_balance: newBalance, entry_id: entry.id });
+      return { entry, balance: newBalance, hostelId: tenant.hostel_id };
     }).then(async (res) => {
       try {
         const { eventSystem } = await import("@/lib/events");
@@ -227,20 +223,16 @@ export class TenantFinancialLedgerService {
       },
     });
 
-    // Auto-apply future rent credit balance to any outstanding obligations!
-    await this.autoApplyFutureRentCreditToDuesInTx(tx, tenantId, ownerId, createdBy);
-    const balanceAfterApply = await this._computeBalance(tx, tenantId);
-
     logger.info("financial-ledger.credit.from_gateway", {
       tenant_id: tenantId,
       reason,
       amount,
-      new_balance: balanceAfterApply,
+      new_balance: newBalance,
       entry_id: entry.id,
       reference_id: referenceId,
     });
 
-    return { entry, balance: balanceAfterApply, alreadyCredited: false };
+    return { entry, balance: newBalance, alreadyCredited: false };
   }
 
   /**

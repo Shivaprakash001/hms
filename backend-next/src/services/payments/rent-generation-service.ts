@@ -11,7 +11,7 @@ import {
 } from "@/lib/services/billing-validation";
 import { billingScheduleService, type PaymentFrequency } from "@/lib/services/billing-schedule-service";
 import crypto from "crypto";
-import { tenantFinancialLedgerService } from "./tenant-financial-ledger-service";
+import { agreementRentScheduleService } from "./agreement-rent-schedule-service";
 
 /**
  * 🏦 Rent Generation Service — Phases 1-7
@@ -107,6 +107,13 @@ export class RentGenerationService {
         throw new Error(`HOSTEL_NOT_ACTIVE: Rent generation is only allowed for ACTIVE hostels.`);
       }
 
+      await agreementRentScheduleService.syncDueStatuses({ hostelId, now }).catch((error: any) => {
+        console.warn("[RENT] Agreement schedule status sync failed", {
+          hostel_id: hostelId,
+          error: error?.message || String(error),
+        });
+      });
+
       const lastDay = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 0)).getUTCDate();
       const monthEndDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), lastDay, 23, 59, 59, 999));
 
@@ -168,6 +175,16 @@ export class RentGenerationService {
       );
 
       const tenantIds = Array.from(new Set(allocations.map((a: any) => a.tenant?.id).filter(Boolean))) as string[];
+      const agreementRows = tenantIds.length > 0
+        ? await prisma.agreement.findMany({
+            where: {
+              tenant_id: { in: tenantIds },
+              status: { in: ["SIGNED", "EXPIRING_SOON", "AGREEMENT_EXPIRED"] },
+            },
+            select: { tenant_id: true },
+          })
+        : [];
+      const tenantsWithAgreementSchedules = new Set(agreementRows.map((agreement: any) => agreement.tenant_id));
       const activePlans = await prisma.tenant_billing_plans.findMany({
         where: {
           tenant_id: { in: tenantIds },
@@ -367,9 +384,17 @@ export class RentGenerationService {
         const tenantDueDate = installment.due_date;
         const activePlan = activePlanMap.get(alloc.tenant.id);
 
-        // Collect RENT row if not already present
+        // Collect RENT row if not already present. Tenants with signed
+        // agreements get their closed rent schedule from AgreementRentScheduleService.
         const rentCompleted = await rentGenerationLedgerService.hasCompleted(ownerId, hostelId, rentMonth, "RENT");
-        if (rentCompleted) {
+        if (tenantsWithAgreementSchedules.has(alloc.tenant.id)) {
+          skipped++;
+          logGenerationDecision({
+            owner_id: ownerId, hostel_id: hostelId, rent_month: rentMonth.toISOString(),
+            obligation_type: "RENT", created: 0, skipped: 1,
+            reason: "AGREEMENT_SCHEDULE_SOURCE", trigger_type: triggerType
+          });
+        } else if (rentCompleted) {
           skipped++;
           await rentGenerationLedgerService.skip({
             ownerId, hostelId, rentMonth, obligationType: "RENT",
@@ -467,23 +492,6 @@ export class RentGenerationService {
           if (maintRows.length > 0) {
             const result = await tx.rent_obligations.createMany({ data: maintRows, skipDuplicates: true });
             maintCount = result.count;
-          }
-
-          // Gather unique tenant IDs from both rent and maintenance rows
-          const uniqueTenantIds = Array.from(
-            new Set([
-              ...rentRows.map((r: any) => r.tenant_id),
-              ...maintRows.map((r: any) => r.tenant_id),
-            ])
-          );
-
-          // Auto-apply advance balance for each tenant who had obligations created
-          for (const tenantId of uniqueTenantIds) {
-            const row = rentRows.find((r: any) => r.tenant_id === tenantId) ||
-                        maintRows.find((r: any) => r.tenant_id === tenantId);
-            if (row) {
-              await tenantFinancialLedgerService.autoApplyAdvanceToDuesInTx(tx, tenantId, row.owner_id, row.owner_id);
-            }
           }
 
           return { rentCount, maintCount };
