@@ -166,6 +166,7 @@ export const fallbackLandingContent: LandingMarketingContent = {
       'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d951.5284365512007!2d78.66220596962678!3d17.454269078321268!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3bcb770dd641583b%3A0xde3e95b9afb8c1b1!2sSri%20Adithya%20Boys%20Hostel!5e0!3m2!1sen!2sin!4v1780503771881!5m2!1sen!2sin',
     ownerName: 'Srinivasa Rao',
     ownerMessage: 'I personally respond to every enquiry.',
+    ownerPhoto: { url: '/hostel_icon.png', alt: 'Sri Adithya Boys Hostel Logo' },
   },
   seo: {
     title: 'Best Boys Hostel in Yamnampet, Secunderabad | Sri Adithya Boys Hostel',
@@ -181,6 +182,7 @@ export const fallbackLandingContent: LandingMarketingContent = {
     highlights: ['Meals Included', 'CCTV + Warden', '400m from SNIST'],
     primaryCta: { label: 'Book a Room Visit', href: '#contact' },
     secondaryCta: { label: 'Check Availability on WhatsApp', href: 'https://api.whatsapp.com/send?phone=919392433422' },
+    ownerImage: { url: '/hostel_icon.png', alt: 'Sri Adithya Boys Hostel Logo' },
     carouselImages: [
       { url: '/SAH_Hostel_Galary_Building.png', alt: 'Hostel Building', caption: 'Hostel Building' },
       { url: '/SAH_Room.jpg', alt: 'Room', caption: '4-Sharing Room' },

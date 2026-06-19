@@ -1,7 +1,6 @@
 import { Phone, MessageCircle } from 'lucide-react';
 import { motion } from 'motion/react';
 import { VideoPlayer } from './VideoPlayer';
-import ownerPhoto from './assets/person__up-removebg-preview__1_.png';
 import type { LandingAvailability } from './landingTypes';
 import type { HeroContent } from '@lib/sanity/landingContent';
 import { getLandingIcon } from './content/icons';
@@ -32,7 +31,7 @@ export function Hero({ availability, content }: { availability?: LandingAvailabi
   const primaryHref = availability?.visitUrl || content.primaryCta?.href || '#contact';
   const secondaryHref = content.secondaryCta?.href || 'https://api.whatsapp.com/send?phone=919392433422';
 
-  const ownerPhotoUrl = content.ownerImage?.url || ownerPhoto;
+  const ownerPhotoUrl = content.ownerImage?.url || '/hostel_icon.png';
 
   return (
     <section id="home" className="bg-gradient-to-b from-[#FFFDF5] to-white py-10 md:py-24">
