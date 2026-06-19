@@ -22,6 +22,7 @@ describe('Tenant Onboarding Integration Flow', () => {
   let sendInvitationSpy: any;
 
   beforeEach(async () => {
+    vi.clearAllMocks();
     owner = await createTestOwner();
     hostel = await createTestHostel(owner.id);
     room = await createTestRoom(hostel.id);
@@ -33,6 +34,7 @@ describe('Tenant Onboarding Integration Flow', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should invite a tenant using WhatsApp only (email is optional/null)', async () => {
@@ -138,6 +140,7 @@ describe('Tenant Onboarding Integration Flow', () => {
 
     // Reset spies
     sendInvitationSpy.mockReset();
+    sendInvitationSpy.mockRejectedValueOnce(new Error('WhatsApp failed on resend'));
     vi.mocked(EmailService.sendInvitation).mockClear();
 
     // 2. Resend invitation specifying fallback email override
@@ -469,6 +472,90 @@ describe('Tenant Onboarding Integration Flow', () => {
       });
 
       expect(dbInvite?.agreement_duration_months).toBe(6);
+    });
+  });
+
+  describe('Modification-driven Token Rotation, Capacity Checking, and Financial Regeneration', () => {
+    it('should rotate token, check capacity, and regenerate financials on resend', async () => {
+      // 1. Setup: Create another room to test capacity and room transfer
+      const room2 = await createTestRoom(hostel.id);
+
+      // Create an invitation
+      sendInvitationSpy.mockResolvedValueOnce({
+        providerMessageId: 'wamid.mod_test_1',
+        attempts: 1,
+      });
+
+      const initial: any = await tenantInvitationLifecycleService.createInvitation({
+        name: 'Mod Test Tenant',
+        phone: '9876543270',
+        room_id: room.id,
+        monthly_rent: 10000,
+        security_deposit: 20000,
+      }, owner.id);
+
+      expect(initial.action).toBe('INVITED');
+      const oldToken = (await prisma.tenant_invitations.findUnique({
+        where: { id: initial.invitation_id },
+      }))!.token;
+
+      // Verify initial financial obligation
+      const initialObligations = await prisma.rent_obligations.findMany({
+        where: { tenant_id: initial.tenant_id, obligation_type: 'SECURITY_DEPOSIT' },
+      });
+      expect(initialObligations.length).toBe(1);
+      expect(Number(initialObligations[0].amount)).toBe(20000);
+
+      // 2. Capacity Checking: Make room2 fully occupied by setting capacity to 0
+      await prisma.rooms.update({
+        where: { id: room2.id },
+        data: { capacity: 0 },
+      });
+
+      // Try resending invitation with target room as room2 -> Should fail due to CAPACITY_EXCEEDED
+      await expect(
+        tenantInvitationLifecycleService.resendInvitation(
+          initial.invitation_id,
+          { id: owner.id, role: 'OWNER' },
+          { room_id: room2.id }
+        )
+      ).rejects.toThrow(/CAPACITY_EXCEEDED/);
+
+      // 3. Resend invitation with valid updates (different rent, deposit)
+      sendInvitationSpy.mockResolvedValueOnce({
+        providerMessageId: 'wamid.mod_test_2',
+        attempts: 1,
+      });
+
+      const resendResult = await tenantInvitationLifecycleService.resendInvitation(
+        initial.invitation_id,
+        { id: owner.id, role: 'OWNER' },
+        {
+          monthly_rent: 12000,
+          security_deposit: 24000,
+        }
+      );
+
+      expect(resendResult.action).toBe('RESENT');
+
+      // Verify token rotation
+      const updatedInvite = await prisma.tenant_invitations.findUnique({
+        where: { id: initial.invitation_id },
+      });
+      expect(updatedInvite!.token).not.toBe(oldToken);
+      expect(updatedInvite!.status).toBe('PENDING');
+
+      // Verify old token cannot be resolved
+      await expect(
+        tenantInvitationLifecycleService.resolveByToken(oldToken)
+      ).rejects.toThrow(/INVALID: Activation link expired or already used/);
+
+      // Verify financial regeneration (old deposit of 20000 deleted, new deposit of 24000 created)
+      const updatedObligations = await prisma.rent_obligations.findMany({
+        where: { tenant_id: initial.tenant_id, obligation_type: 'SECURITY_DEPOSIT' },
+      });
+      expect(updatedObligations.length).toBe(1);
+      expect(Number(updatedObligations[0].amount)).toBe(24000);
     });
   });
 });

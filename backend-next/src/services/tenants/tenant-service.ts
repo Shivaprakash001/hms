@@ -71,7 +71,7 @@ export class TenantService {
         tenant_invitations: {
           orderBy: { created_at: "desc" },
           take: 1,
-          select: { name: true, email: true, phone: true, status: true },
+          select: { name: true, email: true, phone: true, status: true, agreement_duration_months: true, agreement_start_date: true },
         },
         room_allocations: {
           where: { is_active: true, end_date: null },
@@ -141,7 +141,7 @@ export class TenantService {
         tenant_invitations: {
           orderBy: { created_at: "desc" },
           take: 1,
-          select: { name: true, email: true, phone: true, status: true },
+          select: { name: true, email: true, phone: true, status: true, agreement_duration_months: true, agreement_start_date: true },
         },
         room_allocations: {
           where: { is_active: true, end_date: null },
@@ -854,6 +854,7 @@ export class TenantService {
             base_rent: currentRoom.base_rent,
           }
         : null,
+      tenant_invitations: legacyTenant.tenant_invitations || [],
       payment_summary: {
         total_paid: totalPaid,
         pending_amount: outstanding,

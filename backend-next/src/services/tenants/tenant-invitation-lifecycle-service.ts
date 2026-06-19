@@ -269,7 +269,7 @@ export class TenantInvitationLifecycleService {
         data.deposit === undefined) {
       resolvedDeposit = inviteDefaults.billing_defaults.deposit_months * monthlyRent;
     }
-    const advanceDeposit = moneyNumber(data.advance_amount ?? data.advance_deposit ?? data.deposit, Number(resolvedDeposit));
+    const advanceDeposit = moneyNumber(data.advance_amount ?? data.advance_deposit ?? data.deposit ?? data.security_deposit, Number(resolvedDeposit));
     const maintenanceType = (data.maintenance_type || resolved.maintenance_type) as MaintenanceType;
     const maintenanceCharge = maintenanceType === "NONE"
       ? 0
@@ -426,46 +426,161 @@ export class TenantInvitationLifecycleService {
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = addDays(DEFAULT_INVITE_DAYS);
     const updated = await prisma.$transaction(async (tx: any) => {
+      // 1. Resolve target room
+      const targetRoomId = overrides?.room_id || invitation.room_id;
+      let targetRoom = invitation.room;
+      let targetHostelId = invitation.hostel_id;
+
+      if (targetRoomId !== invitation.room_id) {
+        await tx.$executeRaw`SELECT id FROM rooms WHERE id = ${targetRoomId}::uuid FOR UPDATE`;
+        const roomObj = await tx.rooms.findUnique({
+          where: { id: targetRoomId },
+          include: { hostels: true },
+        });
+        if (!roomObj) throw new Error("NOT_FOUND: Room not found");
+        if (roomObj.hostels.status === "ARCHIVED") {
+          throw new Error("VALIDATION_ERROR: Cannot move tenant to an archived hostel");
+        }
+        if (roomObj.hostels.status === "INACTIVE") {
+          throw new Error("VALIDATION_ERROR: Cannot move tenant to an inactive hostel");
+        }
+        targetRoom = roomObj;
+        targetHostelId = roomObj.hostel_id;
+
+        const capacity = await this.getRoomCapacitySnapshot(tx, targetRoomId);
+        if (capacity.available <= 0) {
+          throw new Error("CAPACITY_EXCEEDED: Target room is already full including active reservations");
+        }
+      }
+
+      // 2. Handle reservation
       let reservation = await tx.tenant_invitation_reservations.findFirst({
         where: { invitation_id: invitation.id, status: "ACTIVE" },
       });
-      if (!reservation) {
-        await tx.$executeRaw`SELECT id FROM rooms WHERE id = ${invitation.room_id}::uuid FOR UPDATE`;
-        const capacity = await this.getRoomCapacitySnapshot(tx, invitation.room_id);
-        if (capacity.available <= 0) throw new Error("CAPACITY_EXCEEDED: Room is already full including active reservations");
+
+      if (reservation) {
+        if (targetRoomId !== invitation.room_id) {
+          // Release old reservation
+          await tx.tenant_invitation_reservations.update({
+            where: { id: reservation.id },
+            data: {
+              status: "RELEASED",
+              released_at: new Date(),
+              released_by: actor?.id || invitation.owner_id,
+              release_reason: "ROOM_CHANGE",
+            },
+          });
+          // Create new reservation
+          reservation = await tx.tenant_invitation_reservations.create({
+            data: {
+              id: crypto.randomUUID(),
+              tenant_id: invitation.tenant_id,
+              invitation_id: invitation.id,
+              owner_id: invitation.owner_id,
+              hostel_id: targetHostelId,
+              room_id: targetRoomId,
+              batch_id: invitation.batch_id,
+              status: "ACTIVE",
+              reserved_at: new Date(),
+              expires_at: expiresAt,
+            },
+          });
+        } else {
+          // Update expiry of the existing reservation
+          reservation = await tx.tenant_invitation_reservations.update({
+            where: { id: reservation.id },
+            data: { expires_at: expiresAt, updated_at: new Date() },
+          });
+        }
+      } else {
+        // Create a new reservation if none existed
         reservation = await tx.tenant_invitation_reservations.create({
           data: {
             id: crypto.randomUUID(),
             tenant_id: invitation.tenant_id,
             invitation_id: invitation.id,
             owner_id: invitation.owner_id,
-            hostel_id: invitation.hostel_id,
-            room_id: invitation.room_id,
+            hostel_id: targetHostelId,
+            room_id: targetRoomId,
             batch_id: invitation.batch_id,
             status: "ACTIVE",
             reserved_at: new Date(),
             expires_at: expiresAt,
           },
         });
-      } else {
-        await tx.tenant_invitation_reservations.update({
-          where: { id: reservation.id },
-          data: { expires_at: expiresAt, updated_at: new Date() },
+      }
+
+      // 3. Resolve overrides
+      const monthlyRent = typeof overrides?.monthly_rent !== "undefined" ? Number(overrides.monthly_rent) : undefined;
+      const securityDeposit = typeof overrides?.advance_amount !== "undefined"
+        ? Number(overrides.advance_amount)
+        : (typeof overrides?.security_deposit !== "undefined"
+          ? Number(overrides.security_deposit)
+          : (typeof overrides?.advance_deposit !== "undefined"
+            ? Number(overrides.advance_deposit)
+            : undefined));
+      const maintenanceCharge = typeof overrides?.maintenance_amount !== "undefined"
+        ? Number(overrides.maintenance_amount)
+        : (typeof overrides?.maintenance_charge !== "undefined"
+          ? Number(overrides.maintenance_charge)
+          : undefined);
+      const maintenanceType = overrides?.maintenance_type;
+      const phone = overrides?.phone;
+      const email = overrides?.email;
+      const paymentFrequency = overrides?.payment_frequency;
+      const joiningDate = overrides?.joining_date ? new Date(overrides.joining_date) : (overrides?.joined_on ? new Date(overrides.joined_on) : undefined);
+
+      // 4. Update profiles if profile_id exists
+      if (invitation.tenant.profile_id) {
+        await tx.profile.update({
+          where: { id: invitation.tenant.profile_id },
+          data: {
+            ...(overrides?.name ? { name: String(overrides.name).trim() } : {}),
+            ...(phone ? { phone: normalizeIndianPhone(phone) } : {}),
+            ...(email ? { email: normalizeEmail(email) } : {}),
+            updated_at: new Date(),
+          },
         });
       }
 
-      await tx.tenants.update({
+      // 5. Update tenants table
+      const updatedTenant = await tx.tenants.update({
         where: { id: invitation.tenant_id },
         data: {
           status: "INVITED",
-          ...(typeof overrides?.monthly_rent !== "undefined" ? { monthly_rent: Number(overrides.monthly_rent) } : {}),
-          ...(typeof overrides?.phone !== "undefined" ? { phone_1: normalizeIndianPhone(overrides.phone) || invitation.phone } : {}),
-          ...(overrides?.email ? { personal_email: normalizeEmail(overrides.email) } : {}),
-          ...(overrides?.payment_frequency ? { payment_frequency: overrides.payment_frequency } : {}),
+          ...(typeof monthlyRent !== "undefined" ? { monthly_rent: monthlyRent } : {}),
+          ...(typeof securityDeposit !== "undefined" ? { security_deposit: securityDeposit } : {}),
+          ...(typeof maintenanceCharge !== "undefined" ? { maintenance_charge: maintenanceCharge } : {}),
+          ...(maintenanceType ? { maintenance_type: maintenanceType } : {}),
+          ...(phone ? { phone_1: normalizeIndianPhone(phone) } : {}),
+          ...(email ? { personal_email: normalizeEmail(email) } : {}),
+          ...(paymentFrequency ? { payment_frequency: paymentFrequency } : {}),
+          ...(joiningDate ? { joined_on: joiningDate, billing_start_date: joiningDate } : {}),
+          hostel_id: targetHostelId,
         },
       });
 
-      return tx.tenant_invitations.update({
+      // 6. Delete old pending rent obligations that have no payments, and regenerate them
+      await tx.rent_obligations.deleteMany({
+        where: {
+          tenant_id: invitation.tenant_id,
+          obligation_type: { in: ["SECURITY_DEPOSIT", "MAINTENANCE"] },
+          status: "PENDING",
+          payments: { none: {} },
+        },
+      });
+
+      await onboardingFinancialsService.initializeOnboardingFinancials(tx, {
+        tenantId: invitation.tenant_id,
+        ownerId: invitation.owner_id,
+        hostelId: targetHostelId,
+        joiningDate: updatedTenant.joined_on || new Date(),
+        maintenanceCharge: updatedTenant.maintenance_charge || 0,
+        maintenanceType: updatedTenant.maintenance_type || "NONE",
+      });
+
+      // 7. Update invitation table
+      const updatedInvitation = await tx.tenant_invitations.update({
         where: { id: invitation.id },
         data: {
           token,
@@ -475,36 +590,44 @@ export class TenantInvitationLifecycleService {
           activation_started_at: null,
           activated_at: null,
           cancelled_at: null,
+          room_id: targetRoomId,
+          hostel_id: targetHostelId,
           ...(overrides?.name ? { name: String(overrides.name).trim() } : {}),
-          ...(typeof overrides?.phone !== "undefined" ? { phone: normalizeIndianPhone(overrides.phone) || invitation.phone } : {}),
-          ...(overrides?.email ? { email: normalizeEmail(overrides.email) } : {}),
+          ...(phone ? { phone: normalizeIndianPhone(phone) } : {}),
+          ...(email ? { email: normalizeEmail(email) } : {}),
           ...(typeof overrides?.agreement_duration_months !== "undefined" ? { agreement_duration_months: overrides.agreement_duration_months ? Number(overrides.agreement_duration_months) : null } : {}),
           ...(typeof overrides?.agreement_start_date !== "undefined" ? { agreement_start_date: overrides.agreement_start_date ? new Date(overrides.agreement_start_date) : null } : {}),
           updated_at: new Date(),
         },
       });
+
+      return {
+        updatedInvitation,
+        updatedTenant,
+        targetRoom,
+      };
     });
 
     const owner = await prisma.profile.findUnique({ where: { id: invitation.owner_id }, select: { name: true } });
     const activationLink = frontendUrl(`/activate/${token}`);
-    
+
     const delivery = await this.dispatchInvitationNotification(
-      updated,
-      invitation.tenant,
-      invitation.room,
+      updated.updatedInvitation,
+      updated.updatedTenant,
+      updated.targetRoom,
       owner || { name: "The Owner" },
       activationLink
     );
 
-    await eventLog.log("tenant_invitation_resent", invitation.owner_id, {
-      tenant_id: invitation.tenant_id,
-      invitation_id: invitation.id,
+    await eventLog.log("tenant_invitation_resent", updated.updatedInvitation.owner_id, {
+      tenant_id: updated.updatedInvitation.tenant_id,
+      invitation_id: updated.updatedInvitation.id,
       whatsapp_sent: delivery.whatsapp_sent,
       whatsapp_error: delivery.whatsapp_error,
       email_sent: delivery.email_sent,
       email_error: delivery.email_error,
       needs_email: delivery.needs_email,
-    }, invitation.tenant_id);
+    }, updated.updatedInvitation.tenant_id);
 
     return {
       message: delivery.whatsapp_sent
@@ -515,8 +638,8 @@ export class TenantInvitationLifecycleService {
         ? "WhatsApp delivery failed. Email is required for fallback."
         : "Failed to resend invitation",
       action: "RESENT",
-      email: updated.email,
-      phone: updated.phone,
+      email: updated.updatedInvitation.email,
+      phone: updated.updatedInvitation.phone,
       activation_link: activationLink,
       ...delivery,
     };
@@ -530,7 +653,7 @@ export class TenantInvitationLifecycleService {
         OR: [
           ...(isEmail ? [{ email: normalizeEmail(identifier) }] : []),
           ...(!isEmail && !isUuid ? [{ phone: normalizeIndianPhone(identifier) }] : []),
-          ...(isUuid ? [{ id: identifier }] : [])
+          ...(isUuid ? [{ id: identifier }, { tenant_id: identifier }] : [])
         ],
         ...(actor?.role === "OWNER" ? { owner_id: actor.id } : {}),
         status: { in: ["PENDING", "OPENED", "ACTIVATION_STARTED", "EXPIRED"] },

@@ -30,11 +30,16 @@ uv.lock
 
 # Database backups (contain sensitive data)
 backups/
+db-dumps/
 *.dump
 *.sql.gz
 *_backup_*.sql
 *_ledger_*.csv
 *_obligations_*.csv
+
+# Local scratch files
+scratch/
+backend-next/scratch/
 
 # Added by ggshield
 .cache_ggshield

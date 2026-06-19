@@ -191,9 +191,8 @@ export const tenantService = {
         return response.data.success !== undefined ? (response.data.data !== undefined ? response.data.data : response.data) : response.data;
     },
     resendInvitation: async (identifier, overrides = {}) => {
-        const isEmail = String(identifier || "").includes("@");
         const body = {
-            ...(isEmail ? { email: identifier } : { phone: identifier }),
+            identifier,
             ...overrides
         };
         const response = await api.post('/tenants/resend-invitation', body);

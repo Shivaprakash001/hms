@@ -21,6 +21,7 @@ import { ActivityTimeline } from '@features/tenants/components/profile/ActivityT
 import { ExitWorkflowSection } from '@features/tenants/components/profile/ExitWorkflowSection';
 import { getInitials } from '@features/tenants/utils/normalize';
 import { RecordPaymentModal } from '@/app/components/modals/RecordPaymentModal';
+import { EditInviteModal } from '@/app/components/modals/EditInviteModal';
 
 const SECTIONS = [
   { id: 'overview', label: 'Overview' },
@@ -103,6 +104,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   const [searchParams] = useSearchParams();
   const [section, setSection] = useState<SectionId>((searchParams.get('tab') as SectionId) || 'overview');
   const [payObligationId, setPayObligationId] = useState<string | null>(null);
+  const [showEditInvite, setShowEditInvite] = useState(false);
 
   const { overview, allocations, dues, advance, full, isLoading, isError, refetch } =
     useTenantProfile(hostelId, tenantId, section);
@@ -535,7 +537,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
               <div className="grid gap-2.5 sm:grid-cols-3">
                 <button
                   type="button"
-                  onClick={() => runComplianceAction('RESEND_INVITE', 'Invitation resent')}
+                  onClick={() => setShowEditInvite(true)}
                   className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-border px-3.5 py-2.5 text-xs font-bold hover:bg-secondary transition-colors"
                 >
                   <Send className="w-3.5 h-3.5 text-accent" />
@@ -792,6 +794,17 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
           initialDueId={payObligationId}
           onClose={() => {
             setPayObligationId(null);
+            refetch();
+          }}
+        />
+      )}
+
+      {showEditInvite && (
+        <EditInviteModal
+          tenantId={tenantId}
+          hostelId={hostelId}
+          onClose={() => {
+            setShowEditInvite(false);
             refetch();
           }}
         />

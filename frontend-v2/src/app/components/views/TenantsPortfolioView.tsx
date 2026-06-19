@@ -24,6 +24,9 @@ const TenantProfileDrawer = lazy(() =>
 const TenantTable = lazy(() =>
   import('@features/tenants/components/list/TenantTable').then((m) => ({ default: m.TenantTable }))
 );
+const EditInviteModal = lazy(() =>
+  import('@/app/components/modals/EditInviteModal').then((m) => ({ default: m.EditInviteModal }))
+);
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -303,6 +306,7 @@ export function TenantsPortfolioView() {
   const setPage = useTenantStore((s) => s.setPage);
 
   const [showInvite, setShowInvite] = useState(false);
+  const [editingTenantId, setEditingTenantId] = useState<string | null>(null);
   const [drawerTenant, setDrawerTenant] = useState<NormalizedTenant | null>(null);
 
   // Load hostels
@@ -443,7 +447,7 @@ export function TenantsPortfolioView() {
                   onSelect={handleSelectTenant}
                   onReminder={(t) => reminderMutation.mutate(t.id)}
                   onCall={actions.callTenant}
-                  onResend={(t) => (t.email || t.phone) && actions.resendInvite.mutate(t.email || t.phone)}
+                  onResend={(t) => setEditingTenantId(t.id)}
                 />
 
                 {/* Desktop table — lazy loaded, hidden on mobile */}
@@ -453,7 +457,7 @@ export function TenantsPortfolioView() {
                     hostelId={activeHostelId}
                     onReminder={(t) => reminderMutation.mutate(t.id)}
                     onMoveOut={() => navigate(`/hostels/${activeHostelId}/move-outs`)}
-                    onResend={(t) => (t.email || t.phone) && actions.resendInvite.mutate(t.email || t.phone)}
+                    onResend={(t) => setEditingTenantId(t.id)}
                   />
                 </Suspense>
 
@@ -493,6 +497,17 @@ export function TenantsPortfolioView() {
           <AddTenantModal
             hostelId={activeHostelId}
             onClose={() => { setShowInvite(false); refetch(); }}
+          />
+        </Suspense>
+      )}
+
+      {/* ── Edit Tenant Modal ── */}
+      {editingTenantId && activeHostelId && (
+        <Suspense fallback={null}>
+          <EditInviteModal
+            tenantId={editingTenantId}
+            hostelId={activeHostelId}
+            onClose={() => { setEditingTenantId(null); refetch(); }}
           />
         </Suspense>
       )}

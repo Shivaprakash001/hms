@@ -568,21 +568,16 @@ export class InvitationService {
       monthly_rent: number;
       joining_date?: string;
       payment_frequency?: string;
+      advance_amount?: number;
+      maintenance_amount?: number;
+      maintenance_type?: string;
+      agreement_duration_months?: number;
+      agreement_start_date?: string;
     }
   ) {
-    const normalizedEmail = String(data.email || "").trim().toLowerCase();
-    const joiningDate = data.joining_date ? new Date(data.joining_date) : new Date();
-    joiningDate.setHours(0, 0, 0, 0);
-
     const tenant = await prisma.tenants.findFirst({
       where: { id: tenantId, owner_id: ownerId },
       include: {
-        profiles: true,
-        room_allocations: {
-          where: { is_active: true, end_date: null },
-          orderBy: { start_date: "desc" },
-          take: 1,
-        },
         payments: { select: { id: true }, take: 1 },
       },
     });
@@ -595,152 +590,12 @@ export class InvitationService {
       throw new Error("VALIDATION: Invitation cannot be edited after payment activity exists");
     }
 
-    const targetRoom = await prisma.rooms.findFirst({
-      where: { id: data.room_id, is_active: true, hostels: { owner_id: ownerId, status: "ACTIVE" } },
-      include: {
-        hostels: true,
-        room_allocations: {
-          where: {
-            is_active: true,
-            end_date: null,
-            tenant_id: { not: tenantId },
-          },
-          select: { id: true },
-        },
-      },
-    });
-    if (!targetRoom || !targetRoom.hostels) throw new Error("NOT_FOUND: Target room not found");
-    const targetCapacity = await roomCapacityService.getRoomCapacitySnapshot(targetRoom.id, { ownerId });
-    if (targetCapacity.available <= 0) {
-      throw new Error("CAPACITY_EXCEEDED: Target room is already at full capacity");
-    }
-
-    const emailOwner = await prisma.profile.findUnique({
-      where: { email: normalizedEmail },
-      select: { id: true, owner_id: true },
-    });
-    if (emailOwner && emailOwner.id !== tenant.profile_id) {
-      throw new Error("ALREADY_EXISTS: A user with this email already exists");
-    }
-
-    const token = crypto.randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
-
-    await prisma.$transaction(async (tx: any) => {
-      await tx.profile.update({
-        where: { id: tenant.profile_id },
-        data: {
-          email: normalizedEmail,
-          name: data.name,
-          phone: data.phone || null,
-          invitation_token: token,
-          invitation_expires_at: expiresAt,
-        },
-      });
-
-      await tx.tenants.update({
-        where: { id: tenant.id },
-        data: {
-          monthly_rent: Number(data.monthly_rent),
-          joined_on: joiningDate,
-          billing_start_date: joiningDate,
-          hostel_id: targetRoom.hostel_id,
-          payment_frequency: data.payment_frequency as any || undefined,
-        },
-      });
-
-      const activeAllocation = (tenant as any).room_allocations[0];
-      if (activeAllocation) {
-        await tx.roomAllocation.update({
-          where: { id: activeAllocation.id },
-          data: {
-            room_id: targetRoom.id,
-            hostel_id: targetRoom.hostel_id,
-            start_date: joiningDate,
-          },
-        });
-      } else {
-        await tx.roomAllocation.create({
-          data: {
-            id: crypto.randomUUID(),
-            tenant_id: tenant.id,
-            room_id: targetRoom.id,
-            hostel_id: targetRoom.hostel_id,
-            start_date: joiningDate,
-            is_active: true,
-          },
-        });
-      }
-
-      await tx.rent_obligations.updateMany({
-        where: {
-          tenant_id: tenant.id,
-          status: { in: ["PENDING", "PARTIAL"] },
-          payments: { none: {} },
-        },
-        data: {
-          owner_id: ownerId,
-          hostel_id: targetRoom.hostel_id,
-          rent_month: joiningDate,
-        },
-      });
-    });
-
-    await allocationReconciliationService.reconcileTenant(tenant.id).catch((err: any) => {
-      logger.error("reconcile_after_invitation_update_failed", {
-        tenant_id: tenant.id,
-        room_id: targetRoom.id,
-        error: String(err?.message || err),
-      });
-    });
-
-    const owner = await prisma.profile.findUnique({ where: { id: ownerId } });
-    if (!owner) throw new Error("INTERNAL_ERROR: Cannot resend, missing owner details.");
-
-    const activationLink = frontendUrl(`/activate/${token}`);
-
-    const emailResult = await EmailService.sendInvitation({
-      toEmail: normalizedEmail,
-      tenantName: data.name,
-      ownerName: owner.name,
-      hostelName: targetRoom.hostels.name,
-      roomNumber: targetRoom.room_no,
-      roomRent: Number(data.monthly_rent),
-      activationLink,
-    });
-
-    await eventLog.log("INVITATION_UPDATED_BY_OWNER", ownerId, {
-      tenant_id: tenant.id,
-      room_id: targetRoom.id,
-      hostel_id: targetRoom.hostel_id,
-      email: normalizedEmail,
-      email_sent: emailResult.sent,
-    }, tenant.id);
-
-    await eventSystem.trigger("tenant_updated", {
-      owner_id: ownerId,
-      tenant_id: tenant.id,
-      hostel_id: targetRoom.hostel_id,
-    });
-
-    if (!emailResult.sent) {
-      return {
-        message: "Invitation updated, but email delivery failed",
-        action: "UPDATED",
-        email: normalizedEmail,
-        activation_link: activationLink,
-        email_sent: false,
-        email_error: String(emailResult.error || "unknown"),
-      };
-    }
-
-    return {
-      message: "Invitation updated and resent successfully",
-      action: "UPDATED",
-      email: normalizedEmail,
-      activation_link: activationLink,
-      email_sent: true,
-    };
+    // Delegate the update and resend logic to the lifecyle service to ensure consistency (reservations, obligations, token rotation, delivery)
+    return tenantInvitationLifecycleService.resendInvitationByEmail(
+      tenantId,
+      { id: ownerId, role: "OWNER" },
+      data
+    );
   }
 }
 

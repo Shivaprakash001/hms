@@ -16,12 +16,14 @@ import type { NormalizedTenant } from '@features/tenants/utils/normalize';
 
 const AddTenantModal = lazy(() => import('@/app/components/modals/AddTenantModal').then((m) => ({ default: m.AddTenantModal })));
 const TenantProfileDrawer = lazy(() => import('@features/tenants/components/profile/TenantProfileDrawer').then((m) => ({ default: m.TenantProfileDrawer })));
+const EditInviteModal = lazy(() => import('@/app/components/modals/EditInviteModal').then((m) => ({ default: m.EditInviteModal })));
 
 export function TenantsHostelView() {
   const { hostelId = '' } = useParams();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const [showInvite, setShowInvite] = useState(false);
+  const [editingTenantId, setEditingTenantId] = useState<string | null>(null);
   const [drawerTenant, setDrawerTenant] = useState<NormalizedTenant | null>(null);
   const [selectedTenantIds, setSelectedTenantIds] = useState<Set<string>>(new Set());
   const setPage = useTenantStore((s) => s.setPage);
@@ -121,7 +123,7 @@ export function TenantsHostelView() {
               hostelId={hostelId}
               onReminder={(t) => reminderMutation.mutate(t.id)}
               onMoveOut={() => navigate(`/hostels/${hostelId}/move-outs`)}
-              onResend={(t) => (t.email || t.phone) && actions.resendInvite.mutate(t.email || t.phone)}
+              onResend={(t) => setEditingTenantId(t.id)}
               selectedIds={selectedTenantIds}
               onToggleSelect={toggleTenantSelection}
             />
@@ -131,7 +133,7 @@ export function TenantsHostelView() {
               onSelect={handleView}
               onReminder={(t) => reminderMutation.mutate(t.id)}
               onCall={actions.callTenant}
-              onResend={(t) => (t.email || t.phone) && actions.resendInvite.mutate(t.email || t.phone)}
+              onResend={(t) => setEditingTenantId(t.id)}
               selectedIds={selectedTenantIds}
               onToggleSelect={toggleTenantSelection}
             />
@@ -166,6 +168,12 @@ export function TenantsHostelView() {
     {showInvite && (
       <Suspense fallback={null}>
         <AddTenantModal hostelId={hostelId} onClose={() => { setShowInvite(false); refetch(); }} />
+      </Suspense>
+    )}
+
+    {editingTenantId && (
+      <Suspense fallback={null}>
+        <EditInviteModal tenantId={editingTenantId} hostelId={hostelId} onClose={() => { setEditingTenantId(null); refetch(); }} />
       </Suspense>
     )}
 
