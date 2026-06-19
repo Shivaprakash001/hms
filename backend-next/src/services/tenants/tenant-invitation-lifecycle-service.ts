@@ -331,7 +331,9 @@ export class TenantInvitationLifecycleService {
           token,
           expires_at: expiresAt,
           status: "PENDING",
-          agreement_duration_months: data.agreement_duration_months ? Number(data.agreement_duration_months) : null,
+          agreement_duration_months: data.agreement_duration_months !== undefined && data.agreement_duration_months !== null
+            ? Number(data.agreement_duration_months)
+            : (resolved.agreement_duration_months ? Number(resolved.agreement_duration_months) : 12),
           agreement_start_date: data.agreement_start_date ? new Date(data.agreement_start_date) : null,
         },
       });

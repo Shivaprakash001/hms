@@ -132,6 +132,7 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
     maintenance_type:   (rv.maintenance_type ?? 'MONTHLY') as MtType,
     deposit_calculation_mode: rv.deposit_calculation_mode as 'FLAT' | 'MONTHS_OF_RENT',
     deposit_months:     Number(rv.deposit_months ?? 1),
+    agreement_duration_months: Number(rv.agreement_duration_months ?? 12),
   } : null;
 
   // Auto-fill defaults once when loadedRoomId does not match the current roomId
@@ -148,6 +149,17 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
       setAdvanceDeposit(String(defaults.advance_deposit));
       setMaintenanceCharge(String(defaults.maintenance_charge));
       setMaintenanceType(defaults.maintenance_type);
+      
+      const defaultDuration = defaults.agreement_duration_months;
+      const isStandard = ['1', '3', '6', '9', '11', '12', '24'].includes(String(defaultDuration));
+      if (isStandard) {
+        setAgreementDuration(String(defaultDuration));
+        setCustomDuration('');
+      } else {
+        setAgreementDuration('custom');
+        setCustomDuration(String(defaultDuration));
+      }
+
       setLoadedRoomId(roomId);
       setIsDepositManuallyEdited(false);
     }

@@ -91,7 +91,7 @@ export interface HostelPolicy {
       deposit_months?: number;
     };
     maintenance: { type: string; amount: number };
-    invite_defaults: { auto_fill_room_rent: boolean; allow_override: boolean };
+    invite_defaults: { auto_fill_room_rent: boolean; allow_override: boolean; agreement_duration_months?: number };
     partial_payments: { enabled: boolean; minimum_amount: number };
     payment_frequency: {
       allowed_frequencies: string[];

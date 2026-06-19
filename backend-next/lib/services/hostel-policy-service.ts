@@ -35,6 +35,7 @@ export type HostelPolicy = {
     invite_defaults: {
       auto_fill_room_rent: boolean;
       allow_override: boolean;
+      agreement_duration_months: number;
     };
     partial_payments: {
       enabled: boolean;
@@ -329,6 +330,7 @@ export function normalizeHostelPolicy(hostel: any): HostelPolicy {
       invite_defaults: {
         auto_fill_room_rent: bool(inviteDefaults.auto_fill_room_rent ?? billingDefaults.auto_fill_room_rent, true),
         allow_override: bool(inviteDefaults.allow_override ?? billingDefaults.allow_override, true),
+        agreement_duration_months: boundedNumber(inviteDefaults.agreement_duration_months ?? billingDefaults.agreement_duration_months ?? config.agreement_duration_months ?? 12, 12, 1, 120, "Default agreement duration"),
       },
       partial_payments: {
         enabled: bool(partialPayments.enabled ?? config.allow_partial_payments, false),
@@ -489,6 +491,7 @@ export function toCompatibilityPreferences(policy: HostelPolicy): Record<string,
       maintenance_type: policy.billing.maintenance.type,
       auto_fill_room_rent: policy.billing.invite_defaults.auto_fill_room_rent,
       allow_override: policy.billing.invite_defaults.allow_override,
+      agreement_duration_months: policy.billing.invite_defaults.agreement_duration_months,
       reservation_policy: policy.billing.deposit.reservation_policy ?? "FULL_DEPOSIT",
       minimum_reservation_deposit: policy.billing.deposit.minimum_reservation_deposit ?? 0,
     },
@@ -569,6 +572,7 @@ export function compatibilityPreferencesToPolicyPatch(data: Record<string, any>)
         invite_defaults: {
           auto_fill_room_rent: data.billing_defaults.auto_fill_room_rent,
           allow_override: data.billing_defaults.allow_override,
+          agreement_duration_months: data.billing_defaults.agreement_duration_months,
         },
       }),
       ...((data.allow_partial_payments !== undefined || data.min_payment_amount !== undefined) && {
@@ -735,6 +739,7 @@ export function validateHostelPolicyForWrite(policy: HostelPolicy) {
   for (const [frequency, months] of Object.entries(policy.billing.payment_frequency.minimum_commitment_months || {})) {
     boundedNumber(months, 1, 0, 120, `${frequency} minimum commitment`);
   }
+  boundedNumber(policy.billing.invite_defaults.agreement_duration_months, 12, 1, 120, "Default agreement duration");
   boundedNumber(policy.tenant_rules.invite_expiry_hours, 48, 1, 720, "Invite expiry hours");
   boundedNumber(policy.automation.auto_deactivate_days, 0, 0, 365, "Auto deactivate days");
   boundedNumber(policy.dashboard.occupancy_warning_threshold, 80, 0, 100, "Occupancy warning threshold");

@@ -14,6 +14,7 @@ export type BillingDefaults = {
   minimum_reservation_deposit?: number;
   deposit_calculation_mode: "FLAT" | "MONTHS_OF_RENT";
   deposit_months: number;
+  agreement_duration_months: number;
 };
 
 export type TenantInviteDefaults = {
@@ -34,6 +35,7 @@ export type TenantInviteDefaults = {
     minimum_reservation_deposit?: number;
     deposit_calculation_mode: "FLAT" | "MONTHS_OF_RENT";
     deposit_months: number;
+    agreement_duration_months: number;
   };
 };
 
@@ -50,6 +52,7 @@ export const DEFAULT_BILLING_DEFAULTS: BillingDefaults = {
   minimum_reservation_deposit: 0,
   deposit_calculation_mode: "FLAT",
   deposit_months: 1,
+  agreement_duration_months: 12,
 };
 
 function nonNegativeNumber(value: unknown, fallback: number) {
@@ -110,6 +113,7 @@ export function normalizeBillingDefaults(rawConfig: unknown): BillingDefaults {
     minimum_reservation_deposit: nonNegativeNumber(nested.minimum_reservation_deposit ?? config.minimum_reservation_deposit, 0),
     deposit_calculation_mode: calculationMode(calculationModeSource, DEFAULT_BILLING_DEFAULTS.deposit_calculation_mode),
     deposit_months: Math.max(1, Math.min(12, Math.floor(nonNegativeNumber(depositMonthsSource, DEFAULT_BILLING_DEFAULTS.deposit_months)))),
+    agreement_duration_months: Math.max(1, Math.min(120, Math.floor(nonNegativeNumber(nested.agreement_duration_months ?? config.agreement_duration_months, DEFAULT_BILLING_DEFAULTS.agreement_duration_months)))),
   };
 }
 
@@ -144,6 +148,9 @@ function sanitizeBillingDefaultsPayload(payload: Partial<BillingDefaults>) {
   }
   if (payload.deposit_months !== undefined) {
     next.deposit_months = Math.max(1, Math.min(12, Math.floor(nonNegativeNumber(payload.deposit_months, DEFAULT_BILLING_DEFAULTS.deposit_months))));
+  }
+  if (payload.agreement_duration_months !== undefined) {
+    next.agreement_duration_months = Math.max(1, Math.min(120, Math.floor(nonNegativeNumber(payload.agreement_duration_months, DEFAULT_BILLING_DEFAULTS.agreement_duration_months))));
   }
   return next;
 }
@@ -268,6 +275,7 @@ export class HostelBillingPreferencesService {
         minimum_reservation_deposit: billingDefaults.minimum_reservation_deposit ?? 0,
         deposit_calculation_mode: billingDefaults.deposit_calculation_mode,
         deposit_months: billingDefaults.deposit_months,
+        agreement_duration_months: billingDefaults.agreement_duration_months,
       },
     };
 

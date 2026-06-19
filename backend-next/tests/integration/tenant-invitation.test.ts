@@ -399,5 +399,76 @@ describe('Tenant Onboarding Integration Flow', () => {
       expect(Number(dbInvite?.tenant.monthly_rent)).toBe(10000);
       expect(Number(dbInvite?.tenant.security_deposit)).toBe(15000);
     });
+
+    it('should fall back to default agreement duration from policy when not provided', async () => {
+      await hostelPolicyService.updateHostelPolicy(
+        hostel.id,
+        owner.id,
+        {
+          billing: {
+            invite_defaults: {
+              agreement_duration_months: 9,
+            }
+          }
+        },
+        owner.id
+      );
+
+      sendInvitationSpy.mockResolvedValueOnce({
+        providerMessageId: 'wamid.duration_test_1',
+        attempts: 1,
+      });
+
+      const result: any = await tenantInvitationLifecycleService.createInvitation({
+        name: 'Duration Test Tenant 1',
+        phone: '9876543261',
+        room_id: room.id,
+        monthly_rent: 10000,
+      }, owner.id);
+
+      expect(result.action).toBe('INVITED');
+
+      const dbInvite = await prisma.tenant_invitations.findUnique({
+        where: { id: result.invitation_id },
+      });
+
+      expect(dbInvite?.agreement_duration_months).toBe(9);
+    });
+
+    it('should respect custom agreement duration when explicitly provided', async () => {
+      await hostelPolicyService.updateHostelPolicy(
+        hostel.id,
+        owner.id,
+        {
+          billing: {
+            invite_defaults: {
+              agreement_duration_months: 9,
+            }
+          }
+        },
+        owner.id
+      );
+
+      sendInvitationSpy.mockResolvedValueOnce({
+        providerMessageId: 'wamid.duration_test_2',
+        attempts: 1,
+      });
+
+      const result: any = await tenantInvitationLifecycleService.createInvitation({
+        name: 'Duration Test Tenant 2',
+        phone: '9876543262',
+        room_id: room.id,
+        monthly_rent: 10000,
+        agreement_duration_months: 6,
+      }, owner.id);
+
+      expect(result.action).toBe('INVITED');
+
+      const dbInvite = await prisma.tenant_invitations.findUnique({
+        where: { id: result.invitation_id },
+      });
+
+      expect(dbInvite?.agreement_duration_months).toBe(6);
+    });
   });
 });

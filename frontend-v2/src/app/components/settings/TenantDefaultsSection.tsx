@@ -7,6 +7,7 @@ interface Local {
   deposit_calculation_mode: 'FLAT' | 'MONTHS_OF_RENT'; deposit_months: number;
   maintenance_type: string; maintenance_amount: number;
   auto_fill_room_rent: boolean; allow_override: boolean;
+  agreement_duration_months: number;
   invite_expiry_hours: number;
 }
 
@@ -26,6 +27,7 @@ const init = (p?: HostelPolicy): Local => ({
   maintenance_amount: p?.billing.maintenance.amount ?? 0,
   auto_fill_room_rent: p?.billing.invite_defaults.auto_fill_room_rent ?? true,
   allow_override: p?.billing.invite_defaults.allow_override ?? true,
+  agreement_duration_months: p?.billing.invite_defaults.agreement_duration_months ?? 12,
   invite_expiry_hours: p?.tenant_rules.invite_expiry_hours ?? 48,
 });
 
@@ -57,7 +59,11 @@ export function TenantDefaultsSection({ hostelId, policy }: Props) {
           deposit_months: local.deposit_months,
         },
         maintenance: { type: local.maintenance_type, amount: local.maintenance_amount },
-        invite_defaults: { auto_fill_room_rent: local.auto_fill_room_rent, allow_override: local.allow_override },
+        invite_defaults: {
+          auto_fill_room_rent: local.auto_fill_room_rent,
+          allow_override: local.allow_override,
+          agreement_duration_months: local.agreement_duration_months,
+        },
       },
       tenant_rules: { invite_expiry_hours: local.invite_expiry_hours },
     }, {
@@ -153,6 +159,10 @@ export function TenantDefaultsSection({ hostelId, policy }: Props) {
         <FieldRow label="Allow price override" hint="Owner can edit pricing at invite time">
           <Toggle checked={local.allow_override} onChange={v => upd('allow_override', v)} />
         </FieldRow>
+        <Field label="Default agreement duration (months)" hint="Pre-fills the lease agreement duration">
+          <input type="number" min={1} max={120} className={inp} value={local.agreement_duration_months}
+            onChange={e => upd('agreement_duration_months', Math.min(120, Math.max(1, +e.target.value)))} />
+        </Field>
         <Field label="Invitation link expires (hours)" hint="After this the invite token is invalid">
           <input type="number" min={1} max={720} className={inp} value={local.invite_expiry_hours}
             onChange={e => upd('invite_expiry_hours', Math.min(720, Math.max(1, +e.target.value)))} />
