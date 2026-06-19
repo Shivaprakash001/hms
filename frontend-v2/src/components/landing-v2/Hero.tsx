@@ -20,7 +20,7 @@ function highlightIcon(label: string) {
 }
 
 export function Hero({ availability, content }: { availability?: LandingAvailability; content: HeroContent }) {
-  const startingPriceText = rupee(availability?.startingPrice || 8000);
+  const startingPriceText = rupee(availability?.startingPrice || 8200);
   let supportingCopy = content.supportingCopy || 'Join SNIST students';
   if (startingPriceText) {
     const hasPrice = supportingCopy.includes('₹') || supportingCopy.toLowerCase().includes('/month');

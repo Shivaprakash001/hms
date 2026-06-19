@@ -42,7 +42,7 @@ export function RoomPricing() {
                     className="text-4xl font-bold text-[#F07B1D]"
                     style={{ fontFamily: 'var(--font-display)' }}
                   >
-                    ₹8,000
+                    ₹8,200
                   </div>
                   <div className="text-sm text-[#2C2C2A]">per month</div>
                 </div>

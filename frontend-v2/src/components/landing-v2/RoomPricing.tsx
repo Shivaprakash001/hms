@@ -22,14 +22,14 @@ export function RoomPricing({
     ? roomInclusions
     : (facilities?.filter((facility) => facility?.title).slice(0, 8).map((facility) => facility.title) || []);
 
-  const cleanPrice = availability?.startingPrice || 8000;
+  const cleanPrice = availability?.startingPrice || 8200;
   const formattedPrice = `₹${Number(cleanPrice).toLocaleString('en-IN')}`;
 
   const clarityText = (totalCostClarityText || "No hidden fees. Current rent is confirmed from live HMS room pricing. {{price}} is the current starting price.")
     .replace('{{price}}', formattedPrice)
-    .replace('8000', Number(cleanPrice).toLocaleString('en-IN'));
+    .replace('8200', Number(cleanPrice).toLocaleString('en-IN'));
 
-  const imageSrc = roomImage?.url || "/hostel_room.png";
+  const imageSrc = roomImage?.url || "/SAH_Room.jpg";
   const imageAlt = roomImage?.alt || "Modern boys student hostel room";
 
   return (

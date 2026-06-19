@@ -2,7 +2,7 @@ export function StatsStrip() {
   const stats = [
     { number: '2', label: 'Hostel Buildings' },
     { number: '4', label: 'Sharing Rooms' },
-    { number: '₹8,000', label: 'per month' },
+    { number: '₹8,200', label: 'per month' },
     { number: '9+', label: 'Amenities' },
   ];
 

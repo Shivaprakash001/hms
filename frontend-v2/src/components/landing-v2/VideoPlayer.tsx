@@ -21,20 +21,20 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
 const FALLBACK_VIDEOS: TourVideo[] = [
   {
     id: 'common',
-    label: 'Common Area',
-    url: 'https://media.w3.org/2010/05/sintel/trailer_hd.mp4',
+    label: 'Hostel Tour',
+    url: '/SAH_Common.mp4',
     icon: Building2,
   },
   {
     id: 'room',
-    label: 'Room Tour',
-    url: 'https://www.w3schools.com/html/mov_bbb.mp4',
+    label: 'Room Interior',
+    url: '/SAH_Room.mp4',
     icon: Bed,
   },
   {
     id: 'dining',
-    label: 'Dining',
-    url: 'https://media.w3.org/2010/05/bunny/trailer.mp4',
+    label: 'Dining Hall',
+    url: '/SAH_Dining.mp4',
     icon: UtensilsCrossed,
   },
 ];

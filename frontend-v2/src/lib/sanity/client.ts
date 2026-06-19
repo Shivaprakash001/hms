@@ -74,10 +74,6 @@ const landingQuery = `{
       icon
     }
   },
-  "hostel": *[_type == "hostel" && _id == "hostel-1"][0]{
-    bedsAvailable,
-    intakeMonth
-  },
   "siteSettings": *[_type == "siteSettings"][0]{
     phoneNumber,
     whatsappNumber,
@@ -258,10 +254,8 @@ function mergeLandingContent(result: any): LandingMarketingContent {
     roomImage: hasImage(h?.roomImage) ? h.roomImage : undefined,
     startingPrice: typeof h?.startingPrice === 'number' ? h.startingPrice : undefined,
     hostelAvailability: {
-      bedsAvailable: typeof h?.bedsAvailable === 'number'
-        ? h.bedsAvailable
-        : (typeof result?.hostel?.bedsAvailable === 'number' ? result.hostel.bedsAvailable : null),
-      intakeMonth: h?.intakeMonth || result?.hostel?.intakeMonth || null,
+      bedsAvailable: typeof h?.bedsAvailable === 'number' ? h.bedsAvailable : null,
+      intakeMonth: h?.intakeMonth || null,
     },
   };
 }

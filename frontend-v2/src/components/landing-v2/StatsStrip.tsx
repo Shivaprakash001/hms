@@ -7,7 +7,7 @@ interface StatItem {
 }
 
 function rupee(value: number | null | undefined) {
-  const price = value || 8000;
+  const price = value || 8200;
   return `₹${Number(price).toLocaleString('en-IN')}/mo`;
 }
 
@@ -29,8 +29,8 @@ export function StatsStrip({
   // Resolve dynamic values in stats array if needed
   const displayStats = (stats && stats.length > 0 ? stats : defaultStats).map((stat) => {
     let resolvedValue = stat.value;
-    if (resolvedValue.includes('{{price}}') || resolvedValue.includes('8000')) {
-      resolvedValue = resolvedValue.replace('{{price}}', rupee(availability?.startingPrice)).replace('8000', Number(availability?.startingPrice || 8000).toLocaleString('en-IN'));
+    if (resolvedValue.includes('{{price}}') || resolvedValue.includes('8200')) {
+      resolvedValue = resolvedValue.replace('{{price}}', rupee(availability?.startingPrice)).replace('8200', Number(availability?.startingPrice || 8200).toLocaleString('en-IN'));
     }
     return {
       ...stat,
