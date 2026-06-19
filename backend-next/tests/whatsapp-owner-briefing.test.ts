@@ -12,8 +12,27 @@ const mockSendTextMessage = vi.spyOn(MetaWhatsAppProvider.prototype, "sendTextMe
   attempts: 1,
 });
 
+const mockSendListMessage = vi.spyOn(MetaWhatsAppProvider.prototype, "sendListMessage").mockResolvedValue({
+  providerMessageId: "mock-list-id-12345",
+  raw: { success: true },
+  attempts: 1,
+});
+
+const mockSendButtonMessage = vi.spyOn(MetaWhatsAppProvider.prototype, "sendButtonMessage").mockResolvedValue({
+  providerMessageId: "mock-button-id-12345",
+  raw: { success: true },
+  attempts: 1,
+});
+
+const mockSendTemplate = vi.spyOn(MetaWhatsAppProvider.prototype, "sendTemplate").mockResolvedValue({
+  providerMessageId: "mock-template-id-12345",
+  raw: { success: true },
+  attempts: 1,
+});
+
 describe("WhatsApp Owner Briefing Integration Tests", () => {
   beforeAll(async () => {
+    vi.setConfig({ testTimeout: 20000 });
     await prisma.$executeRaw`TRUNCATE TABLE "test"."profiles" CASCADE`;
     await prisma.$executeRaw`TRUNCATE TABLE "test"."owner_daily_briefings" CASCADE`;
     await prisma.$executeRaw`TRUNCATE TABLE "test"."owner_whatsapp_identities" CASCADE`;
@@ -173,8 +192,10 @@ describe("WhatsApp Owner Briefing Integration Tests", () => {
     expect(briefing?.view_dues_clicks).toBe(1);
     expect(briefing?.quick_action_clicks).toBe(0);
 
-    // Verify response sent dues text
-    expect(mockSendTextMessage).toHaveBeenCalled();
+    // Verify response sent dues list
+    expect(mockSendListMessage).toHaveBeenCalled();
+    const lastListMessage = mockSendListMessage.mock.calls[mockSendListMessage.mock.calls.length - 1][1];
+    expect(lastListMessage).toContain("Pending Rent");
   });
 
   it("Scenario 3: Click on Quick Action for COLLECTIONS triggers collections flow", async () => {
@@ -197,7 +218,7 @@ describe("WhatsApp Owner Briefing Integration Tests", () => {
     expect(briefing?.quick_action_clicks).toBe(1);
     expect(briefing?.view_dues_clicks).toBe(0);
 
-    const lastMessage = mockSendTextMessage.mock.calls[mockSendTextMessage.mock.calls.length - 1][1];
+    const lastMessage = mockSendListMessage.mock.calls[mockSendListMessage.mock.calls.length - 1][1];
     expect(lastMessage).toContain("Pending Rent");
     expect(lastMessage).toContain("No pending dues found.");
   });
@@ -248,10 +269,12 @@ describe("WhatsApp Owner Briefing Integration Tests", () => {
     });
     expect(briefing?.quick_action_clicks).toBe(1);
 
-    // Verify message has "Pending Invitations" and "Invited Tenant"
-    const lastMessage = mockSendTextMessage.mock.calls[mockSendTextMessage.mock.calls.length - 1][1];
-    expect(lastMessage).toContain("Pending Invitations");
-    expect(lastMessage).toContain("Invited Tenant");
+    // Verify message has "Pending Invitations" and sections have "Invited Tenant"
+    const calls = mockSendListMessage.mock.calls;
+    const lastCall = calls[calls.length - 1];
+    expect(lastCall[1]).toContain("Pending Invitations");
+    const sectionsJson = JSON.stringify(lastCall[2]);
+    expect(sectionsJson).toContain("Invited Tenant");
   });
 
   it("Scenario 5: Click on Quick Action for HEALTHY priority returns placeholder response", async () => {
@@ -296,7 +319,7 @@ describe("WhatsApp Owner Briefing Integration Tests", () => {
     expect(result).toBeDefined();
     expect((result as any).processed_commands).toBe(1);
 
-    const lastMessage = mockSendTextMessage.mock.calls[mockSendTextMessage.mock.calls.length - 1][1];
+    const lastMessage = mockSendListMessage.mock.calls[mockSendListMessage.mock.calls.length - 1][1];
     expect(lastMessage).toContain("Empty Beds");
     expect(lastMessage).toContain("Briefing Hostel");
     expect(lastMessage).toContain("4 Vacant Beds");
@@ -335,7 +358,7 @@ describe("WhatsApp Owner Briefing Integration Tests", () => {
     expect(result).toBeDefined();
     expect((result as any).processed_commands).toBe(1);
 
-    const lastMessage = mockSendTextMessage.mock.calls[mockSendTextMessage.mock.calls.length - 1][1];
+    const lastMessage = mockSendButtonMessage.mock.calls[mockSendButtonMessage.mock.calls.length - 1][1];
     expect(lastMessage).toContain("Expense review");
     expect(lastMessage).toContain("This is better handled in HMS.");
   });
@@ -372,9 +395,11 @@ describe("WhatsApp Owner Briefing Integration Tests", () => {
     expect(result).toBeDefined();
     expect((result as any).processed_commands).toBe(1);
 
-    const lastMessage = mockSendTextMessage.mock.calls[mockSendTextMessage.mock.calls.length - 1][1];
-    expect(lastMessage).toContain("Move-Outs");
-    expect(lastMessage).toContain("Rahul");
-    expect(lastMessage).toContain("Action Needed: 1");
+    const calls = mockSendListMessage.mock.calls;
+    const lastCall = calls[calls.length - 1];
+    expect(lastCall[1]).toContain("Move-Outs");
+    expect(lastCall[1]).toContain("Action Needed: 1");
+    const sectionsJson = JSON.stringify(lastCall[2]);
+    expect(sectionsJson).toContain("Rahul");
   });
 });

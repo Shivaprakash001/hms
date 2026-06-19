@@ -209,6 +209,7 @@ export class AgreementGenerationService {
       include: {
         tenant: {
           include: {
+            profiles: true,
             room_allocations: {
               where: { is_active: true },
               include: { room: true },

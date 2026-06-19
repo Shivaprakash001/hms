@@ -230,7 +230,7 @@ export class PaymentService {
       data: { status: newStatus }
     });
 
-    if (obligation.obligation_type === "ADVANCE") {
+    if (obligation.obligation_type === "ADVANCE" || obligation.obligation_type === "SECURITY_DEPOSIT") {
       await tenantFinancialLedgerService.creditIdempotentInTx(tx, {
         tenantId: obligation.tenant_id,
         ownerId: obligation.owner_id || "",
@@ -3019,6 +3019,7 @@ export class PaymentService {
         ) latest_attempt ON true
         WHERE o.owner_id = ${ownerId}::uuid
           AND o.hostel_id = ${hostelId}::uuid
+          AND o.status::text != 'UPCOMING'
           ${tenantFilter}
           ${monthFilter}
       ),
@@ -3653,6 +3654,11 @@ export class PaymentService {
   }
 
   async getPaymentDetail(id: string, ownerId: string, hostelId: string) {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id) || !uuidRegex.test(ownerId) || !uuidRegex.test(hostelId)) {
+      throw new Error("NOT_FOUND: Obligation not found");
+    }
+
     const payment = await prisma.payments.findFirst({
       where: { id, hostel_id: hostelId },
       select: {

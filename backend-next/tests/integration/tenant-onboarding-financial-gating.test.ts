@@ -99,11 +99,13 @@ describe('Tenant Onboarding Financial Gating Integration', () => {
     const obligations = await prisma.rent_obligations.findMany({
       where: { tenant_id: tenantId },
     });
-    expect(obligations.length).toBe(2);
+    expect(obligations.length).toBe(3);
     const depositObligation = obligations.find((o: any) => o.obligation_type === 'SECURITY_DEPOSIT');
     const maintenanceObligation = obligations.find((o: any) => o.obligation_type === 'MAINTENANCE');
+    const rentObligation = obligations.find((o: any) => o.obligation_type === 'RENT');
     expect(depositObligation).toBeTruthy();
     expect(maintenanceObligation).toBeTruthy();
+    expect(rentObligation).toBeTruthy();
 
     // Verify reservation status is PAYMENT_PENDING
     let resStatus = await reservationStatusService.getReservationStatus(tenantId);

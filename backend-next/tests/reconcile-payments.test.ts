@@ -7,6 +7,7 @@ vi.mock("@/lib/db", () => {
   const mockDb = {
     $transaction: vi.fn().mockImplementation((cb) => cb(mockDb)),
     $queryRaw: vi.fn().mockImplementation(() => Promise.resolve([{ next_sequence: 1 }])),
+    $executeRaw: vi.fn().mockImplementation(() => Promise.resolve(0)),
     paymentReconciliationRun: {
       create: vi.fn().mockImplementation(() => Promise.resolve({ id: "run_123" })),
       update: vi.fn().mockImplementation(() => Promise.resolve({})),
@@ -21,6 +22,7 @@ vi.mock("@/lib/db", () => {
     },
     paymentAttemptStatusEvent: {
       create: vi.fn(),
+      aggregate: vi.fn().mockImplementation(() => Promise.resolve({ _max: { transition_sequence: 0 } })),
     },
     paymentProviderVerificationSnapshot: {
       create: vi.fn(),

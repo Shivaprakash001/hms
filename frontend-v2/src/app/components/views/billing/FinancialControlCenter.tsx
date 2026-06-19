@@ -558,6 +558,10 @@ export function FinancialControlCenter({ hostelId }: Props) {
       const hId = pConfig?.meta?.hostelId;
       const hostelName = hostels.find((h: any) => h.id === hId)?.name ?? 'Hostel';
       list.forEach((p: any) => {
+        const rawStatus = String(p.statusRaw || p.status_raw || '').toUpperCase();
+        if (rawStatus === 'UPCOMING') {
+          return;
+        }
         allPayments.push({
           ...p,
           hostelName,
@@ -659,8 +663,63 @@ export function FinancialControlCenter({ hostelId }: Props) {
         });
       });
     });
-    return allDues.filter((due) => dueBalance(due) > 0);
-  }, [duesDataList, queryConfigs, queryResults, hostels]);
+
+    const now = new Date();
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+
+    return allDues.filter((due) => {
+      const statusStr = String(due.status || due.statusRaw || '').toUpperCase();
+      if (statusStr === 'UPCOMING') {
+        const compareTime = due.due_date ? new Date(String(due.due_date)).getTime() : due.rent_month ? new Date(String(due.rent_month)).getTime() : 0;
+        if (compareTime > 0) {
+          const compDate = new Date(compareTime);
+          const compMonthStart = new Date(compDate.getFullYear(), compDate.getMonth(), 1).getTime();
+          if (compMonthStart > currentMonthStart) {
+            return false;
+          }
+        }
+      }
+      return dueBalance(due) > 0;
+    });
+  }, [duesDataList, queryConfigs, queryResults, hostels, dueBalance]);
+
+  const resolvedHostelIdForObligation = useMemo(() => {
+    if (!selectedObligationId) return null;
+
+    // Search dues list
+    const dueMatch = dues.find(
+      (d) => String(d.obligation_id) === selectedObligationId || String(d.id) === selectedObligationId
+    );
+    if (dueMatch?.hostelId && dueMatch.hostelId !== 'all') {
+      return dueMatch.hostelId;
+    }
+    if (dueMatch?.hostel_id && dueMatch.hostel_id !== 'all') {
+      return dueMatch.hostel_id;
+    }
+
+    // Search payments list
+    const paymentMatch = payments.find(
+      (p) => String(p.obligation_id) === selectedObligationId || String(p.id) === selectedObligationId
+    );
+    if (paymentMatch?.hostelId && paymentMatch.hostelId !== 'all') {
+      return paymentMatch.hostelId;
+    }
+    if (paymentMatch?.hostel_id && paymentMatch.hostel_id !== 'all') {
+      return paymentMatch.hostel_id;
+    }
+
+    // Fallback to page-level hostelId if it is a valid UUID (not 'all')
+    if (hostelId && hostelId !== 'all') {
+      return hostelId;
+    }
+
+    // Fallback to first hostel's id if available
+    if (hostels.length > 0) {
+      return hostels[0].id;
+    }
+
+    return null;
+  }, [selectedObligationId, dues, payments, hostelId, hostels]);
 
   const nowTime = Date.now();
   const sortedDues = useMemo(() => {
@@ -1220,7 +1279,7 @@ export function FinancialControlCenter({ hostelId }: Props) {
         <Suspense fallback={null}>
           <PaymentDetailDrawer
             obligationId={selectedObligationId}
-            hostelId={hostelId}
+            hostelId={resolvedHostelIdForObligation || hostelId}
             onClose={() => setSelectedObligationId(null)}
           />
         </Suspense>

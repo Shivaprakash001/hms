@@ -496,6 +496,13 @@ export class WhatsAppWebhookEventService {
       (t) => t.status === "ACTIVE" || t.status === "INVITED"
     );
 
+    // Sort activeTenants alphabetically by name to make the selection list deterministic
+    activeTenants.sort((a, b) => {
+      const nameA = a.profiles?.name || a.guardian_name || "";
+      const nameB = b.profiles?.name || b.guardian_name || "";
+      return nameA.localeCompare(nameB);
+    });
+
     // Fail-safe denial for no matches
     if (activeTenants.length === 0) {
       const failureReason = "No active tenant found";

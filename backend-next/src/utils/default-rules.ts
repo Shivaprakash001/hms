@@ -151,9 +151,10 @@ export function getDefaultCategoryById(categoryId: string) {
 
 export function interpolateText(text: string, variables: Record<string, any>, isFinal: boolean = false): string {
   if (!text) return "";
-  return text.replace(/\{\{([A-Z0-9_]+)\}\}/g, (match, key) => {
-    if (variables[key] !== undefined && variables[key] !== null) {
-      return String(variables[key]);
+  return text.replace(/\{\{\s*([A-Z0-9_]+)\s*\}\}/g, (match, key) => {
+    const trimmedKey = key.trim();
+    if (variables[trimmedKey] !== undefined && variables[trimmedKey] !== null) {
+      return String(variables[trimmedKey]);
     }
     return isFinal ? "____" : match;
   });

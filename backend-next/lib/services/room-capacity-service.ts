@@ -135,16 +135,41 @@ export class RoomCapacityService {
 
     const tenantMap = new Map<string, any>(tenants.map((t: any) => [t.id, t]));
 
-    const depositCredits = await db.tenant_financial_ledger.groupBy({
-      by: ["tenant_id"],
-      where: {
-        tenant_id: { in: tenantIds },
-        type: "CREDIT",
-        reason: "SECURITY_DEPOSIT_COLLECTED",
-      },
-      _sum: { amount: true },
-    });
+    const [depositCredits, paidAdvanceObligations, ledgerDepositPayments] = await Promise.all([
+      db.tenant_financial_ledger.groupBy({
+        by: ["tenant_id"],
+        where: {
+          tenant_id: { in: tenantIds },
+          type: "CREDIT",
+          reason: "SECURITY_DEPOSIT_COLLECTED",
+        },
+        _sum: { amount: true },
+      }),
+      db.payments.groupBy({
+        by: ["tenant_id"],
+        where: {
+          tenant_id: { in: tenantIds },
+          obligation: {
+            obligation_type: { in: ["SECURITY_DEPOSIT", "ADVANCE"] },
+          },
+        },
+        _sum: { amount_paid: true },
+      }),
+      db.tenant_financial_ledger.groupBy({
+        by: ["tenant_id"],
+        where: {
+          tenant_id: { in: tenantIds },
+          type: "CREDIT",
+          reason: "SECURITY_DEPOSIT_COLLECTED",
+          reference_type: "PAYMENT",
+        },
+        _sum: { amount: true },
+      }),
+    ]);
+
     const depositCreditsMap = new Map<string, number>(depositCredits.map((d: any) => [d.tenant_id, Number(d._sum.amount || 0)]));
+    const paidAdvanceMap = new Map<string, number>(paidAdvanceObligations.map((p: any) => [p.tenant_id, Number(p._sum.amount_paid || 0)]));
+    const ledgerDepositPaymentsMap = new Map<string, number>(ledgerDepositPayments.map((l: any) => [l.tenant_id, Number(l._sum.amount || 0)]));
 
     const maintenanceObligations = await db.rent_obligations.findMany({
       where: {
@@ -172,7 +197,12 @@ export class RoomCapacityService {
       if (!tenant) return true;
 
       const requiredDeposit = Number(tenant.security_deposit || 0);
-      const paidDeposit = depositCreditsMap.get(tenantId) || 0;
+      
+      const rawDepositCredits = depositCreditsMap.get(tenantId) || 0;
+      const paidAdvance = paidAdvanceMap.get(tenantId) || 0;
+      const ledgerDepositPaymentsVal = ledgerDepositPaymentsMap.get(tenantId) || 0;
+      const paidAdvanceOutsideLedger = Math.max(0, paidAdvance - ledgerDepositPaymentsVal);
+      const paidDeposit = rawDepositCredits + paidAdvanceOutsideLedger;
 
       const maintenanceType = String(tenant.maintenance_type || "MONTHLY").toUpperCase();
       const requiredMaintenance = maintenanceType === "NONE" ? 0 : Number(tenant.maintenance_charge || 0);

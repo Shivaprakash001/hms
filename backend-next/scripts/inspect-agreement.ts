@@ -1,10 +1,17 @@
 import { prisma } from "../lib/db";
 
 async function main() {
-  const docId = "3a016aea-9ba2-4a67-9f31-7d60b0b450c6";
+  const docId = "858bc8ec-29bb-416c-b66a-1c9e83a9311e";
   const agreement = await prisma.agreement.findUnique({
     where: { id: docId },
-    include: { tenant: true }
+    include: {
+      tenant: {
+        include: {
+          profiles: true,
+          room_allocations: { include: { room: true } }
+        }
+      }
+    }
   });
   console.log("Agreement details:", JSON.stringify(agreement, null, 2));
 }

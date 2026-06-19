@@ -11,12 +11,14 @@ export interface PortfolioPerformanceHostelMonth {
   expenses: number;
   profit: number;
   occupancy_rate: number;
+  pending_dues: number;
 }
 
 export interface PortfolioPerformanceMonth {
   month: string;
   month_key: string;
   total_revenue: number;
+  total_due: number;
   total_expenses: number;
   total_profit: number;
   hostels: PortfolioPerformanceHostelMonth[];
@@ -308,6 +310,7 @@ export class PortfolioPerformanceService {
     const monthly_trends: PortfolioPerformanceMonth[] = ranges.map((range) => {
       const monthHostels = cashflowRows.filter((row) => row.monthKey === range.monthKey);
       const totalRevenue = monthHostels.reduce((s, h) => s + h.revenue, 0);
+      const totalDue = monthHostels.reduce((s, h) => s + h.pending_dues, 0);
       const totalExpenses = expenseGrid
         .filter((row) => row.month_key === range.monthKey)
         .reduce((sum, row) => sum + Number(row.expenses || 0), 0);
@@ -315,9 +318,10 @@ export class PortfolioPerformanceService {
         month: range.label,
         month_key: range.monthKey,
         total_revenue: totalRevenue,
+        total_due: totalDue,
         total_expenses: totalExpenses,
         total_profit: totalRevenue - totalExpenses,
-        hostels: monthHostels.map(({ hostel_id, hostel_name, revenue, collections, expenses, profit, occupancy_rate }) => ({
+        hostels: monthHostels.map(({ hostel_id, hostel_name, revenue, collections, expenses, profit, occupancy_rate, pending_dues }) => ({
           hostel_id,
           hostel_name,
           revenue,
@@ -325,6 +329,7 @@ export class PortfolioPerformanceService {
           expenses,
           profit,
           occupancy_rate,
+          pending_dues,
         })),
       };
     });

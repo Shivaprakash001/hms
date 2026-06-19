@@ -50,6 +50,12 @@ export function scopedExpenseWhere(scope: OperationalScope, extra: Record<string
 
 export async function assertHostelBelongsToOwner(ownerId: string, hostelId?: string | null) {
   if (!hostelId) return null;
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(hostelId);
+  if (!isUuid) {
+    const err: any = new Error("FORBIDDEN: Invalid hostel identifier");
+    err.code = "FORBIDDEN";
+    throw err;
+  }
   const hostel = await prisma.hostels.findFirst({
     where: { id: hostelId, owner_id: ownerId, status: { in: ["ACTIVE", "INACTIVE", "ARCHIVED"] } },
     select: { id: true, owner_id: true, status: true },

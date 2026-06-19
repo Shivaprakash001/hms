@@ -78,6 +78,8 @@ export function PortfolioView() {
   const [showSettings, setShowSettings] = useState(false);
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
   const [hostelFilter, setHostelFilter] = useState<HostelFilter>('all');
+  const [selectedCollectionMonthKey, setSelectedCollectionMonthKey] = useState<string | null>(null);
+  const [showMonthDropdown, setShowMonthDropdown] = useState(false);
 
   // Lifecycle modal state
   const [closingHostel, setClosingHostel] = useState<{ id: string; name: string } | null>(null);
@@ -104,24 +106,50 @@ export function PortfolioView() {
   const portfolio = data?.portfolio ?? {};
   const monthlyTrends = data?.monthly_trends ?? [];
   const rankings = data?.hostel_rankings ?? [];
-  const topPerformer = rankings.find((h: { is_top_performer?: boolean }) => h.is_top_performer);
+
+  // Find currently selected trend month or default to the latest (current) month
+  const activeTrend = useMemo(() => {
+    if (!monthlyTrends || monthlyTrends.length === 0) return null;
+    if (selectedCollectionMonthKey) {
+      return monthlyTrends.find((t: any) => t.month_key === selectedCollectionMonthKey) || monthlyTrends[monthlyTrends.length - 1];
+    }
+    return monthlyTrends[monthlyTrends.length - 1];
+  }, [monthlyTrends, selectedCollectionMonthKey]);
+
+  // Resolve rankings for the selected month to ensure consistency across the whole dashboard
+  const resolvedRankings = useMemo(() => {
+    if (!activeTrend || !activeTrend.hostels) return rankings;
+    return rankings.map((h: any) => {
+      const trendHostel = activeTrend.hostels.find((th: any) => th.hostel_id === h.hostel_id);
+      if (trendHostel) {
+        return {
+          ...h,
+          revenue: trendHostel.revenue,
+          pending_dues: trendHostel.pending_dues ?? 0,
+        };
+      }
+      return h;
+    });
+  }, [rankings, activeTrend]);
+
+  const topPerformer = resolvedRankings.find((h: { is_top_performer?: boolean }) => h.is_top_performer);
 
   const filteredRankings = useMemo(
     () => {
-      const statusFiltered = applyHostelFilter(rankings, hostelFilter);
+      const statusFiltered = applyHostelFilter(resolvedRankings, hostelFilter);
       return statusFiltered.filter((h: { hostel_name: string; city?: string | null }) => {
         const q = searchQuery.toLowerCase();
         if (!q) return true;
         return h.hostel_name.toLowerCase().includes(q) || String(h.city ?? '').toLowerCase().includes(q);
       });
     },
-    [rankings, searchQuery, hostelFilter]
+    [resolvedRankings, searchQuery, hostelFilter]
   );
 
-  const filterCounts = useMemo(() => computeFilterCounts(rankings), [rankings]);
+  const filterCounts = useMemo(() => computeFilterCounts(resolvedRankings), [resolvedRankings]);
 
   const editingHostel = editingHostelId
-    ? rankings.find((h: { hostel_id: string }) => h.hostel_id === editingHostelId)
+    ? resolvedRankings.find((h: { hostel_id: string }) => h.hostel_id === editingHostelId)
     : null;
 
   const overdueRows = useMemo(
@@ -143,9 +171,15 @@ export function PortfolioView() {
   const overdueTenantCount = new Set(overdueRows.map((r) => r.tenant)).size;
   const isOverdue = overdueRows.length > 0;
 
-  const totalDue = Number(portfolio.total_due ?? 0);
-  const totalRevenue = Number(portfolio.total_revenue ?? 0);
-  const collectionRate = Number(portfolio.collection_rate ?? 0);
+  const totalDue = activeTrend ? Number(activeTrend.total_due ?? 0) : Number(portfolio.total_due ?? 0);
+  const totalRevenue = activeTrend ? Number(activeTrend.total_revenue ?? 0) : Number(portfolio.total_revenue ?? 0);
+  const collectionRate = useMemo(() => {
+    if (activeTrend) {
+      const expected = (activeTrend.total_revenue ?? 0) + (activeTrend.total_due ?? 0);
+      return expected > 0 ? (activeTrend.total_revenue / expected) * 100 : 0;
+    }
+    return Number(portfolio.collection_rate ?? 0);
+  }, [activeTrend, portfolio.collection_rate]);
   const activeTenants = Number(portfolio.active_tenants ?? 0);
   const occupiedBeds = Number(portfolio.occupied_beds ?? activeTenants);
   const totalCapacity = Number(portfolio.total_capacity ?? 0);
@@ -502,9 +536,45 @@ export function PortfolioView() {
                     </div>
                     <span className="text-sm font-bold text-foreground">Collection</span>
                   </div>
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 border border-border bg-background rounded-full text-xs font-semibold text-muted-foreground select-none cursor-pointer">
-                    <span>{monthLabel}</span>
-                    <span className="text-[10px] opacity-70">▼</span>
+                  {/* Dynamic Month Dropdown Button */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowMonthDropdown((v) => !v)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 border border-border bg-background hover:bg-accent hover:text-accent-foreground rounded-full text-xs font-semibold text-muted-foreground transition-colors select-none cursor-pointer"
+                    >
+                      <span>{activeTrend ? activeTrend.month : monthLabel}</span>
+                      <span className="text-[10px] opacity-70">▼</span>
+                    </button>
+                    
+                    {showMonthDropdown && (
+                      <>
+                        <div 
+                          className="fixed inset-0 z-40" 
+                          onClick={() => setShowMonthDropdown(false)} 
+                        />
+                        <div className="absolute right-0 mt-1 z-50 w-36 rounded-xl border border-border bg-card shadow-lg p-1 space-y-0.5">
+                          {monthlyTrends.map((t: any) => (
+                            <button
+                              key={t.month_key}
+                              type="button"
+                              onClick={() => {
+                                setSelectedCollectionMonthKey(t.month_key);
+                                setShowMonthDropdown(false);
+                                refetch();
+                              }}
+                              className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                                (activeTrend?.month_key === t.month_key)
+                                  ? 'bg-accent text-accent-foreground'
+                                  : 'text-foreground hover:bg-secondary'
+                              }`}
+                            >
+                              {t.month}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 
