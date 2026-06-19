@@ -170,13 +170,16 @@ export class InvitationService {
         },
       });
 
-      // ── Financial obligations (ADVANCE + one-time MAINTENANCE) ──
+      // ── Financial obligations (ADVANCE + one-time MAINTENANCE + current-month RENT) ──
       const created = await obligationEngine.createInitialObligations(tx, {
         tenantId: tenant.id,
         allocationId: allocation.id,
         ownerId,
         hostelId: room.hostels.id,
         joiningDate,
+        billingStartDate,
+        monthlyRent,
+        createRent: joiningDate <= billingStartDate,
         advanceDeposit: advance_amount,
         maintenanceCharge: maintenance_amount,
         maintenanceType: maintenance_type,

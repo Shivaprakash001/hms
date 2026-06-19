@@ -255,14 +255,28 @@ export class TenantService {
       tenantRepository.count({ where }),
     ]);
 
-    const mappedTenants = tenants.map((s: any) => {
+    const { reservationStatusService } = await import("./reservation-status-service");
+
+    const mappedTenants = await Promise.all(tenants.map(async (s: any) => {
       const tenant = this.withLegacyTenantRelations(s);
       const summary = financialService.getTenantPaymentSummary(tenant.id, tenant.obligations ?? []);
       const firstAllocation = tenant.room_allocations?.[0];
       const firstObligation = (tenant.obligations ?? [])[0];
+
+      // Compute reservation status for INVITED tenants
+      let reservation_status: { status: string; label: string } | null = null;
+      if (tenant.status === "INVITED") {
+        try {
+          reservation_status = await reservationStatusService.getReservationStatus(tenant.id);
+        } catch {
+          reservation_status = { status: "PAYMENT_PENDING", label: "Payment Pending" };
+        }
+      }
+
       return {
         ...tenant,
         payment_summary: summary,
+        reservation_status,
         // Denormalized top-level fields consumed by the frontend
         name: tenant.profiles?.name ?? null,
         email: tenant.profiles?.email ?? null,
@@ -274,7 +288,7 @@ export class TenantService {
         due_date: firstObligation?.due_date ?? null,
         obligation_id: firstObligation?.id ?? null,
       };
-    });
+    }));
 
     return { tenants: mappedTenants, total, limit, offset };
   }

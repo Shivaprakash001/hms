@@ -145,6 +145,20 @@ export function TenantsTab({ hostelId }: { hostelId: string }) {
             const phone = String(tenant.phone ?? tenant.tenant_phone ?? '');
             const identifier = email || phone;
             const room = tenant.room_no ?? tenant.room_number ?? tenant.room;
+
+            // Reservation status badge styling
+            const rsRaw = tenant.reservation_status as { status?: string; label?: string } | null;
+            const rsStatus = rsRaw?.status ?? 'PAYMENT_PENDING';
+            const rsLabel = rsRaw?.label ?? 'Invited';
+            const badgeClass =
+              rsStatus === 'MOVE_IN_READY'   ? 'bg-[#10B981]/10 text-[#059669]'
+              : rsStatus === 'RESERVED'      ? 'bg-[#3B82F6]/10 text-[#2563EB]'
+              : /* PAYMENT_PENDING / default */ 'bg-amber-500/10 text-amber-700';
+            const avatarClass =
+              rsStatus === 'MOVE_IN_READY'   ? 'bg-[#10B981]/10 text-[#059669]'
+              : rsStatus === 'RESERVED'      ? 'bg-[#3B82F6]/10 text-[#2563EB]'
+              : 'bg-amber-500/10 text-amber-700';
+
             return (
               <div
                 key={String(tenant.id)}
@@ -152,11 +166,15 @@ export function TenantsTab({ hostelId }: { hostelId: string }) {
                 tabIndex={0}
                 onClick={() => openTenantProfile(invitedTenantId)}
                 onKeyDown={(event) => handleCardKeyDown(event, invitedTenantId)}
-                className="bg-card border border-amber-500/20 rounded-xl p-3 cursor-pointer transition-colors hover:border-accent/40 focus:outline-none focus:ring-2 focus:ring-accent/30"
+                className={`bg-card border rounded-xl p-3 cursor-pointer transition-colors hover:border-accent/40 focus:outline-none focus:ring-2 focus:ring-accent/30 ${
+                  rsStatus === 'MOVE_IN_READY' ? 'border-[#10B981]/30'
+                  : rsStatus === 'RESERVED'    ? 'border-[#3B82F6]/30'
+                  : 'border-amber-500/20'
+                }`}
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-xs font-bold bg-amber-500/10 text-amber-700">
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-xs font-bold ${avatarClass}`}>
                       {String(tenant.name ?? tenant.tenant_name ?? 'T').charAt(0).toUpperCase()}
                     </div>
                     <div className="min-w-0 flex-1">
@@ -164,8 +182,8 @@ export function TenantsTab({ hostelId }: { hostelId: string }) {
                         <span className="font-semibold text-sm text-foreground truncate">
                           {String(tenant.name ?? tenant.tenant_name ?? 'Invited tenant')}
                         </span>
-                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-700">
-                          Invited
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${badgeClass}`}>
+                          {rsLabel}
                         </span>
                       </div>
                       <div className="text-xs text-muted-foreground mt-0.5 truncate">

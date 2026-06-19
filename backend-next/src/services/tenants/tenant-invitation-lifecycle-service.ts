@@ -365,6 +365,7 @@ export class TenantInvitationLifecycleService {
         ownerId,
         hostelId: capacity.room.hostel_id,
         joiningDate,
+        monthlyRent,
         maintenanceCharge,
         maintenanceType,
       });

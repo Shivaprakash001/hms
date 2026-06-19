@@ -42,6 +42,8 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
   const [success, setSuccess]         = useState(false);
   const [link, setLink]               = useState('');
   const [copied, setCopied]           = useState(false);
+  const [depositThresholdMode, setDepositThresholdMode] = useState<'full' | 'custom'>('full');
+  const [customThreshold, setCustomThreshold] = useState('');
 
   // New WhatsApp/Email fallback states
   const [whatsappSent, setWhatsappSent] = useState(false);
@@ -247,6 +249,9 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
       maintenance_type:   maintenanceType,
       agreement_start_date: agreementStartDate || undefined,
       agreement_duration_months: agreementDuration === 'custom' ? Number(customDuration) : Number(agreementDuration),
+      minimum_deposit_threshold: depositThresholdMode === 'custom' && Number(customThreshold) > 0
+        ? Number(customThreshold)
+        : undefined,
     });
   };
 
@@ -663,6 +668,59 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
                   </select>
                 </div>
               </div>
+
+              {/* Bed Allocation Rule — Deposit Threshold */}
+              {depVal > 0 && (
+                <div className="rounded-xl border border-border bg-secondary/30 p-3.5 space-y-3">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Bed Allocation Rule</p>
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="deposit_threshold"
+                      checked={depositThresholdMode === 'full'}
+                      onChange={() => { setDepositThresholdMode('full'); setCustomThreshold(''); }}
+                      className="mt-0.5 accent-accent"
+                    />
+                    <div>
+                      <span className="text-xs font-medium text-foreground">Full Deposit Required</span>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Bed is allocated only after the full {fmt(depVal)} is paid.</p>
+                    </div>
+                  </label>
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="deposit_threshold"
+                      checked={depositThresholdMode === 'custom'}
+                      onChange={() => setDepositThresholdMode('custom')}
+                      className="mt-0.5 accent-accent"
+                    />
+                    <div className="flex-1">
+                      <span className="text-xs font-medium text-foreground">Custom Threshold</span>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Bed is reserved after paying a minimum amount.</p>
+                      {depositThresholdMode === 'custom' && (
+                        <div className="mt-2">
+                          <label className="text-[10px] text-muted-foreground mb-1 block">Minimum Required (₹)</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={depVal}
+                            value={customThreshold}
+                            onChange={(e) => setCustomThreshold(e.target.value)}
+                            placeholder={`1 – ${depVal.toLocaleString('en-IN')}`}
+                            className={inp}
+                          />
+                          {Number(customThreshold) > depVal && (
+                            <p className="text-[10px] text-destructive mt-1">Cannot exceed deposit of {fmt(depVal)}</p>
+                          )}
+                          {Number(customThreshold) > 0 && Number(customThreshold) <= depVal && (
+                            <p className="text-[10px] text-[#10B981] mt-1">Bed reserved after {fmt(Number(customThreshold))} paid (partial deposit)</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </label>
+                </div>
+              )}
 
               {/* Summary card */}
               <div className="rounded-xl border border-border bg-secondary/40 p-3.5">

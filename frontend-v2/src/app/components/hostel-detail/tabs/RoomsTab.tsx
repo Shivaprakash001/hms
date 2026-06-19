@@ -13,20 +13,23 @@ const FloorNameModal = lazy(() => import('./rooms/RoomModals').then((m) => ({ de
 const FloorActionsSheet = lazy(() => import('./rooms/RoomModals').then((m) => ({ default: m.FloorActionsSheet })));
 const RoomOverviewModal = lazy(() => import('./rooms/RoomModals').then((m) => ({ default: m.RoomOverviewModal }))); 
 
-function BedOccupancyBlocks({ occupied, capacity, hasDues = false }: { occupied: number; capacity: number; hasDues?: boolean }) {
+function BedOccupancyBlocks({ occupied, reserved = 0, capacity, hasDues = false }: { occupied: number; reserved?: number; capacity: number; hasDues?: boolean }) {
   const beds = Array.from({ length: Math.max(1, capacity || 1) });
   return (
     <div className="flex flex-wrap gap-1.5">
       {beds.map((_, index) => {
-        const filled = index < occupied;
+        const isOccupied = index < occupied;
+        const isReserved = !isOccupied && index < occupied + reserved;
         return (
           <span
             key={index}
+            title={isOccupied ? 'Occupied' : isReserved ? 'Reserved' : 'Vacant'}
             className={[
               'h-5 w-4 rounded-[4px] border',
-              filled && hasDues ? 'border-[#F59E0B] bg-[#F59E0B]' : '',
-              filled && !hasDues ? 'border-[#10B981] bg-[#10B981]' : '',
-              !filled ? 'border-border bg-background' : '',
+              isOccupied && hasDues ? 'border-[#F59E0B] bg-[#F59E0B]' : '',
+              isOccupied && !hasDues ? 'border-[#10B981] bg-[#10B981]' : '',
+              isReserved ? 'border-[#3B82F6] bg-[#3B82F6]/20' : '',
+              !isOccupied && !isReserved ? 'border-border bg-background' : '',
             ].join(' ')}
           />
         );
@@ -168,6 +171,7 @@ export function RoomsTab({ hostelId }: { hostelId: string }) {
       groups: Array.from(floorGroups.values()).sort((a, b) => a.sort - b.sort),
       totalBeds: rooms.reduce((s, r) => s + Number(r.capacity ?? 0), 0),
       totalOccupied: rooms.reduce((s, r) => s + Number(r.occupied_count ?? 0), 0),
+      totalReserved: rooms.reduce((s, r) => s + Number(r.reserved_count ?? 0), 0),
       totalVacant: rooms.filter((r) => String(r.status) === 'vacant').length,
     };
   }, [floors, rooms]);
@@ -175,7 +179,7 @@ export function RoomsTab({ hostelId }: { hostelId: string }) {
   if (isLoading) return <TabSkeleton />;
   if (isError)   return <TabError onRetry={refetch} />;
 
-  const { groups, totalBeds, totalOccupied, totalVacant } = roomSummary;
+  const { groups, totalBeds, totalOccupied, totalReserved, totalVacant } = roomSummary;
 
   const toggleCollapse = (id: string) =>
     setCollapsed((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -194,11 +198,17 @@ export function RoomsTab({ hostelId }: { hostelId: string }) {
       )}
 
       {/* Summary strip */}
-      <div className="grid grid-cols-3 gap-2">
+      <div className={`grid gap-2 ${totalReserved > 0 ? 'grid-cols-4' : 'grid-cols-3'}`}>
         <div className="bg-[#10B981]/8 border border-[#10B981]/20 rounded-xl p-3">
           <div className="text-base font-semibold text-[#10B981]">{totalOccupied}/{totalBeds}</div>
           <div className="text-[10px] text-muted-foreground mt-0.5">Beds occupied</div>
         </div>
+        {totalReserved > 0 && (
+          <div className="bg-[#3B82F6]/8 border border-[#3B82F6]/20 rounded-xl p-3">
+            <div className="text-base font-semibold text-[#3B82F6]">{totalReserved}</div>
+            <div className="text-[10px] text-muted-foreground mt-0.5">Reserved</div>
+          </div>
+        )}
         <div className={`rounded-xl p-3 ${ totalVacant > 0 ? 'bg-[#3B82F6]/8 border border-[#3B82F6]/20' : 'bg-card border border-border' }`}>
           <div className={`text-base font-semibold ${ totalVacant > 0 ? 'text-[#3B82F6]' : 'text-foreground' }`}>{totalVacant}</div>
           <div className="text-[10px] text-muted-foreground mt-0.5">Vacant rooms</div>
@@ -255,10 +265,11 @@ export function RoomsTab({ hostelId }: { hostelId: string }) {
                 {group.rooms.map((room) => {
                   const isOccupied = String(room.status) === 'occupied';
                   const occupied   = Number(room.occupied_count ?? 0);
+                  const reserved   = Number(room.reserved_count ?? 0);
                   const capacity   = Number(room.capacity ?? 0);
-                  const hasVacantBed = occupied < capacity;
+                  const hasVacantBed = occupied + reserved < capacity;
                   const roomDues = Number(room.outstanding_dues ?? room.due_amount ?? room.pending_dues ?? 0);
-                  const vacantBeds = Math.max(0, capacity - occupied);
+                  const vacantBeds = Math.max(0, capacity - occupied - reserved);
                   const tenants = Array.isArray(room.tenants) ? (room.tenants as Record<string, unknown>[]) : [];
                   const tenantNames = tenants
                     .map((tenant) => String(tenant.name ?? '').trim())
@@ -286,10 +297,14 @@ export function RoomsTab({ hostelId }: { hostelId: string }) {
                             </span>
                           </div>
                           <div className="mt-2">
-                            <BedOccupancyBlocks occupied={occupied} capacity={capacity} hasDues={roomDues > 0} />
+                            <BedOccupancyBlocks occupied={occupied} reserved={reserved} capacity={capacity} hasDues={roomDues > 0} />
                           </div>
-                          {vacantBeds > 0 && (
-                            <div className="text-[11px] text-muted-foreground mt-1">{vacantBeds} vacant bed{vacantBeds === 1 ? '' : 's'}</div>
+                          {(vacantBeds > 0 || reserved > 0) && (
+                            <div className="text-[11px] text-muted-foreground mt-1">
+                              {reserved > 0 && <span className="text-[#3B82F6]">{reserved} reserved</span>}
+                              {reserved > 0 && vacantBeds > 0 && ' · '}
+                              {vacantBeds > 0 && `${vacantBeds} vacant`}
+                            </div>
                           )}
                           {isOccupied && tenantNames.length > 0 && (
                             <div className="mt-1 space-y-1">

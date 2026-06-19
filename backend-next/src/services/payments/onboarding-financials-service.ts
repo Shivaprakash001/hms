@@ -28,6 +28,7 @@ export class OnboardingFinancialsService {
       ownerId: string;
       hostelId: string;
       joiningDate: Date;
+      monthlyRent?: number;
       maintenanceCharge: number;
       maintenanceType: string;
     }
@@ -58,10 +59,15 @@ export class OnboardingFinancialsService {
     }
 
     const advanceDeposit = money(tenant.security_deposit);
+    const rentAmount = money(params.monthlyRent ?? tenant.monthly_rent);
     const hasMaintenance = maintenanceType !== "NONE" && maintenanceCharge > 0;
     const hasAdvance = advanceDeposit > 0;
+    // Generate current-month rent immediately if joining_date <= today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const shouldCreateRent = rentAmount > 0 && joiningDate <= today;
 
-    if (!hasMaintenance && !hasAdvance) {
+    if (!hasMaintenance && !hasAdvance && !shouldCreateRent) {
       return { createdObligations: [], skipped: true, reason: "NO_FINANCIALS_REQUIRED" };
     }
 
@@ -142,6 +148,48 @@ export class OnboardingFinancialsService {
           tenant_id: tenantId,
           hostel_id: hostelId,
           amount: advanceDeposit,
+        });
+      }
+    }
+
+    // ── CURRENT-MONTH RENT obligation ────────────────────────
+    // P0 Revenue Protection: If joining_date <= today, create the
+    // current month's rent obligation immediately instead of
+    // waiting for the monthly cron job.
+    if (shouldCreateRent) {
+      const existingRent = await tx.rent_obligations.findFirst({
+        where: {
+          tenant_id: tenantId,
+          rent_month: rentMonth,
+          obligation_type: "RENT",
+          is_superseded: false,
+        },
+        select: { id: true },
+      });
+      if (!existingRent) {
+        await tx.rent_obligations.create({
+          data: {
+            tenant_id: tenantId,
+            allocation_id: null,
+            owner_id: ownerId,
+            hostel_id: hostelId,
+            rent_month: rentMonth,
+            amount: rentAmount,
+            total_amount: rentAmount,
+            due_date: joiningDate,
+            status: "PENDING",
+            obligation_type: "RENT",
+            billing_period_start: joiningDate,
+            billing_period_end: new Date(Date.UTC(joiningDate.getFullYear(), joiningDate.getMonth() + 1, 0)),
+            installment_label: `Rent – ${joiningDate.toLocaleDateString("en-IN", { month: "short", year: "numeric" })}`,
+          },
+        });
+        createdObligations.push("RENT");
+        logger.info("onboarding.current_month_rent_created", {
+          tenant_id: tenantId,
+          hostel_id: hostelId,
+          amount: rentAmount,
+          rent_month: rentMonth.toISOString(),
         });
       }
     }
