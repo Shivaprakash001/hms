@@ -25,6 +25,8 @@ export type HostelPolicy = {
       refundable: boolean;
       reservation_policy?: string;
       minimum_reservation_deposit?: number;
+      calculation_mode: 'FLAT' | 'MONTHS_OF_RENT';
+      deposit_months: number;
     };
     maintenance: {
       type: MaintenanceType;
@@ -225,6 +227,15 @@ function maintenanceType(value: unknown): MaintenanceType {
   return normalized as MaintenanceType;
 }
 
+function depositCalculationMode(value: unknown): "FLAT" | "MONTHS_OF_RENT" {
+  const raw = value === undefined || value === null ? "FLAT" : String(value);
+  const normalized = raw.toUpperCase();
+  if (normalized !== "FLAT" && normalized !== "MONTHS_OF_RENT") {
+    throw new Error("VALIDATION: calculation_mode must be FLAT or MONTHS_OF_RENT");
+  }
+  return normalized as "FLAT" | "MONTHS_OF_RENT";
+}
+
 function rentCycle(value: unknown): RentCycle {
   const normalized = String(value || "MONTHLY").toUpperCase();
   return normalized as RentCycle;
@@ -308,6 +319,8 @@ export function normalizeHostelPolicy(hostel: any): HostelPolicy {
         refundable: bool(deposit.refundable ?? config.advance_refundable, true),
         reservation_policy: String(deposit.reservation_policy ?? config.reservation_policy ?? "FULL_DEPOSIT"),
         minimum_reservation_deposit: nonNegative(deposit.minimum_reservation_deposit ?? config.minimum_reservation_deposit, 0, "Minimum reservation deposit", 1000000),
+        calculation_mode: depositCalculationMode(deposit.calculation_mode ?? config.deposit_calculation_mode),
+        deposit_months: nonNegative(deposit.deposit_months ?? config.deposit_months ?? 1, 1, "Default deposit months", 12),
       },
       maintenance: {
         type: maintenanceResolved,
@@ -462,12 +475,16 @@ export function toCompatibilityPreferences(policy: HostelPolicy): Record<string,
     advance_refundable: policy.billing.deposit.refundable,
     reservation_policy: policy.billing.deposit.reservation_policy ?? "FULL_DEPOSIT",
     minimum_reservation_deposit: policy.billing.deposit.minimum_reservation_deposit ?? 0,
+    deposit_calculation_mode: policy.billing.deposit.calculation_mode,
+    deposit_months: policy.billing.deposit.deposit_months,
     maintenance_enabled: policy.billing.maintenance.type !== "NONE",
     maintenance_amount_default: policy.billing.maintenance.amount,
     maintenance_type: policy.billing.maintenance.type,
     billing_defaults: {
       advance_deposit: policy.billing.deposit.default_amount,
       security_deposit: policy.billing.deposit.default_amount,
+      deposit_calculation_mode: policy.billing.deposit.calculation_mode,
+      deposit_months: policy.billing.deposit.deposit_months,
       maintenance_charge: policy.billing.maintenance.amount,
       maintenance_type: policy.billing.maintenance.type,
       auto_fill_room_rent: policy.billing.invite_defaults.auto_fill_room_rent,
@@ -518,11 +535,19 @@ export function compatibilityPreferencesToPolicyPatch(data: Record<string, any>)
   if (data.advance_refundable !== undefined) depositPatch.refundable = data.advance_refundable;
   if (data.reservation_policy !== undefined) depositPatch.reservation_policy = data.reservation_policy;
   if (data.minimum_reservation_deposit !== undefined) depositPatch.minimum_reservation_deposit = data.minimum_reservation_deposit;
+  if (data.deposit_calculation_mode !== undefined) depositPatch.calculation_mode = data.deposit_calculation_mode;
+  if (data.deposit_months !== undefined) depositPatch.deposit_months = data.deposit_months;
 
   if (data.billing_defaults !== undefined) {
     const defaultAmount = data.billing_defaults.security_deposit ?? data.billing_defaults.advance_deposit;
     if (defaultAmount !== undefined) {
       depositPatch.default_amount = defaultAmount;
+    }
+    if (data.billing_defaults.deposit_calculation_mode !== undefined) {
+      depositPatch.calculation_mode = data.billing_defaults.deposit_calculation_mode;
+    }
+    if (data.billing_defaults.deposit_months !== undefined) {
+      depositPatch.deposit_months = data.billing_defaults.deposit_months;
     }
   }
 
@@ -692,6 +717,11 @@ export function validateHostelPolicyForWrite(policy: HostelPolicy) {
   boundedNumber(policy.billing.grace_days, 0, 0, 30, "Grace period");
   nonNegative(policy.billing.late_fee.max_amount, 500, "Maximum late fee", 50000);
   nonNegative(policy.billing.deposit.default_amount, 0, "Default advance deposit", 1000000);
+  const mode = policy.billing.deposit.calculation_mode;
+  if (mode !== "FLAT" && mode !== "MONTHS_OF_RENT") {
+    throw new Error("VALIDATION: calculation_mode must be FLAT or MONTHS_OF_RENT");
+  }
+  boundedNumber(policy.billing.deposit.deposit_months, 1, 1, 12, "Default deposit months");
   const rp = policy.billing.deposit.reservation_policy;
   if (rp && rp !== "FULL_DEPOSIT" && rp !== "PARTIAL_DEPOSIT") {
     throw new Error("VALIDATION: reservation_policy must be FULL_DEPOSIT or PARTIAL_DEPOSIT");

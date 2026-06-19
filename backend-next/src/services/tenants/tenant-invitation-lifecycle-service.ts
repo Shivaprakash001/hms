@@ -262,7 +262,14 @@ export class TenantInvitationLifecycleService {
     const inviteDefaults = await hostelBillingPreferencesService.resolveTenantInviteDefaults(roomId, ownerId);
     const resolved = inviteDefaults.resolved_values;
     const monthlyRent = moneyNumber(data.monthly_rent, Number(resolved.monthly_rent));
-    const advanceDeposit = moneyNumber(data.advance_amount ?? data.advance_deposit ?? data.deposit, Number(resolved.advance_deposit));
+    let resolvedDeposit = resolved.advance_deposit;
+    if (inviteDefaults.billing_defaults.deposit_calculation_mode === "MONTHS_OF_RENT" &&
+        data.advance_amount === undefined &&
+        data.advance_deposit === undefined &&
+        data.deposit === undefined) {
+      resolvedDeposit = inviteDefaults.billing_defaults.deposit_months * monthlyRent;
+    }
+    const advanceDeposit = moneyNumber(data.advance_amount ?? data.advance_deposit ?? data.deposit, Number(resolvedDeposit));
     const maintenanceType = (data.maintenance_type || resolved.maintenance_type) as MaintenanceType;
     const maintenanceCharge = maintenanceType === "NONE"
       ? 0

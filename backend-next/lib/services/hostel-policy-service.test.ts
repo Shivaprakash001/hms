@@ -119,6 +119,57 @@ async function main() {
   assertEq(patch.reminders.auto_stop_after_payment, false, "Flat auto-stop patch maps to reminders domain");
   assertEq(patch.reminders.escalation.tone, "POLITE", "Flat escalation tone patch maps to reminders domain");
 
+  // Assertions for deposit calculation mode and months
+  assertEq(policyA.billing.deposit.calculation_mode, "FLAT", "Legacy policy A defaults to FLAT calculation mode");
+  assertEq(policyA.billing.deposit.deposit_months, 1, "Legacy policy A defaults to 1 deposit month");
+
+  const policyWithCustomDeposit = normalizeHostelPolicy({
+    preferences_config: {
+      billing: {
+        deposit: {
+          calculation_mode: "MONTHS_OF_RENT",
+          deposit_months: 3,
+        }
+      }
+    }
+  });
+  assertEq(policyWithCustomDeposit.billing.deposit.calculation_mode, "MONTHS_OF_RENT", "calculation_mode normalizes correctly");
+  assertEq(policyWithCustomDeposit.billing.deposit.deposit_months, 3, "deposit_months normalizes correctly");
+
+  const compatWithDeposit = toCompatibilityPreferences(policyWithCustomDeposit);
+  assertEq(compatWithDeposit.billing_defaults.deposit_calculation_mode, "MONTHS_OF_RENT", "toCompatibilityPreferences preserves calculation_mode");
+  assertEq(compatWithDeposit.billing_defaults.deposit_months, 3, "toCompatibilityPreferences preserves deposit_months");
+
+  const patchWithDeposit = compatibilityPreferencesToPolicyPatch({
+    billing_defaults: {
+      deposit_calculation_mode: "MONTHS_OF_RENT",
+      deposit_months: 2,
+    }
+  });
+  assertEq(patchWithDeposit.billing.deposit.calculation_mode, "MONTHS_OF_RENT", "compatibilityPreferencesToPolicyPatch maps calculation_mode");
+  assertEq(patchWithDeposit.billing.deposit.deposit_months, 2, "compatibilityPreferencesToPolicyPatch maps deposit_months");
+
+  try {
+    validateHostelPolicyForWrite(normalizeHostelPolicy({ preferences_config: { billing: { deposit: { deposit_months: 13 } } } }));
+    assert(false, "Invalid deposit_months (13) rejected");
+  } catch {
+    assert(true, "Invalid deposit_months (13) rejected");
+  }
+
+  try {
+    validateHostelPolicyForWrite(normalizeHostelPolicy({ preferences_config: { billing: { deposit: { deposit_months: 0 } } } }));
+    assert(false, "Invalid deposit_months (0) rejected");
+  } catch {
+    assert(true, "Invalid deposit_months (0) rejected");
+  }
+
+  try {
+    validateHostelPolicyForWrite(normalizeHostelPolicy({ preferences_config: { billing: { deposit: { calculation_mode: "INVALID" as any } } } }));
+    assert(false, "Invalid calculation_mode rejected");
+  } catch {
+    assert(true, "Invalid calculation_mode rejected");
+  }
+
   try {
     validateHostelPolicyForWrite(normalizeHostelPolicy({ preferences_config: { billing: { due_day: 40 } } }));
     assert(false, "Invalid billing policy rejected");

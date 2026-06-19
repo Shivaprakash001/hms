@@ -37,6 +37,7 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
   const [advanceDeposit, setAdvanceDeposit] = useState('');
   const [maintenanceCharge, setMaintenanceCharge] = useState('');
   const [maintenanceType, setMaintenanceType] = useState<MtType>('MONTHLY');
+  const [isDepositManuallyEdited, setIsDepositManuallyEdited] = useState(false);
   const [error, setError]             = useState<string | null>(null);
   const [success, setSuccess]         = useState(false);
   const [link, setLink]               = useState('');
@@ -129,6 +130,8 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
     advance_deposit:    Number(rv.advance_deposit ?? 0),
     maintenance_charge: Number(rv.maintenance_charge ?? 0),
     maintenance_type:   (rv.maintenance_type ?? 'MONTHLY') as MtType,
+    deposit_calculation_mode: rv.deposit_calculation_mode as 'FLAT' | 'MONTHS_OF_RENT',
+    deposit_months:     Number(rv.deposit_months ?? 1),
   } : null;
 
   // Auto-fill defaults once when loadedRoomId does not match the current roomId
@@ -139,12 +142,14 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
       setMaintenanceCharge('');
       setMaintenanceType('MONTHLY');
       setLoadedRoomId(null);
+      setIsDepositManuallyEdited(false);
     } else if (defaults && roomId !== loadedRoomId) {
       setMonthlyRent(String(defaults.monthly_rent));
       setAdvanceDeposit(String(defaults.advance_deposit));
       setMaintenanceCharge(String(defaults.maintenance_charge));
       setMaintenanceType(defaults.maintenance_type);
       setLoadedRoomId(roomId);
+      setIsDepositManuallyEdited(false);
     }
   }, [defaults, roomId, loadedRoomId]);
 
@@ -160,12 +165,31 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
     maintenanceType !== defaults.maintenance_type
   );
 
+  const handleRentChange = (val: string) => {
+    setMonthlyRent(val);
+    if (defaults && defaults.deposit_calculation_mode === 'MONTHS_OF_RENT' && !isDepositManuallyEdited) {
+      const rentNum = Number(val || 0);
+      setAdvanceDeposit(String(defaults.deposit_months * rentNum));
+    }
+  };
+
+  const handleDepositChange = (val: string) => {
+    setAdvanceDeposit(val);
+    setIsDepositManuallyEdited(true);
+  };
+
   const handleReset = () => {
     if (defaults) {
       setMonthlyRent(String(defaults.monthly_rent));
-      setAdvanceDeposit(String(defaults.advance_deposit));
       setMaintenanceCharge(String(defaults.maintenance_charge));
       setMaintenanceType(defaults.maintenance_type);
+      setIsDepositManuallyEdited(false);
+      
+      const rentNum = defaults.monthly_rent;
+      const expectedDep = defaults.deposit_calculation_mode === 'MONTHS_OF_RENT'
+        ? defaults.deposit_months * rentNum
+        : defaults.advance_deposit;
+      setAdvanceDeposit(String(expectedDep));
     }
   };
 
@@ -556,19 +580,45 @@ export function AddTenantModal({ onClose, hostelId, preselectedRoomId }: AddTena
                     type="number"
                     min={0}
                     value={monthlyRent}
-                    onChange={(e) => setMonthlyRent(e.target.value)}
+                    onChange={(e) => handleRentChange(e.target.value)}
                     required
                     placeholder="0"
                     className={inp}
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Security Deposit (₹) *</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs text-muted-foreground block">Security Deposit (₹) *</label>
+                    {defaults?.deposit_calculation_mode === 'MONTHS_OF_RENT' && (
+                      isDepositManuallyEdited ? (
+                        <span className="text-[10px] text-amber-500 font-medium flex items-center gap-1">
+                          Manual Override
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsDepositManuallyEdited(false);
+                              if (defaults) {
+                                const expected = defaults.deposit_months * Number(monthlyRent || 0);
+                                setAdvanceDeposit(String(expected));
+                              }
+                            }}
+                            className="text-accent underline hover:text-accent/80 active:scale-95 ml-1"
+                          >
+                            Reset
+                          </button>
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-green-500 font-medium">
+                          System Calculated
+                        </span>
+                      )
+                    )}
+                  </div>
                   <input
                     type="number"
                     min={0}
                     value={advanceDeposit}
-                    onChange={(e) => setAdvanceDeposit(e.target.value)}
+                    onChange={(e) => handleDepositChange(e.target.value)}
                     required
                     placeholder="0"
                     className={inp}

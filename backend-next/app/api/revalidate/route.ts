@@ -5,13 +5,10 @@ const REVALIDATION_SECRET = process.env.SANITY_REVALIDATE_SECRET
 
 const DOCUMENT_TYPE_TO_TAG: Record<string, string> = {
   siteSettings: 'siteSettings',
-  hostel: 'hostel',
   landingHostel: 'landingHostel',
   testimonial: 'testimonial',
   faq: 'faq',
   categoryRating: 'categoryRating',
-  food: 'food',
-  parentTrust: 'parentTrust',
 }
 
 export async function POST(req: NextRequest) {

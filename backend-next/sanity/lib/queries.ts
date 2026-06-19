@@ -146,38 +146,4 @@ export const CATEGORY_RATINGS_QUERY = `
   }
 `
 
-export const FOOD_QUERY = `
-  *[_type == "food"][0] {
-    title,
-    description,
-    images[] {
-      image,
-      caption,
-      alt
-    },
-    foodHighlights,
-    weeklyMenu[] {
-      day,
-      breakfast,
-      lunch,
-      dinner
-    },
-    parentQuote,
-    parentName,
-    parentPhoto
-  }
-`
-
-export const PARENT_TRUST_QUERY = `
-  *[_type == "parentTrust"][0] {
-    title,
-    subtitle,
-    points[] {
-      title,
-      description,
-      icon
-    },
-    image
-  }
-`
 

@@ -88,7 +88,11 @@ export class InvitationService {
     const inviteDefaults = await hostelBillingPreferencesService.resolveTenantInviteDefaults(room_id, ownerId);
     const resolved = inviteDefaults.resolved_values;
     const monthlyRent = Number(data.monthly_rent ?? resolved.monthly_rent);
-    const advance_amount = Number(data.advance_amount ?? resolved.advance_deposit);
+    let resolvedDeposit = resolved.advance_deposit;
+    if (inviteDefaults.billing_defaults.deposit_calculation_mode === "MONTHS_OF_RENT" && data.advance_amount === undefined) {
+      resolvedDeposit = inviteDefaults.billing_defaults.deposit_months * monthlyRent;
+    }
+    const advance_amount = Number(data.advance_amount ?? resolvedDeposit);
     const maintenance_type = (data.maintenance_type || resolved.maintenance_type) as MaintenanceType;
     const maintenance_amount = maintenance_type === "NONE"
       ? 0

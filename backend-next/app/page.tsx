@@ -27,11 +27,9 @@ import {
   TESTIMONIALS_QUERY,
   FAQS_QUERY,
   CATEGORY_RATINGS_QUERY,
-  FOOD_QUERY,
-  PARENT_TRUST_QUERY,
 } from "@/sanity/lib/queries";
 import { urlFor } from "@/sanity/lib/image";
-import { fallbackLandingContent } from "@/lib/sanity/landingContent";
+import { fallbackLandingContent, fallbackSiteSettings } from "@/lib/sanity/landingContent";
 
 export const revalidate = 3600; // Cache page for up to 1 hour, revalidated via webhooks
 
@@ -176,39 +174,30 @@ async function getAvailability(slug: string): Promise<LandingAvailability> {
 }
 
 export async function generateMetadata(): Promise<Metadata> {
-  const siteSettings = await client.fetch(SITE_SETTINGS_QUERY, {}, { next: { tags: ["siteSettings"] } });
+  let siteSettings;
+  try {
+    siteSettings = await client.fetch(SITE_SETTINGS_QUERY, {}, { next: { tags: ["siteSettings"] } });
+  } catch (err) {
+    console.error("[CMS generateMetadata Error] Failed to fetch siteSettings from CMS, using fallback:", err);
+  }
   
-  if (!siteSettings) {
-    throw new Error("Missing siteSettings in CMS");
-  }
-  if (!siteSettings.seoTitle) {
-    throw new Error("Missing seoTitle in CMS");
-  }
-  if (!siteSettings.seoDescription) {
-    throw new Error("Missing seoDescription in CMS");
-  }
-  if (!siteSettings.seoSiteName) {
-    throw new Error("Missing seoSiteName in CMS");
-  }
-  if (!siteSettings.canonicalUrl) {
-    throw new Error("Missing canonicalUrl in CMS");
-  }
+  const settings = siteSettings || fallbackSiteSettings;
 
-  const title = siteSettings.seoTitle;
-  const description = siteSettings.seoDescription;
-  const imageUrl = siteSettings.ownerPhoto ? urlFor(siteSettings.ownerPhoto).url() : undefined;
+  const title = settings.seoTitle;
+  const description = settings.seoDescription;
+  const imageUrl = settings.ownerPhoto ? urlFor(settings.ownerPhoto).url() : undefined;
 
   return {
     title,
     description,
     alternates: {
-      canonical: siteSettings.canonicalUrl,
+      canonical: settings.canonicalUrl,
     },
     openGraph: {
-      title: siteSettings.ogTitle || title,
-      description: siteSettings.ogDescription || description,
-      url: siteSettings.canonicalUrl,
-      siteName: siteSettings.seoSiteName,
+      title: settings.ogTitle || title,
+      description: settings.ogDescription || description,
+      url: settings.canonicalUrl,
+      siteName: settings.seoSiteName,
       images: imageUrl
         ? [
             {
@@ -221,8 +210,8 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     twitter: {
       card: "summary_large_image",
-      title: siteSettings.ogTitle || title,
-      description: siteSettings.ogDescription || description,
+      title: settings.ogTitle || title,
+      description: settings.ogDescription || description,
       images: imageUrl ? [imageUrl] : [],
     },
   };
@@ -231,31 +220,86 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function HomePage() {
   const startTime = Date.now();
   
-  let siteSettings, hostel, testimonials, faqs, categoryRating, food, parentTrust, availability;
+  let siteSettings, hostel, testimonials, faqs, categoryRating, availability;
   
   try {
+    const results = await Promise.all([
+      client.fetch(SITE_SETTINGS_QUERY, {}, { next: { tags: ["siteSettings"] } }).catch((err) => {
+        console.error("SITE_SETTINGS_QUERY fetch failed, using fallback:", err);
+        return null;
+      }),
+      client.fetch(LANDING_HOSTEL_QUERY, {}, { next: { tags: ["landingHostel"] } }).catch((err) => {
+        console.error("LANDING_HOSTEL_QUERY fetch failed, using fallback:", err);
+        return null;
+      }),
+      client.fetch(TESTIMONIALS_QUERY, {}, { next: { tags: ["testimonial"] } }).catch((err) => {
+        console.error("TESTIMONIALS_QUERY fetch failed, using fallback:", err);
+        return null;
+      }),
+      client.fetch(FAQS_QUERY, {}, { next: { tags: ["faq"] } }).catch((err) => {
+        console.error("FAQS_QUERY fetch failed, using fallback:", err);
+        return null;
+      }),
+      client.fetch(CATEGORY_RATINGS_QUERY, {}, { next: { tags: ["categoryRating"] } }).catch((err) => {
+        console.error("CATEGORY_RATINGS_QUERY fetch failed, using fallback:", err);
+        return null;
+      }),
+      getAvailability(PRIMARY_VISIT_SLUG).catch((err) => {
+        console.error("getAvailability fetch failed, using fallback:", err);
+        return null;
+      }),
+    ]);
     [
       siteSettings,
       hostel,
       testimonials,
       faqs,
       categoryRating,
-      food,
-      parentTrust,
       availability,
-    ] = await Promise.all([
-      client.fetch(SITE_SETTINGS_QUERY, {}, { next: { tags: ["siteSettings"] } }),
-      client.fetch(LANDING_HOSTEL_QUERY, {}, { next: { tags: ["landingHostel"] } }),
-      client.fetch(TESTIMONIALS_QUERY, {}, { next: { tags: ["testimonial"] } }),
-      client.fetch(FAQS_QUERY, {}, { next: { tags: ["faq"] } }),
-      client.fetch(CATEGORY_RATINGS_QUERY, {}, { next: { tags: ["categoryRating"] } }),
-      client.fetch(FOOD_QUERY, {}, { next: { tags: ["food"] } }),
-      client.fetch(PARENT_TRUST_QUERY, {}, { next: { tags: ["parentTrust"] } }),
-      getAvailability(PRIMARY_VISIT_SLUG),
-    ]);
+    ] = results;
   } catch (err: any) {
     console.error(`[CMS Debug Error] Promise.all fetch failed:`, err);
-    throw err;
+  }
+
+  // Ensure we have fallbacks for the fetched items if they are missing/failed
+  if (!siteSettings) {
+    siteSettings = fallbackSiteSettings;
+  }
+  if (!hostel) {
+    hostel = {
+      name: "Sri Adithya Boys Hostel",
+      shortLocation: "Yamnampet, Secunderabad",
+      locationTitle: fallbackLandingContent.hostelProfile.locationTitle,
+      locationDescription: fallbackLandingContent.hostelProfile.locationDescription,
+      distanceTitle: fallbackLandingContent.hostelProfile.distanceTitle,
+      distanceDescription: fallbackLandingContent.hostelProfile.distanceDescription,
+      mapEmbedUrl: fallbackLandingContent.hostelProfile.googleMapsEmbedUrl,
+      admissionSteps: fallbackLandingContent.admissionSteps,
+      facilities: fallbackLandingContent.facilities,
+      gallery: fallbackLandingContent.gallery.map(g => ({ image: g.url, alt: g.alt, caption: g.caption })),
+    };
+  }
+  if (!availability) {
+    availability = {
+      bedsAvailable: 40,
+      totalBeds: 100,
+      occupiedBeds: 60,
+      reservedBeds: 0,
+      occupancyRate: 60,
+      startingPrice: 8200,
+      sharingTypes: ["2-Sharing", "3-Sharing", "4-Sharing"],
+      roomTypes: [
+        {
+          roomType: "4-Sharing Room",
+          capacity: 4,
+          baseRent: 8200,
+          availableBeds: 40,
+        }
+      ],
+      intakeMonth: "July",
+      visitUrl: "",
+      hasLiveAvailability: false,
+    };
   }
 
   // Override with marketing page copy config if defined in CMS
@@ -278,87 +322,48 @@ export default async function HomePage() {
   console.log(`[CMS Debug] faqs count: ${faqs?.length || 0}`);
   console.log(`[CMS Debug] availability: bedsAvailable=${availability?.bedsAvailable}, startingPrice=${availability?.startingPrice}, hasLiveAvailability=${availability?.hasLiveAvailability}`);
 
-  // Strict CMS Contract Validation
-  if (!siteSettings) {
-    throw new Error("Missing siteSettings in CMS");
-  }
-  if (!siteSettings.phoneNumber) {
-    throw new Error("Missing phoneNumber in CMS");
-  }
-  if (!siteSettings.whatsappNumber) {
-    throw new Error("Missing whatsappNumber in CMS");
-  }
-  if (!siteSettings.ownerName) {
-    throw new Error("Missing ownerName in CMS");
-  }
-  if (siteSettings.googleRating === undefined || siteSettings.googleRating === null) {
-    throw new Error("Missing googleRating in CMS");
-  }
-  if (siteSettings.googleReviewCount === undefined || siteSettings.googleReviewCount === null) {
-    throw new Error("Missing googleReviewCount in CMS");
-  }
-  if (!hostel) {
-    console.error("[CMS Debug Critical] landingHostel document was not found in Sanity. Reverting to fallback or throwing error.");
-    throw new Error("Missing landingHostel in CMS");
-  }
-  if (!hostel.name) {
-    throw new Error("Missing landingHostel.name in CMS");
-  }
-
-  const testimonialsFormatted = testimonials?.map((t: any) => ({
-    name: t.name,
-    role: t.type === "parent"
-      ? `Parent of Resident · Verified Stay`
-      : `${t.year || "4th"} Year · ${t.branch || "CSE"} · ${t.college || "SNIST"}`,
-    review: t.quote,
-    rating: t.rating || 5,
-    initials: t.name ? t.name.split(" ").map((n: string) => n[0]).join("") : "SA",
-    image: t.image ? { url: urlFor(t.image).url(), alt: t.name } : undefined,
-  })) || [];
+  const testimonialsFormatted = (testimonials?.length ? testimonials : fallbackLandingContent.testimonials)?.map((t: any) => {
+    const isUrlString = typeof t.image === "string" && (t.image.startsWith("http") || t.image.startsWith("/"));
+    return {
+      name: t.name,
+      role: t.role || (t.type === "parent"
+        ? `Parent of Resident · Verified Stay`
+        : `${t.year || "4th"} Year · ${t.branch || "CSE"} · ${t.college || "SNIST"}`),
+      review: t.quote || t.review,
+      rating: t.rating || 5,
+      initials: t.initials || (t.name ? t.name.split(" ").map((n: string) => n[0]).join("") : "SA"),
+      image: t.image ? (isUrlString ? { url: t.image, alt: t.name } : { url: urlFor(t.image).url(), alt: t.name }) : undefined,
+    };
+  }) || [];
 
   const categoryRatingsFormatted = categoryRating ? [
     { label: "Food Quality", value: categoryRating.foodQuality || 4.9, percentage: Math.round((categoryRating.foodQuality || 4.9) * 20) },
     { label: "Cleanliness", value: categoryRating.cleanliness || 4.7, percentage: Math.round((categoryRating.cleanliness || 4.7) * 20) },
     { label: "Safety", value: categoryRating.safety || 4.8, percentage: Math.round((categoryRating.safety || 4.8) * 20) },
     { label: "Value for Money", value: categoryRating.valueForMoney || 4.6, percentage: Math.round((categoryRating.valueForMoney || 4.6) * 20) },
-  ] : [];
+  ] : [
+    { label: "Food Quality", value: 4.9, percentage: 98 },
+    { label: "Cleanliness", value: 4.7, percentage: 94 },
+    { label: "Safety", value: 4.8, percentage: 96 },
+    { label: "Value for Money", value: 4.6, percentage: 92 },
+  ];
 
-  const faqsFormatted = faqs?.map((f: any) => ({
+  const faqsFormatted = (faqs?.length ? faqs : fallbackLandingContent.faqs)?.map((f: any) => ({
     question: f.question,
     answer: f.answer,
   })) || [];
 
-  const galleryImagesFormatted = hostel.gallery?.map((g: any) => ({
-    url: urlFor(g.image).url(),
-    alt: g.alt || g.caption || "",
-    caption: g.caption || "",
-  })) || [];
-
-  const foodFormatted = food ? {
-    title: food.title || fallbackLandingContent.food!.title,
-    description: food.description || fallbackLandingContent.food!.description,
-    images: food.images?.map((g: any) => ({
-      url: urlFor(g.image).url(),
+  const galleryImagesFormatted = hostel.gallery?.map((g: any) => {
+    const isUrlString = typeof g.image === "string" && (g.image.startsWith("http") || g.image.startsWith("/"));
+    return {
+      url: isUrlString ? g.image : (g.image ? urlFor(g.image).url() : ""),
+      alt: g.alt || g.caption || "",
       caption: g.caption || "",
-      alt: g.alt || "",
-    })) || fallbackLandingContent.food!.images,
-    foodHighlights: food.foodHighlights || fallbackLandingContent.food!.foodHighlights,
-    weeklyMenu: food.weeklyMenu || fallbackLandingContent.food!.weeklyMenu,
-    parentQuote: food.parentQuote || fallbackLandingContent.food!.parentQuote,
-    parentName: food.parentName || fallbackLandingContent.food!.parentName,
-    parentPhotoUrl: food.parentPhoto ? urlFor(food.parentPhoto).url() : undefined,
-  } : fallbackLandingContent.food;
+    };
+  }) || [];
 
-  const parentTrustFormatted = parentTrust ? {
-    title: parentTrust.title || fallbackLandingContent.parentTrust!.title,
-    subtitle: parentTrust.subtitle || fallbackLandingContent.parentTrust!.subtitle,
-    points: parentTrust.points?.map((p: any) => ({
-      title: p.title,
-      description: p.description,
-      icon: p.icon || "cctv",
-    })) || fallbackLandingContent.parentTrust!.points,
-    imageUrl: parentTrust.image ? urlFor(parentTrust.image).url() : undefined,
-  } : fallbackLandingContent.parentTrust;
+  const foodFormatted = fallbackLandingContent.food;
+  const parentTrustFormatted = fallbackLandingContent.parentTrust;
 
   const hostelProfileForEnquiry = {
     name: hostel.name,
@@ -375,7 +380,7 @@ export default async function HomePage() {
     googleMapsEmbedUrl: hostel.mapEmbedUrl || "",
     ownerName: siteSettings.ownerName,
     ownerMessage: siteSettings.ownerQuote || "",
-    ownerPhoto: siteSettings.ownerPhoto ? { url: urlFor(siteSettings.ownerPhoto).url(), alt: siteSettings.ownerName || "Owner" } : undefined,
+    ownerPhoto: siteSettings.ownerPhoto ? (typeof siteSettings.ownerPhoto === "string" ? { url: siteSettings.ownerPhoto, alt: siteSettings.ownerName || "Owner" } : { url: urlFor(siteSettings.ownerPhoto).url(), alt: siteSettings.ownerName || "Owner" }) : undefined,
     whatsappEnquiryTemplate: siteSettings.whatsappEnquiryTemplate,
   };
 

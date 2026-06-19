@@ -83,7 +83,13 @@ export interface HostelPolicy {
   billing: {
     rent_cycle: string; auto_rent_day: number; due_day: number; grace_days: number;
     late_fee: { enabled: boolean; rules: LateFeeRule[]; max_amount: number };
-    deposit: { enabled: boolean; default_amount: number; refundable: boolean };
+    deposit: {
+      enabled: boolean;
+      default_amount: number;
+      refundable: boolean;
+      calculation_mode?: 'FLAT' | 'MONTHS_OF_RENT';
+      deposit_months?: number;
+    };
     maintenance: { type: string; amount: number };
     invite_defaults: { auto_fill_room_rent: boolean; allow_override: boolean };
     partial_payments: { enabled: boolean; minimum_amount: number };

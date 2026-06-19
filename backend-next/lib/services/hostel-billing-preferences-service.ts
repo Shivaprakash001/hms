@@ -12,6 +12,8 @@ export type BillingDefaults = {
   allow_override: boolean;
   reservation_policy?: string;
   minimum_reservation_deposit?: number;
+  deposit_calculation_mode: "FLAT" | "MONTHS_OF_RENT";
+  deposit_months: number;
 };
 
 export type TenantInviteDefaults = {
@@ -30,6 +32,8 @@ export type TenantInviteDefaults = {
     maintenance_type: MaintenanceType;
     reservation_policy?: string;
     minimum_reservation_deposit?: number;
+    deposit_calculation_mode: "FLAT" | "MONTHS_OF_RENT";
+    deposit_months: number;
   };
 };
 
@@ -44,6 +48,8 @@ export const DEFAULT_BILLING_DEFAULTS: BillingDefaults = {
   allow_override: true,
   reservation_policy: "FULL_DEPOSIT",
   minimum_reservation_deposit: 0,
+  deposit_calculation_mode: "FLAT",
+  deposit_months: 1,
 };
 
 function nonNegativeNumber(value: unknown, fallback: number) {
@@ -63,6 +69,16 @@ function maintenanceType(value: unknown, fallback: MaintenanceType): Maintenance
   return normalized as MaintenanceType;
 }
 
+const VALID_CALCULATION_MODES = new Set(["FLAT", "MONTHS_OF_RENT"]);
+
+function calculationMode(value: unknown, fallback: "FLAT" | "MONTHS_OF_RENT"): "FLAT" | "MONTHS_OF_RENT" {
+  const normalized = String(value || fallback).toUpperCase();
+  if (!VALID_CALCULATION_MODES.has(normalized)) {
+    return "FLAT";
+  }
+  return normalized as "FLAT" | "MONTHS_OF_RENT";
+}
+
 function asConfig(raw: unknown): Record<string, any> {
   return raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, any>) : {};
 }
@@ -75,6 +91,9 @@ export function normalizeBillingDefaults(rawConfig: unknown): BillingDefaults {
   const advanceSource = nested.security_deposit ?? nested.advance_deposit ?? config.advance_amount_default;
   const maintenanceSource = nested.maintenance_charge ?? config.maintenance_amount_default;
   const maintenanceTypeSource = nested.maintenance_type ?? config.maintenance_type;
+
+  const calculationModeSource = nested.deposit_calculation_mode ?? config.deposit_calculation_mode ?? "FLAT";
+  const depositMonthsSource = nested.deposit_months ?? config.deposit_months ?? 1;
  
   return {
     advance_deposit: nonNegativeNumber(advanceSource, DEFAULT_BILLING_DEFAULTS.advance_deposit),
@@ -89,6 +108,8 @@ export function normalizeBillingDefaults(rawConfig: unknown): BillingDefaults {
       : DEFAULT_BILLING_DEFAULTS.allow_override,
     reservation_policy: nested.reservation_policy ?? config.reservation_policy ?? "FULL_DEPOSIT",
     minimum_reservation_deposit: nonNegativeNumber(nested.minimum_reservation_deposit ?? config.minimum_reservation_deposit, 0),
+    deposit_calculation_mode: calculationMode(calculationModeSource, DEFAULT_BILLING_DEFAULTS.deposit_calculation_mode),
+    deposit_months: Math.max(1, Math.min(12, Math.floor(nonNegativeNumber(depositMonthsSource, DEFAULT_BILLING_DEFAULTS.deposit_months)))),
   };
 }
 
@@ -117,6 +138,12 @@ function sanitizeBillingDefaultsPayload(payload: Partial<BillingDefaults>) {
   }
   if (payload.minimum_reservation_deposit !== undefined) {
     next.minimum_reservation_deposit = nonNegativeNumber(payload.minimum_reservation_deposit, 0);
+  }
+  if (payload.deposit_calculation_mode !== undefined) {
+    next.deposit_calculation_mode = calculationMode(payload.deposit_calculation_mode, DEFAULT_BILLING_DEFAULTS.deposit_calculation_mode);
+  }
+  if (payload.deposit_months !== undefined) {
+    next.deposit_months = Math.max(1, Math.min(12, Math.floor(nonNegativeNumber(payload.deposit_months, DEFAULT_BILLING_DEFAULTS.deposit_months))));
   }
   return next;
 }
@@ -217,6 +244,12 @@ export class HostelBillingPreferencesService {
       ? 0
       : billingDefaults.maintenance_charge;
 
+    const rent = billingDefaults.auto_fill_room_rent ? Number(room.base_rent || 0) : 0;
+    let resolvedSecurityDeposit = billingDefaults.security_deposit ?? billingDefaults.advance_deposit;
+    if (billingDefaults.deposit_calculation_mode === "MONTHS_OF_RENT") {
+      resolvedSecurityDeposit = billingDefaults.deposit_months * rent;
+    }
+
     const result: TenantInviteDefaults = {
       room: {
         id: room.id,
@@ -226,13 +259,15 @@ export class HostelBillingPreferencesService {
       },
       billing_defaults: billingDefaults,
       resolved_values: {
-        monthly_rent: billingDefaults.auto_fill_room_rent ? Number(room.base_rent || 0) : 0,
-        advance_deposit: billingDefaults.security_deposit ?? billingDefaults.advance_deposit,
-        security_deposit: billingDefaults.security_deposit ?? billingDefaults.advance_deposit,
+        monthly_rent: rent,
+        advance_deposit: resolvedSecurityDeposit,
+        security_deposit: resolvedSecurityDeposit,
         maintenance_charge: maintenanceCharge,
         maintenance_type: billingDefaults.maintenance_type,
         reservation_policy: billingDefaults.reservation_policy ?? "FULL_DEPOSIT",
         minimum_reservation_deposit: billingDefaults.minimum_reservation_deposit ?? 0,
+        deposit_calculation_mode: billingDefaults.deposit_calculation_mode,
+        deposit_months: billingDefaults.deposit_months,
       },
     };
 

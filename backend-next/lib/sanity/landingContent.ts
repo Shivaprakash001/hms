@@ -181,11 +181,11 @@ const fallbackImages = {
 export const fallbackLandingContent: LandingMarketingContent = {
   hostelProfile: {
     name: 'Sri Adithya Boys Hostel',
-    phone: '9392433422',
+    phone: '07901070333',
     whatsappNumber: '919392433422',
     email: 'sriadithyahostels@gmail.com',
     shortLocation: 'Yamnampet, Secunderabad',
-    addressLines: ['Sri Adithya Boys Hostel', 'Yamnampet', 'Secunderabad, Telangana'],
+    addressLines: ['Sri Adithya Boys Hostel, Yamnampet', 'Secunderabad, Telangana — 501302'],
     locationTitle: 'Prime Location',
     locationDescription: 'Conveniently located near SNIST — your daily commute is just a 5-minute walk',
     distanceTitle: 'Just 400m from SNIST',
@@ -199,13 +199,13 @@ export const fallbackLandingContent: LandingMarketingContent = {
   seo: {
     title: 'Best Boys Hostel in Yamnampet, Secunderabad | Sri Adithya Boys Hostel',
     description:
-      'Sri Adithya Boys Hostel offers safe student accommodation near SNIST with homely meals, transparent pricing, parent-friendly admissions, and easy room visit booking.',
+      'Best Boys Hostel near SNIST with Home Food, Wi-Fi, CCTV security, and single/sharing room options. Walkable distance to SNIST college.',
     canonicalUrl: 'https://sriadithyahostels.in/',
   },
   hero: {
-    title: 'Feel at Home, Every Day',
-    subtitle: 'Boys hostel, just 5 mins walk from SNIST',
-    supportingCopy: 'Join 78+ SNIST students, everything included.',
+    title: '5 Minutes from SNIST Gate.',
+    subtitle: 'Safe living. Homely food. All-inclusive.',
+    supportingCopy: 'Admissions Open — ₹8,200/month, everything included.',
     trustBadge: 'Trusted by SNIST students since 2019',
     highlights: ['Meals Included', 'CCTV + Warden', '400m from SNIST'],
     primaryCta: { label: 'Book a Room Visit', href: '#contact' },
@@ -218,19 +218,19 @@ export const fallbackLandingContent: LandingMarketingContent = {
     tourVideos: [
       {
         id: 'common',
-        label: 'Common Area',
+        label: 'Hostel Tour',
         url: 'https://media.w3.org/2010/05/sintel/trailer_hd.mp4',
         icon: 'building',
       },
       {
         id: 'room',
-        label: 'Room Tour',
+        label: 'Room Interior',
         url: 'https://www.w3schools.com/html/mov_bbb.mp4',
         icon: 'bed',
       },
       {
         id: 'dining',
-        label: 'Dining',
+        label: 'Dining Hall ',
         url: 'https://media.w3.org/2010/05/bunny/trailer.mp4',
         icon: 'utensils',
       },
@@ -239,59 +239,105 @@ export const fallbackLandingContent: LandingMarketingContent = {
   announcements: [],
   features: [
     {
-      icon: 'food',
+      icon: 'utensils',
       title: 'Homely Food',
       description: "Fresh, daily meals included — just like mom's cooking",
       image: { url: fallbackImages.food, alt: 'Homely food served at Sri Adithya Boys Hostel' },
+      bulletPoints: [
+        '3 Hot Meals Daily (Breakfast, Lunch & Dinner)',
+        'Sunday Special Meals & festive celebrations',
+        'RO Purified drinking water & clean kitchen',
+      ],
     },
     {
       icon: 'home',
       title: 'Homely Atmosphere',
       description: 'Warm, safe & comfortable — designed for students',
       image: { url: fallbackImages.room, alt: 'Student room at Sri Adithya Boys Hostel' },
+      bulletPoints: [
+        'Upgraded to 100 Mbps high-speed WiFi in every room',
+        'Daily housekeeping & room cleaning',
+        '24/7 hot water availability',
+      ],
     },
     {
-      icon: 'location',
+      icon: 'map-pin',
       title: 'Prime Location',
       description: '400m from SNIST gate — walk in 5 minutes',
       image: { url: fallbackImages.building, alt: 'Sri Adithya Boys Hostel building location' },
+      bulletPoints: [
+        'Only 400m from SNIST gate (3 min walk)',
+        'Safe well-lit walking path for students',
+        'Close to shops, clinics & transport',
+      ],
     },
   ],
   facilities: [
+    { icon: 'utensils', title: 'Meals Included' },
     { icon: 'wifi', title: 'Free WiFi' },
-    { icon: 'water', title: 'Hot Water' },
-    { icon: 'cleaning', title: 'Daily Cleaning' },
-    { icon: 'security', title: 'Warden Security' },
-    { icon: 'cctv', title: '24/7 CCTV' },
-    { icon: 'laundry', title: 'Washing Machine' },
-    { icon: 'storage', title: 'Secure Storage' },
-    { icon: 'power', title: 'Emergency Generator' },
-    { icon: 'food', title: 'Meals Included' },
+    { icon: 'droplet', title: 'Hot Water' },
+    { icon: 'sparkles', title: 'Daily Cleaning' },
+    { icon: 'shield', title: 'Warden Security' },
+    { icon: 'camera', title: '24/7 CCTV' },
+    { icon: 'shirt', title: 'Washing Machine' },
+    { icon: 'lock', title: 'Secure Storage' },
+    { icon: 'zap', title: 'Emergency Generator' },
+    { icon: 'arrow-up-square', title: 'Lift Available' },
   ],
   testimonials: [
     {
-      name: 'Ravi K.',
+      name: 'Afreed',
       role: '3rd Year · B.Tech CSE · SNIST',
-      review: 'Food is the biggest surprise. I expected mess food — I got home food. My mother actually approved after tasting it.',
+      review: "The best part about this accommodation is the food it's homely, hygienic, and served on time every day. The management and Specially Thatayya👴 are very approachable and ensure all our needs are met quickly. It really feels like a home away from home",
       rating: 5,
     },
     {
-      name: 'Arjun M.',
-      role: '2nd Year · B.Tech ECE · SNIST',
-      review: '5 minutes to college gate. I sleep until 8:55 for a 9 AM class. No other hostel near SNIST gives you that.',
+      name: 'Harsha',
+      role: '3nd Year · B.Tech ECE · SNIST',
+      review: '5 minutes to college gate. I sleep until 8:30 for a 9 AM class. Its biggest Advantage of staying in this hostel for me.',
       rating: 5,
     },
     {
-      name: 'Father of Karthik R.',
-      role: 'Parent · Vizag',
-      review: "My biggest worry was food. After visiting once and seeing the kitchen, I stopped worrying. They also WhatsApp me if anything unusual happens.",
+      name: 'Father of Shiva',
+      role: 'Parent · Verified Stay',
+      review: 'My biggest worry was food. After visiting once and seeing the kitchen, I stopped worrying. They also WhatsApp me if anything unusual happens.',
+      rating: 5,
+    },
+    {
+      name: 'Kuldeep reddy (Google Review)',
+      role: 'Parent · Verified Stay',
+      review: "My brother resided in the hostel actually\nFood was great and hostel was maintained hygienely through out the three years\nIt's rare to find such a college boys hostel",
       rating: 5,
     },
   ],
   faqs: [
     {
-      question: 'Are meals included in the hostel fee?',
-      answer: 'Yes. Daily meals are included, with a focus on homely food for students.',
+      question: 'What kind of food is served and how is quality maintained?',
+      answer: 'We serve 3 hot, hygienic meals daily (Breakfast, Lunch & Dinner) prepared by professional cooks on site. Highlights include special Sunday Chicken biryani and Paneer Biryani. We only use RO purified drinking water and maintain clean, sanitised kitchen premises.',
+    },
+    {
+      question: 'What happens during semester breaks and summer vacation?',
+      answer: 'Students are usually required to vacate the hostel during Summer Holidays, Sankranthi, and Dasara breaks. We use this time for maintenance and facility improvements. Vacation schedules are communicated in advance, and we are always available on WhatsApp for any assistance or clarification.',
+    },
+    {
+      question: 'How far is the hostel from SNIST and how do students commute?',
+      answer: 'The hostel is located just 400 metres from the SNIST main gate. It is a safe 3-to-5-minute walk along a well-lit path, eliminating any need for auto or bus travel for daily classes.',
+    },
+    {
+      question: 'What security measures are in place for students?',
+      answer: 'We take student safety very seriously. The hostel has 24/7 CCTV surveillance across all corridors and entry points, a secure biometric gate control system, and the warden/owner resides on-site to assist students at any hour.',
+    },
+    {
+      question: 'Is high-speed Wi-Fi available for online classes and study?',
+      answer: 'Yes, we provide free high-speed commercial Wi-Fi coverage across all rooms and common study areas to ensure SNIST students can study and work on projects without interruption.',
+    },
+    {
+      question: 'What happens in case of a medical emergency?',
+      answer: 'The warden resides on the premises and has emergency transport ready 24/7. We maintain a basic first-aid kit, have access to nearby clinics in Yamnampet, and immediately coordinate with parents.',
+    },
+    {
+      question: 'Are power backup facilities available?',
+      answer: 'Yes, we have power backup systems installed for basic lights, fans, and Wi-Fi router operations so that studies are not disrupted during power cuts.',
     },
     {
       question: 'Is the hostel suitable for parents who want regular safety updates?',
@@ -302,24 +348,8 @@ export const fallbackLandingContent: LandingMarketingContent = {
       answer: 'No. Room pricing and inclusions are discussed clearly before admission confirmation.',
     },
     {
-      question: 'What is the internet speed at the hostel?',
-      answer: 'The hostel has high-speed fiber broadband WiFi. Students use it for online classes, assignments, and streaming without interruption. Separate network access points are available per room.',
-    },
-    {
       question: 'Can we visit the hostel before confirming admission?',
       answer: 'Absolutely. We encourage all students and parents to visit in person. Call or WhatsApp Srinivasa Rao at 9392433422 to schedule a visit — most visits happen within 24 hours of enquiry.',
-    },
-    {
-      question: 'What is the deposit amount and refund policy?',
-      answer: 'A simple security deposit is required to confirm your bed. The deposit is fully refundable when you move out, subject to room condition. No hidden booking fees.',
-    },
-    {
-      question: 'Is there a study room or quiet area for students?',
-      answer: 'Yes. Students have access to a dedicated study area within the hostel. The environment is designed to support academic focus, especially during exam season.',
-    },
-    {
-      question: 'What happens during semester breaks and summer vacation?',
-      answer: 'Students may choose to keep their room during semester breaks. We offer flexible semester and annual packages. WhatsApp us for details based on your academic calendar.',
     },
   ],
   gallery: [
@@ -373,5 +403,61 @@ export const fallbackLandingContent: LandingMarketingContent = {
       { title: 'Emergency Medical Support', description: 'First-aid kit on-site and tied-up vehicle/hospital support for any medical emergencies.', icon: 'emergency' }
     ]
   },
-  startingPrice: 8000,
+  startingPrice: 8200,
+  announcementBarEnabled: true,
+  announcementBarText: 'Admissions Open — Only 40 beds available for July intake. Filling fast.',
+  announcementBarLinkText: 'Reserve now →',
+  statsStrip: [
+    { value: '2', label: 'Hostel Buildings' },
+    { value: '4', label: 'Sharing Rooms' },
+    { value: '₹8,200+', label: 'Starting Price' },
+    { value: '9+', label: 'Amenities' },
+    { value: '78+', label: 'Students Staying' },
+  ],
+  roomInclusions: [
+    'Free WiFi',
+    'Hot Water',
+    'Daily Cleaning',
+    '24/7 CCTV',
+    'Secure Storage',
+    'Warden Security',
+    'Washing Machine',
+    'Emergency Generator',
+    'Attached Washroom',
+    '3 Meals Per Day Included',
+    'Drinking Water',
+  ],
+  totalCostClarityText: 'No hidden fees. ₹8,200 covers rent, food, WiFi, electricity, cleaning & security. Everything included.',
+  contactFormButtonText: 'Send Enquiry via WhatsApp',
+  roomTypeTitle: '4-Sharing Room',
+  bedsAvailable: 40,
+  intakeMonth: 'July',
 };
+
+export const fallbackSiteSettings = {
+  phoneNumber: "07901070333",
+  whatsappNumber: "9392433422",
+  email: "sriadithyahostels@gmail.com",
+  address: "Sri Adithya Boys Hostel, Yamnampet\nSecunderabad, Telangana — 501302",
+  googleRating: 4.2,
+  googleReviewCount: 51,
+  totalStudents: 78,
+  ownerName: "Srinivasa Rao",
+  ownerTitle: "Owner, Sri Adithya Boys Hostel",
+  ownerQuote: "I personally respond to every enquiry.",
+  ownerPhoto: null,
+  googleMapsUrl: "https://maps.app.goo.gl/tUrcbuFmST7Zyt1c9",
+  seoTitle: "Best Boys Hostel in Yamnampet, Secunderabad | Sri Adithya Boys Hostel",
+  seoDescription: "Best Boys Hostel near SNIST with Home Food, Wi-Fi, CCTV security, and single/sharing room options. Walkable distance to SNIST college.",
+  ogTitle: "Best Boys Hostel in Yamnampet, Secunderabad | Sri Adithya Boys Hostel",
+  ogDescription: "Best Boys Hostel near SNIST with Home Food, Wi-Fi, CCTV security, and single/sharing room options. Walkable distance to SNIST college.",
+  seoSiteName: "Sri Adithya Boys Hostel",
+  canonicalUrl: "https://sriadithyahostels.in/",
+  whatsappFABTemplate: "Hi {ownerName}, I am browsing {hostelName} and would like to ask a question.",
+  whatsappHeroTemplate: "Hi {ownerName}, I would like to check availability at {hostelName}.",
+  whatsappRoomBookingTemplate: "Hi {ownerName}, I am interested in booking a {sharingType} room at {hostelName}.",
+  whatsappAdmissionTemplate: "Hi {ownerName}, I would like to start the admission process for {hostelName}.",
+  whatsappEnquiryTemplate: "Hi {ownerName}, my name is {name} (Phone: {phone}). I am interested in joining {hostelName} from {moveInMonth}. Message: {message}",
+  announcements: []
+};
+

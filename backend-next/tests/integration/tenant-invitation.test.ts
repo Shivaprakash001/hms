@@ -5,6 +5,7 @@ import { tenantInvitationLifecycleService } from '../../src/services/tenants/ten
 import { MetaWhatsAppProvider } from '../../lib/services/notifications/providers/whatsapp/meta-provider';
 import { EmailService } from '../../lib/services/email-service';
 import { prisma } from '../../lib/db';
+import { hostelPolicyService } from '../../lib/services/hostel-policy-service';
 
 vi.mock('../../lib/services/email-service', () => {
   return {
@@ -304,6 +305,99 @@ describe('Tenant Onboarding Integration Flow', () => {
       await expect(
         tenantInvitationLifecycleService.resolveByToken(token)
       ).rejects.toThrow('FORBIDDEN: Cannot activate tenant in an inactive hostel');
+    });
+  });
+
+  describe('Dynamic Security Deposit Onboarding Integration', () => {
+    beforeEach(async () => {
+      // Ensure hostel is active and rent_cycle is MONTHLY
+      await prisma.hostels.update({
+        where: { id: hostel.id },
+        data: { status: 'ACTIVE', is_active: true },
+      });
+    });
+
+    it('should scale security deposit by rent multiplier when mode is MONTHS_OF_RENT', async () => {
+      // 1. Update the hostel billing defaults policy to MONTHS_OF_RENT mode with 2 months multiplier
+      await hostelPolicyService.updateHostelPolicy(
+        hostel.id,
+        owner.id,
+        {
+          billing: {
+            deposit: {
+              calculation_mode: 'MONTHS_OF_RENT',
+              deposit_months: 2,
+            }
+          }
+        },
+        owner.id
+      );
+
+      sendInvitationSpy.mockResolvedValueOnce({
+        providerMessageId: 'wamid.scale_test',
+        attempts: 1,
+      });
+
+      // 2. Invite tenant without specifying explicit advance/deposit override
+      const result: any = await tenantInvitationLifecycleService.createInvitation({
+        name: 'Scaled Deposit Tenant',
+        phone: '9876543233',
+        room_id: room.id,
+        monthly_rent: 12000,
+      }, owner.id);
+
+      expect(result.action).toBe('INVITED');
+
+      // 3. Verify in database that security_deposit is calculated as monthly_rent (12000) * 2 = 24000
+      const dbInvite = await prisma.tenant_invitations.findUnique({
+        where: { id: result.invitation_id },
+        include: { tenant: true },
+      });
+
+      expect(Number(dbInvite?.tenant.monthly_rent)).toBe(12000);
+      expect(Number(dbInvite?.tenant.security_deposit)).toBe(24000);
+    });
+
+    it('should respect manual deposit override even when mode is MONTHS_OF_RENT', async () => {
+      // 1. Update the hostel billing defaults policy to MONTHS_OF_RENT mode with 3 months multiplier
+      await hostelPolicyService.updateHostelPolicy(
+        hostel.id,
+        owner.id,
+        {
+          billing: {
+            deposit: {
+              calculation_mode: 'MONTHS_OF_RENT',
+              deposit_months: 3,
+            }
+          }
+        },
+        owner.id
+      );
+
+      sendInvitationSpy.mockResolvedValueOnce({
+        providerMessageId: 'wamid.override_test',
+        attempts: 1,
+      });
+
+      // 2. Invite tenant specifying an explicit advance_amount override of 15000 (rent is 10000)
+      const result: any = await tenantInvitationLifecycleService.createInvitation({
+        name: 'Overridden Deposit Tenant',
+        phone: '9876543244',
+        room_id: room.id,
+        monthly_rent: 10000,
+        advance_amount: 15000,
+      }, owner.id);
+
+      expect(result.action).toBe('INVITED');
+
+      // 3. Verify in database that security_deposit is exactly the overridden amount (15000), not rent * 3 (30000)
+      const dbInvite = await prisma.tenant_invitations.findUnique({
+        where: { id: result.invitation_id },
+        include: { tenant: true },
+      });
+
+      expect(Number(dbInvite?.tenant.monthly_rent)).toBe(10000);
+      expect(Number(dbInvite?.tenant.security_deposit)).toBe(15000);
     });
   });
 });
