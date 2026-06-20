@@ -60,6 +60,7 @@ export interface HostelOperationalContext {
 export async function getHostelOperationalContext(
   ownerId: string,
   hostelId: string,
+  options?: { allowArchived?: boolean },
 ): Promise<HostelOperationalContext> {
   if (!hostelId) {
     const err: any = new Error(
@@ -97,7 +98,7 @@ export async function getHostelOperationalContext(
     },
   });
 
-  if (!hostel || hostel.status === "ARCHIVED") {
+  if (!hostel || (hostel.status === "ARCHIVED" && !options?.allowArchived)) {
     const err: any = new Error(`HOSTEL_NOT_FOUND: Hostel ${hostelId} does not exist or is archived.`);
     err.code = "HOSTEL_NOT_FOUND";
     throw err;

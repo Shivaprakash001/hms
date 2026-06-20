@@ -241,6 +241,7 @@ export async function POST(req: Request) {
       payment_group_id: (result as any).groupId || null,
       allocations: (result as any).allocations || undefined,
       future_credit: (result as any).futureCredit || 0,
+      settlement_breakdown: (result as any).settlementBreakdown || null,
     });
   } catch (error: any) {
     console.error("Detailed API Error [payments.record-offline]:", error);

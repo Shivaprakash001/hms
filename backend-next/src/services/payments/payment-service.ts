@@ -246,18 +246,18 @@ export class PaymentService {
     return { payment, newStatus, tenantId: obligation.tenant_id, ownerId: obligation.owner_id, hostelId: obligation.hostel_id };
   }
 
-  private async _assertRentMinimumInTx(tx: any, tenantId: string, amountPaid: number) {
+  /**
+   * V2: Validates tenant existence and loads context for settlement.
+   * No rent-floor enforcement — HMS has non-rent obligations (maintenance, deposits,
+   * extra charges) that are legitimately below monthly rent.
+   */
+  private async _assertPaymentMinimumInTx(tx: any, tenantId: string, amountPaid: number) {
     const tenant = await tx.tenants.findUnique({
       where: { id: tenantId },
       select: { id: true, monthly_rent: true, owner_id: true, hostel_id: true },
     });
     if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
-
-    const monthlyRent = Number(tenant.monthly_rent || 0);
-    if (monthlyRent > 0 && Math.round(amountPaid * 100) < Math.round(monthlyRent * 100)) {
-      throw new Error(`BAD_REQUEST: Rent payments below current monthly rent (${formatCurrency(monthlyRent)}) are not allowed`);
-    }
-    return { tenant, monthlyRent };
+    return { tenant, monthlyRent: Number(tenant.monthly_rent || 0) };
   }
 
   private async _settleTenantRentPaymentInTx(tx: any, data: {
@@ -278,7 +278,7 @@ export class PaymentService {
   }, groupId: string) {
     const hostelId = requireFinancialHostelId(data.hostelId, "tenant rent settlement");
     await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${data.tenantId}::uuid FOR UPDATE`;
-    const { tenant } = await this._assertRentMinimumInTx(tx, data.tenantId, data.amountPaid);
+    const { tenant } = await this._assertPaymentMinimumInTx(tx, data.tenantId, data.amountPaid);
 
     if (tenant.hostel_id !== hostelId) {
       throw new Error("HOSTEL_CONTEXT_MISMATCH: Tenant does not belong to requested hostel");
@@ -288,13 +288,23 @@ export class PaymentService {
     }
 
     const amountPaisa = Math.round(data.amountPaid * 100);
+    // V2: Settle ALL obligation types, not just RENT.
+    // Priority: Security Deposit → Maintenance → Rent → Extra Charges
     const lockedRows: { id: string }[] = await tx.$queryRaw`
       SELECT id FROM rent_obligations
       WHERE tenant_id = ${data.tenantId}::uuid
         AND hostel_id = ${hostelId}::uuid
-        AND obligation_type = 'RENT'
         AND status IN ('OVERDUE', 'PENDING', 'PARTIAL')
-      ORDER BY due_date ASC, rent_month ASC
+      ORDER BY
+        CASE obligation_type
+          WHEN 'SECURITY_DEPOSIT' THEN 1
+          WHEN 'MAINTENANCE' THEN 2
+          WHEN 'RENT' THEN 3
+          WHEN 'EXTRA_CHARGE' THEN 4
+          ELSE 5
+        END,
+        due_date ASC,
+        rent_month ASC
       FOR UPDATE
     `;
 
@@ -320,7 +330,17 @@ export class PaymentService {
       }
     }
 
+    // V2: Sort by settlement priority, then chronologically
+    const OBLIGATION_PRIORITY: Record<string, number> = {
+      SECURITY_DEPOSIT: 1,
+      MAINTENANCE: 2,
+      RENT: 3,
+      EXTRA_CHARGE: 4,
+    };
     obligations.sort((a: any, b: any) => {
+      const priorityA = OBLIGATION_PRIORITY[a.obligation_type] ?? 5;
+      const priorityB = OBLIGATION_PRIORITY[b.obligation_type] ?? 5;
+      if (priorityA !== priorityB) return priorityA - priorityB;
       const dateDiff = new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
       if (dateDiff !== 0) return dateDiff;
       return new Date(a.rent_month).getTime() - new Date(b.rent_month).getTime();
@@ -368,12 +388,26 @@ export class PaymentService {
       const newStatus = newTotalPaidPaisa >= duePaisa ? "PAID" : "PARTIAL";
       await tx.rent_obligations.update({ where: { id: ob.id }, data: { status: newStatus } });
 
+      // V2: Generate human-readable label for JSONB snapshot
+      const monthLabel = ob.rent_month
+        ? new Date(ob.rent_month).toLocaleDateString("en-IN", { month: "short", year: "numeric" })
+        : "";
+      const typeLabels: Record<string, string> = {
+        RENT: "Rent",
+        MAINTENANCE: "Maintenance",
+        SECURITY_DEPOSIT: "Security Deposit",
+        EXTRA_CHARGE: "Extra Charge",
+      };
+      const typeLabel = typeLabels[ob.obligation_type] || ob.obligation_type;
+      const installmentLabel = monthLabel ? `${monthLabel} ${typeLabel}` : typeLabel;
+
       allocations.push({
         payment_id: payment.id,
         obligation_id: ob.id,
         owner_id: payment.owner_id,
         obligation_type: ob.obligation_type,
         rent_month: ob.rent_month,
+        installment_label: installmentLabel,
         allocated: allocPaisa / 100,
         new_status: newStatus,
       });
@@ -391,7 +425,7 @@ export class PaymentService {
         referenceId: data.paymentAttemptId || groupId,
         referenceType: data.paymentAttemptId ? "PAYMENT_ATTEMPT_REMAINDER" : "PAYMENT_GROUP_REMAINDER",
         reason: "FUTURE_RENT_CREDIT_TOPUP",
-        notes: "Rent payment excess credited as future rent credit",
+        notes: "Payment excess credited as future rent credit",
       });
       remainingPaisa = 0;
     }
@@ -401,7 +435,27 @@ export class PaymentService {
     const dueRemaining = Math.max(totalDuePaisa - Math.min(amountPaisa, totalDuePaisa), 0) / 100;
     const overallStatus = dueRemaining <= 0 ? "PAID" : "PARTIAL";
 
-    return { allocations, totalDue, totalPaid, remaining: dueRemaining, futureCredit, overallStatus, groupId };
+    // V2: Build immutable settlement breakdown for JSONB storage
+    const settlementBreakdown = {
+      allocations: allocations.map(a => ({
+        obligation_id: a.obligation_id,
+        type: a.obligation_type,
+        rent_month: a.rent_month,
+        label: a.installment_label,
+        allocated: a.allocated,
+        result: a.new_status,
+      })),
+      future_credit: futureCredit,
+      total_settled: totalPaid - futureCredit,
+      total_paid: totalPaid,
+      total_due: totalDue,
+      remaining: dueRemaining,
+      summary: futureCredit > 0
+        ? `₹${totalPaid.toLocaleString("en-IN")} received → ${allocations.length} obligation${allocations.length !== 1 ? "s" : ""} settled, ₹${futureCredit.toLocaleString("en-IN")} credited as future rent`
+        : `₹${totalPaid.toLocaleString("en-IN")} received → ${allocations.length} obligation${allocations.length !== 1 ? "s" : ""} settled`,
+    };
+
+    return { allocations, totalDue, totalPaid, remaining: dueRemaining, futureCredit, overallStatus, groupId, settlementBreakdown };
   }
 
   /**
@@ -1296,10 +1350,9 @@ export class PaymentService {
     if (tenant.owner_id !== ownerId) throw new Error("FORBIDDEN: Tenant does not belong to this owner");
 
     const hostelId = requireFinancialHostelId(tenant.hostel_id, "tenant rent payment intent");
-    const monthlyRent = Number(tenant.monthly_rent || 0);
-    if (monthlyRent > 0 && Math.round(amount * 100) < Math.round(monthlyRent * 100)) {
-      throw new Error(`BAD_REQUEST: Rent payments below current monthly rent (${formatCurrency(monthlyRent)}) are not allowed`);
-    }
+    // V2: No rent-floor enforcement. HMS has non-rent obligations (maintenance,
+    // deposits, extra charges) that are legitimately below monthly rent.
+    // Minimum is enforced by hostel prefs.min_payment_amount at the gateway level.
 
     const providerContext = await getProviderContext({
       paymentDomain: PAYMENT_DOMAIN.RENT_COLLECTION,
@@ -2331,6 +2384,13 @@ export class PaymentService {
             ownerId: allocation.owner_id,
           });
         }
+        // V2: Store immutable settlement breakdown JSONB
+        if (settlement.settlementBreakdown) {
+          await tx.paymentAttempt.update({
+            where: { id: attemptId },
+            data: { settlement_breakdown: settlement.settlementBreakdown },
+          });
+        }
       }
       // If neither — invoice payment or no linkage (handled in billing path above)
       if (appliedPayments.length === 0 && !attempt.tenant_id) {
@@ -2938,7 +2998,6 @@ export class PaymentService {
           FROM hostels h
           WHERE h.id = ${hostelId}::uuid
             AND h.owner_id = ${ownerId}::uuid
-            AND h.status != 'ARCHIVED'
         ) AS allowed
       ),
       base AS (

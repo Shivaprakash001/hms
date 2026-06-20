@@ -564,6 +564,7 @@ model paymentAttempt {
   provider_transaction_id String?
   provider_order_id       String?
   provider_reference_id   String?
+  settlement_breakdown    Json?
   obligations             payment_attempt_obligations[]
   rent_obligations        rent_obligations?             @relation(fields: [obligation_id], references: [id])
   tenants                 tenants?                      @relation(fields: [tenant_id], references: [id])

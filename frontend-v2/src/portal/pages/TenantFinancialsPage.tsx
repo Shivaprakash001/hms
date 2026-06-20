@@ -641,6 +641,11 @@ export function TenantFinancialsPage() {
     dispatch({ type: 'PAY_CURRENT_INSTALLMENT', payload: { ids } });
   };
 
+  const handleOpenPaymentModal = () => {
+    const allPayableIds = payableItems.map((p) => p.id);
+    dispatch({ type: 'TRIGGER_DIRECT_PAYMENT', payload: allPayableIds });
+  };
+
   const handlePaymentSuccess = () => {
     dispatch({ type: 'RECORD_PAYMENT_SUCCESS' });
     queryClient.invalidateQueries({ queryKey: ['tenant'] });
@@ -698,41 +703,53 @@ export function TenantFinancialsPage() {
           </div>
           <HealthIcon className="w-10 h-10 opacity-90 p-1.5 bg-white/10 rounded-xl backdrop-blur-md" />
         </div>
-        <div className="mt-4 pt-4 border-t border-white/15">
-          {financialHealth.state !== 'GREEN' && (
-            <div className="flex items-baseline gap-1.5 mb-1.5">
-              <span className="text-sm font-semibold opacity-85">{financialHealth.amountLabel}:</span>
-              <span className="text-2xl font-black">{fmt(financialHealth.amount)}</span>
+        <div className="mt-4 pt-4 border-t border-white/15 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            {financialHealth.state !== 'GREEN' && (
+              <div className="flex items-baseline gap-1.5 mb-1.5">
+                <span className="text-sm font-semibold opacity-85">{financialHealth.amountLabel}:</span>
+                <span className="text-2xl font-black">{fmt(financialHealth.amount)}</span>
+              </div>
+            )}
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-sm font-medium opacity-90 text-white">
+                {financialHealth.subtext}
+              </p>
+              {financialHealth.state === 'GREEN' && (financialHealth as any).nextDays >= 0 && (() => {
+                const days = (financialHealth as any).nextDays;
+                let pillColor = '#FBB040';
+                if (days < 7) pillColor = '#C62828';
+                else if (days <= 14) pillColor = '#F07B1D';
+                return (
+                  <span
+                    style={{
+                      backgroundColor: `${pillColor}33`,
+                      border: `1px solid ${pillColor}`,
+                      color: pillColor,
+                      fontFamily: 'Poppins, sans-serif',
+                      fontWeight: 600,
+                      fontSize: '12px',
+                      borderRadius: '20px',
+                      padding: '2px 10px',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    ⏱ {days} days left
+                  </span>
+                );
+              })()}
             </div>
-          )}
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-sm font-medium opacity-90 text-white">
-              {financialHealth.subtext}
-            </p>
-            {financialHealth.state === 'GREEN' && (financialHealth as any).nextDays >= 0 && (() => {
-              const days = (financialHealth as any).nextDays;
-              let pillColor = '#FBB040';
-              if (days < 7) pillColor = '#C62828';
-              else if (days <= 14) pillColor = '#F07B1D';
-              return (
-                <span
-                  style={{
-                    backgroundColor: `${pillColor}33`,
-                    border: `1px solid ${pillColor}`,
-                    color: pillColor,
-                    fontFamily: 'Poppins, sans-serif',
-                    fontWeight: 600,
-                    fontSize: '12px',
-                    borderRadius: '20px',
-                    padding: '2px 10px',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  ⏱ {days} days left
-                </span>
-              );
-            })()}
           </div>
+
+          <button
+            type="button"
+            onClick={handleOpenPaymentModal}
+            className="px-5 py-2.5 rounded-xl bg-white text-slate-900 font-bold text-sm shadow-md hover:bg-slate-50 transition-colors flex items-center justify-center gap-2 cursor-pointer self-start sm:self-center"
+            style={{ color: financialHealth.state === 'GREEN' ? '#1B2D5B' : financialHealth.state === 'RED' ? '#C62828' : '#F07B1D' }}
+          >
+            <CreditCard className="w-4 h-4" />
+            Make Payment
+          </button>
         </div>
       </div>
 
@@ -1173,8 +1190,8 @@ export function TenantFinancialsPage() {
         </p>
       </section>
 
-      {/* DEVELOPMENT / TEST PAYMENT SECTION */}
-      {true && (
+      {/* DEVELOPMENT / TEST PAYMENT SECTION — V2: gated behind dev mode */}
+      {isDevelopment && (
         <section className="rounded-2xl border bg-card p-5 shadow-sm space-y-4" style={{ borderColor: '#F59E0B', backgroundColor: '#FFFDF5' }}>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#FEF3C7', color: '#D97706' }}>
@@ -1289,6 +1306,9 @@ export function TenantFinancialsPage() {
         obligationIds={state.selectedIds}
         paymentContext={selectedItems}
         onSuccess={handlePaymentSuccess}
+        allInstallments={installments}
+        tenantId={profile?.tenant?.id}
+        hostelId={profile?.hostel?.id}
       />
 
       <TenantPaymentModal
@@ -1303,6 +1323,9 @@ export function TenantFinancialsPage() {
           queryClient.invalidateQueries({ queryKey: ['tenant'] });
           toast.success('Prepayment recorded successfully!');
         }}
+        allInstallments={installments}
+        tenantId={profile?.tenant?.id}
+        hostelId={profile?.hostel?.id}
       />
 
       <TenantPaymentDetailModal

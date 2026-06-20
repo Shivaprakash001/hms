@@ -19,6 +19,11 @@ function startOfTodayUtc() {
 
 export async function POST(req: Request) {
   try {
+    // V2: Gate test payments behind development environment
+    if (process.env.NODE_ENV === "production") {
+      return apiError("Test payments are disabled in production", "FORBIDDEN", 403);
+    }
+
     const user = await authService.getCurrentUser(req);
     if (!user) {
       return apiError("Unauthorized", "UNAUTHORIZED", 401);

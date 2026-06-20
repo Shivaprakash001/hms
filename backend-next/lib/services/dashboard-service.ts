@@ -113,7 +113,6 @@ export class DashboardService {
         FROM hostels
         WHERE id = ${hostelId}::uuid
           AND owner_id = ${userId}::uuid
-          AND status != 'ARCHIVED'
         LIMIT 1
       ),
       tenant_counts AS (
@@ -1205,7 +1204,7 @@ export class DashboardService {
       }),
     ]);
 
-    const hostel = (hostelRaw && hostelRaw.owner_id === userId && hostelRaw.status !== "ARCHIVED") ? hostelRaw : null;
+    const hostel = (hostelRaw && hostelRaw.owner_id === userId) ? hostelRaw : null;
 
     const expectedRevenue = Number(currentExpected._sum.total_amount || 0);
     const previousRevenue = Number(previousPayments._sum.amount_paid || 0);

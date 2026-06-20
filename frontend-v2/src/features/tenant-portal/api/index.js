@@ -55,6 +55,7 @@ export const tenantPortalApi = {
   getAttempt: (attemptId) => paymentService.getAttempt(attemptId),
   submitUpiReference: (data) => paymentService.submitUpiReference(data),
   verifyPayment: (data) => paymentService.verifyPayment(data),
+  settlementPreview: (tenantId, amount, hostelId) => paymentService.settlementPreview(tenantId, amount, hostelId),
   markNotificationRead: (id) => notificationService.markAsRead(id),
   getMoveOutTimeline: () => moveOutService.getTimeline(),
   getAgreementRenewal: () => agreementService.getTenantRenewal(),
