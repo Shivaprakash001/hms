@@ -132,7 +132,7 @@ export function BillingDashboard() {
 
       {!isLoading && activeHostelId && (
         activeTab === 'expenses' ? (
-          <ExpensesTab hostelId={activeHostelId} />
+          <ExpensesTab hostelId="all" />
         ) : (
           <FinancialControlCenter
             hostelId={activeHostelId}

@@ -25,7 +25,7 @@ type ExpenseFilters = {
   range?: string;
   startDate?: string;
   endDate?: string;
-  hostelId: string | undefined;
+  hostelId?: string | undefined;
   categories?: string[];
   status?: string;
   sort?: string;
@@ -124,11 +124,44 @@ function suggestedCategory(title: string) {
   return "Miscellaneous";
 }
 
+function suggestedOperationalType(title: string, category: string) {
+  const text = `${title} ${category}`.toLowerCase();
+  if (/(salary|staff|warden|watchman|cook|guard)/.test(text)) return "Staff";
+  if (/(electric|water|gas|internet|wifi|broadband|sewage)/.test(text)) return "Utility";
+  if (/(repair|plumb|paint|fix|carpenter|leak|pipe|roof)/.test(text)) return "Maintenance";
+  if (/(emergency|urgent|flood|fire|accident|break)/.test(text)) return "Emergency";
+  return "Operational";
+}
+
 function businessPaymentWhere(ownerId: string, start: Date, end: Date) {
   return {
     payment_date: { gte: start, lt: end },
     OR: [{ owner_id: ownerId }, { hostels: { owner_id: ownerId } }],
   } as any;
+}
+
+function buildSearchWhere(search: string) {
+  const terms = search.trim().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return {};
+
+  // Each term must match at least one field (AND across terms)
+  const termConditions = terms.map((term) => {
+    const fieldMatches: any[] = [
+      { title: { contains: term, mode: "insensitive" } },
+      { notes: { contains: term, mode: "insensitive" } },
+      { vendor_name: { contains: term, mode: "insensitive" } },
+      { payment_method: { contains: term, mode: "insensitive" } },
+      { category: { contains: term, mode: "insensitive" } },
+    ];
+    // If the term looks numeric, also match amount
+    const numericValue = Number(term);
+    if (Number.isFinite(numericValue) && numericValue > 0) {
+      fieldMatches.push({ amount: { equals: numericValue } });
+    }
+    return { OR: fieldMatches };
+  });
+
+  return { AND: termConditions };
 }
 
 export class ExpenseService {
@@ -146,16 +179,7 @@ export class ExpenseService {
       ...(filters.hostelId ? { hostel_id: filters.hostelId } : {}),
       ...(filters.status && filters.status !== "all" ? { status: filters.status } : {}),
       ...(filters.categories?.length ? { category: { in: filters.categories.map(normalizeCategory) } } : {}),
-      ...(filters.search
-        ? {
-            OR: [
-              { title: { contains: filters.search, mode: "insensitive" } },
-              { notes: { contains: filters.search, mode: "insensitive" } },
-              { vendor_name: { contains: filters.search, mode: "insensitive" } },
-              { payment_method: { contains: filters.search, mode: "insensitive" } },
-            ],
-          }
-        : {}),
+      ...(filters.search ? buildSearchWhere(filters.search) : {}),
     };
 
     const sort = filters.sort || "recent";
@@ -183,6 +207,7 @@ export class ExpenseService {
       monthlyExpenses,
       monthlyPayments,
       duplicateCandidates,
+      frequentRaw,
     ] = await Promise.all([
       prisma.expenses.findMany({
         where: ledgerWhere,
@@ -234,7 +259,36 @@ export class ExpenseService {
         orderBy: { created_at: "desc" },
         take: 200,
       }),
+      // Frequent expenses for smart suggestions
+      prisma.$queryRaw`
+        SELECT
+          LOWER(TRIM(title)) AS normalized_title,
+          title,
+          category,
+          vendor_name,
+          payment_method,
+          COUNT(*)::int AS occurrence_count,
+          MAX(amount)::float AS last_amount,
+          MAX(date) AS last_date
+        FROM expenses
+        WHERE owner_id = ${ownerId}::uuid
+        GROUP BY LOWER(TRIM(title)), title, category, vendor_name, payment_method
+        HAVING COUNT(*) >= 2
+        ORDER BY COUNT(*) DESC, MAX(date) DESC
+        LIMIT 8
+      ` as Promise<any[]>,
     ]);
+
+    const frequentExpenses = (Array.isArray(frequentRaw) ? frequentRaw : []).map((r: any) => ({
+      title: r.title,
+      category: r.category,
+      vendor_name: r.vendor_name,
+      payment_method: r.payment_method,
+      occurrence_count: Number(r.occurrence_count || 0),
+      last_amount: Number(r.last_amount || 0),
+      last_date: r.last_date,
+      suggested_operational_type: suggestedOperationalType(r.title || "", r.category || ""),
+    }));
 
     const currentExpenses = Number(currentAgg._sum.amount || 0);
     const previousExpenses = Number(previousAgg._sum.amount || 0);
@@ -244,9 +298,11 @@ export class ExpenseService {
     const margin = collectedRevenue > 0 ? round((netProfit / collectedRevenue) * 100) : 0;
     const expenseRevenueRatio = collectedRevenue > 0 ? round((currentExpenses / collectedRevenue) * 100) : 0;
 
-    const previousByCategory = new Map(categoryPrevious.map((row) => [normalizeCategory(row.category), Number(row._sum.amount || 0)]));
-    const categoryBreakdown = categoryCurrent
-      .map((row) => {
+    const previousByCategory = new Map<string, number>(
+      (categoryPrevious as any[]).map((row: any) => [normalizeCategory(row.category), Number(row._sum.amount || 0)])
+    );
+    const categoryBreakdown = (categoryCurrent as any[])
+      .map((row: any) => {
         const category = normalizeCategory(row.category);
         const amount = Number(row._sum.amount || 0);
         const previous = previousByCategory.get(category) || 0;
@@ -259,7 +315,7 @@ export class ExpenseService {
           anomaly: previous > 0 && trend >= 35 ? `${category} up ${trend}% compared to last month` : null,
         };
       })
-      .sort((a, b) => b.amount - a.amount);
+      .sort((a: any, b: any) => b.amount - a.amount);
 
     const months = Array.from({ length: 6 }, (_, i) => addMonths(sixMonthStart, i));
     const expensesByMonth = new Map<string, number>();
@@ -323,6 +379,7 @@ export class ExpenseService {
       category_breakdown: categoryBreakdown,
       insights,
       monthly_trend: monthlyTrend,
+      frequent_expenses: frequentExpenses,
       meta: {
         range: { start, end },
         categories: EXPENSE_CATEGORIES,
@@ -423,18 +480,19 @@ export class ExpenseService {
     expense_type?: string;
     expense_scope?: "BUSINESS" | "HOSTEL" | null;
     tags?: string[];
+    operational_type?: string;
     metadata?: any;
   }) {
     if (!data.title?.trim()) throw new Error("VALIDATION: Title is required");
     if (!Number.isFinite(Number(data.amount)) || Number(data.amount) <= 0) {
       throw new Error("VALIDATION: Amount must be greater than zero");
     }
-    if (!data.payment_method) throw new Error("VALIDATION: Payment method is required");
 
     const parsedDate = data.date instanceof Date ? data.date : new Date(data.date);
     if (Number.isNaN(parsedDate.getTime())) throw new Error("VALIDATION: Invalid date provided");
 
-    const expense_scope = data.expense_scope || (data.hostel_id ? "HOSTEL" : "BUSINESS");
+    const expense_scope = data.expense_scope || "BUSINESS";
+
     if (expense_scope === "BUSINESS" && data.hostel_id) {
       throw new Error("VALIDATION: Business expenses must not have a hostel ID");
     }
@@ -443,6 +501,7 @@ export class ExpenseService {
     }
 
     const category = normalizeCategory(data.category || suggestedCategory(data.title));
+    const operationalType = data.operational_type || suggestedOperationalType(data.title, category);
     const expense = await prisma.expenses.create({
       data: {
         id: randomUUID(),
@@ -464,6 +523,7 @@ export class ExpenseService {
         approved_by: data.approved_by || null,
         expense_type: data.expense_type || "BUSINESS",
         expense_scope,
+        operational_type: operationalType,
         tags: data.tags || [],
         metadata: {
           ...(data.metadata || {}),
@@ -523,6 +583,8 @@ export class ExpenseService {
       if (!Number.isNaN(d.getTime())) updateData.date = d;
     }
 
+    if (data.operational_type !== undefined) updateData.operational_type = data.operational_type || null;
+
     const scopeToValidate = updateData.expense_scope ?? existing.expense_scope;
     const hostelIdToValidate = updateData.hostel_id !== undefined ? updateData.hostel_id : existing.hostel_id;
 
@@ -556,6 +618,91 @@ export class ExpenseService {
       amount: Number(expense.amount || 0),
     });
     return expense;
+  }
+
+  async getFrequentExpenses(ownerId: string) {
+    const results: any[] = await prisma.$queryRaw`
+      SELECT
+        LOWER(TRIM(title)) AS normalized_title,
+        (array_agg(title ORDER BY date DESC))[1] AS title,
+        (array_agg(category ORDER BY date DESC))[1] AS category,
+        (array_agg(vendor_name ORDER BY date DESC))[1] AS vendor_name,
+        (array_agg(payment_method ORDER BY date DESC))[1] AS payment_method,
+        COUNT(*)::int AS occurrence_count,
+        (array_agg(amount ORDER BY date DESC))[1]::float AS last_amount,
+        MAX(date) AS last_date
+      FROM expenses
+      WHERE owner_id = ${ownerId}::uuid
+      GROUP BY LOWER(TRIM(title))
+      HAVING COUNT(*) >= 2
+      ORDER BY COUNT(*) DESC, MAX(date) DESC
+      LIMIT 10
+    `;
+
+    return results.map((r) => ({
+      title: r.title,
+      category: r.category,
+      vendor_name: r.vendor_name,
+      payment_method: r.payment_method,
+      occurrence_count: r.occurrence_count,
+      last_amount: Number(r.last_amount || 0),
+      last_date: r.last_date,
+      suggested_operational_type: suggestedOperationalType(r.title || "", r.category || ""),
+    }));
+  }
+
+  async getExpenseTitleSummary(ownerId: string, titleSearch: string) {
+    const normalized = titleSearch.trim().toLowerCase();
+    if (!normalized) throw new Error("VALIDATION: Title search term is required");
+
+    const expenses = await prisma.expenses.findMany({
+      where: {
+        owner_id: ownerId,
+        title: { contains: titleSearch.trim(), mode: "insensitive" },
+      },
+      orderBy: { date: "desc" },
+      select: {
+        id: true,
+        title: true,
+        amount: true,
+        date: true,
+        category: true,
+        vendor_name: true,
+        payment_method: true,
+        notes: true,
+        status: true,
+      },
+      take: 50,
+    });
+
+    if (expenses.length === 0) {
+      return { title: titleSearch, transactions: [], summary: null };
+    }
+
+    const amounts = expenses.map((e: any) => Number(e.amount || 0));
+    const totalSpent = round(amounts.reduce((s: number, a: number) => s + a, 0));
+    const highest = Math.max(...amounts);
+    const lowest = Math.min(...amounts);
+
+    // Compute monthly average based on distinct months spanned
+    const monthSet = new Set(expenses.map((e: any) => monthKey(new Date(e.date))));
+    const avgMonthly = monthSet.size > 0 ? round(totalSpent / monthSet.size) : totalSpent;
+
+    return {
+      title: titleSearch,
+      transactions: expenses.map((e: any) => ({
+        ...e,
+        amount: Number(e.amount || 0),
+      })),
+      summary: {
+        total_transactions: expenses.length,
+        total_spent: totalSpent,
+        average_monthly: avgMonthly,
+        highest,
+        lowest,
+        months_tracked: monthSet.size,
+      },
+    };
   }
 }
 

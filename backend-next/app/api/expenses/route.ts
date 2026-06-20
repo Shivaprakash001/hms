@@ -65,6 +65,20 @@ export async function GET(req: NextRequest) {
 
   try {
     const scope = resolveOwnerScope(session);
+
+    // Mode-based routing for intelligence features
+    const mode = req.nextUrl.searchParams.get("mode");
+    if (mode === "suggestions") {
+      const suggestions = await expenseService.getFrequentExpenses(scope.owner_id);
+      return apiResponse({ frequent_expenses: suggestions });
+    }
+    if (mode === "title_summary") {
+      const title = req.nextUrl.searchParams.get("title");
+      if (!title) return apiError("Title parameter is required for title_summary mode", "VALIDATION_ERROR", 400);
+      const summary = await expenseService.getExpenseTitleSummary(scope.owner_id, title);
+      return apiResponse(summary);
+    }
+
     const hostelId = req.nextUrl.searchParams.get("hostelId") || undefined;
     if (hostelId) await requireHostelBelongsToOwner(scope.owner_id, hostelId);
     const categories = req.nextUrl.searchParams.get("categories");
@@ -97,8 +111,8 @@ export async function POST(req: NextRequest) {
     const scope = resolveOwnerScope(session);
     const { body, receiptFile } = await parseExpenseCreateBody(req);
 
-    if (!body.title || !body.amount || !body.date || !body.category || !body.payment_method) {
-      return apiError("Missing required fields: title, amount, date, category, payment_method", "VALIDATION_ERROR", 400);
+    if (!body.title || !body.amount || !body.date || !body.category) {
+      return apiError("Missing required fields: title, amount, date, category", "VALIDATION_ERROR", 400);
     }
 
     if (body.hostelId) await requireHostelBelongsToOwner(scope.owner_id, body.hostelId);
@@ -123,7 +137,8 @@ export async function POST(req: NextRequest) {
       recurring_frequency: body.recurring_frequency,
       created_by: session.sub,
       expense_type: body.expense_type,
-      expense_scope: body.expense_scope ?? body.expenseScope,
+      expense_scope: body.expense_scope ?? body.expenseScope ?? "BUSINESS",
+      operational_type: body.operational_type,
       tags: Array.isArray(body.tags) ? body.tags : [],
       metadata: body.metadata,
     });

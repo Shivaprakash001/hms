@@ -549,7 +549,6 @@ export class PropertyService {
           FROM hostels h
           WHERE h.id = ${hostelId}::uuid
             AND h.owner_id = ${ownerId}::uuid
-            AND h.status != 'ARCHIVED'
         ) AS allowed
       ),
       floor_rows AS (
@@ -589,7 +588,7 @@ export class PropertyService {
   async createFloor(ownerId: string, hostelId: string, data: { name: string; sort_order?: number }) {
     const hostel = await prisma.hostels.findUnique({ where: { id: hostelId } });
     if (!hostel || hostel.owner_id !== ownerId) throw new Error("NOT_FOUND: Hostel not found");
-    if (hostel.status === "ARCHIVED") throw new Error("VALIDATION: Cannot modify rooms/floors of an archived hostel");
+    if (hostel.status === "ARCHIVED") throw new Error("HOSTEL_ARCHIVED: Cannot modify rooms/floors of an archived hostel");
     if (hostel.status === "INACTIVE") throw new Error("VALIDATION: Cannot modify rooms/floors of an inactive hostel");
 
     return await prisma.floors.create({
@@ -608,7 +607,7 @@ export class PropertyService {
       include: { hostel: { select: { owner_id: true, status: true } } },
     });
     if (!floor || floor.hostel.owner_id !== ownerId) throw new Error("NOT_FOUND: Floor not found");
-    if (floor.hostel.status === "ARCHIVED") throw new Error("VALIDATION: Cannot modify rooms/floors of an archived hostel");
+    if (floor.hostel.status === "ARCHIVED") throw new Error("HOSTEL_ARCHIVED: Cannot modify rooms/floors of an archived hostel");
     if (floor.hostel.status === "INACTIVE") throw new Error("VALIDATION: Cannot modify rooms/floors of an inactive hostel");
 
     const updateData: any = {};
@@ -628,7 +627,7 @@ export class PropertyService {
       },
     });
     if (!floor || floor.hostel.owner_id !== ownerId) throw new Error("NOT_FOUND: Floor not found");
-    if (floor.hostel.status === "ARCHIVED") throw new Error("VALIDATION: Cannot modify rooms/floors of an archived hostel");
+    if (floor.hostel.status === "ARCHIVED") throw new Error("HOSTEL_ARCHIVED: Cannot modify rooms/floors of an archived hostel");
     if (floor.hostel.status === "INACTIVE") throw new Error("VALIDATION: Cannot modify rooms/floors of an inactive hostel");
     if (floor.rooms.length > 0) throw new Error("VALIDATION: Cannot delete floor with active rooms");
 
@@ -846,7 +845,7 @@ export class PropertyService {
     });
 
     if (!room || room.hostels.owner_id !== ownerId) throw new Error("NOT_FOUND: Room not found");
-    if (room.hostels.status === "ARCHIVED") throw new Error("VALIDATION: Cannot modify rooms of an archived hostel");
+    if (room.hostels.status === "ARCHIVED") throw new Error("HOSTEL_ARCHIVED: Cannot modify rooms of an archived hostel");
     if (room.hostels.status === "INACTIVE") throw new Error("VALIDATION: Cannot modify rooms of an inactive hostel");
 
     const capacitySnapshot = await roomCapacityService.getRoomCapacitySnapshot(roomId, { ownerId });

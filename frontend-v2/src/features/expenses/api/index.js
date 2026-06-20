@@ -3,13 +3,27 @@ import api from '@lib/api-client';
 export const expenseService = {
     getAll: async (hostelId, params = {}) => {
         const requestParams = { ...params };
-        if (hostelId) requestParams.hostelId = hostelId;
+        if (hostelId && hostelId !== 'all') requestParams.hostelId = hostelId;
         const response = await api.get('/expenses', { params: requestParams });
         return response.data.success !== undefined ? (response.data.data !== undefined ? response.data.data : response.data) : response.data;
     },
-    create: async (hostelId, data) => {
-        let payload = { ...data, hostelId: data?.hostelId ?? hostelId ?? undefined };
-        if (!payload.hostelId) delete payload.hostelId;
+    getSuggestions: async () => {
+        const response = await api.get('/expenses', { params: { mode: 'suggestions' } });
+        const data = response.data.success !== undefined ? (response.data.data !== undefined ? response.data.data : response.data) : response.data;
+        return data?.frequent_expenses || [];
+    },
+    getTitleSummary: async (title) => {
+        const response = await api.get('/expenses', { params: { mode: 'title_summary', title } });
+        return response.data.success !== undefined ? (response.data.data !== undefined ? response.data.data : response.data) : response.data;
+    },
+    create: async (_hostelId, data) => {
+        let payload = {
+            ...data,
+            expense_scope: 'BUSINESS',
+        };
+        // Remove hostelId from payload — expenses are portfolio-level
+        delete payload.hostelId;
+
         if (data?.receipt_image instanceof File) {
             const { receipt_image, ...expenseData } = payload;
             const formData = new FormData();

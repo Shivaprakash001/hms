@@ -142,6 +142,7 @@ model expenses {
   approved_by         String?   @db.Uuid
   expense_type        String    @default("VARIABLE")
   expense_scope       ExpenseScope @default(HOSTEL)
+  operational_type    String?
   tags                String[]  @default([])
   metadata            Json?
   hostels             hostels?  @relation(fields: [hostel_id], references: [id])
@@ -154,6 +155,8 @@ model expenses {
   @@index([hostel_id])
   @@index([owner_id, date])
   @@index([owner_id])
+  @@index([owner_id, title])
+  @@index([owner_id, title, date(sort: Desc)])
 }
 
 model financial_invariant_failures {

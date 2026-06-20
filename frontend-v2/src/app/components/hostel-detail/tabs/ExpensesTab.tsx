@@ -1,6 +1,6 @@
-import { lazy, Suspense, memo, useDeferredValue, useMemo, useState } from 'react';
+import { lazy, Suspense, memo, useDeferredValue, useCallback, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CalendarDays, Copy, Edit3, Eye, Paperclip, Plus, Repeat2, Search, Sparkles, Trash2, X, Zap } from 'lucide-react';
+import { CalendarDays, Copy, Edit3, Eye, Paperclip, Plus, Repeat2, Search, Sparkles, Trash2, TrendingUp, X, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { queryKeys } from '@lib/queryKeys';
 import { fmt } from '../shared/format';
@@ -22,6 +22,8 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
   const [draftExpense, setDraftExpense] = useState<Record<string, any> | null>(null);
   const [selectedExpense, setSelectedExpense] = useState<Record<string, any> | null>(null);
   const [showInsights, setShowInsights] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const deferredSearch = useDeferredValue(searchTerm);
   const params = useMemo(
     () => ({
       range,
@@ -30,9 +32,10 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
       status,
       sort,
       categories: selectedCategories.join(','),
+      search: deferredSearch.trim() || undefined,
       limit: 40,
     }),
-    [customEnd, customStart, range, selectedCategories, sort, status],
+    [customEnd, customStart, deferredSearch, range, selectedCategories, sort, status],
   );
 
   const targetHostelId = hostelId === 'all' ? undefined : hostelId;
@@ -114,6 +117,7 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
   const monthlyTrend = Array.isArray(payload.monthly_trend) ? payload.monthly_trend : [];
   const allCategories: string[] = payload.meta?.categories || EXPENSE_CATEGORIES;
   const topVendors = useMemo(() => getTopVendors(expenses), [expenses]);
+  const frequentExpenses = Array.isArray(payload.frequent_expenses) ? payload.frequent_expenses : [];
   const latestMonth = monthlyTrend[monthlyTrend.length - 1] || {};
   const previousMonth = monthlyTrend[monthlyTrend.length - 2] || {};
   const momExpenseChange = getPercentChange(Number(latestMonth.expenses || 0), Number(previousMonth.expenses || 0));
@@ -233,6 +237,8 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
           total={Number(payload.total || expenses.length)}
           status={status}
           sort={sort}
+          searchTerm={searchTerm}
+          onSearchChange={setSearchTerm}
           onStatusChange={setStatus}
           onSortChange={setSort}
           onSelectExpense={setSelectedExpense}
@@ -286,8 +292,6 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
             categories={allCategories}
             mode={editingExpense ? 'edit' : 'create'}
             initialExpense={editingExpense || draftExpense}
-            defaultHostelId={hostelId}
-            defaultHostelLabel="This hostel"
             loading={createMutation.isPending || updateMutation.isPending}
             onClose={() => {
               setShowAddExpense(false);
@@ -590,6 +594,8 @@ const RecentExpensesSection = memo(function RecentExpensesSection({
   total,
   status,
   sort,
+  searchTerm,
+  onSearchChange,
   onStatusChange,
   onSortChange,
   onSelectExpense,
@@ -601,6 +607,8 @@ const RecentExpensesSection = memo(function RecentExpensesSection({
   total: number;
   status: string;
   sort: string;
+  searchTerm: string;
+  onSearchChange: (value: string) => void;
   onStatusChange: (value: string) => void;
   onSortChange: (value: string) => void;
   onSelectExpense: (expense: Record<string, any>) => void;
@@ -608,30 +616,21 @@ const RecentExpensesSection = memo(function RecentExpensesSection({
   onDuplicateExpense: (expense: Record<string, any>) => void;
   onDelete: (id: string) => void;
 }) {
-  const [search, setSearch] = useState('');
-  const deferredSearch = useDeferredValue(search);
-  const filteredExpenses = useMemo(() => {
-    const term = deferredSearch.trim().toLowerCase();
-    if (!term) return expenses;
-    return expenses.filter((expense) =>
-      [
-        expense.title,
-        expense.vendor_name,
-        expense.notes,
-        expense.category,
-        expense.payment_method,
-        expense.amount,
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-        .includes(term),
-    );
-  }, [deferredSearch, expenses]);
+  // Title summary query — fires when search term matches a specific title pattern
+  const trimmedSearch = searchTerm.trim();
+  const { data: titleSummary } = useQuery({
+    queryKey: ['expenses', 'title_summary', trimmedSearch],
+    queryFn: () =>
+      import('@features/expenses/api').then((m) => m.expenseService.getTitleSummary(trimmedSearch)),
+    enabled: trimmedSearch.length >= 3 && !/\d{4,}/.test(trimmedSearch), // skip for pure numeric/amount searches
+    staleTime: 3 * 60 * 1000,
+  });
 
-  const subtitle = search.trim()
-    ? `${filteredExpenses.length} matching ${total} entries`
+  const subtitle = trimmedSearch
+    ? `${expenses.length} matching${total > expenses.length ? ` of ${total}` : ''}`
     : `${total} entries`;
+
+  const summary = titleSummary?.summary;
 
   return (
     <>
@@ -654,21 +653,48 @@ const RecentExpensesSection = memo(function RecentExpensesSection({
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search title, vendor, notes"
-            className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-border bg-card text-sm outline-none focus:ring-2 focus:ring-accent/20"
+            value={searchTerm}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Search by name, amount, category, vendor..."
+            className="w-full pl-9 pr-9 py-2.5 rounded-xl border border-border bg-card text-sm outline-none focus:ring-2 focus:ring-accent/20"
           />
+          {trimmedSearch && (
+            <button
+              type="button"
+              onClick={() => onSearchChange('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-muted"
+            >
+              <X className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+          )}
         </div>
       </div>
 
+      {/* Title Summary Card — shows when searching a specific expense title */}
+      {summary && trimmedSearch.length >= 3 && (
+        <div className="rounded-2xl border border-accent/30 bg-accent/5 p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-accent" />
+            <h3 className="text-sm font-bold text-foreground">
+              {titleSummary?.title} Summary
+            </h3>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <MiniStat label="Transactions" value={String(summary.total_transactions)} />
+            <MiniStat label="Total Spent" value={fmt(summary.total_spent)} />
+            <MiniStat label="Avg / Month" value={fmt(summary.average_monthly)} />
+            <MiniStat label="Highest" value={fmt(summary.highest)} />
+            <MiniStat label="Lowest" value={fmt(summary.lowest)} />
+            <MiniStat label="Months Tracked" value={String(summary.months_tracked)} />
+          </div>
+        </div>
+      )}
+
       {expenses.length === 0 ? (
         <ExpenseEmptyState />
-      ) : filteredExpenses.length === 0 ? (
-        <EmptyMini text="No expenses match this search." />
       ) : (
         <div className="space-y-2">
-          {filteredExpenses.map((expense) => (
+          {expenses.map((expense) => (
             <ExpenseCard
               key={String(expense.id)}
               expense={expense}
@@ -683,6 +709,15 @@ const RecentExpensesSection = memo(function RecentExpensesSection({
     </>
   );
 });
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-border bg-background p-2.5">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="mt-0.5 text-sm font-bold text-foreground">{value}</p>
+    </div>
+  );
+}
 
 function ExpenseCard({
   expense,

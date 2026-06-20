@@ -54,7 +54,7 @@ import { assertHostelBelongsToOwner, resolveHostelContext } from "../lib/securit
 describe("Hostel Lifecycle State Machine", () => {
   const propertyService = new PropertyService();
   const ownerId = "owner-123";
-  const hostelId = "hostel-456";
+  const hostelId = "4b2e66ef-c782-4217-bfd3-2fb53bf7be7a";
 
   beforeEach(() => {
     mockPrisma.hostels.findFirst.mockReset();
@@ -88,16 +88,13 @@ describe("Hostel Lifecycle State Machine", () => {
 
     it("should prevent updating fields of an archived hostel", async () => {
       mockPrisma.profile.findUnique.mockResolvedValue({ id: ownerId });
-      mockPrisma.hostels.findFirst
-        // First call: duplicate name check findFirst
-        .mockResolvedValueOnce(null)
-        // Second call: get current hostel findFirst
-        .mockResolvedValueOnce({
-          id: hostelId,
-          owner_id: ownerId,
-          status: "ARCHIVED",
-          is_active: false,
-        });
+      mockPrisma.hostels.findMany.mockResolvedValue([]);
+      mockPrisma.hostels.findUnique.mockResolvedValue({
+        id: hostelId,
+        owner_id: ownerId,
+        status: "ARCHIVED",
+        is_active: false,
+      });
 
       // Attempt to rename the archived hostel should be rejected
       await expect(
@@ -110,16 +107,12 @@ describe("Hostel Lifecycle State Machine", () => {
 
     it("should allow restoring an archived hostel to ACTIVE", async () => {
       mockPrisma.profile.findUnique.mockResolvedValue({ id: ownerId });
-      mockPrisma.hostels.findFirst
-        // First call: duplicate name check findFirst (not renaming, but status update might call it if no name)
-        // Wait, updateHostel only does name check if name is in the payload. Here, name is not in payload.
-        // So findFirst will be called exactly once to get the current hostel.
-        .mockResolvedValueOnce({
-          id: hostelId,
-          owner_id: ownerId,
-          status: "ARCHIVED",
-          is_active: false,
-        });
+      mockPrisma.hostels.findUnique.mockResolvedValue({
+        id: hostelId,
+        owner_id: ownerId,
+        status: "ARCHIVED",
+        is_active: false,
+      });
 
       mockPrisma.hostels.update.mockResolvedValue({ id: hostelId });
       mockPrisma.hostels.findMany.mockResolvedValue([]); // for profile lookup mapping
@@ -141,7 +134,7 @@ describe("Hostel Lifecycle State Machine", () => {
 
     it("should block transition to ARCHIVED if there are active allocations", async () => {
       mockPrisma.profile.findUnique.mockResolvedValue({ id: ownerId });
-      mockPrisma.hostels.findFirst.mockResolvedValue({
+      mockPrisma.hostels.findUnique.mockResolvedValue({
         id: hostelId,
         owner_id: ownerId,
         status: "ACTIVE",
@@ -168,7 +161,7 @@ describe("Hostel Lifecycle State Machine", () => {
 
     it("should allow transition to ARCHIVED if there are no active allocations", async () => {
       mockPrisma.profile.findUnique.mockResolvedValue({ id: ownerId });
-      mockPrisma.hostels.findFirst.mockResolvedValue({
+      mockPrisma.hostels.findUnique.mockResolvedValue({
         id: hostelId,
         owner_id: ownerId,
         status: "ACTIVE",
@@ -197,19 +190,15 @@ describe("Hostel Lifecycle State Machine", () => {
 
     it("should ignore ARCHIVED hostels in duplicate name checks", async () => {
       mockPrisma.profile.findUnique.mockResolvedValue({ id: ownerId });
-      mockPrisma.hostels.findFirst
-        // First call: duplicate name check findFirst
-        .mockResolvedValueOnce(null)
-        // Second call: get current hostel findFirst
-        .mockResolvedValueOnce({
-          id: hostelId,
-          owner_id: ownerId,
-          status: "ACTIVE",
-          is_active: true,
-        });
+      mockPrisma.hostels.findMany.mockResolvedValue([]);
+      mockPrisma.hostels.findUnique.mockResolvedValue({
+        id: hostelId,
+        owner_id: ownerId,
+        status: "ACTIVE",
+        is_active: true,
+      });
 
       mockPrisma.hostels.update.mockResolvedValue({ id: hostelId });
-      mockPrisma.hostels.findMany.mockResolvedValue([]);
       mockPrisma.profile.findUnique.mockResolvedValue({ id: ownerId, hostels: [] });
 
       await propertyService.updateHostel(ownerId, {
@@ -218,7 +207,7 @@ describe("Hostel Lifecycle State Machine", () => {
       });
 
       // Verify the duplicate check excludes ARCHIVED hostels (only checks ACTIVE and INACTIVE)
-      expect(mockPrisma.hostels.findFirst).toHaveBeenCalledWith({
+      expect(mockPrisma.hostels.findMany).toHaveBeenCalledWith({
         where: expect.objectContaining({
           owner_id: ownerId,
           status: { in: ["ACTIVE", "INACTIVE"] },
@@ -227,6 +216,7 @@ describe("Hostel Lifecycle State Machine", () => {
             mode: "insensitive",
           },
         }),
+        take: 1,
       });
     });
   });
@@ -280,7 +270,7 @@ describe("Hostel Lifecycle State Machine", () => {
 
       await expect(
         propertyService.createFloor(ownerId, hostelId, { name: "Floor 1" })
-      ).rejects.toThrow("VALIDATION: Cannot modify rooms/floors of an archived hostel");
+      ).rejects.toThrow("HOSTEL_ARCHIVED: Cannot modify rooms/floors of an archived hostel");
 
       // Inactive check
       mockPrisma.hostels.findUnique.mockResolvedValueOnce({
@@ -303,7 +293,7 @@ describe("Hostel Lifecycle State Machine", () => {
 
       await expect(
         propertyService.updateFloor("floor-1", ownerId, { name: "New Floor Name" })
-      ).rejects.toThrow("VALIDATION: Cannot modify rooms/floors of an archived hostel");
+      ).rejects.toThrow("HOSTEL_ARCHIVED: Cannot modify rooms/floors of an archived hostel");
 
       // Inactive check
       mockPrisma.floors.findUnique.mockResolvedValueOnce({
@@ -326,7 +316,7 @@ describe("Hostel Lifecycle State Machine", () => {
 
       await expect(
         propertyService.deleteFloor("floor-1", ownerId)
-      ).rejects.toThrow("VALIDATION: Cannot modify rooms/floors of an archived hostel");
+      ).rejects.toThrow("HOSTEL_ARCHIVED: Cannot modify rooms/floors of an archived hostel");
 
       // Inactive check
       mockPrisma.floors.findUnique.mockResolvedValueOnce({
@@ -349,7 +339,7 @@ describe("Hostel Lifecycle State Machine", () => {
 
       await expect(
         propertyService.updateRoom("room-1", { base_rent: 5000 }, ownerId)
-      ).rejects.toThrow("VALIDATION: Cannot modify rooms of an archived hostel");
+      ).rejects.toThrow("HOSTEL_ARCHIVED: Cannot modify rooms of an archived hostel");
 
       // Inactive check
       mockPrisma.rooms.findUnique.mockResolvedValueOnce({
