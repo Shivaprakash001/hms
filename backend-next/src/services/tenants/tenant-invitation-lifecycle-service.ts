@@ -627,7 +627,7 @@ export class TenantInvitationLifecycleService {
         where: {
           tenant_id: invitation.tenant_id,
           obligation_type: { in: ["SECURITY_DEPOSIT", "MAINTENANCE", "RENT"] },
-          status: "PENDING",
+          status: { in: ["PENDING", "OVERDUE", "UPCOMING"] },
           payments: { none: {} },
         },
       });

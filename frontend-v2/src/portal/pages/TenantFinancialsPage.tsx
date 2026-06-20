@@ -340,7 +340,10 @@ export function TenantFinancialsPage() {
       const periodStart = item.period_start || item.rent_month;
       if (!periodStart) return;
       
-      const dateKey = new Date(periodStart).toISOString().slice(0, 10);
+      const isSecurityDeposit = ['SECURITY_DEPOSIT', 'PROJECTED_SECURITY_DEPOSIT', 'ADVANCE', 'PROJECTED_ADVANCE'].includes(item.type);
+      const dateKey = isSecurityDeposit
+        ? `sd-${item.obligation_id || item.timeline_id || Math.random()}`
+        : new Date(periodStart).toISOString().slice(0, 10);
 
       if (!installmentsMap[dateKey]) {
         installmentsMap[dateKey] = {
@@ -350,11 +353,16 @@ export function TenantFinancialsPage() {
           period_end: item.period_end || item.rent_month,
           rent_month: item.rent_month,
           // Strip maintenance suffix from label if present to keep the installment cycle label clean
-          label: item.label ? String(item.label).replace(/ maintenance/gi, '') : '',
+          label: isSecurityDeposit 
+            ? "Security Deposit" 
+            : item.label 
+              ? String(item.label).replace(/ maintenance/gi, '') 
+              : '',
           due_date: item.due_date,
           rent_amount: 0,
           maintenance_amount: 0,
           late_fee_amount: 0,
+          security_deposit_amount: 0,
           paid: 0,
           remaining: 0,
           covered_by_advance: 0,
@@ -372,6 +380,10 @@ export function TenantFinancialsPage() {
         inst.id = item.obligation_id || item.timeline_id;
         inst.label = item.label;
         inst.due_date = item.due_date;
+      } else if (isSecurityDeposit) {
+        inst.id = item.obligation_id || item.timeline_id;
+        inst.label = "Security Deposit";
+        inst.due_date = item.due_date;
       }
 
       // Add component amounts
@@ -381,6 +393,8 @@ export function TenantFinancialsPage() {
         inst.maintenance_amount += Number(item.amount ?? 0);
       } else if (item.type === 'LATE_FEE') {
         inst.late_fee_amount += Number(item.amount ?? 0);
+      } else if (isSecurityDeposit) {
+        inst.security_deposit_amount += Number(item.amount ?? 0);
       }
 
       // Accumulate totals
@@ -407,24 +421,28 @@ export function TenantFinancialsPage() {
       inst.rent_amount = 0;
       inst.maintenance_amount = 0;
       inst.late_fee_amount = 0;
+      inst.security_deposit_amount = 0;
       inst.paid = 0;
       inst.remaining = 0;
       inst.covered_by_advance = 0;
 
       inst.obligations.forEach((ob: any) => {
+        const isObSD = ['SECURITY_DEPOSIT', 'PROJECTED_SECURITY_DEPOSIT', 'ADVANCE', 'PROJECTED_ADVANCE'].includes(ob.type);
         if (ob.type === 'RENT' || ob.type === 'PROJECTED_RENT') {
           inst.rent_amount += Number(ob.amount ?? 0);
         } else if (ob.type === 'MAINTENANCE' || ob.type === 'PROJECTED_MAINTENANCE') {
           inst.maintenance_amount += Number(ob.amount ?? 0);
         } else if (ob.type === 'LATE_FEE') {
           inst.late_fee_amount += Number(ob.amount ?? 0);
+        } else if (isObSD) {
+          inst.security_deposit_amount += Number(ob.amount ?? 0);
         }
         inst.paid += Number(ob.paid ?? 0);
         inst.remaining += Number(ob.remaining ?? 0);
         inst.covered_by_advance += Number(ob.covered_by_advance ?? 0);
       });
 
-      inst.total_amount = inst.rent_amount + inst.maintenance_amount + inst.late_fee_amount;
+      inst.total_amount = inst.rent_amount + inst.maintenance_amount + inst.late_fee_amount + inst.security_deposit_amount;
 
       // Determine aggregated status & state
       const allWaived = inst.obligations.every((o: any) => o.status === 'WAIVED');
@@ -485,7 +503,7 @@ export function TenantFinancialsPage() {
     }
 
     sorted.forEach((inst: any) => {
-      inst.isCurrent = current && inst.period_start === current.period_start;
+      inst.isCurrent = current && inst.id === current.id;
     });
 
     return sorted;
@@ -827,10 +845,18 @@ export function TenantFinancialsPage() {
           </div>
 
           <div className="space-y-2 text-sm pt-2">
-            <div className="flex justify-between items-center text-muted-foreground">
-              <span>Rent Portion</span>
-              <span className="font-medium text-foreground">{fmt(currentInstallment.rent_amount)}</span>
-            </div>
+            {currentInstallment.rent_amount > 0 && (
+              <div className="flex justify-between items-center text-muted-foreground">
+                <span>Rent Portion</span>
+                <span className="font-medium text-foreground">{fmt(currentInstallment.rent_amount)}</span>
+              </div>
+            )}
+            {currentInstallment.security_deposit_amount > 0 && (
+              <div className="flex justify-between items-center text-muted-foreground">
+                <span>Security Deposit</span>
+                <span className="font-medium text-foreground">{fmt(currentInstallment.security_deposit_amount)}</span>
+              </div>
+            )}
             {currentInstallment.maintenance_amount > 0 && (
               <div className="flex justify-between items-center text-muted-foreground">
                 <span>Maintenance Fee</span>
@@ -890,7 +916,7 @@ export function TenantFinancialsPage() {
           </div>
           <div className="grid grid-cols-1 gap-3">
             {forecastInstallments.map((inst, index) => (
-              <div key={inst.period_start} className="flex justify-between items-center bg-card p-3 rounded-xl border" style={{ borderColor: '#E8E4DC' }}>
+              <div key={inst.id || `forecast-${index}`} className="flex justify-between items-center bg-card p-3 rounded-xl border" style={{ borderColor: '#E8E4DC' }}>
                 <div className="space-y-0.5">
                   <span style={{ fontSize: '12px', color: '#6B6B6B', fontFamily: 'Poppins, sans-serif' }} className="block font-medium">
                     {index === 0 ? 'Next Installment' : 'Following Installment'}
@@ -957,7 +983,7 @@ export function TenantFinancialsPage() {
               }
 
               return (
-                <div key={inst.period_start} className="relative group">
+                <div key={inst.id || inst.period_start} className="relative group">
                   {nodeContent}
                   
                   <div className={`p-4 rounded-xl border transition-all duration-200 ${
@@ -998,10 +1024,18 @@ export function TenantFinancialsPage() {
                     {/* Expand breakdown details for current or overdue/partially paid installments */}
                     {(inst.isCurrent || inst.state === 'overdue' || (inst.paid > 0 && inst.remaining > 0)) && (
                       <div className="mt-3 pt-3 border-t border-dashed border-border/80 text-[11px] space-y-1 text-muted-foreground">
-                        <div className="flex justify-between">
-                          <span>Rent:</span>
-                          <span className="font-medium text-foreground">{fmt(inst.rent_amount)}</span>
-                        </div>
+                        {inst.rent_amount > 0 && (
+                          <div className="flex justify-between">
+                            <span>Rent:</span>
+                            <span className="font-medium text-foreground">{fmt(inst.rent_amount)}</span>
+                          </div>
+                        )}
+                        {inst.security_deposit_amount > 0 && (
+                          <div className="flex justify-between">
+                            <span>Security Deposit:</span>
+                            <span className="font-medium text-foreground">{fmt(inst.security_deposit_amount)}</span>
+                          </div>
+                        )}
                         {inst.maintenance_amount > 0 && (
                           <div className="flex justify-between">
                             <span>Maintenance:</span>
@@ -1135,9 +1169,19 @@ export function TenantFinancialsPage() {
               <p className="text-xs font-medium" style={{ color: '#6B6B6B' }}>Secured deposit for move-in agreement</p>
             </div>
           </div>
-          <span style={{ backgroundColor: '#F0FBF0', color: '#2E7D32', border: '1px solid #2E7D32', borderRadius: '20px', padding: '4px 12px', fontSize: '11px', fontWeight: 700 }}>
-            FULLY SECURED
-          </span>
+          {Number((advance as any)?.security_deposit_paid ?? 0) >= Number((advance as any)?.security_deposit ?? 0) ? (
+            <span style={{ backgroundColor: '#F0FBF0', color: '#2E7D32', border: '1px solid #2E7D32', borderRadius: '20px', padding: '4px 12px', fontSize: '11px', fontWeight: 700 }}>
+              FULLY SECURED
+            </span>
+          ) : Number((advance as any)?.security_deposit_paid ?? 0) > 0 ? (
+            <span style={{ backgroundColor: '#FFF3E0', color: '#E65100', border: '1px solid #E65100', borderRadius: '20px', padding: '4px 12px', fontSize: '11px', fontWeight: 700 }}>
+              PARTIALLY SECURED
+            </span>
+          ) : (
+            <span style={{ backgroundColor: '#FFEBEE', color: '#C62828', border: '1px solid #C62828', borderRadius: '20px', padding: '4px 12px', fontSize: '11px', fontWeight: 700 }}>
+              PENDING PAYMENT
+            </span>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-4 pt-2 text-sm">

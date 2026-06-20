@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getTenantOperationalContext } from "../../../lib/hostel-context";
 import { authOtpService } from "../../../lib/services/auth/auth-otp-service";
 import { normalizeWhatsAppPhone } from "../../../lib/services/notifications/providers/whatsapp/meta-provider";
+import { assertGuardianPhoneNotTenant } from "../../../lib/utils/phone-utils";
 
 import { allocationReconciliationService } from "../../../lib/services/allocation-reconciliation-service";
 import { financialService } from "../../../src/services/payments/financial-service";
@@ -348,6 +349,7 @@ export class TenantService {
     }
     const syncedGuardian = data.phone_2 || data.guardian_phone;
     if (syncedGuardian) {
+      await assertGuardianPhoneNotTenant(syncedGuardian);
       tenantUpdate.phone_2 = syncedGuardian;
       tenantUpdate.guardian_phone = syncedGuardian;
     }
@@ -1088,6 +1090,11 @@ export class TenantService {
         "Please use the Move-Out workflow (POST /api/move-out/requests) " +
         "which ensures proper inspection, settlement, and approval."
       );
+    }
+
+    const proposedGuardian = data.phone_2 || data.guardian_phone;
+    if (proposedGuardian) {
+      await assertGuardianPhoneNotTenant(proposedGuardian);
     }
 
     const updated = await tenantRepository.update({

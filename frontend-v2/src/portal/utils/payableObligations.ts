@@ -3,29 +3,50 @@ export interface PayableObligation {
   amount: number;
   rent_amount?: number;
   maintenance_amount?: number;
+  security_deposit_amount?: number;
   late_fee?: number;
   due_date?: string;
   rent_month?: string;
   label?: string;
   cycle?: string;
   status: string;
+  type?: string;
 }
 
 export function normalizeObligation(raw: Record<string, unknown>): PayableObligation {
   const amount = Number(
     raw.remaining_due ?? raw.outstanding ?? raw.amount ?? 0
   );
+  const type = String(raw.type ?? raw.obligation_type ?? '').toUpperCase();
+
+  let rent_amount = 0;
+  let maintenance_amount = 0;
+  let security_deposit_amount = 0;
+
+  if (type === 'RENT' || type === 'PROJECTED_RENT') {
+    rent_amount = Number(raw.rent_amount ?? raw.amount ?? amount);
+  } else if (type === 'MAINTENANCE' || type === 'PROJECTED_MAINTENANCE') {
+    maintenance_amount = Number(raw.maintenance_amount ?? raw.amount ?? amount);
+  } else if (['SECURITY_DEPOSIT', 'PROJECTED_SECURITY_DEPOSIT', 'ADVANCE', 'PROJECTED_ADVANCE'].includes(type)) {
+    security_deposit_amount = Number(raw.security_deposit_amount ?? raw.amount ?? amount);
+  } else {
+    // Default fallback
+    rent_amount = Number(raw.rent_amount ?? raw.amount ?? amount);
+  }
+
   return {
     id: String(raw.id ?? raw.obligation_id ?? ''),
     amount,
-    rent_amount: Number(raw.rent_amount ?? raw.amount ?? amount),
-    maintenance_amount: Number(raw.maintenance_amount ?? raw.maintenanceAmount ?? 0),
+    rent_amount,
+    maintenance_amount,
+    security_deposit_amount,
     late_fee: Number(raw.late_fee ?? raw.late_fee_amount ?? 0),
     due_date: raw.due_date as string | undefined,
     rent_month: raw.rent_month as string | undefined,
     label: (raw.installment_label ?? raw.label ?? raw.type) as string | undefined,
     cycle: (raw.rent_month ?? raw.due_date) as string | undefined,
     status: String(raw.status ?? 'pending').toLowerCase(),
+    type,
   };
 }
 
@@ -44,12 +65,11 @@ export function buildPayableObligations(
           obligation_id: i.obligation_id,
           outstanding: i.outstanding,
           amount: i.amount,
-          rent_amount: i.amount,
           due_date: i.due_date,
           rent_month: i.rent_month,
           installment_label: i.installment_label,
           status: i.status ?? 'pending',
-          type: i.type,
+          type: i.type ?? i.obligation_type,
         })
       )
       .filter((o) => o.id && o.amount > 0);

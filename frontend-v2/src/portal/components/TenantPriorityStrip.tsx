@@ -6,6 +6,8 @@ const fmt = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
 interface DuesData {
   total_due?: number;
   rent_due?: number;
+  security_deposit_due?: number;
+  maintenance_due?: number;
   late_fees_due?: number;
   items?: { type?: string; outstanding?: number; due_date?: string; dueDate?: string }[];
 }
@@ -29,9 +31,12 @@ export function TenantPriorityStrip({ dues, payments, moveOut }: Props) {
   const totalDue = Number(dues?.total_due ?? payments?.outstanding_balance ?? 0);
   const rentDue = Number(dues?.rent_due ?? 0);
   const lateFees = Number(dues?.late_fees_due ?? 0);
-  const maintenanceDue = (dues?.items ?? [])
+  const securityDepositDue = Number(dues?.security_deposit_due ?? (dues?.items ?? [])
+    .filter((i) => ['SECURITY_DEPOSIT', 'ADVANCE'].includes(String(i.type).toUpperCase()))
+    .reduce((s, i) => s + Number(i.outstanding ?? 0), 0));
+  const maintenanceDue = Number(dues?.maintenance_due ?? (dues?.items ?? [])
     .filter((i) => String(i.type).toUpperCase() === 'MAINTENANCE')
-    .reduce((s, i) => s + Number(i.outstanding ?? 0), 0);
+    .reduce((s, i) => s + Number(i.outstanding ?? 0), 0));
 
   const nextDue = payments?.next_due_date ?? dues?.items
     ?.map((item) => item.due_date ?? item.dueDate)
@@ -75,6 +80,12 @@ export function TenantPriorityStrip({ dues, payments, moveOut }: Props) {
                 <div className="flex justify-between">
                   <span>Rent due</span>
                   <span className="font-medium">{fmt(rentDue)}</span>
+                </div>
+              )}
+              {securityDepositDue > 0 && (
+                <div className="flex justify-between">
+                  <span>Security deposit</span>
+                  <span className="font-medium">{fmt(securityDepositDue)}</span>
                 </div>
               )}
               {lateFees > 0 && (

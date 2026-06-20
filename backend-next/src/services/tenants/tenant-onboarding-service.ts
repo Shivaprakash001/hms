@@ -2,6 +2,7 @@ import { prisma } from "../../../lib/db";
 import { getLogger } from "../../../lib/logger";
 
 import { getActiveTemplateAndSyncRuleVersion } from "../../utils/default-rules";
+import { assertGuardianPhoneNotTenant } from "../../../lib/utils/phone-utils";
 
 const logger = getLogger("tenant-onboarding-service");
 
@@ -25,6 +26,8 @@ export class TenantOnboardingService {
       address,
       policyAcceptance
     } = payload;
+
+    await assertGuardianPhoneNotTenant(contact?.guardian_phone);
 
     // Validate Signature
     if (!policyAcceptance || !policyAcceptance.typed_signature_name) {

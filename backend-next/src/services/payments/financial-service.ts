@@ -258,18 +258,35 @@ export class FinancialService {
     items: TenantDueItem[];
     total_due: number;
     rent_due: number;
+    security_deposit_due: number;
+    maintenance_due: number;
     late_fees_due: number;
     obligation_count: number;
   }> {
     const obligations = await billingRepository.getTenantPendingObligations(tenantId, ownerId, hostelId);
 
     let totalLateFeesDue = 0;
+    let rentDue = 0;
+    let securityDepositDue = 0;
+    let maintenanceDue = 0;
+
     const items: TenantDueItem[] = obligations.map((ob) => {
       const paid = ob.payments.reduce((s, p) => s + Number(p.amount_paid), 0);
       const outstanding = Math.max(Number(ob.total_amount || ob.amount) - paid, 0);
       const lateFeeVal = Number((ob as any).late_fee || 0);
       const itemLateFeeOutstanding = Math.min(lateFeeVal, outstanding);
       totalLateFeesDue += itemLateFeeOutstanding;
+
+      const pureOutstanding = Math.max(0, outstanding - itemLateFeeOutstanding);
+      if (ob.obligation_type === "RENT") {
+        rentDue += pureOutstanding;
+      } else if (ob.obligation_type === "SECURITY_DEPOSIT" || ob.obligation_type === "ADVANCE") {
+        securityDepositDue += pureOutstanding;
+      } else if (ob.obligation_type === "MAINTENANCE") {
+        maintenanceDue += pureOutstanding;
+      } else {
+        rentDue += pureOutstanding;
+      }
 
       return {
         obligation_id: ob.id,
@@ -289,13 +306,14 @@ export class FinancialService {
     }).filter((i) => i.outstanding > 0);
 
     const totalDue = items.reduce((s, i) => s + i.outstanding, 0);
-    const rentDue = Math.max(0, totalDue - totalLateFeesDue);
 
     return {
       tenant_id:        tenantId,
       items,
       total_due:        totalDue,
       rent_due:         rentDue,
+      security_deposit_due: securityDepositDue,
+      maintenance_due:  maintenanceDue,
       late_fees_due:    totalLateFeesDue,
       obligation_count: items.length,
     };

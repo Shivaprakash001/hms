@@ -1,6 +1,6 @@
 import { prisma } from "../../../lib/db";
 import { hashPassword } from "../../../lib/auth";
-import { normalizeIndianPhone } from "../../../lib/utils/phone-utils";
+import { normalizeIndianPhone, assertGuardianPhoneNotTenant } from "../../../lib/utils/phone-utils";
 import { normalizeWhatsAppPhone } from "../../../lib/services/notifications/providers/whatsapp/meta-provider";
 
 function safeNormalizeWhatsApp(val: string | null | undefined): string {
@@ -991,6 +991,7 @@ export class ActivationWorkflowService {
     if (guardianPhone === null && (data?.guardian_phone || data?.phone_2)) throw new Error("VALIDATION_ERROR: Valid guardian phone is required");
     if (!emergencyPhone) throw new Error("VALIDATION_ERROR: Valid emergency contact phone is required");
     assertUniqueActivationPhones({ primary: phone, guardian: guardianPhone, emergency: emergencyPhone });
+    await assertGuardianPhoneNotTenant(guardianPhone);
     if (!["Male", "Female", "Other", "Prefer not to say"].includes(gender)) throw new Error("VALIDATION_ERROR: Gender is required");
     if (!dob) throw new Error("VALIDATION_ERROR: Valid date of birth is required");
     if (!tenant.photo_url && !data?.photo_url) throw new Error("VALIDATION_ERROR: Profile photo is required");
