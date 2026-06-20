@@ -705,5 +705,127 @@ describe('Tenant Onboarding Integration Flow', () => {
       expect(metadata.message).toContain('Invitation V2 created');
       expect(metadata.message).toContain('Invitation V1 superseded');
     });
+
+    it('should reset onboarding progress (nullify activation dates, delete agreements & rules acceptances) on resend', async () => {
+      sendInvitationSpy.mockResolvedValueOnce({
+        providerMessageId: 'wamid.reset_test_1',
+        attempts: 1,
+      });
+
+      const initial: any = await tenantInvitationLifecycleService.createInvitation({
+        name: 'Reset Progress Tenant',
+        phone: '9876543279',
+        room_id: room.id,
+        monthly_rent: 10000,
+        security_deposit: 20000,
+      }, owner.id);
+
+      // 1. Manually update tenant to set activation timestamps, mobile_verified, document_verified, profile_completed to true
+      await prisma.tenants.update({
+        where: { id: initial.tenant_id },
+        data: {
+          activation_started_at: new Date(),
+          activation_completed_at: new Date(),
+          onboarding_last_activity_at: new Date(),
+          mobile_verified: true,
+          document_verified: true,
+          profile_completed: true,
+        },
+      });
+
+      // 2. Create a rule version and policy acceptance
+      const ruleVersion = await prisma.ruleVersion.create({
+        data: {
+          hostel_id: hostel.id,
+          version: 'v1-reset-test',
+          title: 'Reset Test Rules',
+          content_snapshot: {},
+          is_active: true,
+          active: true,
+        }
+      });
+
+      await prisma.tenantPolicyAcceptance.create({
+        data: {
+          tenant_id: initial.tenant_id,
+          hostel_id: hostel.id,
+          rule_version_id: ruleVersion.id,
+          rules_version: 'v1-reset-test',
+          rules_snapshot: {},
+          accepted_ip: '127.0.0.1',
+          accepted_user_agent: 'test',
+          typed_signature_name: 'Reset Progress Tenant',
+        }
+      });
+
+      // 3. Create an agreement template and a signed agreement
+      let template = await prisma.agreementTemplate.findFirst({
+        where: { hostel_id: hostel.id }
+      });
+      if (!template) {
+        template = await prisma.agreementTemplate.create({
+          data: {
+            id: crypto.randomUUID(),
+            hostel_id: hostel.id,
+            version: 'v1-reset-default',
+            title: 'Reset Test Agreement',
+            owner_name: 'Owner',
+            custom_rules: '',
+            is_active: true,
+          }
+        });
+      }
+
+      await prisma.agreement.create({
+        data: {
+          id: crypto.randomUUID(),
+          tenant_id: initial.tenant_id,
+          hostel_id: hostel.id,
+          template_id: template.id,
+          status: 'SIGNED',
+          content_snapshot: {},
+        }
+      });
+
+      // Assert pre-conditions
+      const tenantBefore = await prisma.tenants.findUnique({ where: { id: initial.tenant_id } });
+      expect(tenantBefore!.activation_started_at).not.toBeNull();
+      expect(tenantBefore!.mobile_verified).toBe(true);
+
+      const agreementsBefore = await prisma.agreement.findMany({ where: { tenant_id: initial.tenant_id } });
+      expect(agreementsBefore.length).toBe(1);
+
+      const acceptancesBefore = await prisma.tenantPolicyAcceptance.findMany({ where: { tenant_id: initial.tenant_id } });
+      expect(acceptancesBefore.length).toBe(1);
+
+      // 4. Trigger resend
+      sendInvitationSpy.mockResolvedValueOnce({
+        providerMessageId: 'wamid.reset_test_2',
+        attempts: 1,
+      });
+
+      await tenantInvitationLifecycleService.resendInvitation(
+        initial.invitation_id,
+        { id: owner.id, role: 'OWNER' },
+        {
+          monthly_rent: 11000,
+        }
+      );
+
+      // Assert post-conditions: progress dates are nullified, verification state is false, records deleted
+      const tenantAfter = await prisma.tenants.findUnique({ where: { id: initial.tenant_id } });
+      expect(tenantAfter!.activation_started_at).toBeNull();
+      expect(tenantAfter!.activation_completed_at).toBeNull();
+      expect(tenantAfter!.onboarding_last_activity_at).toBeNull();
+      expect(tenantAfter!.mobile_verified).toBe(false);
+      expect(tenantAfter!.document_verified).toBe(false);
+      expect(tenantAfter!.profile_completed).toBe(false);
+
+      const agreementsAfter = await prisma.agreement.findMany({ where: { tenant_id: initial.tenant_id } });
+      expect(agreementsAfter.length).toBe(0);
+
+      const acceptancesAfter = await prisma.tenantPolicyAcceptance.findMany({ where: { tenant_id: initial.tenant_id } });
+      expect(acceptancesAfter.length).toBe(0);
+    });
   });
 });

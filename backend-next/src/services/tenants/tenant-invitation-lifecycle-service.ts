@@ -594,6 +594,12 @@ export class TenantInvitationLifecycleService {
         where: { id: invitation.tenant_id },
         data: {
           status: "INVITED",
+          activation_started_at: null,
+          activation_completed_at: null,
+          onboarding_last_activity_at: null,
+          mobile_verified: false,
+          document_verified: false,
+          profile_completed: false,
           ...(typeof monthlyRent !== "undefined" ? { monthly_rent: monthlyRent } : {}),
           ...(typeof securityDeposit !== "undefined" ? { security_deposit: securityDeposit } : {}),
           reservation_policy: nextReservationPolicy,
@@ -606,6 +612,14 @@ export class TenantInvitationLifecycleService {
           ...(joiningDate ? { joined_on: joiningDate, billing_start_date: joiningDate } : {}),
           hostel_id: targetHostelId,
         },
+      });
+
+      // 5.5 Delete agreements and rules acceptances to reset onboarding progress
+      await tx.agreement.deleteMany({
+        where: { tenant_id: invitation.tenant_id },
+      });
+      await tx.tenantPolicyAcceptance.deleteMany({
+        where: { tenant_id: invitation.tenant_id },
       });
 
       // 6. Delete old pending rent obligations that have no payments, and regenerate them
