@@ -157,9 +157,15 @@ describe('Tenant Onboarding Integration Flow', () => {
     expect(resendResult.email_sent).toBe(true);
     expect(EmailService.sendInvitation).toHaveBeenCalledTimes(1);
 
-    // Verify invitation record now has the email updated
-    const dbInvite = await prisma.tenant_invitations.findUnique({
+    // Verify that the old invitation is superseded
+    const oldInvite = await prisma.tenant_invitations.findUnique({
       where: { id: initial.invitation_id },
+    });
+    expect(oldInvite?.status).toBe('SUPERSEDED');
+
+    // Verify invitation record now has the email updated on the new version
+    const dbInvite = await prisma.tenant_invitations.findFirst({
+      where: { tenant_id: initial.tenant_id, status: 'PENDING' },
     });
     expect(dbInvite?.email).toBe('rahul-fallback4@test.com');
   });
@@ -538,17 +544,29 @@ describe('Tenant Onboarding Integration Flow', () => {
 
       expect(resendResult.action).toBe('RESENT');
 
-      // Verify token rotation
-      const updatedInvite = await prisma.tenant_invitations.findUnique({
+      // Verify old invitation is SUPERSEDED
+      const supersededInvite = await prisma.tenant_invitations.findUnique({
         where: { id: initial.invitation_id },
       });
-      expect(updatedInvite!.token).not.toBe(oldToken);
-      expect(updatedInvite!.status).toBe('PENDING');
+      expect(supersededInvite!.status).toBe('SUPERSEDED');
+      expect(supersededInvite!.token).toBe(oldToken); // old token remains on the superseded record
+
+      // Verify new invitation is created
+      const newInvite = await prisma.tenant_invitations.findFirst({
+        where: { tenant_id: initial.tenant_id, status: 'PENDING' },
+      });
+      expect(newInvite).not.toBeNull();
+      expect(newInvite!.token).not.toBe(oldToken);
+      expect(newInvite!.parent_invitation_id).toBe(initial.invitation_id);
 
       // Verify old token cannot be resolved
       await expect(
         tenantInvitationLifecycleService.resolveByToken(oldToken)
       ).rejects.toThrow(/INVALID: Activation link expired or already used/);
+
+      // Verify new token resolves successfully
+      const resolved = await tenantInvitationLifecycleService.resolveByToken(newInvite!.token);
+      expect(resolved.invitation.id).toBe(newInvite!.id);
 
       // Verify financial regeneration (old deposit of 20000 deleted, new deposit of 24000 created)
       const updatedObligations = await prisma.rent_obligations.findMany({
@@ -556,6 +574,136 @@ describe('Tenant Onboarding Integration Flow', () => {
       });
       expect(updatedObligations.length).toBe(1);
       expect(Number(updatedObligations[0].amount)).toBe(24000);
+    });
+
+    it('should lock invitation editing and resending once a payment has been recorded', async () => {
+      // Create an invitation
+      sendInvitationSpy.mockResolvedValueOnce({
+        providerMessageId: 'wamid.payment_lock_test',
+        attempts: 1,
+      });
+
+      const initial: any = await tenantInvitationLifecycleService.createInvitation({
+        name: 'Payment Lock Tenant',
+        phone: '9876543271',
+        room_id: room.id,
+        monthly_rent: 10000,
+        security_deposit: 20000,
+      }, owner.id);
+
+      // Get an obligation to link the payment to
+      const dbObligation = await prisma.rent_obligations.findFirst({
+        where: { tenant_id: initial.tenant_id },
+      });
+
+      // Record a payment for this tenant
+      await prisma.payments.create({
+        data: {
+          id: crypto.randomUUID(),
+          tenant_id: initial.tenant_id,
+          hostel_id: hostel.id,
+          obligation_id: dbObligation!.id,
+          amount_paid: 5000,
+          payment_method: 'CASH',
+          payment_date: new Date(),
+          reference_number: 'ref-123',
+        },
+      });
+
+      // Try editing/resending -> should throw edit lock error
+      await expect(
+        tenantInvitationLifecycleService.resendInvitation(
+          initial.invitation_id,
+          { id: owner.id, role: 'OWNER' },
+          { monthly_rent: 11000 }
+        )
+      ).rejects.toThrow(/Cannot edit or resend invitation after payments have been recorded/);
+    });
+
+    it('should prevent resending after 10 versions have been created', async () => {
+      sendInvitationSpy.mockResolvedValue({
+        providerMessageId: 'wamid.version_limit_test',
+        attempts: 1,
+      });
+
+      // 1. Create initial invitation
+      const initial: any = await tenantInvitationLifecycleService.createInvitation({
+        name: 'Version Limit Tenant',
+        phone: '9876543272',
+        room_id: room.id,
+        monthly_rent: 10000,
+        security_deposit: 20000,
+      }, owner.id);
+
+      let currentInviteId = initial.invitation_id;
+
+      // 2. Perform 9 resends (total of 10 versions: 1 original + 9 resends)
+      for (let i = 2; i <= 10; i++) {
+        await tenantInvitationLifecycleService.resendInvitation(
+          currentInviteId,
+          { id: owner.id, role: 'OWNER' },
+          { monthly_rent: 10000 + i * 100 }
+        );
+        // Find the newly created invitation to resend again
+        const latestInvite = await prisma.tenant_invitations.findFirst({
+          where: { tenant_id: initial.tenant_id, status: 'PENDING' },
+        });
+        currentInviteId = latestInvite!.id;
+      }
+
+      // 3. The 11th version should fail
+      await expect(
+        tenantInvitationLifecycleService.resendInvitation(
+          currentInviteId,
+          { id: owner.id, role: 'OWNER' },
+          { monthly_rent: 15000 }
+        )
+      ).rejects.toThrow(/Maximum limit of 10 invitation versions reached/);
+    }, 30000);
+
+    it('should log the changes in event logs', async () => {
+      sendInvitationSpy.mockResolvedValueOnce({
+        providerMessageId: 'wamid.log_test',
+        attempts: 1,
+      });
+
+      const initial: any = await tenantInvitationLifecycleService.createInvitation({
+        name: 'Log Test Tenant',
+        phone: '9876543273',
+        room_id: room.id,
+        monthly_rent: 10000,
+        security_deposit: 20000,
+      }, owner.id);
+
+      sendInvitationSpy.mockResolvedValueOnce({
+        providerMessageId: 'wamid.log_test_2',
+        attempts: 1,
+      });
+
+      await tenantInvitationLifecycleService.resendInvitation(
+        initial.invitation_id,
+        { id: owner.id, role: 'OWNER' },
+        {
+          monthly_rent: 12000,
+          security_deposit: 24000,
+        }
+      );
+
+      // Verify that event log has the correct message and type
+      const log = await prisma.systemEventLog.findFirst({
+        where: {
+          event_type: 'tenant_invitation_edited',
+          owner_id: owner.id,
+        },
+        orderBy: { created_at: 'desc' },
+      });
+
+      expect(log).not.toBeNull();
+      const metadata = log!.metadata as any;
+      expect(metadata.message).toContain('Rent: "₹10,000" → "₹12,000"');
+      expect(metadata.message).toContain('Deposit: "₹20,000" → "₹24,000"');
+      expect(metadata.message).toContain('Invitation V2 created');
+      expect(metadata.message).toContain('Invitation V1 superseded');
     });
   });
 });

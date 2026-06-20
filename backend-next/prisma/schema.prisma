@@ -1332,6 +1332,10 @@ model tenant_invitations {
   agreement_start_date    DateTime? @db.Date
   created_at          DateTime  @default(now()) @db.Timestamptz(6)
   updated_at          DateTime? @db.Timestamptz(6)
+  parent_invitation_id String?             @db.Uuid
+  notes                String?
+  parent_invitation    tenant_invitations?  @relation("InvitationVersions", fields: [parent_invitation_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  child_invitations    tenant_invitations[] @relation("InvitationVersions")
   tenant              tenants   @relation(fields: [tenant_id], references: [id])
   hostel              hostels   @relation(fields: [hostel_id], references: [id])
   room                rooms     @relation(fields: [room_id], references: [id])

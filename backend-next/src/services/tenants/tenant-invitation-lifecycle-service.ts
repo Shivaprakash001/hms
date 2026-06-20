@@ -431,6 +431,22 @@ export class TenantInvitationLifecycleService {
     }
     if (invitation.status === "CANCELLED") throw new Error("BAD_REQUEST: Invitation is cancelled");
 
+    // Lock rule: Prevent edit/resend if tenant has successful/recorded payments
+    const paymentsCount = await prisma.payments.count({
+      where: { tenant_id: invitation.tenant_id },
+    });
+    if (paymentsCount > 0) {
+      throw new Error("VALIDATION_ERROR: Cannot edit or resend invitation after payments have been recorded for this tenant");
+    }
+
+    // Limit rule: Prevent more than 10 invitation versions
+    const versionCount = await prisma.tenant_invitations.count({
+      where: { tenant_id: invitation.tenant_id },
+    });
+    if (versionCount >= 10) {
+      throw new Error("VALIDATION_ERROR: Maximum limit of 10 invitation versions reached. Please cancel this invitation and create a fresh one.");
+    }
+
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = addDays(DEFAULT_INVITE_DAYS);
     const updated = await prisma.$transaction(async (tx: any) => {
@@ -438,6 +454,24 @@ export class TenantInvitationLifecycleService {
       const targetRoomId = overrides?.room_id || invitation.room_id;
       let targetRoom = invitation.room;
       let targetHostelId = invitation.hostel_id;
+
+      // Track changes for logging and audit trail
+      const changes: string[] = [];
+
+      const overridesName = overrides?.name ? String(overrides.name).trim() : undefined;
+      if (overridesName && overridesName !== invitation.name) {
+        changes.push(`Name: "${invitation.name}" → "${overridesName}"`);
+      }
+
+      const overridesPhone = overrides?.phone ? normalizeIndianPhone(overrides.phone) : undefined;
+      if (overridesPhone && overridesPhone !== invitation.phone) {
+        changes.push(`Phone: "${invitation.phone || "None"}" → "${overridesPhone}"`);
+      }
+
+      const overridesEmail = overrides?.email ? normalizeEmail(overrides.email) : undefined;
+      if (overridesEmail && overridesEmail !== invitation.email) {
+        changes.push(`Email: "${invitation.email || "None"}" → "${overridesEmail}"`);
+      }
 
       if (targetRoomId !== invitation.room_id) {
         await tx.$executeRaw`SELECT id FROM rooms WHERE id = ${targetRoomId}::uuid FOR UPDATE`;
@@ -452,6 +486,11 @@ export class TenantInvitationLifecycleService {
         if (roomObj.hostels.status === "INACTIVE") {
           throw new Error("VALIDATION_ERROR: Cannot move tenant to an inactive hostel");
         }
+        
+        const currentRoomNo = invitation.room?.room_no || "Unknown";
+        const nextRoomNo = roomObj?.room_no || "Unknown";
+        changes.push(`Room: "${currentRoomNo}" → "${nextRoomNo}"`);
+        
         targetRoom = roomObj;
         targetHostelId = roomObj.hostel_id;
 
@@ -461,65 +500,26 @@ export class TenantInvitationLifecycleService {
         }
       }
 
-      // 2. Handle reservation
-      let reservation = await tx.tenant_invitation_reservations.findFirst({
+      // 2. Handle reservation: release all old active reservations for this invitation
+      await tx.tenant_invitation_reservations.updateMany({
         where: { invitation_id: invitation.id, status: "ACTIVE" },
+        data: {
+          status: "RELEASED",
+          released_at: new Date(),
+          released_by: actor?.id || invitation.owner_id,
+          release_reason: targetRoomId !== invitation.room_id ? "ROOM_CHANGE" : "SUPERSEDED",
+          updated_at: new Date(),
+        },
       });
 
-      if (reservation) {
-        if (targetRoomId !== invitation.room_id) {
-          // Release old reservation
-          await tx.tenant_invitation_reservations.update({
-            where: { id: reservation.id },
-            data: {
-              status: "RELEASED",
-              released_at: new Date(),
-              released_by: actor?.id || invitation.owner_id,
-              release_reason: "ROOM_CHANGE",
-            },
-          });
-          // Create new reservation
-          reservation = await tx.tenant_invitation_reservations.create({
-            data: {
-              id: crypto.randomUUID(),
-              tenant_id: invitation.tenant_id,
-              invitation_id: invitation.id,
-              owner_id: invitation.owner_id,
-              hostel_id: targetHostelId,
-              room_id: targetRoomId,
-              batch_id: invitation.batch_id,
-              status: "ACTIVE",
-              reserved_at: new Date(),
-              expires_at: expiresAt,
-            },
-          });
-        } else {
-          // Update expiry of the existing reservation
-          reservation = await tx.tenant_invitation_reservations.update({
-            where: { id: reservation.id },
-            data: { expires_at: expiresAt, updated_at: new Date() },
-          });
-        }
-      } else {
-        // Create a new reservation if none existed
-        reservation = await tx.tenant_invitation_reservations.create({
-          data: {
-            id: crypto.randomUUID(),
-            tenant_id: invitation.tenant_id,
-            invitation_id: invitation.id,
-            owner_id: invitation.owner_id,
-            hostel_id: targetHostelId,
-            room_id: targetRoomId,
-            batch_id: invitation.batch_id,
-            status: "ACTIVE",
-            reserved_at: new Date(),
-            expires_at: expiresAt,
-          },
-        });
-      }
+      const newInvitationId = crypto.randomUUID();
 
       // 3. Resolve overrides
       const monthlyRent = typeof overrides?.monthly_rent !== "undefined" ? Number(overrides.monthly_rent) : undefined;
+      if (typeof monthlyRent !== "undefined" && monthlyRent !== Number(invitation.tenant.monthly_rent)) {
+        changes.push(`Rent: "₹${Number(invitation.tenant.monthly_rent).toLocaleString('en-IN')}" → "₹${monthlyRent.toLocaleString('en-IN')}"`);
+      }
+
       const securityDeposit = typeof overrides?.advance_amount !== "undefined"
         ? Number(overrides.advance_amount)
         : (typeof overrides?.security_deposit !== "undefined"
@@ -527,6 +527,10 @@ export class TenantInvitationLifecycleService {
           : (typeof overrides?.advance_deposit !== "undefined"
             ? Number(overrides.advance_deposit)
             : undefined));
+      if (typeof securityDeposit !== "undefined" && securityDeposit !== Number(invitation.tenant.security_deposit)) {
+        changes.push(`Deposit: "₹${Number(invitation.tenant.security_deposit).toLocaleString('en-IN')}" → "₹${securityDeposit.toLocaleString('en-IN')}"`);
+      }
+
       const maintenanceCharge = typeof overrides?.maintenance_amount !== "undefined"
         ? Number(overrides.maintenance_amount)
         : (typeof overrides?.maintenance_charge !== "undefined"
@@ -536,7 +540,26 @@ export class TenantInvitationLifecycleService {
       const phone = overrides?.phone;
       const email = overrides?.email;
       const paymentFrequency = overrides?.payment_frequency;
+      if (paymentFrequency && paymentFrequency !== invitation.tenant.payment_frequency) {
+        changes.push(`Billing Cycle: "${invitation.tenant.payment_frequency || "MONTHLY"}" → "${paymentFrequency}"`);
+      }
+
+      const agreementDuration = typeof overrides?.agreement_duration_months !== "undefined"
+        ? (overrides.agreement_duration_months ? Number(overrides.agreement_duration_months) : null)
+        : invitation.agreement_duration_months;
+      if (typeof overrides?.agreement_duration_months !== "undefined" && overrides.agreement_duration_months !== invitation.agreement_duration_months) {
+        changes.push(`Agreement Duration: "${invitation.agreement_duration_months || "None"} months" → "${overrides.agreement_duration_months || "None"} months"`);
+      }
+
       const joiningDate = overrides?.joining_date ? new Date(overrides.joining_date) : (overrides?.joined_on ? new Date(overrides.joined_on) : undefined);
+      if (joiningDate) {
+        const currentJoinedOnStr = invitation.tenant.joined_on ? new Date(invitation.tenant.joined_on).toISOString().split('T')[0] : "None";
+        const nextJoinedOnStr = joiningDate.toISOString().split('T')[0];
+        if (currentJoinedOnStr !== nextJoinedOnStr) {
+          changes.push(`Move-in Date: "${currentJoinedOnStr}" → "${nextJoinedOnStr}"`);
+        }
+      }
+
       const nextSecurityDeposit = typeof securityDeposit !== "undefined"
         ? securityDeposit
         : Number(invitation.tenant.security_deposit || 0);
@@ -589,7 +612,7 @@ export class TenantInvitationLifecycleService {
       await tx.rent_obligations.deleteMany({
         where: {
           tenant_id: invitation.tenant_id,
-          obligation_type: { in: ["SECURITY_DEPOSIT", "MAINTENANCE"] },
+          obligation_type: { in: ["SECURITY_DEPOSIT", "MAINTENANCE", "RENT"] },
           status: "PENDING",
           payments: { none: {} },
         },
@@ -604,10 +627,28 @@ export class TenantInvitationLifecycleService {
         maintenanceType: updatedTenant.maintenance_type || "NONE",
       });
 
-      // 7. Update invitation table
-      const updatedInvitation = await tx.tenant_invitations.update({
+      // 7. Update parent invitation to SUPERSEDED and record change log in notes
+      await tx.tenant_invitations.update({
         where: { id: invitation.id },
         data: {
+          status: "SUPERSEDED",
+          notes: changes.length > 0 ? `Edited: ${changes.join(", ")}` : "Superseded by new version",
+          updated_at: new Date(),
+        },
+      });
+
+      // 8. Create brand new child invitation version
+      const updatedInvitation = await tx.tenant_invitations.create({
+        data: {
+          id: newInvitationId,
+          tenant_id: invitation.tenant_id,
+          owner_id: invitation.owner_id,
+          hostel_id: targetHostelId,
+          room_id: targetRoomId,
+          batch_id: invitation.batch_id,
+          name: overrides?.name ? String(overrides.name).trim() : invitation.name,
+          phone: phone ? normalizeIndianPhone(phone) : invitation.phone,
+          email: email ? normalizeEmail(email) : invitation.email,
           token,
           expires_at: expiresAt,
           status: "PENDING",
@@ -615,14 +656,29 @@ export class TenantInvitationLifecycleService {
           activation_started_at: null,
           activated_at: null,
           cancelled_at: null,
-          room_id: targetRoomId,
-          hostel_id: targetHostelId,
-          ...(overrides?.name ? { name: String(overrides.name).trim() } : {}),
-          ...(phone ? { phone: normalizeIndianPhone(phone) } : {}),
-          ...(email ? { email: normalizeEmail(email) } : {}),
-          ...(typeof overrides?.agreement_duration_months !== "undefined" ? { agreement_duration_months: overrides.agreement_duration_months ? Number(overrides.agreement_duration_months) : null } : {}),
-          ...(typeof overrides?.agreement_start_date !== "undefined" ? { agreement_start_date: overrides.agreement_start_date ? new Date(overrides.agreement_start_date) : null } : {}),
+          agreement_duration_months: agreementDuration,
+          agreement_start_date: typeof overrides?.agreement_start_date !== "undefined"
+            ? (overrides.agreement_start_date ? new Date(overrides.agreement_start_date) : null)
+            : invitation.agreement_start_date,
+          parent_invitation_id: invitation.id,
+          created_at: new Date(),
           updated_at: new Date(),
+        },
+      });
+
+      // 9. Create a new reservation for the new invitation
+      await tx.tenant_invitation_reservations.create({
+        data: {
+          id: crypto.randomUUID(),
+          tenant_id: invitation.tenant_id,
+          invitation_id: newInvitationId,
+          owner_id: invitation.owner_id,
+          hostel_id: targetHostelId,
+          room_id: targetRoomId,
+          batch_id: invitation.batch_id,
+          status: "ACTIVE",
+          reserved_at: new Date(),
+          expires_at: expiresAt,
         },
       });
 
@@ -630,6 +686,8 @@ export class TenantInvitationLifecycleService {
         updatedInvitation,
         updatedTenant,
         targetRoom,
+        changes,
+        versionCount,
       };
     });
 
@@ -643,6 +701,15 @@ export class TenantInvitationLifecycleService {
       owner || { name: "The Owner" },
       activationLink
     );
+
+    // Automatically write to activity/system event logs
+    await eventLog.log("tenant_invitation_edited", updated.updatedInvitation.owner_id, {
+      tenant_id: updated.updatedInvitation.tenant_id,
+      parent_invitation_id: invitation.id,
+      new_invitation_id: updated.updatedInvitation.id,
+      changes: updated.changes,
+      message: `Owner edited invitation. Changed:\n${updated.changes.map(c => `- ${c}`).join('\n')}\nInvitation V${updated.versionCount + 1} created\nInvitation V${updated.versionCount} superseded`,
+    }, updated.updatedInvitation.tenant_id);
 
     await eventLog.log("tenant_invitation_resent", updated.updatedInvitation.owner_id, {
       tenant_id: updated.updatedInvitation.tenant_id,
@@ -720,6 +787,9 @@ export class TenantInvitationLifecycleService {
 
     if (!invitation || !invitation.tenant) {
       return this.resolveLegacyProfileToken(normalizedToken);
+    }
+    if (invitation.status === "SUPERSEDED") {
+      throw new Error("INVALID: Activation link expired or already used");
     }
     if (invitation.tenant.hostels?.status === "ARCHIVED") {
       throw new Error("FORBIDDEN: Cannot activate tenant in an archived hostel");

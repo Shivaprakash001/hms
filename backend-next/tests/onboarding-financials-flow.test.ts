@@ -12,11 +12,13 @@ vi.mock("@/lib/db", () => {
     tenants: { create: vi.fn() },
     tenant_invitations: { create: vi.fn() },
     tenant_invitation_reservations: { create: vi.fn() },
+    rooms: { findFirst: vi.fn(), findUnique: vi.fn() },
   };
   const mockPrisma = {
     profile: { findUnique: vi.fn() },
     tenants: { findFirst: vi.fn() },
     tenant_invitations: { findFirst: vi.fn() },
+    rooms: { findFirst: vi.fn(), findUnique: vi.fn() },
     visitorLead: {
       findFirst: vi.fn(),
       update: vi.fn(),
@@ -129,6 +131,32 @@ describe("onboarding financial flow routing", () => {
         },
       },
     } as any);
+    vi.mocked(prisma.rooms.findFirst).mockResolvedValue({
+      id: "room-1",
+      hostel_id: "hostel-1",
+      room_no: "101",
+      capacity: 2,
+      base_rent: 8000,
+      hostels: {
+        id: "hostel-1",
+        owner_id: "owner-1",
+        name: "Sri Hostel",
+        rent_cycle: "MONTHLY",
+      },
+    } as any);
+    tx.rooms.findFirst.mockResolvedValue({
+      id: "room-1",
+      hostel_id: "hostel-1",
+      room_no: "101",
+      capacity: 2,
+      base_rent: 8000,
+      hostels: {
+        id: "hostel-1",
+        owner_id: "owner-1",
+        name: "Sri Hostel",
+        rent_cycle: "MONTHLY",
+      },
+    });
     tx.tenants.create.mockResolvedValue({
       id: "tenant-1",
       owner_id: "owner-1",
