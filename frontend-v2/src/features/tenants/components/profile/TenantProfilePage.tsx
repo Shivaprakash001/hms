@@ -3,7 +3,8 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Phone, Mail, Loader2, Bell, Download, FileCheck2, Send, CalendarDays,
   CheckCircle2, XCircle, ShieldAlert, Smartphone, MessageSquare, BedDouble, User,
-  Building2, Settings, IndianRupee, LogOut, CheckCircle, AlertTriangle, AlertCircle
+  Building2, Settings, IndianRupee, LogOut, CheckCircle, AlertTriangle, AlertCircle,
+  History
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -625,6 +626,92 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
                 >
                   Download rules acceptance JSON
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* Invitation History Timeline Card */}
+          {((tenant?.tenant_invitations ?? overview?.tenant_invitations ?? []) as any[]).length > 0 && (
+            <div className="p-4 rounded-xl border border-border bg-card space-y-4 shadow-sm">
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <History className="w-4 h-4 text-accent" />
+                Invitation History
+              </h3>
+              
+              <div className="relative pl-6 border-l border-border space-y-5 ml-2 mt-2">
+                {((tenant?.tenant_invitations ?? overview?.tenant_invitations ?? []) as any[]).map((invite: any, index: number, arr: any[]) => {
+                  const versionNum = arr.length - index;
+                  const isActive = index === 0;
+                  
+                  // Status badge helper
+                  let badgeText = 'Superseded';
+                  let badgeClass = 'bg-secondary/40 text-muted-foreground border-border/50';
+                  
+                  if (isActive) {
+                    if (status === 'ACTIVE') {
+                      badgeText = 'Accepted';
+                      badgeClass = 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20';
+                    } else if (status === 'CANCELLED') {
+                      badgeText = 'Cancelled';
+                      badgeClass = 'bg-rose-500/10 text-rose-600 border-rose-500/20';
+                    } else {
+                      badgeText = 'Active';
+                      badgeClass = 'bg-accent/10 text-accent border-accent/20';
+                    }
+                  }
+
+                  return (
+                    <div key={invite.id} className="relative group">
+                      {/* Timeline dot */}
+                      <span className={`absolute -left-[31px] top-1.5 w-2.5 h-2.5 rounded-full border-2 bg-card ${isActive ? 'border-accent animate-pulse' : 'border-muted'}`} />
+                      
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-xs text-foreground">Version {versionNum}</span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider ${badgeClass}`}>
+                            {badgeText}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground ml-auto">
+                            {invite.created_at ? new Date(invite.created_at).toLocaleDateString('en-IN', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            }) : ''}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-1.5 text-xs text-muted-foreground p-3 bg-secondary/20 rounded-xl border border-border/40">
+                          <div>
+                            <span className="block text-[10px] text-muted-foreground/75 uppercase tracking-wider">Room</span>
+                            <span className="font-medium text-foreground">{invite.room?.room_no || 'Unassigned'}</span>
+                          </div>
+                          <div>
+                            <span className="block text-[10px] text-muted-foreground/75 uppercase tracking-wider">Monthly Rent</span>
+                            <span className="font-medium text-foreground">{money(invite.monthly_rent)}</span>
+                          </div>
+                          <div>
+                            <span className="block text-[10px] text-muted-foreground/75 uppercase tracking-wider">Agreement Period</span>
+                            <span className="font-medium text-foreground">
+                              {invite.agreement_duration_months ? `${invite.agreement_duration_months} mo` : '—'}
+                              {invite.agreement_start_date ? ` (from ${new Date(invite.agreement_start_date).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' })})` : ''}
+                            </span>
+                          </div>
+                        </div>
+
+                        {invite.notes && (
+                          <div className="mt-2 text-[11px] text-muted-foreground p-3 bg-rose-500/5 rounded-xl border border-rose-500/10 font-sans leading-relaxed">
+                            <span className="block font-semibold text-rose-600/90 mb-1">Changes Log</span>
+                            <div className="whitespace-pre-line text-muted-foreground/90 font-mono text-[10px]">
+                              {invite.notes}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { X, User, BedDouble, Calendar, ChevronDown, ChevronRight, Copy, Check, Loader2, IndianRupee, RotateCcw, Building2 } from 'lucide-react';
+import { X, User, BedDouble, Calendar, ChevronDown, ChevronRight, Copy, Check, Loader2, IndianRupee, RotateCcw, Building2, AlertTriangle, ArrowRight } from 'lucide-react';
 import { ownerService } from '@domains/hostels/api';
 import { roomService } from '@domains/rooms/api';
 import { tenantService } from '@domains/tenants/api';
@@ -52,6 +52,7 @@ export function EditInviteModal({ onClose, tenantId, hostelId }: EditInviteModal
   const [success, setSuccess]         = useState(false);
   const [link, setLink]               = useState('');
   const [copied, setCopied]           = useState(false);
+  const [showComparison, setShowComparison] = useState(false);
 
   // New WhatsApp/Email fallback states
   const [whatsappSent, setWhatsappSent] = useState(false);
@@ -266,8 +267,23 @@ export function EditInviteModal({ onClose, tenantId, hostelId }: EditInviteModal
     },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const originalValues = {
+    name: tenant?.name || invitationData?.name || '',
+    phone: tenant?.phone || invitationData?.phone || '',
+    email: tenant?.email || invitationData?.email || '',
+    roomId: tenant?.current_room?.id || '',
+    roomNo: tenant?.current_room?.room_no || '',
+    joiningDate: tenant?.joined_on ? new Date(tenant.joined_on).toISOString().split('T')[0] : '',
+    billingFrequency: tenant?.payment_frequency || 'MONTHLY',
+    monthlyRent: String(tenant?.monthly_rent || ''),
+    advanceDeposit: String(tenant?.security_deposit || ''),
+    maintenanceCharge: String(tenant?.maintenance_charge || ''),
+    maintenanceType: tenant?.maintenance_type || 'NONE',
+    agreementStartDate: invitationData?.agreement_start_date ? new Date(invitationData.agreement_start_date).toISOString().split('T')[0] : (tenant?.joined_on ? new Date(tenant.joined_on).toISOString().split('T')[0] : ''),
+    agreementDuration: invitationData?.agreement_duration_months ? String(invitationData.agreement_duration_months) : '',
+  };
+
+  const confirmSubmit = () => {
     setError(null);
     editMutation.mutate({
       invitation_edit:    true,
@@ -284,6 +300,32 @@ export function EditInviteModal({ onClose, tenantId, hostelId }: EditInviteModal
       agreement_start_date: agreementStartDate || undefined,
       agreement_duration_months: agreementDuration === 'custom' ? Number(customDuration) : Number(agreementDuration),
     });
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    const finalDuration = agreementDuration === 'custom' ? customDuration : agreementDuration;
+    const hasChanges =
+      originalValues.name !== name.trim() ||
+      originalValues.phone !== phone.trim() ||
+      originalValues.email !== email.trim() ||
+      originalValues.roomId !== roomId ||
+      originalValues.joiningDate !== joiningDate ||
+      originalValues.billingFrequency !== paymentFrequency ||
+      Number(originalValues.monthlyRent) !== Number(monthlyRent) ||
+      Number(originalValues.advanceDeposit) !== Number(advanceDeposit) ||
+      Number(originalValues.maintenanceCharge) !== Number(maintenanceCharge) ||
+      originalValues.maintenanceType !== maintenanceType ||
+      originalValues.agreementStartDate !== agreementStartDate ||
+      originalValues.agreementDuration !== finalDuration;
+
+    if (hasChanges) {
+      setShowComparison(true);
+    } else {
+      confirmSubmit();
+    }
   };
 
   const handleFallbackSubmit = async (e: React.FormEvent) => {
@@ -326,6 +368,107 @@ export function EditInviteModal({ onClose, tenantId, hostelId }: EditInviteModal
         <div className="bg-card rounded-2xl p-6 border border-border flex flex-col items-center gap-3">
           <Loader2 className="w-8 h-8 animate-spin text-accent" />
           <p className="text-sm text-muted-foreground">Loading invitation details…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Changes Detected comparison overlay ──────────────────────────────
+  if (showComparison) {
+    const changes: { label: string; from: string; to: string }[] = [];
+    if (originalValues.name !== name.trim()) {
+      changes.push({ label: 'Name', from: originalValues.name, to: name.trim() });
+    }
+    if (originalValues.phone !== phone.trim()) {
+      changes.push({ label: 'Phone', from: originalValues.phone, to: phone.trim() });
+    }
+    if (originalValues.email !== email.trim()) {
+      changes.push({ label: 'Email', from: originalValues.email || 'None', to: email.trim() || 'None' });
+    }
+    if (originalValues.roomId !== roomId) {
+      const oldRoomNo = originalValues.roomNo || 'None';
+      const newRoom = availableRooms.find(r => r.id === roomId);
+      const newRoomNo = newRoom ? newRoom.room_no : 'None';
+      changes.push({ label: 'Room', from: oldRoomNo, to: newRoomNo });
+    }
+    if (originalValues.joiningDate !== joiningDate) {
+      changes.push({ label: 'Joining Date', from: originalValues.joiningDate, to: joiningDate });
+    }
+    if (originalValues.billingFrequency !== paymentFrequency) {
+      changes.push({ label: 'Billing Frequency', from: originalValues.billingFrequency, to: paymentFrequency });
+    }
+    if (Number(originalValues.monthlyRent) !== Number(monthlyRent)) {
+      changes.push({ label: 'Rent', from: fmt(Number(originalValues.monthlyRent || 0)), to: fmt(Number(monthlyRent || 0)) });
+    }
+    if (Number(originalValues.advanceDeposit) !== Number(advanceDeposit)) {
+      changes.push({ label: 'Deposit', from: fmt(Number(originalValues.advanceDeposit || 0)), to: fmt(Number(advanceDeposit || 0)) });
+    }
+    const oldMaintLabel = originalValues.maintenanceType === 'NONE' ? 'None' : `${fmt(Number(originalValues.maintenanceCharge || 0))} (${originalValues.maintenanceType})`;
+    const newMaintLabel = maintenanceType === 'NONE' ? 'None' : `${fmt(Number(maintenanceCharge || 0))} (${maintenanceType})`;
+    if (oldMaintLabel !== newMaintLabel) {
+      changes.push({ label: 'Maintenance', from: oldMaintLabel, to: newMaintLabel });
+    }
+    if (originalValues.agreementStartDate !== agreementStartDate) {
+      changes.push({ label: 'Agreement Start Date', from: originalValues.agreementStartDate, to: agreementStartDate });
+    }
+    const finalDuration = agreementDuration === 'custom' ? customDuration : agreementDuration;
+    if (originalValues.agreementDuration !== finalDuration) {
+      changes.push({ label: 'Agreement Duration', from: originalValues.agreementDuration ? `${originalValues.agreementDuration} months` : 'None', to: finalDuration ? `${finalDuration} months` : 'None' });
+    }
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+        <div className="w-full max-w-lg bg-card rounded-t-2xl md:rounded-2xl border border-border max-h-[90dvh] overflow-y-auto shadow-2xl p-6 transition-all" onClick={(e) => e.stopPropagation()}>
+          <div className="flex flex-col gap-5">
+            <div>
+              <h3 className="font-bold text-foreground text-lg flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-amber-500" />
+                Changes Detected
+              </h3>
+              <p className="text-xs text-muted-foreground mt-1">Please review the proposed contract modifications before sending the updated invitation.</p>
+            </div>
+
+            {changes.length === 0 ? (
+              <div className="p-4 bg-secondary/30 rounded-xl border border-border text-center text-xs text-muted-foreground">
+                No differences detected. The invitation will be resent with its current parameters.
+              </div>
+            ) : (
+              <div className="border border-border rounded-xl overflow-hidden divide-y divide-border bg-secondary/10">
+                {changes.map((chg, idx) => (
+                  <div key={idx} className="grid grid-cols-3 gap-2 px-4 py-3 text-xs items-center">
+                    <span className="font-semibold text-muted-foreground">{chg.label}</span>
+                    <span className="text-rose-500 line-through truncate pr-2">{chg.from || '—'}</span>
+                    <span className="text-emerald-600 font-bold flex items-center gap-1.5 min-w-0">
+                      <ArrowRight className="w-3 h-3 shrink-0 text-emerald-500/70" />
+                      <span className="truncate">{chg.to || '—'}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowComparison(false)}
+                className="flex-1 py-3 border border-border text-foreground hover:bg-secondary rounded-xl text-sm font-semibold transition-colors active:scale-[0.98]"
+              >
+                Back to Edit
+              </button>
+              <button
+                type="button"
+                onClick={confirmSubmit}
+                disabled={editMutation.isPending}
+                className="flex-1 py-3 bg-accent text-accent-foreground rounded-xl text-sm font-semibold active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              >
+                {editMutation.isPending ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Saving &amp; Resending…</>
+                ) : (
+                  'Confirm &amp; Resend'
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );

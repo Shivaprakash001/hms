@@ -2,7 +2,7 @@ import { lazy, Suspense, useMemo, useState, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Users, Plus, CreditCard, Phone, Send, Search } from 'lucide-react';
+import { Users, Plus, CreditCard, Phone, Send, Search, Edit3, RefreshCw, X, AlertTriangle } from 'lucide-react';
 import { queryKeys } from '@lib/queryKeys';
 import { fmtExact } from '../shared/format';
 import { TabError, TabSkeleton } from '../shared/TabStates';
@@ -11,6 +11,7 @@ import { useTenantActions } from '@features/tenants/hooks/useTenantActions';
 
 const AddTenantModal = lazy(() => import('../../modals/AddTenantModal').then((m) => ({ default: m.AddTenantModal })));
 const RecordPaymentModal = lazy(() => import('../../modals/RecordPaymentModal').then((m) => ({ default: m.RecordPaymentModal })));
+const EditInviteModal = lazy(() => import('../../modals/EditInviteModal').then((m) => ({ default: m.EditInviteModal })));
 
 type TenantFilter = 'all' | 'due' | 'paid' | 'overdue' | 'unassigned';
 
@@ -28,6 +29,8 @@ export function TenantsTab({ hostelId }: { hostelId: string }) {
   const [showPayment, setShowPayment] = useState<string>('');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<TenantFilter>('all');
+  const [resendOptionsTenant, setResendOptionsTenant] = useState<{ id: string; phone: string } | null>(null);
+  const [showEditInvite, setShowEditInvite] = useState<string | null>(null);
   const actions = useTenantActions(hostelId);
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -197,7 +200,9 @@ export function TenantsTab({ hostelId }: { hostelId: string }) {
                     disabled={!identifier || actions.resendInvite.isPending}
                     onClick={(event) => {
                       event.stopPropagation();
-                      if (identifier) actions.resendInvite.mutate(identifier);
+                      if (identifier) {
+                        setResendOptionsTenant({ id: invitedTenantId, phone: identifier });
+                      }
                     }}
                     className="flex items-center justify-center gap-1 px-3 py-2 bg-amber-50 text-amber-700 rounded-xl text-xs font-semibold active:scale-[0.98] transition-transform touch-manipulation disabled:opacity-50 shrink-0"
                     title="Resend Invitation"
@@ -338,6 +343,75 @@ export function TenantsTab({ hostelId }: { hostelId: string }) {
             hostelId={hostelId}
             initialDueId={showPayment}
             onClose={() => setShowPayment('')}
+          />
+        </Suspense>
+      )}
+
+      {resendOptionsTenant && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setResendOptionsTenant(null)}>
+          <div className="w-full max-w-sm bg-card rounded-2xl border border-border shadow-2xl p-6 m-4 transition-all" onClick={(e) => e.stopPropagation()}>
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-foreground text-base flex items-center gap-2">
+                  <RefreshCw className="w-4 h-4 text-accent" />
+                  Resend Options
+                </h3>
+                <button onClick={() => setResendOptionsTenant(null)} className="text-muted-foreground hover:text-foreground">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Choose how you want to resend the invitation. You can resend with current parameters or edit details before sending.
+              </p>
+
+              <div className="flex flex-col gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const identifier = resendOptionsTenant.phone;
+                    setResendOptionsTenant(null);
+                    actions.resendInvite.mutate(identifier);
+                  }}
+                  className="flex items-center gap-3 w-full p-3 bg-secondary/30 hover:bg-secondary/60 active:bg-secondary/80 rounded-xl border border-border/50 transition-all text-left animate-none"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-600 shrink-0">
+                    <Send className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="block text-xs font-bold text-foreground">Direct Resend</span>
+                    <span className="block text-[10px] text-muted-foreground mt-0.5">Send invitation using current details</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const tenantId = resendOptionsTenant.id;
+                    setResendOptionsTenant(null);
+                    setShowEditInvite(tenantId);
+                  }}
+                  className="flex items-center gap-3 w-full p-3 bg-secondary/30 hover:bg-secondary/60 active:bg-secondary/80 rounded-xl border border-border/50 transition-all text-left animate-none"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center text-accent shrink-0">
+                    <Edit3 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="block text-xs font-bold text-foreground">Edit &amp; Resend</span>
+                    <span className="block text-[10px] text-muted-foreground mt-0.5">Modify room, rent, or agreement before sending</span>
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showEditInvite && (
+        <Suspense fallback={null}>
+          <EditInviteModal
+            hostelId={hostelId}
+            tenantId={showEditInvite}
+            onClose={() => setShowEditInvite(null)}
           />
         </Suspense>
       )}

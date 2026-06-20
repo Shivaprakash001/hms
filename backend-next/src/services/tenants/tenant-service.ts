@@ -734,7 +734,7 @@ export class TenantService {
         profiles: true,
         tenant_invitations: {
           orderBy: { created_at: "desc" },
-          take: 1,
+          include: { room: true },
         },
         move_out_requests: {
           where: { status: { notIn: ["COMPLETED", "REJECTED"] } },
