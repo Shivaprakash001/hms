@@ -144,10 +144,10 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("Error creating payment intent:", error);
     const message = String(error?.message ?? error);
-    if (message.includes("FORBIDDEN")) return apiError(message, "FORBIDDEN", 403);
-    if (message.includes("NOT_FOUND")) return apiError(message, "NOT_FOUND", 404);
-    if (message.includes("BAD_REQUEST")) return apiError(message, "VALIDATION_ERROR", 400);
-    if (message.includes("CONFIG_ERROR")) return apiError(message, "CONFIG_ERROR", 422);
+    if (message.includes("FORBIDDEN")) return apiError(message.replace("FORBIDDEN: ", ""), "FORBIDDEN", 403);
+    if (message.includes("NOT_FOUND")) return apiError(message.replace("NOT_FOUND: ", ""), "NOT_FOUND", 404);
+    if (message.includes("BAD_REQUEST")) return apiError(message.replace("BAD_REQUEST: ", ""), "VALIDATION_ERROR", 400);
+    if (message.includes("CONFIG_ERROR")) return apiError(message.replace("CONFIG_ERROR: ", ""), "CONFIG_ERROR", 422);
     return apiError(message, "INTERNAL_ERROR", 500);
   }
 }

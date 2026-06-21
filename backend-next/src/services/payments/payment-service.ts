@@ -1041,6 +1041,41 @@ export class PaymentService {
     if (tenantId && singleTenantId !== tenantId) {
       throw new Error("FORBIDDEN: You can only pay your own obligations");
     }
+
+    // ── FIFO enforcement: oldest unpaid obligations must be cleared first ──
+    if (!options.bypassCollectionPolicy) {
+      const allUnpaid = await prisma.rent_obligations.findMany({
+        where: {
+          tenant_id: singleTenantId,
+          status: { in: ["PENDING", "PARTIAL"] },
+          is_superseded: false,
+        },
+        orderBy: [
+          { due_date: "asc" },
+          { created_at: "asc" },
+        ],
+      });
+
+      if (allUnpaid.length > 0) {
+        let minRequestedDueDate = obligations[0].due_date;
+        for (const ob of obligations) {
+          if (ob.due_date < minRequestedDueDate) {
+            minRequestedDueDate = ob.due_date;
+          }
+        }
+
+        const requestedIdSet = new Set(obligationIds);
+        const hasOlderUnpaid = allUnpaid.some((o) =>
+          !requestedIdSet.has(o.id) &&
+          new Date(o.due_date).getTime() < new Date(minRequestedDueDate).getTime()
+        );
+
+        if (hasOlderUnpaid) {
+          throw new Error("BAD_REQUEST: Previous installments must be cleared before paying future installments.");
+        }
+      }
+    }
+
     if (obligations.some(o => o.status === "WAIVED")) {
       throw new Error("BAD_REQUEST: Cannot pay for waived obligations");
     }

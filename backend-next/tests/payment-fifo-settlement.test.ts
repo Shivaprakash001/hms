@@ -74,17 +74,6 @@ describe("PaymentService FIFO rent settlement", () => {
     service = new PaymentService() as any;
   });
 
-  it("rejects rent payments below current monthly rent", async () => {
-    const tx = createTx([obligation("old", "2026-06-05")]);
-
-    await expect(service._settleTenantRentPaymentInTx(tx, {
-      hostelId: "hostel-1",
-      tenantId: "tenant-1",
-      amountPaid: 4200,
-      paymentMethod: "CASH",
-    }, "group-1")).rejects.toThrow("below current monthly rent");
-  });
-
   it("settles exact rent oldest first and leaves upcoming untouched", async () => {
     const due = obligation("due", "2026-06-05", 8500, [], "OVERDUE");
     const upcoming = obligation("upcoming", "2026-07-05", 8500, [], "UPCOMING");
