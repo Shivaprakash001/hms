@@ -22,8 +22,8 @@ async function repairAttemptHostelScope(): Promise<RepairResult> {
     },
     include: {
       payments: { select: { hostel_id: true } },
-      obligation: { select: { hostel_id: true } },
-      obligations: { include: { obligation: { select: { hostel_id: true } } } },
+      rent_obligations: { select: { hostel_id: true } },
+      obligations: { include: { rent_obligations: { select: { hostel_id: true } } } },
     },
   });
 
@@ -31,8 +31,8 @@ async function repairAttemptHostelScope(): Promise<RepairResult> {
     result.attempted++;
     const hostelIds = new Set<string>();
     attempt.payments.forEach((payment) => payment.hostel_id && hostelIds.add(payment.hostel_id));
-    if (attempt.obligation?.hostel_id) hostelIds.add(attempt.obligation.hostel_id);
-    attempt.obligations.forEach((link) => link.obligation?.hostel_id && hostelIds.add(link.obligation.hostel_id));
+    if (attempt.rent_obligations?.hostel_id) hostelIds.add(attempt.rent_obligations.hostel_id);
+    attempt.obligations.forEach((link) => link.rent_obligations?.hostel_id && hostelIds.add(link.rent_obligations.hostel_id));
 
     if (hostelIds.size !== 1) {
       result.skipped++;
@@ -60,7 +60,7 @@ async function repairAttemptHostelScope(): Promise<RepairResult> {
 
 async function repairMissingReceipts(): Promise<RepairResult> {
   const result: RepairResult = { attempted: 0, repaired: 0, skipped: 0, errors: [] };
-  const payments = await prisma.payment.findMany({
+  const payments = await prisma.payments.findMany({
     where: {
       receipts: null,
       created_at: { lt: new Date(Date.now() - 5 * 60 * 1000) },

@@ -1,6 +1,7 @@
-import { PDFDocument, rgb, StandardFonts, PDFPage } from "pdf-lib";
+import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import type { HostelPreferences } from "../preferences";
 import { formatCurrency, formatShortDate, formatMonthYear } from "../format";
+import QRCode from "qrcode";
 
 export interface ReceiptSettlementAllocation {
   type: string;
@@ -54,6 +55,9 @@ export interface ReceiptRenderData {
 
   prefs: Partial<HostelPreferences>;
   footer?: string | null;
+  
+  // Verification
+  verification_url?: string | null;
 }
 
 const COLORS = {
@@ -114,7 +118,7 @@ export async function generateReceiptPdf(data: ReceiptRenderData): Promise<Uint8
     `PaymentID:${data.payment_id || "N/A"}`,
     `TenantID:${data.tenant_id || "N/A"}`,
     `ReceiptID:${data.receipt_id || "N/A"}`,
-    `TemplateVersion:${data.template_version || 3}`,
+    `TemplateVersion:${data.template_version || 4}`,
   ]);
 
   const page = pdfDoc.addPage([595.28, 841.89]); // A4
@@ -146,23 +150,74 @@ export async function generateReceiptPdf(data: ReceiptRenderData): Promise<Uint8
     color: COLORS.charcoal,
   });
 
-  // Styled Orange Logo Box
-  page.drawRectangle({
-    x: 36,
-    y: currentY + 28,
-    width: 54,
-    height: 54,
-    borderColor: COLORS.orange,
-    borderWidth: 1.5,
-    color: COLORS.charcoal,
-  });
-  page.drawText("SA", {
-    x: 36 + 12,
-    y: currentY + 44,
-    size: 20,
-    font: fontBold,
-    color: COLORS.orange,
-  });
+  // Dynamic Logo Loader Fallback Chain
+  let logoImage: any = null;
+  const logoWidth = 54;
+  const logoHeight = 54;
+
+  if (data.hostel_logo_url) {
+    try {
+      const response = await fetch(data.hostel_logo_url);
+      if (response.ok) {
+        const imageBytes = await response.arrayBuffer();
+        if (data.hostel_logo_url.toLowerCase().includes(".png")) {
+          logoImage = await pdfDoc.embedPng(imageBytes);
+        } else {
+          logoImage = await pdfDoc.embedJpg(imageBytes);
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to load custom logo from URL:", e);
+    }
+  }
+
+  if (!logoImage) {
+    try {
+      const fs = await import("fs/promises");
+      const path = await import("path");
+      const localPath = path.join(process.cwd(), "public", "hostel_icon.jpeg");
+      const imageBytes = await fs.readFile(localPath);
+      logoImage = await pdfDoc.embedJpg(imageBytes);
+    } catch (e) {
+      console.warn("Failed to load local fallback logo_icon.jpeg:", e);
+    }
+  }
+
+  // Draw logo image if embedded successfully
+  if (logoImage) {
+    page.drawImage(logoImage, {
+      x: 36,
+      y: currentY + 28,
+      width: logoWidth,
+      height: logoHeight,
+    });
+  } else {
+    // Styled Orange Monogram Box Fallback
+    page.drawRectangle({
+      x: 36,
+      y: currentY + 28,
+      width: 54,
+      height: 54,
+      borderColor: COLORS.orange,
+      borderWidth: 1.5,
+      color: COLORS.charcoal,
+    });
+    // Extract initials of hostel name
+    const initials = (data.hostel_name || "Sri Adithya")
+      .split(" ")
+      .map((w) => w[0])
+      .join("")
+      .slice(0, 3)
+      .toUpperCase();
+      
+    page.drawText(initials, {
+      x: 36 + (54 - fontBold.widthOfTextAtSize(initials, 16)) / 2,
+      y: currentY + 44,
+      size: 16,
+      font: fontBold,
+      color: COLORS.orange,
+    });
+  }
 
   // Hostel Title & Subtitle
   const hostelNameObj = sanitizeText(data.hostel_name || "Sri Adithya Boys Hostel");
@@ -232,7 +287,7 @@ export async function generateReceiptPdf(data: ReceiptRenderData): Promise<Uint8
   page.drawText(sanitizeText(data.transaction_id || "N/A"), { x: width / 2 - 60, y: valY, size: 10, font: fontRegular, color: COLORS.textPrimary });
 
   const rightLabel = "RECEIPT VERSION";
-  const rightVal = `v${data.template_version || 3}.0.0`;
+  const rightVal = `v${data.template_version || 4}.0.0`;
   page.drawText(rightLabel, { x: width - 36 - fontBold.widthOfTextAtSize(rightLabel, 8), y: metaY, size: 8, font: fontBold, color: COLORS.textLight });
   page.drawText(rightVal, { x: width - 36 - fontRegular.widthOfTextAtSize(rightVal, 10), y: valY, size: 10, font: fontRegular, color: COLORS.textPrimary });
 
@@ -351,14 +406,16 @@ export async function generateReceiptPdf(data: ReceiptRenderData): Promise<Uint8
   currentY = bottomY - 30;
 
   // --- POST-SETTLEMENT FINANCIAL POSITION & QR CODE VERIFICATION ---
-  const cardY = currentY - 100;
+  // Elevate cards height to 135px to support a minimum 120px QR code cleanly
+  const cardHeight = 135;
+  const cardY = currentY - cardHeight;
   
   // Left Card: Financial Position
   page.drawRectangle({
     x: 36,
     y: cardY,
-    width: 320,
-    height: 100,
+    width: 250,
+    height: cardHeight,
     borderColor: COLORS.border,
     borderWidth: 1,
     color: rgb(250 / 255, 248 / 255, 245 / 255),
@@ -366,7 +423,7 @@ export async function generateReceiptPdf(data: ReceiptRenderData): Promise<Uint8
   
   page.drawText("POST-SETTLEMENT FINANCIAL POSITION", {
     x: 46,
-    y: cardY + 82,
+    y: cardY + 115,
     size: 8,
     font: fontBold,
     color: COLORS.orange,
@@ -375,89 +432,124 @@ export async function generateReceiptPdf(data: ReceiptRenderData): Promise<Uint8
   // Balance Due
   const balDueLabel = "Outstanding Dues:";
   const balDueVal = sanitizeText(formatCurrency(data.outstanding_balance_after || 0, p));
-  page.drawText(balDueLabel, { x: 46, y: cardY + 56, size: 9, font: fontRegular, color: COLORS.textMuted });
-  page.drawText(balDueVal, { x: 170, y: cardY + 56, size: 9, font: fontBold, color: (data.outstanding_balance_after || 0) > 0 ? rgb(220/255, 50/255, 50/255) : COLORS.textPrimary });
+  page.drawText(balDueLabel, { x: 46, y: cardY + 85, size: 9, font: fontRegular, color: COLORS.textMuted });
+  page.drawText(balDueVal, { x: 155, y: cardY + 85, size: 9, font: fontBold, color: (data.outstanding_balance_after || 0) > 0 ? rgb(220/255, 50/255, 50/255) : COLORS.textPrimary });
 
   // Future Credit
   const creditLabel = "Available Future Credit:";
   const creditVal = sanitizeText(formatCurrency(data.future_credit_balance_after || 0, p));
-  page.drawText(creditLabel, { x: 46, y: cardY + 38, size: 9, font: fontRegular, color: COLORS.textMuted });
-  page.drawText(creditVal, { x: 170, y: cardY + 38, size: 9, font: fontBold, color: (data.future_credit_balance_after || 0) > 0 ? COLORS.green : COLORS.textPrimary });
+  page.drawText(creditLabel, { x: 46, y: cardY + 60, size: 9, font: fontRegular, color: COLORS.textMuted });
+  page.drawText(creditVal, { x: 155, y: cardY + 60, size: 9, font: fontBold, color: (data.future_credit_balance_after || 0) > 0 ? COLORS.green : COLORS.textPrimary });
 
   // Status Badge/Text
   const statusLabel = "Account Status:";
   const statusVal = (data.outstanding_balance_after || 0) === 0 ? "PAID / NO DUES" : "PENDING DUES";
-  page.drawText(statusLabel, { x: 46, y: cardY + 20, size: 9, font: fontRegular, color: COLORS.textMuted });
-  page.drawText(statusVal, { x: 170, y: cardY + 20, size: 9, font: fontBold, color: (data.outstanding_balance_after || 0) === 0 ? COLORS.green : COLORS.orange });
+  page.drawText(statusLabel, { x: 46, y: cardY + 35, size: 9, font: fontRegular, color: COLORS.textMuted });
+  page.drawText(statusVal, { x: 155, y: cardY + 35, size: 9, font: fontBold, color: (data.outstanding_balance_after || 0) === 0 ? COLORS.green : COLORS.orange });
 
-  // Right Card: QR Code Verification Box
+  // Right Card: QR Code Verification Box (250 width, 135 height)
   page.drawRectangle({
-    x: 376,
+    x: 309.28,
     y: cardY,
-    width: 183.28,
-    height: 100,
+    width: 250,
+    height: cardHeight,
     borderColor: COLORS.orange,
     borderWidth: 1,
     color: rgb(250 / 255, 248 / 255, 245 / 255),
   });
-  
-  const qrX = 388;
-  const qrY = cardY + 20;
-  page.drawRectangle({
-    x: qrX,
-    y: qrY,
-    width: 60,
-    height: 60,
-    borderColor: COLORS.charcoal,
-    borderWidth: 1,
-    color: COLORS.white,
-  });
-  
-  // Finder Patterns (QR Corners)
-  page.drawRectangle({ x: qrX + 4, y: qrY + 44, width: 12, height: 12, color: COLORS.charcoal });
-  page.drawRectangle({ x: qrX + 6, y: qrY + 46, width: 8, height: 8, color: COLORS.white });
-  page.drawRectangle({ x: qrX + 8, y: qrY + 48, width: 4, height: 4, color: COLORS.charcoal });
 
-  page.drawRectangle({ x: qrX + 44, y: qrY + 44, width: 12, height: 12, color: COLORS.charcoal });
-  page.drawRectangle({ x: qrX + 46, y: qrY + 46, width: 8, height: 8, color: COLORS.white });
-  page.drawRectangle({ x: qrX + 48, y: qrY + 48, width: 4, height: 4, color: COLORS.charcoal });
+  // Generate QR code image streams
+  let qrImageObj: any = null;
+  const qrSize = 120;
+  const qrX = 309.28 + 8;
+  const qrY = cardY + 7.5;
 
-  page.drawRectangle({ x: qrX + 4, y: qrY + 4, width: 12, height: 12, color: COLORS.charcoal });
-  page.drawRectangle({ x: qrX + 6, y: qrY + 6, width: 8, height: 8, color: COLORS.white });
-  page.drawRectangle({ x: qrX + 8, y: qrY + 8, width: 4, height: 4, color: COLORS.charcoal });
-  
-  // Dotted QR pixel clusters
-  page.drawRectangle({ x: qrX + 24, y: qrY + 36, width: 6, height: 6, color: COLORS.charcoal });
-  page.drawRectangle({ x: qrX + 32, y: qrY + 24, width: 8, height: 4, color: COLORS.charcoal });
-  page.drawRectangle({ x: qrX + 20, y: qrY + 16, width: 4, height: 8, color: COLORS.charcoal });
-  page.drawRectangle({ x: qrX + 40, y: qrY + 8, width: 6, height: 6, color: COLORS.charcoal });
+  if (data.verification_url) {
+    try {
+      const qrBuffer = await QRCode.toBuffer(data.verification_url, {
+        type: "png",
+        width: 240,
+        margin: 1,
+      });
+      qrImageObj = await pdfDoc.embedPng(qrBuffer);
+    } catch (err) {
+      console.error("Failed to generate QR code:", err);
+    }
+  }
 
-  // QR labels
-  page.drawText("VERIFIED RECEIPT", {
-    x: qrX + 68,
-    y: cardY + 70,
-    size: 7,
+  if (qrImageObj) {
+    page.drawImage(qrImageObj, {
+      x: qrX,
+      y: qrY,
+      width: qrSize,
+      height: qrSize,
+    });
+  } else {
+    // Elegant fallback QR mockup
+    page.drawRectangle({
+      x: qrX,
+      y: qrY,
+      width: qrSize,
+      height: qrSize,
+      borderColor: COLORS.charcoal,
+      borderWidth: 1,
+      color: COLORS.white,
+    });
+    // Finder Patterns (QR Corners)
+    page.drawRectangle({ x: qrX + 8, y: qrY + 120 - 24, width: 16, height: 16, color: COLORS.charcoal });
+    page.drawRectangle({ x: qrX + 10, y: qrY + 120 - 22, width: 12, height: 12, color: COLORS.white });
+    page.drawRectangle({ x: qrX + 12, y: qrY + 120 - 20, width: 8, height: 8, color: COLORS.charcoal });
+    
+    page.drawRectangle({ x: qrX + 120 - 24, y: qrY + 120 - 24, width: 16, height: 16, color: COLORS.charcoal });
+    page.drawRectangle({ x: qrX + 120 - 22, y: qrY + 120 - 22, width: 12, height: 12, color: COLORS.white });
+    page.drawRectangle({ x: qrX + 120 - 20, y: qrY + 120 - 20, width: 8, height: 8, color: COLORS.charcoal });
+
+    page.drawRectangle({ x: qrX + 8, y: qrY + 8, width: 16, height: 16, color: COLORS.charcoal });
+    page.drawRectangle({ x: qrX + 10, y: qrY + 10, width: 12, height: 12, color: COLORS.white });
+    page.drawRectangle({ x: qrX + 12, y: qrY + 12, width: 8, height: 8, color: COLORS.charcoal });
+  }
+
+  // QR labels positioned to the right of the 120px QR code (x = 309.28 + 138)
+  const lblX = 309.28 + 138;
+  page.drawText("VERIFIED", {
+    x: lblX,
+    y: cardY + 95,
+    size: 9,
     font: fontBold,
     color: COLORS.textPrimary,
   });
-  page.drawText("Scan to check", {
-    x: qrX + 68,
-    y: cardY + 54,
-    size: 6,
+  page.drawText("RECEIPT", {
+    x: lblX,
+    y: cardY + 83,
+    size: 9,
+    font: fontBold,
+    color: COLORS.orange,
+  });
+  page.drawText("Scan to verify", {
+    x: lblX,
+    y: cardY + 60,
+    size: 8,
     font: fontRegular,
     color: COLORS.textMuted,
   });
   page.drawText("authenticity", {
-    x: qrX + 68,
-    y: cardY + 44,
-    size: 6,
+    x: lblX,
+    y: cardY + 50,
+    size: 8,
     font: fontRegular,
     color: COLORS.textMuted,
   });
-  page.drawText("[ Future Verification ]", {
-    x: qrX + 68,
-    y: cardY + 24,
-    size: 5,
+  page.drawText("Secure HMAC", {
+    x: lblX,
+    y: cardY + 30,
+    size: 7,
+    font: fontItalic,
+    color: COLORS.textLight,
+  });
+  page.drawText("Signed Link", {
+    x: lblX,
+    y: cardY + 20,
+    size: 7,
     font: fontItalic,
     color: COLORS.textLight,
   });
@@ -487,25 +579,21 @@ export async function generateReceiptPdf(data: ReceiptRenderData): Promise<Uint8
   }
   page.drawText(line, { x: 36, y: noteY, size: 8, font: fontItalic, color: COLORS.textLight });
 
-  // --- MICRO-TYPOGRAPHY AUDIT FOOTER ---
-  const metadataText = `System Version: v2.0.0 | Payment ID: ${data.payment_id || "N/A"} | Tenant ID: ${data.tenant_id || "N/A"} | Receipt ID: ${data.receipt_id || "N/A"} | Template: v${data.template_version || 3}`;
-  page.drawText(metadataText, {
-    x: 36,
-    y: 52,
-    size: 6,
-    font: fontRegular,
-    color: COLORS.textLight,
-  });
-
-  // --- BOTTOM BAR ---
-  const footerHeight = 40;
+  // --- BOTTOM BAR WITH CONTACT AND SUPPORT DETAILS ---
+  const footerHeight = 50;
   page.drawRectangle({
     x: 0, y: 0, width: width, height: footerHeight, color: COLORS.charcoal
   });
   
-  page.drawText("Thank you for your timely payment.", { x: 36, y: 15, size: 9, font: fontRegular, color: rgb(220 / 255, 220 / 255, 220 / 255) });
-  const rightFooter = "Sri Adithya Boys Hostel";
-  page.drawText(rightFooter, { x: width - 36 - fontRegular.widthOfTextAtSize(rightFooter, 9), y: 15, size: 9, font: fontRegular, color: COLORS.orange });
+  // Left: Support contact details
+  page.drawText("Support & Queries", { x: 36, y: 28, size: 8, font: fontBold, color: COLORS.orange });
+  page.drawText("sriadithyahostels@gmail.com | +91 99638 23824", { x: 36, y: 14, size: 9, font: fontRegular, color: rgb(220 / 255, 220 / 255, 220 / 255) });
+  
+  // Right: Branding details
+  const brandName = "Sri Adithya Boys Hostel";
+  const brandSub = "Secure Digital Receipt";
+  page.drawText(brandName, { x: width - 36 - fontBold.widthOfTextAtSize(brandName, 9), y: 28, size: 9, font: fontBold, color: COLORS.orange });
+  page.drawText(brandSub, { x: width - 36 - fontRegular.widthOfTextAtSize(brandSub, 8), y: 14, size: 8, font: fontRegular, color: rgb(180 / 255, 180 / 180, 180 / 255) });
 
   return await pdfDoc.save();
 }

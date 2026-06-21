@@ -20,6 +20,7 @@ const ResetPasswordPage = lazy(() => import('@/app/pages/ResetPasswordPage').the
 const ActivateAccountPage = lazy(() => import('@/portal/pages/ActivateAccountPage').then((m) => ({ default: m.ActivateAccountPage })));
 const CompleteProfilePage = lazy(() => import('@/portal/pages/CompleteProfilePage').then((m) => ({ default: m.CompleteProfilePage })));
 const AuthRouteShell = lazy(() => import('@/app/providers/AuthRouteShell').then((m) => ({ default: m.AuthRouteShell })));
+const ReceiptVerificationPage = lazy(() => import('@/app/pages/public/ReceiptVerificationPage').then((m) => ({ default: m.ReceiptVerificationPage })));
 
 function PublicRouteFallback() {
   return <div className="min-h-screen bg-slate-50" />;
@@ -69,6 +70,7 @@ export function PublicRoutes() {
         <Route path="/refund-policy" element={<LegalPage />} />
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/visit/:hostelSlug" element={<VisitPage />} />
+        <Route path="/verify/r/:token" element={<ReceiptVerificationPage />} />
       </Route>
 
       {/* ── Auth & utility ───────────────────────────────────────────── */}

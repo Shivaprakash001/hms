@@ -22,6 +22,7 @@ import { incrementPdfCache } from "@/lib/metrics";
 import { acquireSystemLock, releaseSystemLock, sleep } from "@/lib/lock";
 import { financialService } from "./financial-service";
 import { tenantFinancialLedgerService } from "./tenant-financial-ledger-service";
+import { generateVerificationToken } from "@/lib/receipt-verify";
 
 async function resolveHostelForPayment(payment: any): Promise<{ hostel: any; prefs: any }> {
   const ownerId = payment.tenants?.owner_id || payment.owner_id || "";
@@ -51,7 +52,7 @@ async function resolveHostelForPayment(payment: any): Promise<{ hostel: any; pre
 
 // ── Template version: bump when receipt layout changes ──
 // This triggers a one-time re-render for all existing receipts.
-const RECEIPT_TEMPLATE_VERSION = 3;
+const RECEIPT_TEMPLATE_VERSION = 4;
 
 const RECEIPT_NUMBER_RETRY_LIMIT = 10;
 
@@ -360,6 +361,9 @@ export class ReceiptService {
       const future_credit_balance_after = ledgerBalance.future_rent_credit;
 
       // 3. Build render data
+      const verificationToken = generateVerificationToken(receipt.id, receipt.issued_at);
+      const verification_url = `https://sriadithyahostels.in/verify/r/${verificationToken}`;
+
       const renderData: ReceiptRenderData = {
         // Hostel
         hostel_name: hostel?.name || receipt.hostel_name || "HMS Hostel",
@@ -415,6 +419,9 @@ export class ReceiptService {
         // Preferences
         prefs,
         footer: prefs.receipt_footer || null,
+
+        // Verification
+        verification_url,
       };
 
       // 4. Render PDF directly via pdf-lib
@@ -508,6 +515,9 @@ export class ReceiptService {
       label: ledgerEntry.reason === "FUTURE_RENT_CREDIT_TOPUP" ? "Future Rent Credit Top-up" : "Ledger Credit Entry",
     }];
 
+    const verificationToken = generateVerificationToken(ledgerEntry.id, ledgerEntry.created_at);
+    const verification_url = `https://sriadithyahostels.in/verify/r/${verificationToken}`;
+
     const renderData: ReceiptRenderData = {
       // Hostel
       hostel_name: hostel.name || "HMS Hostel",
@@ -561,6 +571,9 @@ export class ReceiptService {
       // Preferences
       prefs,
       footer: prefs.receipt_footer || null,
+
+      // Verification
+      verification_url,
     };
 
     const pdfUint8Array = await generateReceiptPdf(renderData);
@@ -601,6 +614,9 @@ export class ReceiptService {
     }
 
     // Minimal fallback with limited data
+    const verificationToken = generateVerificationToken(receipt.payment_id || receipt.receipt_number || "minimal", receipt.issued_at);
+    const verification_url = `https://sriadithyahostels.in/verify/r/${verificationToken}`;
+
     const renderData: ReceiptRenderData = {
       hostel_name: receipt.hostel_name || "HMS Hostel",
       hostel_address: "",
@@ -647,6 +663,9 @@ export class ReceiptService {
         timezone: context?.timezone || "Asia/Kolkata",
       },
       footer: context?.footer,
+
+      // Verification
+      verification_url,
     };
 
     const pdfUint8Array = await generateReceiptPdf(renderData);
