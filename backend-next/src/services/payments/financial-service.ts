@@ -330,31 +330,49 @@ export class FinancialService {
     pending_amount: number;
     last_paid_at: Date | null;
     last_payment_amount: number;
-    payment_status: "PAID" | "PARTIAL" | "PENDING" | "NOT_GENERATED";
+    payment_status: "PAID" | "PARTIAL" | "PENDING" | "NOT_GENERATED" | "OVERDUE";
   } {
     let totalBilled = 0;
     let totalPaid   = 0;
     let lastPaidAt: Date | null = null;
     let lastPaymentAmount = 0;
+    let hasOverdueObligation = false;
+
+    const now = new Date();
+    const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
     for (const ob of obligationRows) {
       if (ob.status === "WAIVED") continue;
-      totalBilled += Number(ob.total_amount || ob.amount);
+      const totalAmt = Number(ob.total_amount || ob.amount);
+      totalBilled += totalAmt;
+      
+      let obPaid = 0;
       for (const p of ob.payments) {
         const amt = Number(p.amount_paid);
         totalPaid += amt;
+        obPaid += amt;
         const pd = new Date(p.payment_date);
         if (!lastPaidAt || pd > lastPaidAt) {
           lastPaidAt = pd;
           lastPaymentAmount = amt;
         }
       }
+
+      const remaining = Math.max(0, totalAmt - obPaid);
+      if (remaining > 0 && ob.status !== "PAID" && ob.due_date) {
+        const dueDate = new Date(ob.due_date);
+        const dueDateUTC = new Date(Date.UTC(dueDate.getUTCFullYear(), dueDate.getUTCMonth(), dueDate.getUTCDate()));
+        if (dueDateUTC.getTime() < todayUTC.getTime()) {
+          hasOverdueObligation = true;
+        }
+      }
     }
 
     const pending = Math.max(0, totalBilled - totalPaid);
-    let payment_status: "PAID" | "PARTIAL" | "PENDING" | "NOT_GENERATED" = "PENDING";
+    let payment_status: "PAID" | "PARTIAL" | "PENDING" | "NOT_GENERATED" | "OVERDUE" = "PENDING";
     if (totalBilled === 0)                         payment_status = "NOT_GENERATED";
     else if (pending <= 0)                         payment_status = "PAID";
+    else if (hasOverdueObligation)                 payment_status = "OVERDUE";
     else if (totalPaid > 0)                        payment_status = "PARTIAL";
 
     return {
@@ -587,6 +605,7 @@ export interface ObligationRow {
   amount: number | string;
   total_amount?: number | string;
   status: string;
+  due_date?: Date | string | null;
   payments: Array<{ amount_paid: number | string; payment_date: Date | string }>;
 }
 
