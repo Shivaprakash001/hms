@@ -599,10 +599,20 @@ export function TenantFinancialsPage() {
     let nextInstallmentDays = -1;
     
     if (nextInstallment) {
-      const diffTime = new Date(nextInstallment.due_date).getTime() - today.getTime();
-      const daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
-      nextInstallmentText = `Next: ${fmt(nextInstallment.total_amount)} · Due ${fmtDate(nextInstallment.due_date)}`;
-      nextInstallmentDays = daysRemaining;
+      const rentGenDate = new Date(nextInstallment.period_start || nextInstallment.rent_month);
+      rentGenDate.setHours(0, 0, 0, 0);
+
+      if (today < rentGenDate) {
+        const diffTime = rentGenDate.getTime() - today.getTime();
+        const daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+        nextInstallmentText = `Next: ${fmt(nextInstallment.total_amount)} · Next Rent Day: ${fmtDate(rentGenDate)}`;
+        nextInstallmentDays = daysRemaining;
+      } else {
+        const diffTime = new Date(nextInstallment.due_date).getTime() - today.getTime();
+        const daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+        nextInstallmentText = `Next: ${fmt(nextInstallment.total_amount)} · Due ${fmtDate(nextInstallment.due_date)}`;
+        nextInstallmentDays = daysRemaining;
+      }
     }
 
     return {
