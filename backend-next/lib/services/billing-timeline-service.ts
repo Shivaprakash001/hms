@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import type { PaymentFrequency } from "@/lib/services/billing-schedule-service";
+import { billingScheduleService, type PaymentFrequency } from "@/lib/services/billing-schedule-service";
 import { hostelPolicyService } from "@/lib/services/hostel-policy-service";
 
 function money(value: unknown) {
@@ -162,6 +162,55 @@ export class BillingTimelineService {
       return String(a.timeline_id).localeCompare(String(b.timeline_id));
     });
 
+    // Find the latest rent obligation
+    const rentObligations = obligations.filter((ob) => ob.obligation_type === "RENT");
+    let latestRentMonth: Date | null = tenant.payment_frequency_effective_from
+      ? new Date(tenant.payment_frequency_effective_from)
+      : null;
+
+    if (rentObligations.length > 0) {
+      const maxMonth = rentObligations.reduce((max, ob) => {
+        const d = new Date(ob.rent_month);
+        return d > max ? d : max;
+      }, new Date(0));
+      if (maxMonth.getTime() > 0) {
+        latestRentMonth = maxMonth;
+      }
+    }
+
+    if (!latestRentMonth) {
+      const activeAllocation = await prisma.roomAllocation.findFirst({
+        where: { tenant_id: tenantId, is_active: true },
+        select: { start_date: true },
+      });
+      latestRentMonth = activeAllocation?.start_date ? new Date(activeAllocation.start_date) : new Date();
+    }
+
+    const months = billingScheduleService.periodMonths(activeFrequency);
+    const nextRentMonth = new Date(Date.UTC(latestRentMonth.getUTCFullYear(), latestRentMonth.getUTCMonth() + months, 1));
+    const nextGenDate = new Date(Date.UTC(nextRentMonth.getUTCFullYear(), nextRentMonth.getUTCMonth(), autoRentDay));
+
+    const nextInstallment = billingScheduleService.buildInstallment({
+      frequency: activeFrequency,
+      anchorDate: nextRentMonth,
+      monthlyRent: tenant.monthly_rent ? Number(tenant.monthly_rent) : 0,
+      maintenanceAmount: tenant.maintenance_charge ? Number(tenant.maintenance_charge) : 0,
+      dueDay,
+      autoRentDay,
+      policy: policyResponse?.policy?.preferences_config || {},
+    });
+
+    const nextRentGeneration = {
+      next_rent_month: nextRentMonth.toISOString(),
+      next_rent_generation_date: nextGenDate.toISOString(),
+      next_installment_due_date: nextInstallment.due_date.toISOString(),
+      next_installment_amount: nextInstallment.amount,
+      next_maintenance_amount: nextInstallment.maintenance_amount,
+      period_start: nextInstallment.period_start.toISOString(),
+      period_end: nextInstallment.period_end.toISOString(),
+      installment_label: nextInstallment.installment_label,
+    };
+
     return {
       tenant_id: tenant.id,
       active_frequency: activeFrequency,
@@ -175,6 +224,7 @@ export class BillingTimelineService {
       payment_items: [...paymentItems, ...rentAdvanceItems],
       rent_advance_items: rentAdvanceItems,
       projected_items: projectedItems,
+      next_rent_generation: nextRentGeneration,
     };
   }
 }

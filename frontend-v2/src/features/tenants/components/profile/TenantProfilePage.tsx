@@ -43,8 +43,7 @@ const billingTimelineLabel = (item: Record<string, unknown>) => {
   return String(item.type).replace('PROJECTED_', '').replaceAll('_', ' ');
 };
 const billingTimelineAmount = (item: Record<string, unknown>) => {
-  if (item.type === 'PAYMENT' || item.type === 'ADVANCE_CREDIT') return Number(item.amount ?? 0);
-  return Number(item.remaining ?? item.amount ?? 0);
+  return Number(item.amount ?? 0);
 };
 const billingTimelineDateVerb = (item: Record<string, unknown>) =>
   item.type === 'PAYMENT' || item.type === 'ADVANCE_CREDIT' ? 'Paid' : 'Due';
@@ -256,22 +255,40 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   const overdueAmount = Number(paymentSummary?.overdue_amount ?? overview?.overdue_amount ?? 0);
   const isOverdue = overdueAmount > 0;
 
-  const mergedTimeline = [
-    ...recentPayments.map((p: any) => ({
-      id: `p-${p.id}`,
-      date: new Date(p.date ?? p.payment_date),
-      title: 'Payment Received',
-      subtitle: `Paid via ${p.method || 'Cash'}${p.reference_number ? ` · Ref: ${p.reference_number}` : ''}`,
-      dateVerb: 'Paid on',
-      amount: Number(p.amount ?? p.amount_paid ?? 0),
-      status: 'Paid',
-      statusColor: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
-      tone: 'border-emerald-100 bg-emerald-50/20',
-    })),
-    ...timelineItems.map((item: any) => {
-      const amount = billingTimelineAmount(item);
-      const isCovered = item.state === 'covered';
+  const mergedTimeline = (timelineItems || [])
+    .map((item: any) => {
+      const isCovered = item.state === 'covered' || item.state === 'paid';
       const isUpcoming = item.state === 'upcoming';
+
+      if (item.type === 'PAYMENT') {
+        return {
+          id: `t-${item.timeline_id ?? item.obligation_id}`,
+          date: new Date(item.due_date),
+          title: 'Payment Received',
+          subtitle: `Paid via ${item.payment_method || 'Cash'}${item.reference_number ? ` · Ref: ${item.reference_number}` : ''}`,
+          dateVerb: 'Paid on',
+          amount: Number(item.amount ?? 0),
+          status: 'Paid',
+          statusColor: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
+          tone: 'border-emerald-100 bg-emerald-50/20',
+        };
+      }
+
+      if (item.type === 'ADVANCE_CREDIT') {
+        return {
+          id: `t-${item.timeline_id ?? item.obligation_id}`,
+          date: new Date(item.due_date),
+          title: 'Future Rent Credit',
+          subtitle: `Credit added via ${item.payment_method || 'Offline'}${item.reference_number ? ` · Ref: ${item.reference_number}` : ''}${item.notes ? ` · Note: ${item.notes}` : ''}`,
+          dateVerb: 'Added on',
+          amount: Number(item.amount ?? 0),
+          status: 'Paid',
+          statusColor: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
+          tone: 'border-emerald-100 bg-emerald-50/20',
+        };
+      }
+
+      const amount = billingTimelineAmount(item);
       return {
         id: `t-${item.timeline_id ?? item.obligation_id}`,
         date: new Date(item.due_date),
@@ -291,8 +308,8 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
           ? 'border-dashed border-accent/20 bg-accent/5'
           : 'border-rose-100 bg-rose-50/20',
       };
-    }),
-  ].sort((a, b) => b.date.getTime() - a.date.getTime());
+    })
+    .sort((a, b) => b.date.getTime() - a.date.getTime());
 
   return (
     <div className="px-4 py-5 max-w-3xl mx-auto pb-24 min-w-0">
@@ -818,6 +835,34 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
                   <CalendarDays className="w-4 h-4 text-accent" />
                   <p className="text-sm font-semibold text-foreground">Financial Timeline</p>
                 </div>
+                {billingTimeline.data?.next_rent_generation && (
+                  <div className="mb-4 rounded-xl border border-accent/20 bg-accent/5 p-3.5 text-xs shadow-sm">
+                    <div className="flex justify-between items-start gap-4">
+                      <div>
+                        <p className="font-bold text-foreground">Next Rent Generation</p>
+                        <p className="text-muted-foreground mt-1 text-[11px] leading-relaxed">
+                          Scheduled: {new Date(billingTimeline.data.next_rent_generation.next_rent_generation_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </p>
+                        <p className="text-muted-foreground text-[11px] leading-relaxed">
+                          Period: {new Date(billingTimeline.data.next_rent_generation.period_start).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="font-extrabold text-foreground text-sm">
+                          ₹{billingTimeline.data.next_rent_generation.next_installment_amount.toLocaleString('en-IN')}
+                        </p>
+                        <p className="text-muted-foreground mt-1 text-[11px]">
+                          Due by: {new Date(billingTimeline.data.next_rent_generation.next_installment_due_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </p>
+                        {billingTimeline.data.next_rent_generation.next_maintenance_amount > 0 && (
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            + ₹{billingTimeline.data.next_rent_generation.next_maintenance_amount.toLocaleString('en-IN')} Maintenance
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {mergedTimeline.length === 0 ? (
                   <p className="text-xs text-muted-foreground py-6 text-center">No billing or payment history recorded yet.</p>
                 ) : (
