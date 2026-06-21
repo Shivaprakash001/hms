@@ -190,8 +190,7 @@ function BulkActions({
     const overdueTenants = allTenants.filter(
       (t) =>
         t.status === 'ACTIVE' &&
-        t.outstandingAmount > 0 &&
-        ['PENDING', 'PARTIAL'].includes(String(t.paymentStatus).toUpperCase())
+        String(t.paymentStatus).toUpperCase() === 'OVERDUE'
     );
     if (overdueTenants.length === 0) {
       toast.info('No overdue tenants right now');

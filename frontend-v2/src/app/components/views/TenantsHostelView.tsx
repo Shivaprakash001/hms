@@ -39,8 +39,7 @@ export function TenantsHostelView() {
       tenants.filter(
         (t) =>
           t.status === 'ACTIVE' &&
-          t.outstandingAmount > 0 &&
-          ['PENDING', 'PARTIAL'].includes(String(t.paymentStatus).toUpperCase())
+          String(t.paymentStatus).toUpperCase() === 'OVERDUE'
       ),
     [tenants]
   );

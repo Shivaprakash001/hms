@@ -239,7 +239,7 @@ export class TenantService {
             include: { room: true },
           },
           rent_obligations: {
-            where: { status: { in: ["PENDING", "PARTIAL"] } },
+            where: { status: { in: ["PENDING", "PARTIAL", "PAID"] }, is_superseded: false },
             include: { payments: { select: { amount_paid: true, payment_date: true } } }
           },
           move_out_requests: {
@@ -748,7 +748,7 @@ export class TenantService {
           include: { room: true },
         },
         rent_obligations: {
-          where: { status: { in: ["PENDING", "PARTIAL"] } },
+          where: { status: { in: ["PENDING", "PARTIAL", "PAID"] }, is_superseded: false },
           include: { payments: { select: { amount_paid: true, payment_date: true, payment_method: true, reference_number: true } } }
         },
         identification_documents: {

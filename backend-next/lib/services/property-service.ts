@@ -656,7 +656,7 @@ export class PropertyService {
                     select: { name: true, email: true, phone: true },
                   },
                   rent_obligations: {
-                    where: { status: { in: ["PENDING", "PARTIAL"] } },
+                    where: { status: { in: ["PENDING", "PARTIAL", "PAID"] }, is_superseded: false },
                     include: { payments: { select: { amount_paid: true, payment_date: true } } },
                   },
                 },
@@ -747,7 +747,7 @@ export class PropertyService {
                   select: { name: true, email: true, phone: true },
                 },
                 rent_obligations: {
-                  where: { status: { in: ["PENDING", "PARTIAL"] } },
+                  where: { status: { in: ["PENDING", "PARTIAL", "PAID"] }, is_superseded: false },
                   include: { payments: { select: { amount_paid: true, payment_date: true } } }
                 }
               }

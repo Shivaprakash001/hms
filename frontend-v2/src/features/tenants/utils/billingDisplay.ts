@@ -21,8 +21,19 @@ export function getTenantBillingDisplay(tenant: NormalizedTenant): TenantBilling
       outstandingLabel: 'Not billed',
       mobileLabel: 'Billing pending',
       title: 'Rent has not been generated for this tenant yet.',
-      dueClassName: 'border-amber-200 bg-amber-50 text-amber-700',
-      outstandingClassName: 'text-amber-700',
+      dueClassName: 'border-slate-200 bg-slate-50 text-slate-500',
+      outstandingClassName: 'text-slate-500',
+    };
+  }
+
+  if (paymentStatus === 'OVERDUE') {
+    return {
+      dueLabel: 'Overdue',
+      outstandingLabel: fmt(outstandingAmount),
+      mobileLabel: `Overdue ${fmt(outstandingAmount)}`,
+      title: 'Tenant has an overdue balance.',
+      dueClassName: 'border-red-200 bg-red-50 text-red-700 font-medium',
+      outstandingClassName: 'text-destructive font-medium',
     };
   }
 
@@ -36,8 +47,8 @@ export function getTenantBillingDisplay(tenant: NormalizedTenant): TenantBilling
       title: isPartial ? 'Tenant has a partial outstanding balance.' : 'Tenant has an outstanding balance.',
       dueClassName: isPartial
         ? 'border-orange-200 bg-orange-50 text-orange-700'
-        : 'border-red-200 bg-red-50 text-red-700',
-      outstandingClassName: isPartial ? 'text-orange-700' : 'text-destructive',
+        : 'border-amber-200 bg-amber-50 text-amber-700',
+      outstandingClassName: isPartial ? 'text-orange-700' : 'text-amber-700',
     };
   }
 

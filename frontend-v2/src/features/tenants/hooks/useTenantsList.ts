@@ -16,9 +16,7 @@ function applyLifecycleFilter(tenants: NormalizedTenant[], filter: LifecycleFilt
       return tenants.filter((t) => t.status === 'MOVE_OUT_REQUESTED');
     case 'overdue':
       return tenants.filter(
-        (t) =>
-          t.outstandingAmount > 0 &&
-          ['PENDING', 'PARTIAL'].includes(String(t.paymentStatus).toUpperCase())
+        (t) => String(t.paymentStatus).toUpperCase() === 'OVERDUE'
       );
     case 'unverified':
       return tenants.filter((t) => !t.documentVerified && t.status === 'ACTIVE');
