@@ -7,6 +7,7 @@ import { ownerService } from '@features/owners/api';
 import { paymentService } from '@features/payments/api';
 import { tenantService } from '@features/tenants/api';
 import { moveOutService } from '@features/move-out/api';
+import { agreementService } from '@features/agreements/api';
 import { queryKeys } from '@lib/queryKeys';
 import { RecordPaymentModal } from '../modals/RecordPaymentModal';
 
@@ -56,7 +57,7 @@ export function AlertsView() {
   const [selectedHostelId, setSelectedHostelId] = useState<string | null>(null);
   const [showHostelPicker, setShowHostelPicker] = useState(false);
   const [recordPayment, setRecordPayment] = useState<{ hostelId: string; dueId?: string; amount?: string } | null>(null);
-  const [activeFilter, setActiveFilter] = useState<'all' | 'overdue' | 'upcoming' | 'docs' | 'payments' | 'move-out'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'overdue' | 'renewals' | 'docs' | 'payments' | 'move-out'>('all');
 
   const { data: hostelsData } = useQuery({
     queryKey: queryKeys.owner.hostels(),
@@ -141,6 +142,18 @@ export function AlertsView() {
     (req) => req.status !== 'COMPLETED' && req.status !== 'REJECTED' && req.status !== 'CANCELLED'
   );
 
+  const { data: renewalQueueData } = useQuery({
+    queryKey: ['agreements', 'renewal-queue', activeHostelId ?? 'none', 'all'],
+    queryFn: () => agreementService.getRenewalQueue({ hostelId: activeHostelId || '', filter: 'all' }),
+    enabled: !!activeHostelId,
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: true,
+  });
+
+  const renewalRequests: Record<string, any>[] = Array.isArray(renewalQueueData?.renewals)
+    ? renewalQueueData.renewals
+    : [];
+
   const confirmPaymentMutation = useMutation({
     mutationFn: (attemptId: string) => paymentService.confirmPayment(attemptId),
     onSuccess: () => {
@@ -195,7 +208,6 @@ export function AlertsView() {
   });
 
   const overdueList = sortedDues.filter((d) => d.due_date && new Date(String(d.due_date)).getTime() < now);
-  const pendingList = sortedDues.filter((d) => !d.due_date || new Date(String(d.due_date)).getTime() >= now);
 
   // Group overdue rent by tenant
   const groupedOverdueMap: Record<string, any> = {};
@@ -240,50 +252,6 @@ export function AlertsView() {
     }
   }
   const groupedOverdueList = Object.values(groupedOverdueMap);
-
-  // Group pending dues (Upcoming Rent) by tenant
-  const groupedPendingMap: Record<string, any> = {};
-  for (const due of pendingList) {
-    const tId = firstNonEmptyString(due.tenant_id, due.tenantId);
-    if (!tId) continue;
-    const amount = dueBalance(due);
-    if (amount <= 0) continue;
-
-    if (!groupedPendingMap[tId]) {
-      groupedPendingMap[tId] = {
-        tenant_id: tId,
-        tenant_name: String(due.tenant_name ?? due.name ?? 'Tenant'),
-        room_no: String(due.room_no ?? due.room_number ?? 'N/A'),
-        tenant_phone: String(due.phone ?? due.tenant_phone ?? due.tenantPhone ?? ''),
-        photo_url: due.photo_url,
-        avatar: due.avatar,
-        tenant_avatar: due.tenant_avatar,
-        tenant_avatar_url: due.tenant_avatar_url,
-        avatar_url: due.avatar_url,
-        total_amount: 0,
-        soonest_due_date: due.due_date ? String(due.due_date) : '',
-        dues_count: 0,
-        soonest_due_id: String(due.obligation_id ?? due.id ?? ''),
-        dues: [],
-      };
-    }
-
-    const entry = groupedPendingMap[tId];
-    entry.total_amount += amount;
-    entry.dues_count += 1;
-    entry.dues.push(due);
-
-    if (due.due_date && entry.soonest_due_date) {
-      if (new Date(String(due.due_date)).getTime() < new Date(entry.soonest_due_date).getTime()) {
-        entry.soonest_due_date = String(due.due_date);
-        entry.soonest_due_id = String(due.obligation_id ?? due.id ?? '');
-      }
-    } else if (due.due_date) {
-      entry.soonest_due_date = String(due.due_date);
-      entry.soonest_due_id = String(due.obligation_id ?? due.id ?? '');
-    }
-  }
-  const groupedPendingList = Object.values(groupedPendingMap);
 
   // Group pending payments by tenant
   const groupedPaymentsMap: Record<string, any> = {};
@@ -350,27 +318,27 @@ export function AlertsView() {
     groupedPaymentsList.length +
     groupedBillingList.length +
     groupedDocsList.length +
-    activeMoveOutRequests.length;
+    activeMoveOutRequests.length +
+    renewalRequests.length;
 
   const showHighPriority =
     groupedOverdueList.length > 0 &&
     (activeFilter === 'all' || activeFilter === 'overdue');
 
   const showMediumPriority =
-    (groupedPaymentsList.length > 0 || groupedBillingList.length > 0 || activeMoveOutRequests.length > 0) &&
-    (activeFilter === 'all' || activeFilter === 'payments' || activeFilter === 'move-out');
+    (groupedPaymentsList.length > 0 || groupedBillingList.length > 0 || activeMoveOutRequests.length > 0 || renewalRequests.length > 0) &&
+    (activeFilter === 'all' || activeFilter === 'payments' || activeFilter === 'move-out' || activeFilter === 'renewals');
 
   const showLowPriority =
-    (groupedDocsList.length > 0 && (activeFilter === 'all' || activeFilter === 'docs')) ||
-    (groupedPendingList.length > 0 && (activeFilter === 'all' || activeFilter === 'upcoming'));
+    groupedDocsList.length > 0 && (activeFilter === 'all' || activeFilter === 'docs');
 
   const hasData =
     groupedOverdueList.length > 0 ||
-    groupedPendingList.length > 0 ||
     groupedDocsList.length > 0 ||
     groupedBillingList.length > 0 ||
     groupedPaymentsList.length > 0 ||
-    activeMoveOutRequests.length > 0;
+    activeMoveOutRequests.length > 0 ||
+    renewalRequests.length > 0;
 
   return (
     <div className="px-4 py-5 space-y-5 min-w-0">
@@ -429,17 +397,19 @@ export function AlertsView() {
             <span className="w-1.5 h-1.5 rounded-full bg-[#EF4444] shrink-0" style={{ display: activeFilter === 'overdue' ? 'none' : 'inline-block' }} />
             Overdue {groupedOverdueList.length}
           </button>
+
           <button
-            onClick={() => setActiveFilter(activeFilter === 'upcoming' ? 'all' : 'upcoming')}
+            onClick={() => setActiveFilter(activeFilter === 'renewals' ? 'all' : 'renewals')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all shrink-0 ${
-              activeFilter === 'upcoming'
+              activeFilter === 'renewals'
                 ? 'bg-[#F59E0B] text-white border-transparent shadow-sm'
                 : 'bg-[#F59E0B]/8 text-[#F59E0B] border-[#F59E0B]/20 hover:bg-[#F59E0B]/15'
             }`}
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B] shrink-0" style={{ display: activeFilter === 'upcoming' ? 'none' : 'inline-block' }} />
-            Upcoming {groupedPendingList.length}
+            <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B] shrink-0" style={{ display: activeFilter === 'renewals' ? 'none' : 'inline-block' }} />
+            Renewals {renewalRequests.length}
           </button>
+
           <button
             onClick={() => setActiveFilter(activeFilter === 'docs' ? 'all' : 'docs')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all shrink-0 ${
@@ -645,6 +615,36 @@ export function AlertsView() {
               </div>
             </div>
           )}
+
+          {/* Agreement Renewal Requests */}
+          {renewalRequests.length > 0 && (activeFilter === 'all' || activeFilter === 'renewals') && (
+            <div className="space-y-3 mt-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-amber-600 uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  Agreement Renewal Requests
+                </h3>
+                <span className="text-[10px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded-md font-semibold">{renewalRequests.length}</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {renewalRequests.map((row) => {
+                  const agreement = row.current_agreement || {};
+                  const tenant = row.tenant || {};
+                  const critical = ['EXPIRED_AND_RENT_OVERDUE', 'RENEWAL_OVERDUE_CRITICAL'].includes(row.decision_state);
+                  return (
+                    <RenewalAlertCard
+                      key={agreement.id}
+                      row={row}
+                      critical={critical}
+                      agreement={agreement}
+                      tenant={tenant}
+                      activeHostel={activeHostel}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -688,43 +688,7 @@ export function AlertsView() {
             </div>
           )}
 
-          {/* Upcoming Rent */}
-          {groupedPendingList.length > 0 && (activeFilter === 'all' || activeFilter === 'upcoming') && (
-            <div className="space-y-3 mt-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold text-[#F59E0B] uppercase tracking-wider flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B]" />
-                  Upcoming Rent
-                </h3>
-                <span className="text-[10px] bg-[#F59E0B]/10 text-[#F59E0B] px-1.5 py-0.5 rounded-md font-semibold">{groupedPendingList.length}</span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {groupedPendingList.map((gDue: any) => (
-                  <GroupedDueCard
-                    key={gDue.tenant_id}
-                    tenantId={gDue.tenant_id}
-                    tenantName={gDue.tenant_name}
-                    roomNo={gDue.room_no}
-                    tenantPhone={gDue.tenant_phone}
-                    avatarUrl={gDue.photo_url ?? gDue.avatar ?? gDue.tenant_avatar ?? gDue.tenant_avatar_url ?? gDue.avatar_url}
-                    totalAmount={gDue.total_amount}
-                    duesCount={gDue.dues_count}
-                    oldestDueDate={gDue.soonest_due_date}
-                    dues={gDue.dues}
-                    isOverdue={false}
-                    activeHostel={activeHostel}
-                    onRecordPayment={(dueId, amount) =>
-                      activeHostelId && setRecordPayment({
-                        hostelId: activeHostelId,
-                        dueId,
-                        amount,
-                      })
-                    }
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+
         </div>
       )}
 
@@ -1457,6 +1421,119 @@ function MoveOutCard({ request, activeHostel }: MoveOutCardProps) {
           >
             <ExternalLink className="w-3.5 h-3.5" />
             Manage Exit
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function fmtDate(value: unknown) {
+  if (!value) return 'Not set';
+  return new Date(String(value)).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function stateLabel(state: string) {
+  switch (state) {
+    case 'EXPIRED_AND_RENT_OVERDUE': return 'Expired + Rent Overdue';
+    case 'RENEWAL_OVERDUE_CRITICAL': return 'Overdue Critical';
+    case 'RENEWAL_DECISION_PENDING': return 'Renewal Pending';
+    case 'MOVE_OUT_IN_PROGRESS': return 'Move-out Conflict';
+    case 'EXPIRING_SOON': return 'Expiring Soon';
+    case 'RENEWAL_AVAILABLE': return 'Renewal Available';
+    default: return state.replace(/_/g, ' ');
+  }
+}
+
+interface RenewalAlertCardProps {
+  row: Record<string, any>;
+  critical: boolean;
+  agreement: Record<string, any>;
+  tenant: Record<string, any>;
+  activeHostel: Record<string, unknown> | undefined;
+}
+
+function RenewalAlertCard({ row, critical, agreement, tenant, activeHostel }: RenewalAlertCardProps) {
+  const tenantName = tenant.name || 'Tenant';
+  const tenantId = tenant.id;
+  const hostelId = agreement.hostel_id || activeHostel?.id;
+  const roomNo = tenant.room?.room_no || 'N/A';
+  const tenantPhone = tenant.phone || '';
+
+  const telPhone = tenantPhone ? tenantPhone.replace(/[^\d+]/g, '') : null;
+  const hostelName = activeHostel ? String(activeHostel.name ?? '') : 'Sri Adithya Hostels';
+
+  let whatsappUrl = null;
+  if (tenantPhone) {
+    let clean = tenantPhone.replace(/[^\d]/g, '');
+    if (clean.length === 10) {
+      clean = '91' + clean;
+    }
+    const message = `Hi ${tenantName}, this is regarding your agreement renewal at ${hostelName}. Please let us know if you wish to renew your agreement.`;
+    whatsappUrl = `https://wa.me/${clean}?text=${encodeURIComponent(message)}`;
+  }
+
+  const profilePath = tenantId && hostelId ? `/hostels/${hostelId}/tenants/${tenantId}?tab=stay` : '';
+
+  return (
+    <div className={`bg-card border ${critical ? 'border-rose-100 hover:border-rose-200' : 'border-amber-100 hover:border-amber-200'} rounded-xl p-3 flex flex-col justify-between gap-3 shadow-sm hover:shadow-md transition-shadow`}>
+      <div className="flex items-start gap-3">
+        <div className={`w-10 h-10 rounded-full ${critical ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-600'} flex items-center justify-center shrink-0 font-bold text-sm`}>
+          {tenantName.charAt(0).toUpperCase()}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <h4 className="font-semibold text-foreground truncate text-sm">{tenantName}</h4>
+            <span className="text-xs text-muted-foreground shrink-0">Room {roomNo}</span>
+          </div>
+          <div className="flex items-center gap-1.5 mt-1">
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${critical ? 'bg-rose-500/10 text-rose-700' : 'bg-amber-500/10 text-amber-700'}`}>
+              {stateLabel(row.decision_state)}
+            </span>
+            <span className="text-[10px] text-muted-foreground">v{agreement.agreement_version || 1}</span>
+          </div>
+          
+          <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+            <CalendarDays className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+            Ends:{' '}
+            <span className="font-semibold text-foreground">
+              {fmtDate(agreement.agreement_end_date)}
+            </span>
+          </p>
+
+          {row.overdue_rent?.count > 0 && (
+            <p className="mt-1 text-xs font-semibold text-rose-700">
+              Rent overdue: ₹{Number(row.overdue_rent.amount || 0).toLocaleString('en-IN')}
+            </p>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        {telPhone && (
+          <a
+            className="w-9 h-9 flex items-center justify-center rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 active:scale-95 transition-all shrink-0"
+            href={`tel:${telPhone}`}
+          >
+            <Phone className="w-4 h-4" />
+          </a>
+        )}
+        {whatsappUrl && (
+          <a
+            className="w-9 h-9 flex items-center justify-center rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-100 active:scale-95 transition-all shrink-0"
+            href={whatsappUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <WhatsAppIcon />
+          </a>
+        )}
+        {profilePath && (
+          <Link
+            to={profilePath}
+            className="flex-1 bg-accent text-accent-foreground py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-98 transition-all"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            Manage Stay
           </Link>
         )}
       </div>
