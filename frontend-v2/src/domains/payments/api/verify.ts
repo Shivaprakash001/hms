@@ -1,4 +1,4 @@
-import { api } from '@/infrastructure/api/client';
+import { publicApi } from '@/infrastructure/api/client';
 
 export interface VerificationDetails {
   id: string;
@@ -16,6 +16,6 @@ export interface VerificationDetails {
 }
 
 export async function verifyReceipt(token: string): Promise<VerificationDetails> {
-  const { data } = await api.get<{ data: VerificationDetails }>(`/verify/receipt?token=${token}`);
+  const { data } = await publicApi.get<{ data: VerificationDetails }>(`/verify/receipt?token=${token}`);
   return data.data;
 }

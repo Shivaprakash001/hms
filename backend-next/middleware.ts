@@ -27,6 +27,7 @@ const PUBLIC_ROUTES = [
   // which is NOT a JWT. Each route handler enforces the secret check
   // itself (see app/api/cron/*/route.ts), so middleware must step aside.
   "/api/cron",
+  "/api/verify",
 ];
 
 const PUBLIC_CSRF_ROUTES = [

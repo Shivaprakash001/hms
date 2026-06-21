@@ -220,6 +220,11 @@ api.interceptors.response.use(
 
 export default api;
 
+export const publicApi = axios.create({
+  baseURL,
+  headers: { 'Content-Type': 'application/json' },
+});
+
 export const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 

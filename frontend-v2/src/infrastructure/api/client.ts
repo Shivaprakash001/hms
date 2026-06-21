@@ -1,1 +1,1 @@
-export { default as api, requestWithRetry, sleep } from '@/lib/api-client';
+export { default as api, publicApi, requestWithRetry, sleep } from '@/lib/api-client';

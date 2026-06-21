@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
 import { 
   ShieldCheck, 
   AlertTriangle, 
@@ -12,16 +12,23 @@ import {
   CreditCard,
   Phone,
   Mail,
-  Home
+  Home,
+  WifiOff,
+  FileX
 } from 'lucide-react';
 import { verifyReceipt, VerificationDetails } from '@/domains/payments/api';
 import { PublicLayout } from './PublicLayout';
 
 export function ReceiptVerificationPage() {
-  const { token } = useParams<{ token: string }>();
+  const { token: routeToken } = useParams<{ token: string }>();
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [errorType, setErrorType] = useState<'INVALID' | 'NOT_FOUND' | 'EXPIRED' | 'UNAVAILABLE' | 'GENERIC' | null>(null);
   const [data, setData] = useState<VerificationDetails | null>(null);
+
+  // Extract token from route parameter or query parameter '?token=...'
+  const token = routeToken || new URLSearchParams(location.search).get('token');
 
   useEffect(() => {
     // Dynamic SEO Metadata
@@ -36,6 +43,7 @@ export function ReceiptVerificationPage() {
   useEffect(() => {
     if (!token) {
       setError('Verification token is missing from the URL.');
+      setErrorType('INVALID');
       setLoading(false);
       return;
     }
@@ -44,12 +52,30 @@ export function ReceiptVerificationPage() {
       try {
         setLoading(true);
         setError(null);
+        setErrorType(null);
         const verifiedData = await verifyReceipt(token);
         setData(verifiedData);
       } catch (err: any) {
         console.error('Error during receipt verification:', err);
-        const serverError = err.response?.data?.error || err.message || 'An unexpected error occurred while verifying the receipt.';
-        setError(serverError);
+        if (!err.response) {
+          setErrorType('UNAVAILABLE');
+          setError('The verification server could not be reached. Please check your network connection and try again.');
+        } else if (err.response.status === 404) {
+          setErrorType('NOT_FOUND');
+          setError('This receipt record does not exist in our database. It may have been deleted or archived.');
+        } else if (err.response.status === 400) {
+          const errMsg = err.response.data?.error || '';
+          if (errMsg.toLowerCase().includes('expired')) {
+            setErrorType('EXPIRED');
+            setError('This verification link has expired. Receipts are valid for verification up to 1 year from issue date.');
+          } else {
+            setErrorType('INVALID');
+            setError('This receipt token could not be verified. The signature is invalid or has been modified.');
+          }
+        } else {
+          setErrorType('GENERIC');
+          setError(err.response.data?.error || err.message || 'An unexpected error occurred while verifying the receipt.');
+        }
       } finally {
         setLoading(false);
       }
@@ -57,6 +83,34 @@ export function ReceiptVerificationPage() {
 
     doVerify();
   }, [token]);
+
+  const renderErrorIcon = () => {
+    switch (errorType) {
+      case 'UNAVAILABLE':
+        return <WifiOff className="w-8 h-8 text-red-500" />;
+      case 'NOT_FOUND':
+        return <FileX className="w-8 h-8 text-red-500" />;
+      case 'EXPIRED':
+        return <Clock className="w-8 h-8 text-red-500" />;
+      default:
+        return <AlertTriangle className="w-8 h-8 text-red-500" />;
+    }
+  };
+
+  const getErrorTitle = () => {
+    switch (errorType) {
+      case 'UNAVAILABLE':
+        return 'Server Connection Error';
+      case 'NOT_FOUND':
+        return 'Receipt Not Found';
+      case 'EXPIRED':
+        return 'Verification Expired';
+      case 'INVALID':
+        return 'Invalid or Tampered Receipt';
+      default:
+        return 'Verification Failed';
+    }
+  };
 
   return (
     <PublicLayout title="Receipt Verification" subtitle="Verify and inspect authentic digital hostel receipts.">
@@ -77,11 +131,11 @@ export function ReceiptVerificationPage() {
             
             <div className="p-8 text-center">
               <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <AlertTriangle className="w-8 h-8 text-red-500" />
+                {renderErrorIcon()}
               </div>
-              <p className="text-slate-800 font-bold text-lg mb-2">Invalid or Tampered Receipt</p>
+              <p className="text-slate-800 font-bold text-lg mb-2">{getErrorTitle()}</p>
               <p className="text-slate-500 text-sm mb-6 max-w-sm mx-auto">
-                {error || 'This receipt token could not be verified. It may have been modified, expired, or generated with an invalid key.'}
+                {error}
               </p>
 
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
