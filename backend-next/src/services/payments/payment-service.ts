@@ -2850,17 +2850,12 @@ export class PaymentService {
         throw new Error("SECURITY_ERROR: razorpay_order_id mismatch");
       }
 
+      let activeAttempt = attempt;
       if (["CREATED", "PENDING"].includes(attempt.status)) {
-        const updatedAttempt = await this.updateAttemptStatusOutsideTx({
-          attemptId: attempt.id,
-          fromStatus: attempt.status,
-          toStatus: "PENDING_VERIFICATION",
-          source: "VERIFY",
-          reason: "client signature verified, waiting for webhook",
-          operationalOwnerId: attempt.owner_id,
-          financialOwnerId: this.isPlatformBillingAttempt(attempt) ? this.hmsFinancialOwnerId() : attempt.owner_id,
-          hostelId: this.isPlatformBillingAttempt(attempt) ? null : attempt.hostel_id,
+        const updateResult = await prisma.paymentAttempt.updateMany({
+          where: { id: attempt.id, status: { in: ["CREATED", "PENDING"] } },
           data: {
+            status: "PENDING_VERIFICATION",
             provider_transaction_id: razorpay_payment_id,
             provider_order_id: razorpay_order_id,
             gateway_txn_id: razorpay_order_id,
@@ -2868,17 +2863,90 @@ export class PaymentService {
           }
         });
 
+        if (updateResult.count > 0) {
+          const fresh = await prisma.paymentAttempt.findUnique({ where: { id: attempt.id } });
+          if (fresh) {
+            activeAttempt = fresh;
+            await paymentStatusEventService.appendOutsideTransaction({
+              attemptId: attempt.id,
+              fromStatus: attempt.status,
+              toStatus: "PENDING_VERIFICATION",
+              source: "VERIFY",
+              reason: "client signature verified, verifying status inline",
+              operationalOwnerId: attempt.owner_id,
+              financialOwnerId: this.isPlatformBillingAttempt(attempt) ? this.hmsFinancialOwnerId() : attempt.owner_id,
+              hostelId: this.isPlatformBillingAttempt(attempt) ? null : attempt.hostel_id,
+            });
+          }
+        } else {
+          const fresh = await prisma.paymentAttempt.findUnique({ where: { id: attempt.id } });
+          if (fresh) {
+            activeAttempt = fresh;
+          }
+        }
+      }
+
+      let fetched;
+      try {
+        fetched = await instance.fetchStatus(
+          (activeAttempt as any).merchant_transaction_id || activeAttempt.merchant_txn_id,
+          razorpay_order_id
+        );
+        await paymentProviderVerificationSnapshotService.record({
+          provider: "RAZORPAY",
+          source: "VERIFY",
+          attempt: activeAttempt,
+          providerTransactionId: razorpay_payment_id,
+          providerOrderId: razorpay_order_id,
+          providerReferenceId: razorpay_payment_id,
+          providerStatus: (fetched as any).provider_status || fetched.status,
+          normalizedStatus: fetched.status,
+          amount: (fetched as any).amount ?? null,
+          rawResponse: fetched.raw_status,
+        });
+      } catch (error) {
+        logger.error("payments.verify.razorpay_fetch_status_failed", {
+          attemptId: activeAttempt.id,
+          merchantTxnId: activeAttempt.merchant_txn_id,
+          provider: activeAttempt.provider,
+          error: String(error),
+        });
+
         return {
-          attempt: updatedAttempt,
-          status: "PENDING_VERIFICATION",
-          source: "provider",
+          attempt: this.mapAttemptWithRawResponse(activeAttempt),
+          status: activeAttempt.status,
+          source: "cached_pending"
         };
       }
 
+      logger.info("payments.verify.razorpay_fetched_status", {
+        attemptId: activeAttempt.id,
+        merchantTxnId: activeAttempt.merchant_txn_id,
+        fromStatus: activeAttempt.status,
+        fetchedStatus: fetched.status,
+      });
+
+      if (fetched.status === "PENDING") {
+        return {
+          attempt: this.mapAttemptWithRawResponse(activeAttempt),
+          status: activeAttempt.status,
+          source: "pending"
+        };
+      }
+
+      const finalized = await this.finalizePaymentAttempt(
+        activeAttempt.id,
+        fetched.status,
+        fetched.provider_transaction_id || fetched.gateway_txn_id || razorpay_payment_id || undefined,
+        { source: "verify", payload: fetched.raw_status }
+      );
+
+      const resolvedAttempt = finalized || activeAttempt;
+
       return {
-        attempt: this.mapAttemptWithRawResponse(attempt),
-        status: attempt.status,
-        source: "provider",
+        attempt: this.mapAttemptWithRawResponse(resolvedAttempt),
+        status: resolvedAttempt.status,
+        source: "provider"
       };
     }
 

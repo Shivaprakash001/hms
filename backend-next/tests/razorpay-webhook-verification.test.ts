@@ -31,6 +31,7 @@ vi.mock("@/lib/db", () => {
     },
     paymentAttemptStatusEvent: {
       create: vi.fn(),
+      aggregate: vi.fn().mockImplementation(() => Promise.resolve({ _max: { sequence: 0 } })),
     },
     paymentProviderVerificationSnapshot: {
       create: vi.fn(),
@@ -55,7 +56,7 @@ describe("Razorpay Webhook and Verification Hardening", () => {
   });
 
   describe("verifyPaymentStatus", () => {
-    it("should transition PENDING attempt to PENDING_VERIFICATION on valid client signature", async () => {
+    it("should transition PENDING attempt to PENDING_VERIFICATION if fetchStatus returns PENDING", async () => {
       const mockAttempt = {
         id: "att_123",
         status: "PENDING",
@@ -70,16 +71,129 @@ describe("Razorpay Webhook and Verification Hardening", () => {
       };
 
       vi.mocked(prisma.paymentAttempt.findFirst).mockResolvedValueOnce(mockAttempt);
-      vi.mocked(prisma.paymentAttempt.update).mockResolvedValueOnce({
+      vi.mocked(prisma.paymentAttempt.updateMany).mockResolvedValueOnce({ count: 1 });
+      vi.mocked(prisma.paymentAttempt.findUnique).mockResolvedValue({
         ...mockAttempt,
         status: "PENDING_VERIFICATION",
       });
 
-      // Mock getting the provider instance configuration
+      const mockProviderInstance = {
+        fetchStatus: vi.fn().mockResolvedValue({
+          status: "PENDING",
+          gateway_txn_id: "order_mock123",
+          provider_order_id: "order_mock123",
+          provider_transaction_id: "pay_mock123",
+          provider_reference_id: "pay_mock123",
+          provider_state: "attempted",
+          raw_status: {},
+        }),
+      };
+
       vi.spyOn(paymentService as any, "getProviderInstanceForAttempt").mockResolvedValue({
-        instance: {
-          config: { key_secret: "rzp_test_secret" },
-        },
+        instance: mockProviderInstance,
+        config: { key_secret: "rzp_test_secret" },
+      });
+
+      const signature = crypto
+        .createHmac("sha256", "rzp_test_secret")
+        .update("order_mock123|pay_mock123")
+        .digest("hex");
+
+      const result = await paymentService.verifyPaymentStatus({
+        attemptId: "att_123",
+        razorpay_payment_id: "pay_mock123",
+        razorpay_order_id: "order_mock123",
+        razorpay_signature: signature,
+      });
+
+      expect(result.status).toBe("PENDING_VERIFICATION");
+      expect(mockProviderInstance.fetchStatus).toHaveBeenCalledWith("txn_001", "order_mock123");
+    });
+
+    it("should finalize inline and return SUCCESS if fetchStatus returns SUCCESS", async () => {
+      const mockAttempt = {
+        id: "att_123",
+        status: "PENDING",
+        provider: "RAZORPAY",
+        amount: "100.00",
+        tenant_id: "tenant_abc",
+        owner_id: "owner_xyz",
+        hostel_id: "hostel_123",
+        merchant_txn_id: "txn_001",
+        gateway_txn_id: "order_mock123",
+        provider_order_id: "order_mock123",
+      };
+
+      vi.mocked(prisma.paymentAttempt.findFirst).mockResolvedValueOnce(mockAttempt);
+      vi.mocked(prisma.paymentAttempt.updateMany).mockResolvedValueOnce({ count: 1 });
+      vi.mocked(prisma.paymentAttempt.findUnique).mockResolvedValue({
+        ...mockAttempt,
+        status: "PENDING_VERIFICATION",
+      });
+
+      const mockProviderInstance = {
+        fetchStatus: vi.fn().mockResolvedValue({
+          status: "SUCCESS",
+          gateway_txn_id: "order_mock123",
+          provider_order_id: "order_mock123",
+          provider_transaction_id: "pay_mock123",
+          provider_reference_id: "pay_mock123",
+          provider_state: "paid",
+          raw_status: {},
+        }),
+      };
+
+      vi.spyOn(paymentService as any, "getProviderInstanceForAttempt").mockResolvedValue({
+        instance: mockProviderInstance,
+        config: { key_secret: "rzp_test_secret" },
+      });
+
+      const finalizedAttempt = { ...mockAttempt, status: "SUCCESS" };
+      const finalizeSpy = vi.spyOn(paymentService as any, "finalizePaymentAttempt").mockResolvedValue(finalizedAttempt);
+
+      const signature = crypto
+        .createHmac("sha256", "rzp_test_secret")
+        .update("order_mock123|pay_mock123")
+        .digest("hex");
+
+      const result = await paymentService.verifyPaymentStatus({
+        attemptId: "att_123",
+        razorpay_payment_id: "pay_mock123",
+        razorpay_order_id: "order_mock123",
+        razorpay_signature: signature,
+      });
+
+      expect(result.status).toBe("SUCCESS");
+      expect(finalizeSpy).toHaveBeenCalledWith("att_123", "SUCCESS", "pay_mock123", expect.any(Object));
+    });
+
+    it("should return PENDING_VERIFICATION if fetchStatus throws an error (fallback path)", async () => {
+      const mockAttempt = {
+        id: "att_123",
+        status: "PENDING",
+        provider: "RAZORPAY",
+        amount: "100.00",
+        tenant_id: "tenant_abc",
+        owner_id: "owner_xyz",
+        hostel_id: "hostel_123",
+        merchant_txn_id: "txn_001",
+        gateway_txn_id: "order_mock123",
+        provider_order_id: "order_mock123",
+      };
+
+      vi.mocked(prisma.paymentAttempt.findFirst).mockResolvedValueOnce(mockAttempt);
+      vi.mocked(prisma.paymentAttempt.updateMany).mockResolvedValueOnce({ count: 1 });
+      vi.mocked(prisma.paymentAttempt.findUnique).mockResolvedValue({
+        ...mockAttempt,
+        status: "PENDING_VERIFICATION",
+      });
+
+      const mockProviderInstance = {
+        fetchStatus: vi.fn().mockRejectedValue(new Error("API network error")),
+      };
+
+      vi.spyOn(paymentService as any, "getProviderInstanceForAttempt").mockResolvedValue({
+        instance: mockProviderInstance,
         config: { key_secret: "rzp_test_secret" },
       });
 

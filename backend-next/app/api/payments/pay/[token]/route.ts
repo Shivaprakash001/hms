@@ -196,16 +196,14 @@ function renderPage(content: {
                         razorpay_order_id: rzpResponse.razorpay_order_id,
                         razorpay_signature: rzpResponse.razorpay_signature
                       })
-                    });
-
-                    const verifyData = await verifyRes.json();
+                    });                     const verifyData = await verifyRes.json();
                     if (verifyData.success && (verifyData.status === 'SUCCESS' || verifyData.attempt?.status === 'SUCCESS')) {
                       document.querySelector('.container').innerHTML = \`
                         <div class="header-section">
                           <div class="hostel-logo-container">
-                            \${logoUrl ? \`<img class="hostel-logo" src="\${logoUrl}" alt="Hostel Logo"/>\` : \`<span class="hostel-logo-fallback">🏠</span>\`}
+                            \\\${logoUrl ? \\\`<img class="hostel-logo" src="\\\${logoUrl}" alt="Hostel Logo"/>\\\` : \\\`<span class="hostel-logo-fallback">🏠</span>\\\`}
                           </div>
-                          <p class="hostel-name">\${escapeHtml("${hostelName}")}</p>
+                          <p class="hostel-name">\\\${escapeHtml("${hostelName}")}</p>
                           <div class="verified-badge">
                             <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
                             <span>Verified Hostel</span>
@@ -219,14 +217,38 @@ function renderPage(content: {
                           <p class="status-text">Payment Successful</p>
                           <p class="status-sub">Your payment has been successfully recorded. Thank you!</p>
                         </div>
-                        \${"${supportPhone}" ? \`<p class="support">Need help? Call <a href="tel:${supportPhone}">${supportPhone}</a></p>\` : ""}
-                        \${"${hostelAddress}" ? \`
+                        \\\${"${supportPhone}" ? \\\`<p class="support">Need help? Call <a href="tel:${supportPhone}">${supportPhone}</a></p>\\\` : ""}
+                        \\\${"${hostelAddress}" ? \\\`
                         <div class="footer-section">
-                          <p class="footer-hostel-info">\${escapeHtml("${hostelName}")}</p>
-                          <p>\${escapeHtml("${hostelAddress}")}</p>
+                          <p class="footer-hostel-info">\\\${escapeHtml("${hostelName}")}</p>
+                          <p>\\\${escapeHtml("${hostelAddress}")}</p>
                         </div>
-                        \` : ""}
-                      \`;
+                        \\\` : ""}
+                      \\\`;
+                    } else if (verifyData.success && (verifyData.status === 'PENDING_VERIFICATION' || verifyData.attempt?.status === 'PENDING_VERIFICATION')) {
+                      document.querySelector('.container').innerHTML = \\\`
+                        <div class="header-section">
+                          <div class="hostel-logo-container">
+                            \\\${logoUrl ? \\\`<img class="hostel-logo" src="\\\${logoUrl}" alt="Hostel Logo"/>\\\` : \\\`<span class="hostel-logo-fallback">🏠</span>\\\`}
+                          </div>
+                          <p class="hostel-name">\\\${escapeHtml("${hostelName}")}</p>
+                        </div>
+                        
+                        <div class="status-card pending">
+                          <div class="status-icon">
+                            <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#F97316" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                          </div>
+                          <p class="status-text">Payment Received</p>
+                          <p class="status-sub">We're confirming your payment. This usually takes a few seconds. Feel free to close this page.</p>
+                        </div>
+                        \\\${"${supportPhone}" ? \\\`<p class="support">Need help? Call <a href="tel:${supportPhone}">${supportPhone}</a></p>\\\` : ""}
+                        \\\${"${hostelAddress}" ? \\\`
+                        <div class="footer-section">
+                          <p class="footer-hostel-info">\\\${escapeHtml("${hostelName}")}</p>
+                          <p>\\\${escapeHtml("${hostelAddress}")}</p>
+                        </div>
+                        \\\` : ""}
+                      \\\`;
                     } else {
                       throw new Error(verifyData.error?.message || verifyData.error || 'Payment verification pending or failed');
                     }
@@ -550,6 +572,7 @@ function renderPage(content: {
       margin: 0 auto 16px;
     }
     .status-card.paid .status-icon { background: #E8F5E9; border: 1px solid #C8E6C9; }
+    .status-card.pending .status-icon { background: #FFF7ED; border: 1px solid #FFEDD5; }
     .status-card.expired .status-icon { background: #FEF2F2; border: 1px solid #FEE2E2; }
     .status-card.error .status-icon { background: #FEF2F2; border: 1px solid #FEE2E2; }
     .status-text { font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 6px; }
