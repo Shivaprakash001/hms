@@ -1313,8 +1313,8 @@ export class WhatsAppWebhookEventService {
       });
 
       const summary = financialService.getTenantPaymentSummary(tenant.id, obligations);
-      const [nextBilling, health] = await Promise.all([
-        getNextBillingInfo(tenant.id),
+      const [status, health] = await Promise.all([
+        financialService.getTenantFinancialStatus(tenant.id),
         getPaymentHealth(tenant.id),
       ]);
 
@@ -1350,12 +1350,16 @@ export class WhatsAppWebhookEventService {
         residentName: tenantName,
         roomNumber: roomNo,
         health,
-        totalBilled: summary.total_billed,
+        totalBilled: status.payable_now + status.future_outstanding + summary.total_paid,
         totalPaid: summary.total_paid,
-        pendingAmount: summary.pending_amount,
+        payableNow: status.payable_now,
+        futureOutstanding: status.future_outstanding,
         lastPaymentAmount: summary.last_payment_amount,
         lastPaymentDate: summary.last_paid_at,
-        nextBilling,
+        nextGenerationDate: status.next_generation_date,
+        nextDueDate: status.next_due_date,
+        expectedAmount: status.expected_amount,
+        fullySettled: status.fully_settled,
         agreement: {
           startDate: allocation?.start_date || tenant.joined_on || null,
           endDate: allocation?.end_date || null,
@@ -1525,16 +1529,29 @@ export class WhatsAppWebhookEventService {
       return { phone, command: "DUES", success: false, reason: "TENANT_NOT_FOUND" };
     }
 
-    const dues = await financialService.getTenantDues(tenant.id, tenant.owner_id, tenant.hostel_id);
+    const status = await financialService.getTenantFinancialStatus(tenant.id);
     await refreshResidentContext(phone);
 
     const provider = new MetaWhatsAppProvider();
-    if (dues.items.length === 0) {
-      await provider.sendTextMessage(phone, `✅ ${resident.residentName} (Room ${resident.residentRoom})\n\nNo pending dues. All payments are up to date!`);
+    if (status.payable_now === 0) {
+      if (status.fully_settled) {
+        await provider.sendTextMessage(
+          phone,
+          `✅ ${resident.residentName} (Room ${resident.residentRoom})\n\nFully Settled. No pending dues or future contract obligations!`
+        );
+      } else {
+        const nextGenStr = status.next_generation_date ? formatShortDate(status.next_generation_date) : "N/A";
+        const amtStr = status.expected_amount ? `₹${formatAmountWithoutSymbol(status.expected_amount)}` : "TBD";
+        await provider.sendTextMessage(
+          phone,
+          `✅ ${resident.residentName} (Room ${resident.residentRoom})\n\nNo dues payable right now. Next billing of ${amtStr} is scheduled for ${nextGenStr}.`
+        );
+      }
       await this.sendQuickActions(provider, phone);
       return { phone, command: "DUES", success: true, items: 0 };
     }
 
+    const dues = await financialService.getTenantDues(tenant.id, tenant.owner_id, tenant.hostel_id);
     const lines = [`📋 Dues — ${resident.residentName} (Room ${resident.residentRoom})\n`];
     for (const item of dues.items.slice(0, 10)) {
       const typeLabel = item.type === "RENT" ? "Rent" : item.type === "SECURITY_DEPOSIT" ? "Deposit" : item.type === "MAINTENANCE" ? "Maintenance" : item.type;
@@ -1564,11 +1581,29 @@ export class WhatsAppWebhookEventService {
       return { phone, command: "PAY", success: false, reason: "TENANT_NOT_FOUND" };
     }
 
-    const nextBilling = await getNextBillingInfo(tenant.id);
+    const status = await financialService.getTenantFinancialStatus(tenant.id);
     await refreshResidentContext(phone);
 
     const provider = new MetaWhatsAppProvider();
 
+    if (status.payable_now === 0) {
+      if (status.fully_settled) {
+        await provider.sendTextMessage(
+          phone,
+          `✅ ${resident.residentName} (Room ${resident.residentRoom})\n\nFully Settled. No payments are outstanding.`
+        );
+      } else {
+        const nextGenStr = status.next_generation_date ? formatShortDate(status.next_generation_date) : "N/A";
+        const amtStr = status.expected_amount ? `₹${formatAmountWithoutSymbol(status.expected_amount)}` : "TBD";
+        await provider.sendTextMessage(
+          phone,
+          `✅ ${resident.residentName} (Room ${resident.residentRoom})\n\nNo dues payable right now. Next billing of ${amtStr} is scheduled for ${nextGenStr}.`
+        );
+      }
+      return { phone, command: "PAY", success: true, reason: "NO_DUES" };
+    }
+
+    const nextBilling = await getNextBillingInfo(tenant.id);
     if (!nextBilling) {
       await provider.sendTextMessage(phone, `✅ ${resident.residentName} (Room ${resident.residentRoom})\n\nNo pending dues to pay!`);
       return { phone, command: "PAY", success: true, reason: "NO_DUES" };

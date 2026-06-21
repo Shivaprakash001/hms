@@ -874,4 +874,82 @@ describe("WhatsApp Balance Command Integration Tests", () => {
     expect(state?.tenantIds).toContain(tenantIds[1]);
     expect(state?.tenantIds).not.toContain(tenantIds[2]);
   }, 20000);
+
+  it("Scenario 15: formatted balance response for 'Payable Now' state", async () => {
+    const phone = "919000100001";
+    // seedTestData yields 20,000 pending out of 120,000.
+    const { tenantId } = await seedTestData({
+      tenantPhone: phone,
+      tenantStatus: "ACTIVE",
+    });
+
+    const sendTextMessageSpy = vi.spyOn(MetaWhatsAppProvider.prototype, "sendTextMessage");
+
+    const { eventId, payload } = makeWebhookPayload(phone, "BAL");
+    await whatsappWebhookEventService.processWebhookEvent(eventId, payload);
+
+    expect(sendTextMessageSpy).toHaveBeenCalled();
+    const sentText = sendTextMessageSpy.mock.calls[0][1];
+    expect(sentText).toContain("OVERDUE");
+    expect(sentText).toContain("Outstanding: ₹20,000");
+    expect(sentText).toContain("Total Paid: ₹1,00,000");
+  }, 20000);
+
+  it("Scenario 16: formatted balance response for 'Nothing Due Right Now' state", async () => {
+    const phone = "919000100002";
+    const { tenantId, ownerId, hostelId } = await seedTestData({
+      tenantPhone: phone,
+      tenantStatus: "ACTIVE",
+    });
+
+    // Update tenant's monthly rent to 15,000 so contract_total = 15000 * 12 = 180,000
+    // total_paid = 120,000, payable_now = 0, future_outstanding = 60,000 > 0.
+    await prisma.tenants.update({
+      where: { id: tenantId },
+      data: { monthly_rent: 15000 },
+    });
+
+    // Mark the pending obligation as PAID to transition to "Nothing Due Right Now"
+    await prisma.rent_obligations.updateMany({
+      where: { tenant_id: tenantId, status: "PENDING" },
+      data: { status: "PAID" },
+    });
+
+    const sendTextMessageSpy = vi.spyOn(MetaWhatsAppProvider.prototype, "sendTextMessage");
+
+    const { eventId, payload } = makeWebhookPayload(phone, "BAL");
+    await whatsappWebhookEventService.processWebhookEvent(eventId, payload);
+
+    expect(sendTextMessageSpy).toHaveBeenCalled();
+    const sentText = sendTextMessageSpy.mock.calls[0][1];
+    expect(sentText).toContain("ON TRACK");
+    expect(sentText).toContain("Outstanding: ₹0");
+    expect(sentText).toContain("Status: 🟢 Nothing Due Right Now");
+    expect(sentText).toContain("Remaining: ₹80,000");
+  }, 20000);
+
+  it("Scenario 17: formatted balance response for 'Fully Settled' state", async () => {
+    const phone = "919000100003";
+    const { tenantId, ownerId, hostelId } = await seedTestData({
+      tenantPhone: phone,
+      tenantStatus: "ACTIVE",
+    });
+
+    // Mark pending obligations as PAID
+    await prisma.rent_obligations.updateMany({
+      where: { tenant_id: tenantId, status: "PENDING" },
+      data: { status: "PAID" },
+    });
+
+    const sendTextMessageSpy = vi.spyOn(MetaWhatsAppProvider.prototype, "sendTextMessage");
+
+    const { eventId, payload } = makeWebhookPayload(phone, "BAL");
+    await whatsappWebhookEventService.processWebhookEvent(eventId, payload);
+
+    expect(sendTextMessageSpy).toHaveBeenCalled();
+    const sentText = sendTextMessageSpy.mock.calls[0][1];
+    expect(sentText).toContain("ON TRACK");
+    expect(sentText).toContain("Status: 🟢 Fully Settled");
+    expect(sentText).toContain("Outstanding: ₹0");
+  }, 20000);
 });

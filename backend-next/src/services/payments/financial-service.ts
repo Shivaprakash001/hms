@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { billingRepository } from "@/src/repositories/billingRepository";
+import { resolvePreferences } from "@/lib/preferences";
 
 /**
  * FinancialService — Canonical dues calculation layer
@@ -363,6 +364,205 @@ export class FinancialService {
       last_paid_at:         lastPaidAt,
       last_payment_amount:  lastPaymentAmount,
       payment_status,
+    };
+  }
+
+  async getTenantFinancialStatus(tenantId: string): Promise<{
+    payable_now: number;
+    future_outstanding: number;
+    next_generation_date: Date | null;
+    next_due_date: Date | null;
+    expected_amount: number | null;
+    fully_settled: boolean;
+  }> {
+    const tenant = await prisma.tenants.findUnique({
+      where: { id: tenantId },
+      include: {
+        room_allocations: {
+          orderBy: { start_date: "desc" },
+        },
+      },
+    });
+    if (!tenant) {
+      throw new Error(`NOT_FOUND: Tenant with ID ${tenantId} not found`);
+    }
+
+    const agreement = await prisma.agreement.findFirst({
+      where: {
+        tenant_id: tenantId,
+        status: { in: ["SIGNED", "EXPIRING_SOON"] },
+      },
+      orderBy: { generated_at: "desc" },
+    });
+
+    const activeAllocation = tenant.room_allocations.find((a) => a.is_active) || tenant.room_allocations[0] || null;
+
+    const monthly_rent = agreement
+      ? Number(agreement.contract_rent ?? tenant.monthly_rent ?? 0)
+      : Number(tenant.monthly_rent ?? 0);
+    const security_deposit = agreement
+      ? Number(agreement.contract_security_deposit ?? tenant.security_deposit ?? 0)
+      : Number(tenant.security_deposit ?? 0);
+    const maintenance_charge = Number(tenant.maintenance_charge ?? 0);
+    const maintenance_type = tenant.maintenance_type || "NONE";
+
+    const start_date = agreement?.agreement_start_date ?? activeAllocation?.start_date ?? tenant.billing_start_date ?? tenant.joined_on;
+    const end_date = agreement?.agreement_end_date ?? activeAllocation?.end_date ?? null;
+
+    const countMonths = (start: Date, end: Date): number => {
+      const sY = start.getUTCFullYear();
+      const sM = start.getUTCMonth();
+      const eY = end.getUTCFullYear();
+      const eM = end.getUTCMonth();
+      return (eY - sY) * 12 + (eM - sM) + 1;
+    };
+
+    let duration_months = 0;
+    if (agreement?.agreement_duration_months) {
+      duration_months = agreement.agreement_duration_months;
+    } else if (start_date && end_date) {
+      duration_months = countMonths(new Date(start_date), new Date(end_date));
+    }
+
+    let total_contract_value = 0;
+    const isFixedTerm = duration_months > 0;
+
+    if (isFixedTerm) {
+      total_contract_value = (monthly_rent * duration_months) + security_deposit;
+      if (maintenance_type === "MONTHLY") {
+        total_contract_value += maintenance_charge * duration_months;
+      } else if (maintenance_type !== "NONE") {
+        total_contract_value += maintenance_charge;
+      }
+    } else {
+      const allBilled = await prisma.rent_obligations.findMany({
+        where: {
+          tenant_id: tenantId,
+          is_superseded: false,
+          status: { not: "WAIVED" },
+        },
+        select: {
+          total_amount: true,
+          amount: true,
+        },
+      });
+      total_contract_value = allBilled.reduce((sum, ob) => sum + Number(ob.total_amount || ob.amount || 0), 0);
+    }
+
+    const payments = await prisma.payments.findMany({
+      where: { tenant_id: tenantId },
+      select: { amount_paid: true },
+    });
+    const total_paid = payments.reduce((sum, p) => sum + Number(p.amount_paid), 0);
+
+    const obligations = await prisma.rent_obligations.findMany({
+      where: {
+        tenant_id: tenantId,
+        is_superseded: false,
+        status: { not: "WAIVED" },
+      },
+      include: {
+        payments: {
+          select: { amount_paid: true },
+        },
+      },
+    });
+
+    let payable_now = 0;
+    for (const ob of obligations) {
+      const obPaid = ob.payments.reduce((sum, p) => sum + Number(p.amount_paid), 0);
+      const obOutstanding = Math.max(0, Number(ob.total_amount || ob.amount || 0) - obPaid);
+      if (ob.status === "PENDING" || ob.status === "PARTIAL") {
+        payable_now += obOutstanding;
+      }
+    }
+
+    const future_outstanding = Math.max(0, total_contract_value - total_paid - payable_now);
+
+    let next_generation_date: Date | null = null;
+    let next_due_date: Date | null = null;
+    let expected_amount: number | null = null;
+
+    const earliestUnpaid = await prisma.rent_obligations.findFirst({
+      where: {
+        tenant_id: tenantId,
+        status: { in: ["PENDING", "PARTIAL"] },
+        is_superseded: false,
+      },
+      orderBy: { due_date: "asc" },
+      include: { payments: { select: { amount_paid: true } } },
+    });
+
+    if (earliestUnpaid) {
+      const paid = earliestUnpaid.payments.reduce((sum, p) => sum + Number(p.amount_paid), 0);
+      next_due_date = earliestUnpaid.due_date;
+      expected_amount = Math.max(0, Number(earliestUnpaid.total_amount || earliestUnpaid.amount) - paid);
+    }
+
+    const nextUpcoming = await prisma.rent_obligations.findFirst({
+      where: {
+        tenant_id: tenantId,
+        status: "UPCOMING",
+        is_superseded: false,
+      },
+      orderBy: { due_date: "asc" },
+    });
+
+    if (nextUpcoming) {
+      next_generation_date = nextUpcoming.rent_month;
+      if (!next_due_date) {
+        next_due_date = nextUpcoming.due_date;
+        expected_amount = Number(nextUpcoming.total_amount || nextUpcoming.amount);
+      }
+    } else {
+      const isContractActive = !end_date || new Date(end_date) > new Date();
+      const isActiveTenant = !tenant.status.includes("LEFT") && tenant.status !== "CANCELLED" && tenant.status !== "EXPIRED";
+
+      if (isContractActive && isActiveTenant) {
+        const latestObligation = await prisma.rent_obligations.findFirst({
+          where: {
+            tenant_id: tenantId,
+            obligation_type: "RENT",
+            is_superseded: false,
+            status: { not: "WAIVED" },
+          },
+          orderBy: { rent_month: "desc" },
+        });
+
+        const startRef = latestObligation?.rent_month
+          ? new Date(latestObligation.rent_month)
+          : (start_date ? new Date(start_date) : new Date());
+
+        const nextMonthDate = latestObligation?.rent_month
+          ? new Date(Date.UTC(startRef.getUTCFullYear(), startRef.getUTCMonth() + 1, 1))
+          : new Date(Date.UTC(startRef.getUTCFullYear(), startRef.getUTCMonth(), 1));
+
+        const hostel = await prisma.hostels.findUnique({
+          where: { id: tenant.hostel_id },
+          select: { preferences_config: true },
+        });
+        const prefs = resolvePreferences(hostel);
+        const dueDay = Number(prefs.due_day || 5);
+        const boundedDay = Math.max(1, Math.min(28, dueDay));
+        const lastDay = new Date(Date.UTC(nextMonthDate.getUTCFullYear(), nextMonthDate.getUTCMonth() + 1, 0)).getUTCDate();
+
+        next_generation_date = nextMonthDate;
+        if (!next_due_date) {
+          next_due_date = new Date(Date.UTC(nextMonthDate.getUTCFullYear(), nextMonthDate.getUTCMonth(), Math.min(boundedDay, lastDay)));
+          expected_amount = monthly_rent;
+        }
+      }
+    }
+
+    const fully_settled = payable_now === 0 && future_outstanding <= 0;
+
+    return {
+      payable_now,
+      future_outstanding,
+      next_generation_date,
+      next_due_date,
+      expected_amount,
+      fully_settled,
     };
   }
 }

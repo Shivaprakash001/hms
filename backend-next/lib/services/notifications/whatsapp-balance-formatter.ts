@@ -1,6 +1,6 @@
 import { formatShortDate } from "@/lib/format";
 import { formatAgreementStatus, AgreementDisplayInput } from "./whatsapp-agreement-formatter";
-import { PaymentHealth, NextBillingInfo } from "./whatsapp-billing-intelligence";
+import { PaymentHealth } from "./whatsapp-billing-intelligence";
 
 /**
  * V2 Balance Response Formatter for WhatsApp.
@@ -22,10 +22,14 @@ export type BalanceFormatInput = {
   health: PaymentHealth;
   totalBilled: number;
   totalPaid: number;
-  pendingAmount: number;
+  payableNow: number;
+  futureOutstanding: number;
   lastPaymentAmount: number;
   lastPaymentDate: Date | null;
-  nextBilling: NextBillingInfo | null;
+  nextGenerationDate: Date | null;
+  nextDueDate: Date | null;
+  expectedAmount: number | null;
+  fullySettled: boolean;
   agreement: AgreementDisplayInput;
   /** Credit balance (overpayment), usually 0 */
   creditBalance?: number;
@@ -52,8 +56,8 @@ export function formatBalanceResponse(input: BalanceFormatInput): string {
   sections.push(formatLifetimeSummary(input));
 
   // ─── Next Billing ───
-  if (input.nextBilling) {
-    sections.push(formatNextBilling(input.nextBilling));
+  if (input.nextGenerationDate) {
+    sections.push(formatNextBilling(input));
   }
 
   // ─── Agreement ───
@@ -79,24 +83,31 @@ function formatHeader(input: BalanceFormatInput): string {
 function formatCurrentStatus(input: BalanceFormatInput): string {
   const lines = ["━━ Current Status ━━"];
 
-  if (input.pendingAmount > 0) {
-    lines.push(`Outstanding: ₹${money(input.pendingAmount)}`);
+  if (input.payableNow > 0) {
+    lines.push(`Outstanding: ₹${money(input.payableNow)}`);
 
-    if (input.nextBilling) {
-      lines.push(`Due Date: ${formatShortDate(input.nextBilling.dueDate)}`);
-
-      // Status badge
-      if (input.health.status === "OVERDUE") {
-        lines.push("Status: 🔴 Overdue");
-      } else if (input.health.status === "DUE_SOON") {
-        lines.push("Status: 🟡 Due Soon");
-      } else {
-        lines.push("Status: 🟢 On Track");
-      }
+    if (input.nextDueDate) {
+      lines.push(`Due Date: ${formatShortDate(input.nextDueDate)}`);
     }
-  } else {
+
+    // Status badge
+    if (input.health.status === "OVERDUE") {
+      lines.push("Status: 🔴 Overdue");
+    } else if (input.health.status === "DUE_SOON") {
+      lines.push("Status: 🟡 Due Soon");
+    } else {
+      lines.push("Status: 🟢 On Track");
+    }
+  } else if (input.fullySettled) {
     lines.push("Outstanding: ₹0");
-    lines.push("Status: ✅ All Clear");
+    lines.push("Status: 🟢 Fully Settled");
+  } else {
+    // State 2: Nothing Due Right Now
+    lines.push("Outstanding: ₹0");
+    lines.push("Status: 🟢 Nothing Due Right Now");
+    if (input.nextGenerationDate) {
+      lines.push(`Next Billing: ₹${money(input.expectedAmount ?? 0)} on ${formatShortDate(input.nextGenerationDate)}`);
+    }
   }
 
   return lines.join("\n");
@@ -113,7 +124,7 @@ function formatProgress(input: BalanceFormatInput): string {
   const lines = [
     "━━ Progress ━━",
     `${bar} ${pct}%`,
-    `Paid: ₹${money(input.totalPaid)} | Remaining: ₹${money(input.pendingAmount)}`,
+    `Paid: ₹${money(input.totalPaid)} | Remaining: ₹${money(input.futureOutstanding)}`,
   ];
 
   return lines.join("\n");
@@ -139,14 +150,17 @@ function formatLifetimeSummary(input: BalanceFormatInput): string {
   return lines.join("\n");
 }
 
-function formatNextBilling(billing: NextBillingInfo): string {
+function formatNextBilling(input: BalanceFormatInput): string {
+  if (!input.nextGenerationDate) return "";
+
   const lines = [
     "━━ Next Billing ━━",
-    billing.label,
-    "",
-    `Amount: ₹${money(billing.remainingAmount)}`,
-    `Due Date: ${formatShortDate(billing.dueDate)}`,
+    `Expected: ₹${money(input.expectedAmount ?? 0)}`,
+    `Generation: ${formatShortDate(input.nextGenerationDate)}`,
   ];
+  if (input.nextDueDate) {
+    lines.push(`Due Date: ${formatShortDate(input.nextDueDate)}`);
+  }
 
   return lines.join("\n");
 }
