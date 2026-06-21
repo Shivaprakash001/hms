@@ -257,28 +257,11 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
 
   const mergedTimeline = (timelineItems || [])
     .map((item: any) => {
-      const isCovered = item.state === 'covered' || item.state === 'paid';
-      const isUpcoming = item.state === 'upcoming';
-
-      if (item.type === 'PAYMENT') {
+      if (item.type === 'CREDIT_APPLIED' || item.type === 'ADVANCE_CREDIT') {
         return {
           id: `t-${item.timeline_id ?? item.obligation_id}`,
-          date: new Date(item.due_date),
-          title: 'Payment Received',
-          subtitle: `Paid via ${item.payment_method || 'Cash'}${item.reference_number ? ` · Ref: ${item.reference_number}` : ''}`,
-          dateVerb: 'Paid on',
-          amount: Number(item.amount ?? 0),
-          status: 'Paid',
-          statusColor: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
-          tone: 'border-emerald-100 bg-emerald-50/20',
-        };
-      }
-
-      if (item.type === 'ADVANCE_CREDIT') {
-        return {
-          id: `t-${item.timeline_id ?? item.obligation_id}`,
-          date: new Date(item.due_date),
-          title: 'Future Rent Credit',
+          date: new Date(item.event_date || item.due_date),
+          title: item.label || 'Future Rent Credit',
           subtitle: `Credit added via ${item.payment_method || 'Offline'}${item.reference_number ? ` · Ref: ${item.reference_number}` : ''}${item.notes ? ` · Note: ${item.notes}` : ''}`,
           dateVerb: 'Added on',
           amount: Number(item.amount ?? 0),
@@ -288,15 +271,55 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
         };
       }
 
-      const amount = billingTimelineAmount(item);
+      if (String(item.type).endsWith('_PAID')) {
+        const formattedDueDate = item.due_date ? new Date(item.due_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+        return {
+          id: `t-${item.timeline_id ?? item.obligation_id}`,
+          date: new Date(item.paid_date || item.event_date || item.due_date),
+          title: item.label || 'Paid Event',
+          subtitle: `Paid via ${item.payment_method || 'Cash'}${item.reference_number ? ` · Ref: ${item.reference_number}` : ''}${formattedDueDate ? ` · Originally due: ${formattedDueDate}` : ''}`,
+          dateVerb: 'Paid on',
+          amount: Number(item.amount ?? 0),
+          status: 'Paid',
+          statusColor: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
+          tone: 'border-emerald-100 bg-emerald-50/20',
+        };
+      }
+
+      if (item.type === 'PAYMENT_SETTLED' || item.type === 'PAYMENT') {
+        return {
+          id: `t-${item.timeline_id ?? item.obligation_id}`,
+          date: new Date(item.paid_date || item.event_date || item.due_date),
+          title: item.label || 'Payment Received',
+          subtitle: `Paid via ${item.payment_method || 'Cash'}${item.reference_number ? ` · Ref: ${item.reference_number}` : ''}`,
+          dateVerb: 'Paid on',
+          amount: Number(item.amount ?? 0),
+          status: 'Paid',
+          statusColor: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
+          tone: 'border-emerald-100 bg-emerald-50/20',
+        };
+      }
+
+      const isCovered = item.state === 'covered' || item.state === 'paid' || item.status === 'PAID';
+      const isUpcoming = item.state === 'upcoming';
+      const amount = Number(item.amount ?? 0);
+      const paid = Number(item.paid ?? 0);
+      const remaining = Number(item.remaining ?? amount);
+
+      const formattedDueDate = item.due_date ? new Date(item.due_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+      let sub = formattedDueDate ? `Due by ${formattedDueDate}` : '';
+      if (paid > 0 && remaining > 0) {
+        sub += ` · ₹${paid.toLocaleString('en-IN')} paid, ₹${remaining.toLocaleString('en-IN')} remaining`;
+      }
+
       return {
         id: `t-${item.timeline_id ?? item.obligation_id}`,
-        date: new Date(item.due_date),
-        title: item.label || 'Rent Generated',
-        subtitle: `${billingTimelineLabel(item)}${Number(item.covered_by_advance ?? 0) > 0 ? ` (₹${item.covered_by_advance} covered by advance)` : ''}`,
+        date: new Date(item.event_date || item.due_date),
+        title: item.label || 'Charge Generated',
+        subtitle: sub,
         dateVerb: 'Due by',
         amount,
-        status: String(item.state).replaceAll('_', ' '),
+        status: String(item.state || item.status || 'pending').replaceAll('_', ' '),
         statusColor: isCovered
           ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
           : isUpcoming
@@ -825,6 +848,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
               <RentObligationList
                 obligations={obligations as never[]}
                 onRecordPayment={(id) => setPayObligationId(id)}
+                hasActivePlan={Number(tenant?.monthly_rent ?? overview?.rent ?? 0) > 0}
               />
             </div>
 

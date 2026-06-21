@@ -77,13 +77,16 @@ export class BillingTimelineService {
       take: 20,
     });
 
-    const items = obligations.map((ob: any) => {
+    const timelineEvents: any[] = [];
+
+    obligations.forEach((ob: any) => {
       const amount = money(ob.amount);
       const recordedPaid = money((ob.payments || []).reduce((s: number, p: any) => s + Number(p.amount_paid || 0), 0));
       const paid = ob.status === "PAID" && recordedPaid <= 0 ? amount : recordedPaid;
       const remaining = money(Math.max(amount - paid, 0));
       const dueDate = new Date(ob.due_date);
       const delta = daysUntil(dueDate);
+      
       let state = "pending";
       if (ob.status === "WAIVED") state = "waived";
       else if (remaining <= 0 || ob.status === "PAID") state = "paid";
@@ -92,52 +95,131 @@ export class BillingTimelineService {
       else if (delta <= 5) state = "due_soon";
       else if (delta > 30) state = "upcoming";
 
-      return {
-        obligation_id: ob.id,
-        timeline_id: `obligation:${ob.id}`,
-        type: ob.obligation_type,
-        billing_plan_id: ob.billing_plan_id,
-        period_start: ob.billing_period_start || ob.rent_month,
-        period_end: ob.billing_period_end || ob.rent_month,
-        rent_month: ob.rent_month,
-        label: ob.installment_label || new Date(ob.rent_month).toLocaleDateString("en-IN", { month: "short", year: "numeric" }),
-        installment_sequence: ob.installment_sequence,
-        amount,
-        paid,
-        remaining,
-        due_date: ob.due_date,
-        status: ob.status,
-        state,
-      };
+      const latestPayment = ob.payments && ob.payments.length > 0
+        ? ob.payments.reduce((latest: any, current: any) => {
+            return new Date(current.payment_date) > new Date(latest.payment_date) ? current : latest;
+          }, ob.payments[0])
+        : null;
+
+      const paidDate = latestPayment ? latestPayment.payment_date : null;
+
+      if (state === "paid") {
+        let eventType = ob.obligation_type + "_PAID";
+        if (ob.obligation_type === "RENT") eventType = "RENT_PAID";
+        else if (ob.obligation_type === "SECURITY_DEPOSIT") eventType = "SECURITY_DEPOSIT_PAID";
+        else if (ob.obligation_type === "MAINTENANCE") eventType = "MAINTENANCE_PAID";
+
+        let label = "";
+        if (ob.obligation_type === "RENT") {
+          label = `Rent Paid - ${new Date(ob.rent_month).toLocaleDateString("en-IN", { month: "short", year: "numeric" })}`;
+        } else if (ob.obligation_type === "SECURITY_DEPOSIT") {
+          label = "Security Deposit Paid";
+        } else if (ob.obligation_type === "MAINTENANCE") {
+          label = "Onboarding Maintenance Paid";
+        } else {
+          label = `${ob.obligation_type.replace("_", " ")} Paid`;
+        }
+
+        timelineEvents.push({
+          id: `event:paid:${ob.id}`,
+          timeline_id: `event:paid:${ob.id}`,
+          obligation_id: ob.id,
+          type: eventType,
+          billing_plan_id: ob.billing_plan_id,
+          period_start: ob.billing_period_start || ob.rent_month,
+          period_end: ob.billing_period_end || ob.rent_month,
+          rent_month: ob.rent_month,
+          label: ob.installment_label || label,
+          installment_sequence: ob.installment_sequence,
+          amount,
+          paid,
+          remaining: 0,
+          due_date: ob.due_date,
+          paid_date: paidDate || ob.due_date,
+          event_date: paidDate || ob.due_date,
+          status: "PAID",
+          state: "paid",
+          payment_method: latestPayment?.payment_method || null,
+          reference_number: latestPayment?.reference_number || null,
+        });
+      } else {
+        let eventType = ob.obligation_type + "_GENERATED";
+        if (ob.obligation_type === "RENT") eventType = "RENT_GENERATED";
+        else if (ob.obligation_type === "SECURITY_DEPOSIT") eventType = "SECURITY_DEPOSIT_GENERATED";
+        else if (ob.obligation_type === "MAINTENANCE") eventType = "MAINTENANCE_GENERATED";
+        else if (ob.obligation_type === "EXTRA_CHARGE") eventType = "EXTRA_CHARGE_CREATED";
+
+        let label = "";
+        if (ob.obligation_type === "RENT") {
+          label = `Rent Due - ${new Date(ob.rent_month).toLocaleDateString("en-IN", { month: "short", year: "numeric" })}`;
+        } else if (ob.obligation_type === "SECURITY_DEPOSIT") {
+          label = "Security Deposit Due";
+        } else if (ob.obligation_type === "MAINTENANCE") {
+          label = "Onboarding Maintenance Due";
+        } else {
+          label = `${ob.obligation_type.replace("_", " ")} Due`;
+        }
+
+        timelineEvents.push({
+          id: `event:unpaid:${ob.id}`,
+          timeline_id: `event:unpaid:${ob.id}`,
+          obligation_id: ob.id,
+          type: eventType,
+          billing_plan_id: ob.billing_plan_id,
+          period_start: ob.billing_period_start || ob.rent_month,
+          period_end: ob.billing_period_end || ob.rent_month,
+          rent_month: ob.rent_month,
+          label: ob.installment_label || label,
+          installment_sequence: ob.installment_sequence,
+          amount,
+          paid,
+          remaining,
+          due_date: ob.due_date,
+          paid_date: null,
+          event_date: ob.due_date,
+          status: ob.status,
+          state,
+          payment_method: null,
+          reference_number: null,
+        });
+
+        if (state === "partial" && ob.payments && ob.payments.length > 0) {
+          ob.payments.forEach((p: any) => {
+            timelineEvents.push({
+              id: `event:payment:${p.id}`,
+              timeline_id: `event:payment:${p.id}`,
+              obligation_id: ob.id,
+              type: "PAYMENT_SETTLED",
+              billing_plan_id: ob.billing_plan_id,
+              period_start: p.payment_date,
+              period_end: p.payment_date,
+              rent_month: p.payment_date,
+              label: `Partial Payment Received`,
+              installment_sequence: null,
+              amount: money(p.amount_paid),
+              paid: money(p.amount_paid),
+              remaining: 0,
+              due_date: ob.due_date,
+              paid_date: p.payment_date,
+              event_date: p.payment_date,
+              status: "PAID",
+              state: "paid",
+              payment_method: p.payment_method,
+              reference_number: p.reference_number,
+            });
+          });
+        }
+      }
     });
 
     const activeFrequency = (tenant.payment_frequency || "MONTHLY") as PaymentFrequency;
     const projectedItems: any[] = [];
 
-    const paymentItems = payments.map((payment: any) => ({
-      obligation_id: payment.obligation_id,
-      timeline_id: `payment:${payment.id}`,
-      type: "PAYMENT",
-      billing_plan_id: null,
-      period_start: payment.payment_date,
-      period_end: payment.payment_date,
-      rent_month: payment.payment_date,
-      label: "Payment received",
-      installment_sequence: null,
-      amount: money(payment.amount_paid),
-      paid: money(payment.amount_paid),
-      remaining: 0,
-      due_date: payment.payment_date,
-      status: "PAID",
-      state: "paid",
-      payment_method: payment.payment_method,
-      reference_number: payment.reference_number,
-    }));
-
     const rentAdvanceItems = rentAdvanceCredits.map((entry: any) => ({
+      id: `event:credit:${entry.id}`,
+      timeline_id: `event:credit:${entry.id}`,
       obligation_id: null,
-      timeline_id: `advance-credit:${entry.id}`,
-      type: "ADVANCE_CREDIT",
+      type: "CREDIT_APPLIED",
       billing_plan_id: null,
       period_start: entry.created_at,
       period_end: entry.created_at,
@@ -148,6 +230,8 @@ export class BillingTimelineService {
       paid: money(entry.amount),
       remaining: 0,
       due_date: entry.created_at,
+      paid_date: entry.created_at,
+      event_date: entry.created_at,
       status: "PAID",
       state: "paid",
       payment_method: entry.reference_type === "PAYMENT_ATTEMPT" ? "RAZORPAY" : "OFFLINE",
@@ -155,9 +239,9 @@ export class BillingTimelineService {
       notes: entry.notes,
     }));
 
-    const timeline = [...items, ...paymentItems, ...rentAdvanceItems].sort((a: any, b: any) => {
-      const aDate = new Date(a.due_date || a.period_start || 0).getTime();
-      const bDate = new Date(b.due_date || b.period_start || 0).getTime();
+    const timeline = [...timelineEvents, ...rentAdvanceItems].sort((a: any, b: any) => {
+      const aDate = new Date(a.event_date || a.due_date || a.period_start || 0).getTime();
+      const bDate = new Date(b.event_date || b.due_date || b.period_start || 0).getTime();
       if (aDate !== bDate) return aDate - bDate;
       return String(a.timeline_id).localeCompare(String(b.timeline_id));
     });
@@ -194,7 +278,7 @@ export class BillingTimelineService {
       frequency: activeFrequency,
       anchorDate: nextRentMonth,
       monthlyRent: tenant.monthly_rent ? Number(tenant.monthly_rent) : 0,
-      maintenanceAmount: tenant.maintenance_charge ? Number(tenant.maintenance_charge) : 0,
+      maintenanceAmount: String(tenant.maintenance_type || "MONTHLY") === "MONTHLY" && tenant.maintenance_charge ? Number(tenant.maintenance_charge) : 0,
       dueDay,
       autoRentDay,
       policy: policyResponse?.policy?.preferences_config || {},
@@ -220,8 +304,8 @@ export class BillingTimelineService {
       plans: tenant.tenant_billing_plans,
       requests: tenant.payment_frequency_change_requests,
       items: timeline,
-      obligation_items: items,
-      payment_items: [...paymentItems, ...rentAdvanceItems],
+      obligation_items: timelineEvents,
+      payment_items: [],
       rent_advance_items: rentAdvanceItems,
       projected_items: projectedItems,
       next_rent_generation: nextRentGeneration,

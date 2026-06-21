@@ -17,32 +17,61 @@ export function normalizeIndianPhone(value: string | null | undefined): string |
 /**
  * Validates that a guardian's phone number is not the phone number of any tenant in the database.
  */
-export async function assertGuardianPhoneNotTenant(guardianPhone: string | null | undefined): Promise<void> {
+export async function assertGuardianPhoneNotTenant(
+  guardianPhone: string | null | undefined,
+  tenantId?: string
+): Promise<void> {
   if (!guardianPhone) return;
   const normalized = normalizeIndianPhone(guardianPhone);
   if (!normalized) return;
 
-  const existingTenant = await prisma.tenants.findFirst({
-    where: {
-      OR: [
-        { phone_1: normalized },
-        { profiles: { phone: normalized } }
-      ]
-    },
-    select: {
-      id: true,
-      profiles: {
-        select: {
-          name: true
+  if (tenantId) {
+    const existingTenant = await prisma.tenants.findFirst({
+      where: {
+        id: tenantId,
+        OR: [
+          { phone_1: normalized },
+          { profiles: { phone: normalized } }
+        ]
+      },
+      select: {
+        id: true,
+        profiles: {
+          select: {
+            name: true
+          }
         }
       }
-    }
-  });
+    });
 
-  if (existingTenant) {
-    throw new Error(
-      `VALIDATION_ERROR: Guardian phone number cannot be the same as a tenant's phone number (${existingTenant.profiles?.name || "another tenant"})`
-    );
+    if (existingTenant) {
+      throw new Error(
+        `VALIDATION_ERROR: Guardian phone number cannot be the same as a tenant's phone number (${existingTenant.profiles?.name || "another tenant"})`
+      );
+    }
+  } else {
+    const existingTenant = await prisma.tenants.findFirst({
+      where: {
+        OR: [
+          { phone_1: normalized },
+          { profiles: { phone: normalized } }
+        ]
+      },
+      select: {
+        id: true,
+        profiles: {
+          select: {
+            name: true
+          }
+        }
+      }
+    });
+
+    if (existingTenant) {
+      throw new Error(
+        `VALIDATION_ERROR: Guardian phone number cannot be the same as a tenant's phone number (${existingTenant.profiles?.name || "another tenant"})`
+      );
+    }
   }
 }
 

@@ -349,7 +349,7 @@ export class TenantService {
     }
     const syncedGuardian = data.phone_2 || data.guardian_phone;
     if (syncedGuardian) {
-      await assertGuardianPhoneNotTenant(syncedGuardian);
+      await assertGuardianPhoneNotTenant(syncedGuardian, tenantCheck.id);
       tenantUpdate.phone_2 = syncedGuardian;
       tenantUpdate.guardian_phone = syncedGuardian;
     }
@@ -1094,7 +1094,7 @@ export class TenantService {
 
     const proposedGuardian = data.phone_2 || data.guardian_phone;
     if (proposedGuardian) {
-      await assertGuardianPhoneNotTenant(proposedGuardian);
+      await assertGuardianPhoneNotTenant(proposedGuardian, id);
     }
 
     const updated = await tenantRepository.update({

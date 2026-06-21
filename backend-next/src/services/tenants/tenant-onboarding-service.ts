@@ -27,7 +27,7 @@ export class TenantOnboardingService {
       policyAcceptance
     } = payload;
 
-    await assertGuardianPhoneNotTenant(contact?.guardian_phone);
+    await assertGuardianPhoneNotTenant(contact?.guardian_phone, tenant.id);
 
     // Validate Signature
     if (!policyAcceptance || !policyAcceptance.typed_signature_name) {

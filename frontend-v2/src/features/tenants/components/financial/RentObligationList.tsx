@@ -43,6 +43,7 @@ interface Props {
   onSetupBilling?: () => void;
   onDownloadReceipt?: (paymentId: string) => void;
   onSelectObligation?: (obligation: Obligation) => void;
+  hasActivePlan?: boolean;
 }
 
 export function RentObligationList({
@@ -51,6 +52,7 @@ export function RentObligationList({
   onSetupBilling,
   onDownloadReceipt,
   onSelectObligation,
+  hasActivePlan,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const { months, rows } = useMemo(() => {
@@ -84,6 +86,16 @@ export function RentObligationList({
   });
 
   if (months.length === 0) {
+    if (hasActivePlan) {
+      return (
+        <div className="rounded-xl border border-dashed border-border bg-card p-5 text-center">
+          <p className="text-sm font-semibold text-foreground">No dues generated yet.</p>
+          <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
+            Dues will appear here once the billing cycle begins or a charge is recorded.
+          </p>
+        </div>
+      );
+    }
     return (
       <div className="rounded-xl border border-dashed border-border bg-card p-5 text-center">
         <p className="text-sm font-semibold text-foreground">This tenant has no active rent plan.</p>
