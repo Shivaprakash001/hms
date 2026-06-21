@@ -18,20 +18,25 @@ export function normalizeObligation(raw: Record<string, unknown>): PayableObliga
     raw.remaining_due ?? raw.outstanding ?? raw.amount ?? 0
   );
   const type = String(raw.type ?? raw.obligation_type ?? '').toUpperCase();
+  const rawObligationType = String(raw.obligation_type ?? '').toUpperCase();
+
+  const isRent = type === 'RENT' || type === 'PROJECTED_RENT' || type.startsWith('RENT') || rawObligationType === 'RENT';
+  const isMaintenance = type === 'MAINTENANCE' || type === 'PROJECTED_MAINTENANCE' || type.startsWith('MAINTENANCE') || rawObligationType === 'MAINTENANCE';
+  const isSecurityDeposit = ['SECURITY_DEPOSIT', 'PROJECTED_SECURITY_DEPOSIT', 'ADVANCE', 'PROJECTED_ADVANCE'].includes(type) || type.startsWith('SECURITY_DEPOSIT') || rawObligationType === 'SECURITY_DEPOSIT' || rawObligationType === 'ADVANCE';
 
   let rent_amount = 0;
   let maintenance_amount = 0;
   let security_deposit_amount = 0;
 
-  if (type === 'RENT' || type === 'PROJECTED_RENT') {
-    rent_amount = Number(raw.rent_amount ?? raw.amount ?? amount);
-  } else if (type === 'MAINTENANCE' || type === 'PROJECTED_MAINTENANCE') {
-    maintenance_amount = Number(raw.maintenance_amount ?? raw.amount ?? amount);
-  } else if (['SECURITY_DEPOSIT', 'PROJECTED_SECURITY_DEPOSIT', 'ADVANCE', 'PROJECTED_ADVANCE'].includes(type)) {
-    security_deposit_amount = Number(raw.security_deposit_amount ?? raw.amount ?? amount);
+  if (isRent) {
+    rent_amount = Number(raw.original_amount ?? raw.rent_amount ?? raw.amount ?? amount);
+  } else if (isMaintenance) {
+    maintenance_amount = Number(raw.original_amount ?? raw.maintenance_amount ?? raw.amount ?? amount);
+  } else if (isSecurityDeposit) {
+    security_deposit_amount = Number(raw.original_amount ?? raw.security_deposit_amount ?? raw.amount ?? amount);
   } else {
     // Default fallback
-    rent_amount = Number(raw.rent_amount ?? raw.amount ?? amount);
+    rent_amount = Number(raw.original_amount ?? raw.rent_amount ?? raw.amount ?? amount);
   }
 
   return {

@@ -49,8 +49,13 @@ const loadRazorpayScript = (): Promise<boolean> => {
   });
 };
 const timelineAmount = (item: any) => {
-  if (item.type === 'PAYMENT' || item.type === 'ADVANCE_CREDIT') return Number(item.amount ?? 0);
-  return Number(item.remaining ?? item.amount ?? 0);
+  if (
+    ['PAYMENT', 'ADVANCE_CREDIT', 'CREDIT_APPLIED', 'PAYMENT_SETTLED'].includes(item.type) ||
+    ['PAYMENT', 'RENT_CREDIT'].includes(item.obligation_type)
+  ) {
+    return Number(item.original_amount ?? item.amount ?? 0);
+  }
+  return Number(item.remaining_amount ?? item.remaining ?? item.original_amount ?? item.amount ?? 0);
 };
 const canSelectTimelineItem = (item: any) => item.state === 'upcoming' && timelineAmount(item) > 0;
 
@@ -335,7 +340,10 @@ export function TenantFinancialsPage() {
 
     timelineItems.forEach((item: any) => {
       // Exclude transaction records (payments & credits) from being treated as installments themselves
-      if (['PAYMENT', 'ADVANCE_CREDIT'].includes(item.type)) {
+      if (
+        ['PAYMENT', 'ADVANCE_CREDIT', 'CREDIT_APPLIED', 'PAYMENT_SETTLED'].includes(item.type) ||
+        ['PAYMENT', 'RENT_CREDIT'].includes(item.obligation_type)
+      ) {
         return;
       }
 
@@ -343,7 +351,12 @@ export function TenantFinancialsPage() {
       const periodStart = item.period_start || item.rent_month;
       if (!periodStart) return;
       
-      const isSecurityDeposit = ['SECURITY_DEPOSIT', 'PROJECTED_SECURITY_DEPOSIT', 'ADVANCE', 'PROJECTED_ADVANCE'].includes(item.type);
+      const isSecurityDeposit = 
+        item.obligation_type === 'SECURITY_DEPOSIT' || 
+        item.obligation_type === 'ADVANCE' ||
+        ['SECURITY_DEPOSIT', 'PROJECTED_SECURITY_DEPOSIT', 'ADVANCE', 'PROJECTED_ADVANCE'].includes(item.type) ||
+        String(item.type).startsWith('SECURITY_DEPOSIT');
+
       const dateKey = isSecurityDeposit
         ? `sd-${item.obligation_id || item.timeline_id || Math.random()}`
         : new Date(periodStart).toISOString().slice(0, 10);
@@ -379,7 +392,8 @@ export function TenantFinancialsPage() {
       inst.obligations.push(item);
 
       // Prefer the rent item's details for the main installment info
-      if (item.type === 'RENT' || item.type === 'PROJECTED_RENT') {
+      const isRent = item.obligation_type === 'RENT' || item.type === 'RENT' || item.type === 'PROJECTED_RENT' || String(item.type).startsWith('RENT');
+      if (isRent) {
         inst.id = item.obligation_id || item.timeline_id;
         inst.label = item.label;
         inst.due_date = item.due_date;
@@ -390,19 +404,22 @@ export function TenantFinancialsPage() {
       }
 
       // Add component amounts
-      if (item.type === 'RENT' || item.type === 'PROJECTED_RENT') {
-        inst.rent_amount += Number(item.amount ?? 0);
-      } else if (item.type === 'MAINTENANCE' || item.type === 'PROJECTED_MAINTENANCE') {
-        inst.maintenance_amount += Number(item.amount ?? 0);
-      } else if (item.type === 'LATE_FEE') {
-        inst.late_fee_amount += Number(item.amount ?? 0);
+      const isMaintenance = item.obligation_type === 'MAINTENANCE' || item.type === 'MAINTENANCE' || item.type === 'PROJECTED_MAINTENANCE' || String(item.type).startsWith('MAINTENANCE');
+      const isLateFee = item.obligation_type === 'LATE_FEE' || item.type === 'LATE_FEE' || String(item.type).startsWith('LATE_FEE');
+
+      if (isRent) {
+        inst.rent_amount += Number(item.original_amount ?? item.amount ?? 0);
+      } else if (isMaintenance) {
+        inst.maintenance_amount += Number(item.original_amount ?? item.amount ?? 0);
+      } else if (isLateFee) {
+        inst.late_fee_amount += Number(item.original_amount ?? item.amount ?? 0);
       } else if (isSecurityDeposit) {
-        inst.security_deposit_amount += Number(item.amount ?? 0);
+        inst.security_deposit_amount += Number(item.original_amount ?? item.amount ?? 0);
       }
 
       // Accumulate totals
-      inst.paid += Number(item.paid ?? 0);
-      inst.remaining += Number(item.remaining ?? 0);
+      inst.paid += Number(item.paid_amount ?? item.paid ?? 0);
+      inst.remaining += Number(item.remaining_amount ?? item.remaining ?? 0);
       inst.covered_by_advance += Number(item.covered_by_advance ?? 0);
     });
 
@@ -415,6 +432,9 @@ export function TenantFinancialsPage() {
             timelineOb.amount = dueItem.amount;
             timelineOb.paid = dueItem.paid;
             timelineOb.remaining = dueItem.outstanding;
+            timelineOb.original_amount = dueItem.amount;
+            timelineOb.paid_amount = dueItem.paid;
+            timelineOb.remaining_amount = dueItem.outstanding;
             timelineOb.status = dueItem.status;
           }
         }
@@ -430,18 +450,22 @@ export function TenantFinancialsPage() {
       inst.covered_by_advance = 0;
 
       inst.obligations.forEach((ob: any) => {
-        const isObSD = ['SECURITY_DEPOSIT', 'PROJECTED_SECURITY_DEPOSIT', 'ADVANCE', 'PROJECTED_ADVANCE'].includes(ob.type);
-        if (ob.type === 'RENT' || ob.type === 'PROJECTED_RENT') {
-          inst.rent_amount += Number(ob.amount ?? 0);
-        } else if (ob.type === 'MAINTENANCE' || ob.type === 'PROJECTED_MAINTENANCE') {
-          inst.maintenance_amount += Number(ob.amount ?? 0);
-        } else if (ob.type === 'LATE_FEE') {
-          inst.late_fee_amount += Number(ob.amount ?? 0);
+        const isObRent = ob.obligation_type === 'RENT' || ob.type === 'RENT' || ob.type === 'PROJECTED_RENT' || String(ob.type).startsWith('RENT');
+        const isObMaint = ob.obligation_type === 'MAINTENANCE' || ob.type === 'MAINTENANCE' || ob.type === 'PROJECTED_MAINTENANCE' || String(ob.type).startsWith('MAINTENANCE');
+        const isObLF = ob.obligation_type === 'LATE_FEE' || ob.type === 'LATE_FEE' || String(ob.type).startsWith('LATE_FEE');
+        const isObSD = ob.obligation_type === 'SECURITY_DEPOSIT' || ob.obligation_type === 'ADVANCE' || ['SECURITY_DEPOSIT', 'PROJECTED_SECURITY_DEPOSIT', 'ADVANCE', 'PROJECTED_ADVANCE'].includes(ob.type) || String(ob.type).startsWith('SECURITY_DEPOSIT');
+
+        if (isObRent) {
+          inst.rent_amount += Number(ob.original_amount ?? ob.amount ?? 0);
+        } else if (isObMaint) {
+          inst.maintenance_amount += Number(ob.original_amount ?? ob.amount ?? 0);
+        } else if (isObLF) {
+          inst.late_fee_amount += Number(ob.original_amount ?? ob.amount ?? 0);
         } else if (isObSD) {
-          inst.security_deposit_amount += Number(ob.amount ?? 0);
+          inst.security_deposit_amount += Number(ob.original_amount ?? ob.amount ?? 0);
         }
-        inst.paid += Number(ob.paid ?? 0);
-        inst.remaining += Number(ob.remaining ?? 0);
+        inst.paid += Number(ob.paid_amount ?? ob.paid ?? 0);
+        inst.remaining += Number(ob.remaining_amount ?? ob.remaining ?? 0);
         inst.covered_by_advance += Number(ob.covered_by_advance ?? 0);
       });
 
@@ -607,7 +631,7 @@ export function TenantFinancialsPage() {
   
   const advanceCreditHistory = useMemo(() => {
     return ((advance as any)?.entries ?? [])
-      .filter((entry: any) => entry?.type === 'CREDIT' && entry?.reason === 'TOPUP')
+      .filter((entry: any) => entry?.type === 'CREDIT' && (entry?.reason === 'TOPUP' || entry?.reason === 'FUTURE_RENT_CREDIT_TOPUP'))
       .map((entry: any) => ({
         id: `advance-${entry.id}`,
         label: 'Future rent credit',
