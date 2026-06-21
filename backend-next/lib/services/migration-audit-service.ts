@@ -1,5 +1,4 @@
-import { mkdir, writeFile } from "fs/promises";
-import path from "path";
+import { randomUUID } from "crypto";
 import { prisma } from "../db";
 import { eventLog } from "./event-log-service";
 
@@ -51,13 +50,6 @@ type DualReadValidationResult = {
   sample_mismatches: AuditRecord[];
 };
 
-function yyyymmdd(d: Date) {
-  const yyyy = d.getUTCFullYear();
-  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(d.getUTCDate()).padStart(2, "0");
-  return `${yyyy}${mm}${dd}`;
-}
-
 function toNumber(value: any) {
   return Number(value || 0);
 }
@@ -67,7 +59,7 @@ async function rows<T = any>(sql: string): Promise<T[]> {
 }
 
 export class MigrationAuditService {
-  async runFullAudit(options: { artifactDir?: string } = {}): Promise<MigrationAuditArtifact & { artifact_path: string }> {
+  async runFullAudit(): Promise<MigrationAuditArtifact & { artifact_path: string }> {
     const generatedAt = new Date();
     const [orphans, drifts, historical, rollups, dualRead] = await Promise.all([
       this.detectOrphans(),
@@ -97,13 +89,12 @@ export class MigrationAuditService {
       },
     };
 
-    const artifactDir = options.artifactDir || path.join(process.cwd(), "migration-audits");
-    await mkdir(artifactDir, { recursive: true });
-    const artifactPath = path.join(artifactDir, `migration_audit_${yyyymmdd(generatedAt)}.json`);
-    await writeFile(artifactPath, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
+    const auditRunId = randomUUID();
+    const artifactPath = `database://migration_audit_runs/${auditRunId}`;
 
     await (prisma as any).migrationAuditRun.create({
       data: {
+        id: auditRunId,
         artifact_path: artifactPath,
         orphan_count: artifact.orphan_count,
         mismatch_count: artifact.mismatch_count,
@@ -112,8 +103,9 @@ export class MigrationAuditService {
         corruption_candidates_count: artifact.summary.corruption_candidates_count,
         hostel_rollup_validation: artifact.hostel_rollup_validation,
         summary: artifact.summary,
+        artifact,
       },
-    }).catch((err: any) => console.error("[MIGRATION_AUDIT] failed to persist audit run", err));
+    });
 
     await this.emitAuditEvents(artifact);
     return { ...artifact, artifact_path: artifactPath };
@@ -272,7 +264,7 @@ export class MigrationAuditService {
           COALESCE((SELECT SUM(amount)::float FROM rent_obligations ro WHERE ro.owner_id = o.owner_id AND ro.status IN ('PENDING','PARTIAL') AND ro.due_date < CURRENT_DATE), 0) AS overdue,
           COALESCE((SELECT COUNT(*)::float FROM room_allocations ra JOIN tenants t ON t.id = ra.tenant_id WHERE t.owner_id = o.owner_id AND ra.is_active = true AND ra.end_date IS NULL), 0) AS occupancy,
           COALESCE((SELECT SUM(amount)::float FROM rent_obligations ro WHERE ro.owner_id = o.owner_id), 0) AS revenue,
-          COALESCE((SELECT SUM(amount)::float FROM expenses e WHERE e.owner_id = o.owner_id), 0) AS expenses,
+          COALESCE((SELECT SUM(amount)::float FROM expenses e WHERE e.owner_id = o.owner_id AND e.expense_scope = 'HOSTEL'), 0) AS expenses,
           COALESCE((SELECT COUNT(*)::float FROM reminder_logs rl JOIN rent_obligations ro ON ro.id = rl.obligation_id WHERE ro.owner_id = o.owner_id), 0) AS reminders,
           COALESCE((SELECT COUNT(*)::float FROM payments p WHERE p.owner_id = o.owner_id), 0) AS payment_counts
         FROM owners o
@@ -282,7 +274,7 @@ export class MigrationAuditService {
           COALESCE((SELECT SUM(amount)::float FROM rent_obligations ro JOIN hostels h ON h.id = ro.hostel_id WHERE h.owner_id = o.owner_id AND ro.status IN ('PENDING','PARTIAL') AND ro.due_date < CURRENT_DATE), 0) AS overdue,
           COALESCE((SELECT COUNT(*)::float FROM room_allocations ra JOIN hostels h ON h.id = ra.hostel_id WHERE h.owner_id = o.owner_id AND ra.is_active = true AND ra.end_date IS NULL), 0) AS occupancy,
           COALESCE((SELECT SUM(amount)::float FROM rent_obligations ro JOIN hostels h ON h.id = ro.hostel_id WHERE h.owner_id = o.owner_id), 0) AS revenue,
-          COALESCE((SELECT SUM(amount)::float FROM expenses e JOIN hostels h ON h.id = e.hostel_id WHERE h.owner_id = o.owner_id), 0) AS expenses,
+          COALESCE((SELECT SUM(amount)::float FROM expenses e JOIN hostels h ON h.id = e.hostel_id WHERE h.owner_id = o.owner_id AND e.expense_scope = 'HOSTEL'), 0) AS expenses,
           COALESCE((SELECT COUNT(*)::float FROM reminder_logs rl JOIN hostels h ON h.id = rl.hostel_id WHERE h.owner_id = o.owner_id), 0) AS reminders,
           COALESCE((SELECT COUNT(*)::float FROM payments p JOIN hostels h ON h.id = p.hostel_id WHERE h.owner_id = o.owner_id), 0) AS payment_counts
         FROM owners o

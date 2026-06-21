@@ -114,7 +114,7 @@ export class ReminderService {
           id: ob.tenant_id,
           owner_id: ob.owner_id,
           personal_email: ob.personal_email,
-          profile: { name: ob.tenant_name, phone: (ob as any).phone },
+          profiles: { name: ob.tenant_name, phone: (ob as any).phone },
         },
       };
 
@@ -318,7 +318,13 @@ export class ReminderService {
   }> {
     const tenant = await prisma.tenants.findFirst({
       where: { id: tenantId, owner_id: ownerId, status: "ACTIVE" },
-      select: { id: true, personal_email: true, owner_id: true, hostel_id: true, profile: { select: { name: true, phone: true } } },
+      select: {
+        id: true,
+        personal_email: true,
+        owner_id: true,
+        hostel_id: true,
+        profiles: { select: { name: true, phone: true } },
+      },
     });
     if (!tenant) {
       const err: any = new Error("Tenant not found or access denied");
@@ -336,7 +342,7 @@ export class ReminderService {
       orderBy: { due_date: "asc" },
     });
 
-    if (!obligation) return { sent: 0, tenant_name: tenant.profile?.name ?? "Tenant" };
+    if (!obligation) return { sent: 0, tenant_name: tenant.profiles?.name ?? "Tenant" };
 
     const context = await getTenantOperationalContext(tenantId, ownerId, tenant.hostel_id);
     const config = context.prefs;
@@ -365,7 +371,7 @@ export class ReminderService {
       ? 1
       : 0;
 
-    return { sent, tenant_name: tenant.profile?.name ?? "Tenant", channels };
+    return { sent, tenant_name: tenant.profiles?.name ?? "Tenant", channels };
   }
 
   private async triggerNotification(obligation: any, type: string, config: any): Promise<NotificationDeliveryResult> {
@@ -406,7 +412,7 @@ export class ReminderService {
       try {
         const mailData = {
           toEmail: tenant.personal_email,
-          name: tenant.profile?.name || "Tenant",
+          name: tenant.profiles?.name || "Tenant",
           amount: Number(obligation.amount),
           rentMonth: formatMonthYear(obligation.rent_month, config),
           dueDate: formatDate(obligation.due_date, config),
@@ -442,7 +448,7 @@ export class ReminderService {
       result.whatsapp = { attempted: false, sent: false, skipped: true, reason: "WHATSAPP_DISABLED" };
     } else if (!ownerId) {
       result.whatsapp = { attempted: false, sent: false, skipped: true, reason: "OWNER_MISSING" };
-    } else if (!tenant.profile?.phone) {
+    } else if (!tenant.profiles?.phone) {
       result.whatsapp = { attempted: false, sent: false, skipped: true, reason: "TENANT_PHONE_MISSING" };
     } else {
       result.whatsapp.attempted = true;
@@ -465,8 +471,8 @@ export class ReminderService {
             tenantId: tenant.id,
             hostelId: obligation.hostel_id,
             obligationId: obligation.id,
-            phone: tenant.profile.phone,
-            tenantName: tenant.profile?.name || "Tenant",
+            phone: tenant.profiles.phone,
+            tenantName: tenant.profiles?.name || "Tenant",
             hostelName: obligation.hostel_name || "Your Hostel",
             amount: Number(obligation.amount),
             rentMonth: obligation.rent_month,

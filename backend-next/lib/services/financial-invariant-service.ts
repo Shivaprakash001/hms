@@ -1,4 +1,5 @@
 import { prisma } from "../db";
+import { randomUUID } from "crypto";
 import { eventLog } from "./event-log-service";
 import { migrationAuditService } from "./migration-audit-service";
 import { incrementIntegrityMetric } from "../metrics";
@@ -60,6 +61,7 @@ export class FinancialInvariantService {
     if (persist && failures.length > 0) {
       await (prisma as any).financialInvariantFailure.createMany({
         data: failures.map((f) => ({
+          id: randomUUID(),
           invariant_type: f.invariant_type,
           severity: f.severity,
           entity_type: f.entity_type,

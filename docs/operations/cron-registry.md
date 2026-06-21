@@ -159,4 +159,4 @@ Required before scheduling:
 | Agreement lifecycle | Re-run the route with `CRON_SECRET`; agreement reminder timestamps and status checks prevent duplicate lifecycle notifications. |
 | Owner daily briefings | Re-run the route with `CRON_SECRET`; delivered owner/date records are skipped, failed records may retry. |
 | Hostel invariants | Re-run the route with `CRON_SECRET`; inspect persisted invariant failures before remediation. |
-| Migration audit | Re-run the route with `CRON_SECRET`; compare latest audit artifact and `migrationAuditRun` row. |
+| Migration audit | Re-run the route with `CRON_SECRET`; inspect the latest `migrationAuditRun` row and its database-backed `artifact` JSON. |

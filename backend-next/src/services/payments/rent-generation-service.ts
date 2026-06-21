@@ -708,7 +708,7 @@ export class RentGenerationService {
       where: whereClause,
       include: {
         tenant: {
-          select: { id: true, monthly_rent: true, owner_id: true, profile: { select: { name: true } } }
+          select: { id: true, monthly_rent: true, owner_id: true, profiles: { select: { name: true } } }
         },
         room: {
           select: { room_no: true, base_rent: true }
@@ -731,7 +731,7 @@ export class RentGenerationService {
       const rentAmount = Number(alloc.tenant.monthly_rent) || Number(alloc.room.base_rent) || 0;
       return {
         allocation_id: alloc.id,
-        tenant_name: alloc.tenant.profile?.name || "Unknown",
+        tenant_name: alloc.tenant.profiles?.name || "Unknown",
         room_no: alloc.room.room_no,
         rent_amount: rentAmount,
         already_generated: existingSet.has(alloc.id),

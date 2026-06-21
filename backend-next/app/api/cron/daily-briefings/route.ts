@@ -39,6 +39,7 @@ export async function GET(req: NextRequest) {
     sent: 0,
     failed: 0,
     skipped: 0,
+    stale_identities: 0,
     errors: [] as string[],
   };
 
@@ -51,9 +52,29 @@ export async function GET(req: NextRequest) {
       },
     });
 
+    const activeOwners = await prisma.profile.findMany({
+      where: {
+        id: { in: identities.map((identity: { owner_id: string }) => identity.owner_id) },
+        role: "OWNER",
+        is_active: true,
+      },
+      select: { id: true },
+    });
+    const activeOwnerIds = new Set(activeOwners.map((owner: { id: string }) => owner.id));
+
     for (const identity of identities) {
       if (!identity.phone_number) continue;
       summary.processed++;
+
+      if (!activeOwnerIds.has(identity.owner_id)) {
+        summary.skipped++;
+        summary.stale_identities++;
+        logger.warn("Skipping verified WhatsApp identity without an active owner profile", {
+          ownerId: identity.owner_id,
+          identityId: identity.id,
+        });
+        continue;
+      }
 
       try {
         const ownerId = identity.owner_id;
