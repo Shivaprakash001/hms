@@ -45,4 +45,40 @@ export const agreementService = {
     const response = await api.post(`/agreements/${agreementId}/sign-renewal`, data);
     return unwrap(response);
   },
+  getRenewalOffers: async ({ hostelId, status } = {}) => {
+    const response = await api.get('/agreements/renewal-offers', { params: { hostelId, status } });
+    return unwrap(response);
+  },
+  generateRenewalOffer: async (agreementId, data) => {
+    const response = await api.post(`/agreements/${agreementId}/renewal-offer`, data);
+    return unwrap(response);
+  },
+  generateBulkRenewalOffers: async (data) => {
+    const response = await api.post('/agreements/renewal-offers', data);
+    return unwrap(response);
+  },
+  sendRenewalOffer: async (offerId) => {
+    const response = await api.post(`/agreements/renewal-offers/${offerId}/send`);
+    return unwrap(response);
+  },
+  reviseRenewalOffer: async (offerId, data) => {
+    const response = await api.patch(`/agreements/renewal-offers/${offerId}`, data);
+    return unwrap(response);
+  },
+  getTenantRenewalOffer: async () => {
+    const response = await api.get('/tenant/renewal-offer');
+    return unwrap(response);
+  },
+  acceptRenewalOffer: async (offerId) => {
+    const response = await api.post(`/tenant/renewal-offer/${offerId}/accept`);
+    return unwrap(response);
+  },
+  declineRenewalOffer: async (offerId, reason) => {
+    const response = await api.post(`/tenant/renewal-offer/${offerId}/decline`, { reason });
+    return unwrap(response);
+  },
+  discussRenewalOffer: async (offerId, message) => {
+    const response = await api.post(`/tenant/renewal-offer/${offerId}/discuss`, { message });
+    return unwrap(response);
+  },
 };

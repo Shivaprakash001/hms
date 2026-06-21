@@ -34,6 +34,7 @@ export function TenantDashboardPage() {
     notifications,
     documents,
     agreementRenewal,
+    renewalOffer,
   } = useTenantDashboard();
 
   const prof = profile?.profile as Record<string, unknown> | undefined;
@@ -59,6 +60,41 @@ export function TenantDashboardPage() {
     },
     onError: (error: any) => {
       toast.error(error?.response?.data?.error?.message || 'Unable to create renewal draft');
+    },
+  });
+
+  const acceptOfferMutation = useMutation({
+    mutationFn: (offerId: string) => agreementService.acceptRenewalOffer(offerId),
+    onSuccess: () => {
+      toast.success('Renewal offer accepted successfully! A draft agreement has been scheduled.');
+      queryClient.invalidateQueries({ queryKey: ['tenant', 'me', 'renewal-offer'] });
+      queryClient.invalidateQueries({ queryKey: ['tenant', 'me', 'profile'] });
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.error?.message || 'Unable to accept renewal offer');
+    },
+  });
+
+  const declineOfferMutation = useMutation({
+    mutationFn: ({ offerId, reason }: { offerId: string; reason: string }) => 
+      agreementService.declineRenewalOffer(offerId, reason),
+    onSuccess: () => {
+      toast.success('Renewal offer declined.');
+      queryClient.invalidateQueries({ queryKey: ['tenant', 'me', 'renewal-offer'] });
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.error?.message || 'Unable to decline renewal offer');
+    },
+  });
+
+  const discussOfferMutation = useMutation({
+    mutationFn: (offerId: string) => 
+      agreementService.discussRenewalOffer(offerId, 'Let us discuss the renewal offer options.'),
+    onSuccess: () => {
+      toast.success('WhatsApp discussion request sent to owner!');
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.error?.message || 'Unable to send discussion request');
     },
   });
 
@@ -223,11 +259,23 @@ export function TenantDashboardPage() {
         </Link>
       )}
 
-      <TenantRenewalCard
-        renewal={agreementRenewal as Record<string, unknown> | undefined}
-        isCreating={renewalMutation.isPending}
-        onRenew={(agreementId) => renewalMutation.mutate(agreementId)}
-      />
+      {renewalOffer ? (
+        <TenantRenewalOfferCard
+          offer={renewalOffer as Record<string, any>}
+          onAccept={(id) => acceptOfferMutation.mutate(id)}
+          onDecline={(id, reason) => declineOfferMutation.mutate({ offerId: id, reason })}
+          onDiscuss={(id) => discussOfferMutation.mutate(id)}
+          isAccepting={acceptOfferMutation.isPending}
+          isDeclining={declineOfferMutation.isPending}
+          isDiscussing={discussOfferMutation.isPending}
+        />
+      ) : (
+        <TenantRenewalCard
+          renewal={agreementRenewal as Record<string, unknown> | undefined}
+          isCreating={renewalMutation.isPending}
+          onRenew={(agreementId) => renewalMutation.mutate(agreementId)}
+        />
+      )}
 
       {/* My Stay Section */}
       <section className="space-y-3">
@@ -431,6 +479,167 @@ function TenantRenewalCard({
   );
 }
 
+function TenantRenewalOfferCard({
+  offer,
+  onAccept,
+  onDecline,
+  onDiscuss,
+  isAccepting,
+  isDeclining,
+  isDiscussing,
+}: {
+  offer: Record<string, any>;
+  onAccept: (id: string) => void;
+  onDecline: (id: string, reason: string) => void;
+  onDiscuss: (id: string) => void;
+  isAccepting: boolean;
+  isDeclining: boolean;
+  isDiscussing: boolean;
+}) {
+  const [showDeclineForm, setShowDeclineForm] = useState(false);
+  const [declineReason, setDeclineReason] = useState('');
+
+  if (!offer || (offer.status !== 'SENT' && offer.status !== 'DRAFT')) return null;
+
+  const currentRent = offer.agreement?.contract_rent || 0;
+  const proposedRent = offer.proposed_rent || 0;
+  const rentDelta = proposedRent - currentRent;
+
+  const currentDeposit = offer.agreement?.contract_security_deposit || 0;
+  const proposedDeposit = offer.proposed_security_deposit || 0;
+  const depositDelta = offer.additional_deposit_required || 0;
+
+  const startDateFmt = offer.effective_from 
+    ? new Date(offer.effective_from).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+    : 'Next Period';
+
+  return (
+    <section className="rounded-2xl border border-indigo-100 bg-indigo-50/40 p-5 shadow-sm relative overflow-hidden">
+      <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+        <FileCheck2 className="h-28 w-28 text-indigo-900" />
+      </div>
+      
+      <div className="flex items-start gap-4">
+        <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-700 flex items-center justify-center shrink-0">
+          <FileCheck2 className="w-5 h-5" />
+        </div>
+        <div className="min-w-0 flex-1 space-y-3">
+          <div>
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-indigo-600/10 text-indigo-700">
+              New Renewal Offer
+            </span>
+            <h4 className="text-sm font-bold text-indigo-950 mt-1">Proposed Extension Terms</h4>
+            <p className="text-xs text-indigo-900/70 mt-0.5">Please review the proposed terms for your upcoming contract period starting {startDateFmt}.</p>
+          </div>
+
+          {/* Pricing Grid */}
+          <div className="grid grid-cols-2 gap-3 max-w-md">
+            <div className="bg-card rounded-xl p-3 border border-indigo-100/50">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Monthly Rent</p>
+              <p className="text-base font-extrabold text-foreground mt-0.5">{fmt(proposedRent)}</p>
+              {rentDelta !== 0 && (
+                <p className={`text-[10px] font-semibold mt-0.5 ${rentDelta > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                  {rentDelta > 0 ? `+${fmt(rentDelta)}` : fmt(rentDelta)} change
+                </p>
+              )}
+            </div>
+
+            <div className="bg-card rounded-xl p-3 border border-indigo-100/50">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Security Deposit</p>
+              <p className="text-base font-extrabold text-foreground mt-0.5">{fmt(proposedDeposit)}</p>
+              {depositDelta > 0 ? (
+                <p className="text-[10px] font-semibold text-rose-600 mt-0.5">
+                  Top-up due: {fmt(depositDelta)}
+                </p>
+              ) : (
+                <p className="text-[10px] font-semibold text-emerald-600 mt-0.5">
+                  Deposit covered
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Additional details */}
+          <div className="text-xs text-indigo-900/80 space-y-1">
+            <p>· Duration: <strong>{offer.proposed_duration_months} Months</strong></p>
+            {offer.owner_notes && (
+              <div className="mt-2 bg-indigo-100/40 border-l-2 border-indigo-400 p-2.5 rounded-r-lg text-indigo-950 italic text-[11px]">
+                &ldquo;{offer.owner_notes}&rdquo;
+              </div>
+            )}
+          </div>
+
+          {/* Action buttons */}
+          {!showDeclineForm ? (
+            <div className="pt-2 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={isAccepting || isDeclining || isDiscussing}
+                onClick={() => onAccept(offer.id)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-colors disabled:opacity-50"
+              >
+                {isAccepting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                Accept Proposal
+              </button>
+
+              <button
+                type="button"
+                disabled={isAccepting || isDeclining || isDiscussing}
+                onClick={() => setShowDeclineForm(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-card hover:bg-indigo-50/50 px-4 py-2.5 text-xs font-bold text-indigo-900 transition-colors disabled:opacity-50"
+              >
+                <XCircle className="h-4 w-4 text-indigo-600/70" />
+                Decline
+              </button>
+
+              <button
+                type="button"
+                disabled={isAccepting || isDeclining || isDiscussing}
+                onClick={() => onDiscuss(offer.id)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-transparent bg-indigo-600/10 hover:bg-indigo-600/20 px-4 py-2.5 text-xs font-bold text-indigo-950 transition-colors disabled:opacity-50"
+              >
+                {isDiscussing ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquare className="h-4 w-4" />}
+                Discuss on WhatsApp
+              </button>
+            </div>
+          ) : (
+            <div className="pt-2 border-t border-indigo-100/50 space-y-2">
+              <p className="text-xs font-semibold text-indigo-950">Why are you declining this offer?</p>
+              <textarea
+                value={declineReason}
+                onChange={(e) => setDeclineReason(e.target.value)}
+                placeholder="E.g., rent increase is too high, plan to vacate, room category change needed..."
+                className="w-full min-h-[70px] rounded-xl border border-indigo-200 bg-card p-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+              <div className="flex gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDeclineForm(false);
+                    setDeclineReason('');
+                  }}
+                  className="rounded-lg px-3 py-1.5 text-xs font-bold text-indigo-900"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!declineReason.trim() || isDeclining}
+                  onClick={() => onDecline(offer.id, declineReason)}
+                  className="rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 text-xs font-bold transition-colors disabled:opacity-50"
+                >
+                  {isDeclining ? <Loader2 className="h-3 w-3 animate-spin inline mr-1" /> : null}
+                  Confirm Decline
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function TenantPrioritySkeleton() {
   return (
     <div className="rounded-xl border border-border bg-card p-4">
@@ -440,5 +649,6 @@ function TenantPrioritySkeleton() {
     </div>
   );
 }
+
 
 

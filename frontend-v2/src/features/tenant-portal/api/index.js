@@ -59,4 +59,5 @@ export const tenantPortalApi = {
   markNotificationRead: (id) => notificationService.markAsRead(id),
   getMoveOutTimeline: () => moveOutService.getTimeline(),
   getAgreementRenewal: () => agreementService.getTenantRenewal(),
+  getTenantRenewalOffer: () => agreementService.getTenantRenewalOffer(),
 };

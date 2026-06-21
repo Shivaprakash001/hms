@@ -269,6 +269,8 @@ model hostels {
   agreements          Agreement[]
   agreement_templates AgreementTemplate[]
   payment_link_tokens payment_link_tokens[]
+  renewal_offers      RenewalOffer[]
+  bulk_renewal_batches BulkRenewalBatch[]
 }
 
 model identity_tokens {
@@ -1307,6 +1309,8 @@ model tenants {
   visitor_leads            visitor_leads[]
   agreements               Agreement[]
   payment_link_tokens      payment_link_tokens[]
+  renewal_offers           RenewalOffer[]
+  renewal_decisions        RenewalDecision[]
 
   @@index([hostel_id])
   @@index([owner_id])
@@ -1507,6 +1511,7 @@ model whatsapp_webhook_events {
 
 enum FinancialLedgerReason {
   SECURITY_DEPOSIT_COLLECTED
+  SECURITY_DEPOSIT_TOPUP
   FUTURE_RENT_CREDIT_TOPUP
   FUTURE_RENT_CREDIT_ADJUSTMENT
   SECURITY_DEPOSIT_DEDUCTION
@@ -1925,6 +1930,16 @@ enum AgreementStatus {
   VOID
 }
 
+enum RenewalOfferStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  DECLINED
+  EXPIRED
+  REVISED
+  SUPERSEDED
+}
+
 model AgreementTemplate {
   id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   hostel_id           String                @db.Uuid
@@ -1942,8 +1957,16 @@ model AgreementTemplate {
   status              TemplateStatus        @default(DRAFT)
   version_number      Int                   @default(1)
   effective_from      DateTime              @default(now()) @db.Timestamptz(6)
+  effective_to        DateTime?             @db.Timestamptz(6)
   published_at        DateTime?             @db.Timestamptz(6)
   published_by_id     String?               @db.Uuid
+
+  // Default values for room categories and templates
+  room_category             String?
+  default_rent              Decimal?              @db.Decimal(10, 2)
+  default_security_deposit  Decimal?              @db.Decimal(10, 2)
+  default_duration_months   Int?
+  notice_period_days        Int?
 
   hostel              hostels               @relation(fields: [hostel_id], references: [id], onDelete: Cascade)
   agreements          Agreement[]
@@ -2013,6 +2036,8 @@ model Agreement {
   renewed_to_agreement    Agreement?        @relation("AgreementRenewedTo", fields: [renewed_to_agreement_id], references: [id])
   renewed_previous_agreements Agreement[]   @relation("AgreementRenewedTo")
   rent_obligations        rent_obligations[]
+  renewal_offers_source   RenewalOffer[]   @relation("OfferSourceAgreement")
+  renewal_offers_result   RenewalOffer[]   @relation("OfferResultAgreement")
 
   @@index([tenant_id])
   @@index([tenant_id, status])
@@ -2040,6 +2065,136 @@ model payment_link_tokens {
   @@index([obligation_id])
   @@index([tenant_id])
   @@index([expires_at])
+}
+
+model RenewalOffer {
+  id                         String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  agreement_id               String                    @db.Uuid
+  tenant_id                  String                    @db.Uuid
+  hostel_id                  String                    @db.Uuid
+  owner_id                   String                    @db.Uuid
+  batch_id                   String?                   @db.Uuid
+
+  // Proposed contract terms
+  proposed_rent              Decimal                   @db.Decimal(10, 2)
+  proposed_security_deposit  Decimal                   @db.Decimal(10, 2)
+  proposed_maintenance       Decimal                   @default(0) @db.Decimal(10, 2)
+  proposed_maintenance_type  String?
+  proposed_duration_months   Int
+  proposed_start_date        DateTime                  @db.Date
+  proposed_end_date          DateTime                  @db.Date
+  proposed_payment_frequency String?
+  effective_from             DateTime                  @db.Date  // When the new agreement actually activates
+
+  // Current terms snapshot
+  current_rent               Decimal                   @db.Decimal(10, 2)
+  current_security_deposit   Decimal                   @db.Decimal(10, 2)
+  current_maintenance        Decimal                   @default(0) @db.Decimal(10, 2)
+
+  // Deposit delta
+  deposit_held               Decimal                   @default(0) @db.Decimal(10, 2)
+  additional_deposit_required Decimal                  @default(0) @db.Decimal(10, 2)
+  deposit_refund_eligible    Decimal                   @default(0) @db.Decimal(10, 2)
+  deposit_refund_policy      DepositRefundPolicy       @default(KEEP_AS_CREDIT)
+
+  // Notifications
+  notification_target        RenewalNotificationTarget @default(TENANT)
+
+  // Status
+  status                     RenewalOfferStatus        @default(DRAFT)
+  offer_expires_at           DateTime?                 @db.Timestamptz(6)
+  sent_at                    DateTime?                 @db.Timestamptz(6)
+  accepted_at                DateTime?                 @db.Timestamptz(6)
+  declined_at                DateTime?                 @db.Timestamptz(6)
+  decline_reason             String?
+  revised_from_offer_id      String?                   @db.Uuid
+
+  // Owner notes
+  owner_notes                String?
+  is_custom_override         Boolean                   @default(false)
+
+  // Result
+  resulting_agreement_id     String?                   @db.Uuid
+
+  created_at                 DateTime                  @default(now()) @db.Timestamptz(6)
+  updated_at                 DateTime?                 @db.Timestamptz(6)
+
+  // Relations
+  agreement                  Agreement                 @relation("OfferSourceAgreement", fields: [agreement_id], references: [id], onDelete: Cascade)
+  tenant                     tenants                   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  hostel                     hostels                   @relation(fields: [hostel_id], references: [id], onDelete: Cascade)
+  batch                      BulkRenewalBatch?         @relation(fields: [batch_id], references: [id], onDelete: SetNull)
+  revised_from_offer         RenewalOffer?             @relation("OfferRevision", fields: [revised_from_offer_id], references: [id], onDelete: SetNull)
+  revised_offers             RenewalOffer[]            @relation("OfferRevision")
+  resulting_agreement        Agreement?                @relation("OfferResultAgreement", fields: [resulting_agreement_id], references: [id], onDelete: SetNull)
+  decisions                  RenewalDecision[]
+
+  @@index([agreement_id, status])
+  @@index([tenant_id, status])
+  @@index([hostel_id, status])
+  @@index([batch_id])
+  @@index([status, offer_expires_at])
+  @@index([owner_id, hostel_id, status])
+}
+
+model BulkRenewalBatch {
+  id                     String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  owner_id               String                    @db.Uuid
+  hostel_id              String                    @db.Uuid
+  title                  String                    @default("Bulk Renewal")
+  filter_criteria        Json                      @default("{}")
+  renewal_strategy       String                    @default("FLAT")  // FLAT | PERCENTAGE | ROOM_CATEGORY
+  proposed_rent          Decimal?                  @db.Decimal(10, 2)
+  proposed_deposit       Decimal?                  @db.Decimal(10, 2)
+  proposed_duration_months Int?
+  rent_increase_amount   Decimal?                  @db.Decimal(10, 2)
+  rent_increase_percent  Decimal?                  @db.Decimal(5, 2)
+  offers_generated       Int                       @default(0)
+  offers_sent            Int                       @default(0)
+  offers_accepted        Int                       @default(0)
+  offers_declined        Int                       @default(0)
+  status                 String                    @default("DRAFT")
+
+  // Deposit and Notification snapshotted strategies
+  deposit_refund_policy  DepositRefundPolicy       @default(KEEP_AS_CREDIT)
+  notification_target    RenewalNotificationTarget @default(TENANT)
+  strategy_type          String?                   // snapshot e.g. FLAT, PERCENTAGE, ROOM_CATEGORY
+  room_category_snapshot String?                   // snapshot of room category target
+
+  created_at             DateTime                  @default(now()) @db.Timestamptz(6)
+  completed_at           DateTime?                 @db.Timestamptz(6)
+
+  hostel                 hostels                   @relation(fields: [hostel_id], references: [id], onDelete: Cascade)
+  offers                 RenewalOffer[]
+
+  @@index([owner_id, hostel_id, status])
+}
+
+model RenewalDecision {
+  id         String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  offer_id   String             @db.Uuid
+  tenant_id  String             @db.Uuid
+  decision   RenewalOfferStatus
+  reason     String?
+  created_at DateTime           @default(now()) @db.Timestamptz(6)
+
+  offer      RenewalOffer       @relation(fields: [offer_id], references: [id], onDelete: Cascade)
+  tenant     tenants            @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([offer_id])
+  @@index([tenant_id])
+}
+
+enum DepositRefundPolicy {
+  KEEP_AS_DEPOSIT
+  KEEP_AS_CREDIT
+  REFUND
+}
+
+enum RenewalNotificationTarget {
+  TENANT
+  GUARDIAN
+  BOTH
 }
 
 enum HostelStatus {

@@ -101,6 +101,13 @@ export function useTenantDashboard() {
     enabled: loadSecondary,
   });
 
+  const renewalOfferQ = useQuery({
+    queryKey: ['tenant', 'me', 'renewal-offer'],
+    queryFn: () => tenantPortalApi.getTenantRenewalOffer(),
+    staleTime: 60_000,
+    enabled: loadSecondary,
+  });
+
   const refetchAll = () => {
     profileQ.refetch();
     duesQ.refetch();
@@ -112,6 +119,7 @@ export function useTenantDashboard() {
     notificationsQ.refetch();
     documentsQ.refetch();
     agreementRenewalQ.refetch();
+    renewalOfferQ.refetch();
   };
 
   return {
@@ -125,6 +133,7 @@ export function useTenantDashboard() {
     notifications: notificationsQ.data,
     documents: documentsQ.data,
     agreementRenewal: agreementRenewalQ.data,
+    renewalOffer: renewalOfferQ.data,
     isLoading: criticalLoading,
     refetchAll,
   };

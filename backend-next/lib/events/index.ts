@@ -304,3 +304,37 @@ eventSystem.on("tenant_onboarding_completed", async (data) => {
     console.error("[Event] tenant_onboarding_completed notification failed:", error);
   }
 });
+
+eventSystem.on("renewal_offer_sent", async (data) => {
+  try {
+    const { sendRenewalOfferNotification } = await import(
+      "../services/notifications/whatsapp-renewal-handler"
+    );
+    await sendRenewalOfferNotification(data.offer_id);
+  } catch (error) {
+    console.error("[Event] renewal_offer_sent notification failed:", error);
+  }
+});
+
+eventSystem.on("renewal_offer_declined", async (data) => {
+  try {
+    const { sendRenewalOfferDeclinedNotification } = await import(
+      "../services/notifications/whatsapp-renewal-handler"
+    );
+    await sendRenewalOfferDeclinedNotification(data.offer_id, data.reason);
+  } catch (error) {
+    console.error("[Event] renewal_offer_declined notification failed:", error);
+  }
+});
+
+eventSystem.on("renewal_offer_discussion_requested", async (data) => {
+  try {
+    const { sendRenewalOfferDiscussionNotification } = await import(
+      "../services/notifications/whatsapp-renewal-handler"
+    );
+    await sendRenewalOfferDiscussionNotification(data.offer_id, data.message);
+  } catch (error) {
+    console.error("[Event] renewal_offer_discussion_requested notification failed:", error);
+  }
+});
+

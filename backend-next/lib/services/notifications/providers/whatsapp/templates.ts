@@ -207,3 +207,52 @@ export function buildOwnerRenewalAlertPayload(input: OwnerRenewalAlertInput): st
   ];
 }
 
+// ─── Stay Renewal Offer Templates ─────────────────────────────
+
+export const RENEWAL_OFFER_SENT_TEMPLATE_NAME = "renewal_offer_sent_v1";
+export const RENEWAL_OFFER_DECLINED_TEMPLATE_NAME = "renewal_offer_declined_v1";
+export const RENEWAL_OFFER_DISCUSSION_TEMPLATE_NAME = "renewal_offer_discussion_v1";
+
+export type RenewalOfferSentTemplateInput = {
+  tenantName: string;
+  hostelName: string;
+  proposedRent: number;
+  expiryDate: Date | string;
+};
+
+export function buildRenewalOfferSentPayload(input: RenewalOfferSentTemplateInput): string[] {
+  return [
+    input.tenantName || "Resident",
+    input.hostelName || "Your Hostel",
+    formatTemplateAmount(input.proposedRent),
+    formatShortDate(input.expiryDate),
+  ];
+}
+
+export type RenewalOfferDeclinedTemplateInput = {
+  tenantName: string;
+  roomNo: string;
+  reason: string;
+};
+
+export function buildRenewalOfferDeclinedPayload(input: RenewalOfferDeclinedTemplateInput): string[] {
+  return [
+    input.tenantName || "Tenant",
+    input.roomNo || "N/A",
+    input.reason || "No reason provided",
+  ];
+}
+
+export type RenewalOfferDiscussionTemplateInput = {
+  tenantName: string;
+  roomNo: string;
+  message: string;
+};
+
+export function buildRenewalOfferDiscussionPayload(input: RenewalOfferDiscussionTemplateInput): string[] {
+  return [
+    input.tenantName || "Tenant",
+    input.roomNo || "N/A",
+    input.message || "Wants to discuss",
+  ];
+}
