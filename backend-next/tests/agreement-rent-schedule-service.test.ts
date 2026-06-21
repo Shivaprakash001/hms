@@ -87,7 +87,7 @@ describe("AgreementRentScheduleService", () => {
     expect(tx.rows).toHaveLength(2);
     expect(tx.rows.map((row) => row.rent_month.toISOString().slice(0, 10))).toEqual(["2026-06-01", "2026-07-01"]);
     expect(tx.rows.map((row) => Number(row.amount))).toEqual([8500, 8500]);
-    expect(tx.rows.map((row) => row.status)).toEqual(["OVERDUE", "UPCOMING"]);
+    expect(tx.rows.map((row) => row.status)).toEqual(["PENDING", "UPCOMING"]);
   });
 
   it("reruns without duplicating agreement obligations", async () => {

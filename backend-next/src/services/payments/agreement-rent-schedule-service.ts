@@ -148,7 +148,7 @@ export class AgreementRentScheduleService {
           patch.total_amount = rentAmount;
         }
         if (shouldUpdateStatus(existing.status)) {
-          patch.status = status;
+          patch.status = status === "OVERDUE" ? "PENDING" : status;
         }
         if (allocation?.id && !existing.allocation_id) {
           patch.allocation_id = allocation.id;
@@ -171,7 +171,7 @@ export class AgreementRentScheduleService {
             amount: rentAmount,
             total_amount: rentAmount,
             due_date: dueDate,
-            status,
+            status: status === "OVERDUE" ? "PENDING" : status,
             obligation_type: "RENT",
             billing_period_start: rentMonth,
             billing_period_end: periodEnd,
@@ -197,6 +197,25 @@ export class AgreementRentScheduleService {
     const currentMonth = firstOfUtcMonth(now);
     const whereHostel = params.hostelId ? { hostel_id: params.hostelId } : {};
 
+    // 1. Self-healing backfill: Convert any existing database status 'OVERDUE' to 'PENDING' or 'PARTIAL'
+    const overdueObs = await prisma.rent_obligations.findMany({
+      where: {
+        ...whereHostel,
+        status: "OVERDUE"
+      },
+      include: { payments: { select: { amount_paid: true } } }
+    });
+
+    for (const ob of overdueObs) {
+      const totalPaid = ob.payments.reduce((sum, p) => sum + Number(p.amount_paid), 0);
+      const targetStatus = totalPaid > 0 ? "PARTIAL" : "PENDING";
+      await prisma.rent_obligations.update({
+        where: { id: ob.id },
+        data: { status: targetStatus, updated_at: new Date() }
+      });
+    }
+
+    // 2. Transition 'UPCOMING' rent obligations to 'PENDING' when the billing month starts
     const pendingResult = await prisma.rent_obligations.updateMany({
       where: {
         ...whereHostel,
@@ -208,20 +227,20 @@ export class AgreementRentScheduleService {
       data: { status: "PENDING", updated_at: new Date() },
     });
 
-    const overdueResult = await prisma.rent_obligations.updateMany({
+    // 3. Count overdue obligations dynamically instead of setting database status
+    const overdueCount = await prisma.rent_obligations.count({
       where: {
         ...whereHostel,
         obligation_type: "RENT",
         is_superseded: false,
-        status: "PENDING",
+        status: { in: ["PENDING", "PARTIAL"] },
         due_date: { lt: now },
       },
-      data: { status: "OVERDUE", updated_at: new Date() },
     });
 
     return {
       pending: pendingResult.count,
-      overdue: overdueResult.count,
+      overdue: overdueCount,
     };
   }
 }
