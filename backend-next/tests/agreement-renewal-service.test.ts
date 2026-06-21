@@ -240,8 +240,26 @@ describe("AgreementRenewalService", () => {
     expect(tx.move_out_requests_write.updateMany).not.toHaveBeenCalled();
   });
 
-  it("requires explicit lifecycle dates before creating a renewal draft", async () => {
-    const { db, tx } = createDb();
+  it("requires explicit lifecycle dates before creating a renewal draft if source agreement and snapshot lack them", async () => {
+    const { db, tx } = createDb({
+      agreement_start_date: null,
+      agreement_end_date: null,
+      agreement_duration_months: null,
+      content_snapshot: {
+        hostel_name: "Sri Adithya",
+        tenant_name: "Tenant One",
+        monthly_rent: 8000,
+        advance_deposit: 9000,
+        maintenance_charge: 1000,
+        maintenance_type: "MONTHLY",
+        payment_frequency: "QUARTERLY",
+        agreement_start_date: null,
+        agreement_end_date: null,
+        agreement_duration_months: null,
+        joining_date: null,
+        billing_start_date: null,
+      },
+    });
     const service = new AgreementRenewalService(db as any);
 
     await expect(service.createRenewalDraft("agreement-1")).rejects.toMatchObject({
@@ -256,6 +274,44 @@ describe("AgreementRenewalService", () => {
       }),
     });
     expect(tx.agreement.create).not.toHaveBeenCalled();
+  });
+
+  it("successfully creates a renewal draft with defaulted dates when not provided in input", async () => {
+    const { db, tx } = createDb();
+    const service = new AgreementRenewalService(db as any);
+
+    const result = await service.createRenewalDraft("agreement-1");
+    expect(result.renewalDraft).toBeTruthy();
+    expect(result.renewalDraft.agreement_start_date.toISOString()).toBe("2027-06-14T00:00:00.000Z");
+    expect(result.renewalDraft.agreement_end_date.toISOString()).toBe("2028-06-14T00:00:00.000Z");
+    expect(result.renewalDraft.agreement_duration_months).toBe(12);
+    expect(tx.agreement.create).toHaveBeenCalled();
+  });
+
+  it("handles legacy source agreements by fallback to content snapshot", async () => {
+    const { db, tx } = createDb({
+      agreement_start_date: null,
+      agreement_end_date: null,
+      agreement_duration_months: null,
+      content_snapshot: {
+        hostel_name: "Sri Adithya",
+        tenant_name: "Tenant One",
+        monthly_rent: 8000,
+        advance_deposit: 9000,
+        maintenance_charge: 1000,
+        maintenance_type: "MONTHLY",
+        payment_frequency: "QUARTERLY",
+        joining_date: "2026-06-14",
+        duration: 12,
+      },
+    });
+    const service = new AgreementRenewalService(db as any);
+
+    const result = await service.createRenewalDraft("agreement-1");
+    expect(result.renewalDraft).toBeTruthy();
+    expect(result.renewalDraft.agreement_start_date.toISOString()).toBe("2027-06-14T00:00:00.000Z");
+    expect(result.renewalDraft.agreement_end_date.toISOString()).toBe("2028-06-14T00:00:00.000Z");
+    expect(result.renewalDraft.agreement_duration_months).toBe(12);
   });
 
   it("uses structured renewal errors", () => {

@@ -3,6 +3,8 @@ import { randomUUID } from "crypto";
 import {
   assertAgreementLifecycleComplete,
   buildRenewalAgreementLifecycle,
+  toAgreementDate,
+  addAgreementMonths,
 } from "./agreement-lifecycle-completeness";
 import type { RenewalLifecycleInput } from "./agreement-lifecycle-completeness";
 
@@ -27,6 +29,38 @@ function moneyOrNull(value: unknown) {
   if (value === null || value === undefined) return null;
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
+}
+
+function toPositiveIntegerOrNull(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  const integer = Math.trunc(numeric);
+  return integer > 0 ? integer : null;
+}
+
+function resolveSourceLifecycle(sourceAgreement: any) {
+  const snapshot = (sourceAgreement?.content_snapshot || {}) as Record<string, any>;
+
+  const startDate = toAgreementDate(sourceAgreement?.agreement_start_date)
+    ?? toAgreementDate(snapshot.agreement_start_date)
+    ?? toAgreementDate(snapshot.joining_date)
+    ?? toAgreementDate(snapshot.billing_start_date);
+
+  const durationMonths = toPositiveIntegerOrNull(sourceAgreement?.agreement_duration_months)
+    ?? toPositiveIntegerOrNull(snapshot.agreement_duration_months)
+    ?? toPositiveIntegerOrNull(snapshot.duration_months)
+    ?? toPositiveIntegerOrNull(snapshot.duration);
+
+  const endDate = toAgreementDate(sourceAgreement?.agreement_end_date)
+    ?? toAgreementDate(snapshot.agreement_end_date)
+    ?? (startDate && durationMonths ? addAgreementMonths(startDate, durationMonths) : null);
+
+  return {
+    startDate,
+    endDate,
+    durationMonths,
+  };
 }
 
 function resolveContractSnapshot(sourceAgreement: any) {
@@ -141,7 +175,25 @@ export class AgreementRenewalService {
       }
 
       const contract = resolveContractSnapshot(sourceAgreement);
-      const lifecycle = buildRenewalAgreementLifecycle(lifecycleInput);
+      const sourceLifecycle = resolveSourceLifecycle(sourceAgreement);
+
+      const defaultStartDate = lifecycleInput.agreement_start_date
+        ? toAgreementDate(lifecycleInput.agreement_start_date)
+        : sourceLifecycle.endDate;
+
+      const defaultDuration = toPositiveIntegerOrNull(lifecycleInput.agreement_duration_months)
+        ?? sourceLifecycle.durationMonths;
+
+      const defaultEndDate = lifecycleInput.agreement_end_date
+        ? toAgreementDate(lifecycleInput.agreement_end_date)
+        : (defaultStartDate && defaultDuration ? addAgreementMonths(defaultStartDate, defaultDuration) : null);
+
+      const lifecycle = {
+        agreement_start_date: defaultStartDate,
+        agreement_end_date: defaultEndDate,
+        agreement_duration_months: defaultDuration,
+      };
+
       const nextVersion = Number(sourceAgreement.agreement_version || 1) + 1;
       const renewalLifecycleCandidate = {
         ...lifecycle,
