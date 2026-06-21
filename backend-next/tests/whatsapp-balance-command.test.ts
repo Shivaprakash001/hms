@@ -19,6 +19,18 @@ vi.spyOn(MetaWhatsAppProvider.prototype, "sendTextMessage").mockResolvedValue({
   attempts: 1,
 });
 
+vi.spyOn(MetaWhatsAppProvider.prototype, "sendButtonMessage").mockResolvedValue({
+  providerMessageId: "mock-button-id-12345",
+  raw: { success: true },
+  attempts: 1,
+});
+
+vi.spyOn(MetaWhatsAppProvider.prototype, "sendListMessage").mockResolvedValue({
+  providerMessageId: "mock-list-id-12345",
+  raw: { success: true },
+  attempts: 1,
+});
+
 const rateLimits = new Map<string, number>();
 vi.spyOn(rateLimitService, "checkStatelessLimit").mockImplementation(async ({ identifier }) => {
   const now = Date.now();
@@ -425,7 +437,7 @@ describe("WhatsApp Balance Command Integration Tests", () => {
     expect(auditData.command).toBe("BAL");
     expect(auditData.sender_role).toBe("TENANT");
     expect(auditData.success).toBe(true);
-    expect(auditData.template_used).toBe("rent_balance_summary_v1");
+    expect(auditData.template_used).toBe("v2_balance_text");
   });
 
   it("Scenario 2: executes BALANCE command successfully for guardian of an active resident", async () => {
@@ -805,7 +817,7 @@ describe("WhatsApp Balance Command Integration Tests", () => {
       ],
     });
 
-    const sendTemplateSpy = vi.spyOn(MetaWhatsAppProvider.prototype, "sendTemplate");
+    const sendTextMessageSpy = vi.spyOn(MetaWhatsAppProvider.prototype, "sendTextMessage");
 
     const { eventId, payload } = makeWebhookPayload(guardianPhone, "BAL");
     const result = await whatsappWebhookEventService.processWebhookEvent(eventId, payload);
@@ -814,11 +826,13 @@ describe("WhatsApp Balance Command Integration Tests", () => {
     expect((result as any).command_results[0].success).toBe(true);
     expect((result as any).command_results[0].tenant_id).toBe(tenantIds[0]);
 
-    // Verify template sent
-    expect(sendTemplateSpy).toHaveBeenCalled();
-    // Selection state should NOT exist
+    // Verify text message sent
+    expect(sendTextMessageSpy).toHaveBeenCalled();
+    // Selection state (BALANCE_SELECTION) should NOT exist, but RESIDENT_CONTEXT should
     const state = await getSelectionState(guardianPhone);
-    expect(state).toBeNull();
+    expect(state).toBeDefined();
+    expect(state?.action).toBe("RESIDENT_CONTEXT");
+    expect((state as any).activeResidentId).toBe(tenantIds[0]);
   }, 20000);
 
   it("Scenario 14: Guardian linked to 2 active children and 1 cancelled child -> selection list contains only 2 active children", async () => {
@@ -832,7 +846,7 @@ describe("WhatsApp Balance Command Integration Tests", () => {
       ],
     });
 
-    const sendTextMessageSpy = vi.spyOn(MetaWhatsAppProvider.prototype, "sendTextMessage");
+    const sendButtonMessageSpy = vi.spyOn(MetaWhatsAppProvider.prototype, "sendButtonMessage");
 
     const { eventId, payload } = makeWebhookPayload(guardianPhone, "BAL");
     const result = await whatsappWebhookEventService.processWebhookEvent(eventId, payload);
@@ -841,22 +855,16 @@ describe("WhatsApp Balance Command Integration Tests", () => {
     expect((result as any).command_results[0].reason).toBe("MULTIPLE_MATCHES");
 
     // Selection text should list only Son A and Son B, omitting Son C
-    expect(sendTextMessageSpy).toHaveBeenCalledWith(
+    expect(sendButtonMessageSpy).toHaveBeenCalledWith(
       guardianPhone,
-      expect.stringContaining("Your number is linked to multiple residents.")
+      expect.stringContaining("Your number is linked to multiple residents."),
+      expect.any(Array)
     );
-    expect(sendTextMessageSpy).toHaveBeenCalledWith(
-      guardianPhone,
-      expect.stringContaining("1. Son A (Room G1)")
-    );
-    expect(sendTextMessageSpy).toHaveBeenCalledWith(
-      guardianPhone,
-      expect.stringContaining("2. Son B (Room G2)")
-    );
-    expect(sendTextMessageSpy).not.toHaveBeenCalledWith(
-      guardianPhone,
-      expect.stringContaining("Son C")
-    );
+
+    const buttonsPassed = sendButtonMessageSpy.mock.calls[0][2];
+    expect(buttonsPassed).toHaveLength(2);
+    expect(buttonsPassed[0].title).toBe("Son A");
+    expect(buttonsPassed[1].title).toBe("Son B");
 
     // State should only contain the 2 active tenant IDs
     const state: any = await getSelectionState(guardianPhone);

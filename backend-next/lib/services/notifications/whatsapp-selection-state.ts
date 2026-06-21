@@ -49,11 +49,26 @@ export interface OwnerMoveOutDateState {
   expiresAt: string;
 }
 
+export interface ResidentContextState {
+  phone: string;
+  action: "RESIDENT_CONTEXT";
+  activeResidentId: string;
+  activeResidentName: string;
+  activeResidentRoom: string;
+  hostelId: string;
+  ownerId: string;
+  /** The command that was pending when selection was triggered (e.g. "BAL") */
+  pendingCommand?: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
 export type WhatsAppSessionState =
   | BalanceSelectionState
   | InviteTenantSessionState
   | OwnerEntitySearchState
-  | OwnerMoveOutDateState;
+  | OwnerMoveOutDateState
+  | ResidentContextState;
 
 const memoryState = new Map<string, { state: WhatsAppSessionState; expiresAt: number }>();
 
@@ -93,7 +108,8 @@ export async function setSelectionState(
     | Omit<BalanceSelectionState, "createdAt" | "expiresAt">
     | Omit<InviteTenantSessionState, "createdAt" | "expiresAt">
     | Omit<OwnerEntitySearchState, "createdAt" | "expiresAt">
-    | Omit<OwnerMoveOutDateState, "createdAt" | "expiresAt">,
+    | Omit<OwnerMoveOutDateState, "createdAt" | "expiresAt">
+    | Omit<ResidentContextState, "createdAt" | "expiresAt">,
   ttlSeconds = 600
 ): Promise<void> {
   const now = new Date();

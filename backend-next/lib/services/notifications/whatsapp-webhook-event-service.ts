@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { prisma } from "@/lib/db";
 import { getLogger } from "@/lib/logger";
 import { incrementOtpDeliveryStatus } from "@/lib/metrics";
-import { formatDate, formatShortMonth } from "@/lib/format";
+import { formatDate, formatShortMonth, formatShortDate } from "@/lib/format";
 import { financialService } from "@/src/services/payments/financial-service";
 import { rateLimitService } from "@/lib/services/rate-limit-service";
 import { MetaWhatsAppProvider } from "./providers/whatsapp/meta-provider";
@@ -12,7 +12,21 @@ import {
   setSelectionState,
   deleteSelectionState,
   BalanceSelectionState,
+  ResidentContextState,
 } from "./whatsapp-selection-state";
+import {
+  resolveActiveResident,
+  setActiveResident,
+  refreshResidentContext,
+  clearActiveResident,
+  ResolvedResident,
+} from "./whatsapp-resident-context";
+import {
+  getNextBillingInfo,
+  getPaymentHealth,
+} from "./whatsapp-billing-intelligence";
+import { formatBalanceResponse } from "./whatsapp-balance-formatter";
+import { getFrontendUrl } from "@/lib/config/domains";
 
 const logger = getLogger("whatsapp.webhook-event");
 
@@ -249,6 +263,11 @@ export class WhatsAppWebhookEventService {
   > = {
     BAL: (service, msg) => service.handleBalanceCommand(msg),
     BALANCE: (service, msg) => service.handleBalanceCommand(msg),
+    SWITCH: (service, msg) => service.handleSwitchCommand(msg),
+    DUES: (service, msg) => service.handleDuesCommand(msg),
+    PAY: (service, msg) => service.handlePayCommand(msg),
+    STATUS: (service, msg) => service.handleStatusCommand(msg),
+    HELP: (service, msg) => service.handleHelpCommand(msg),
   };
 
   async recordReceived(input: RecordReceivedInput): Promise<RecordReceivedResult> {
@@ -342,6 +361,17 @@ export class WhatsAppWebhookEventService {
         }
 
         const cleanBody = msg.body.trim().toUpperCase();
+
+        // V2: Handle interactive button/list replies first
+        if (msg.messageType === "interactive") {
+          const interactiveResult = await this.handleInteractiveReply(msg);
+          if (interactiveResult) {
+            commandResults.push(interactiveResult);
+            processedCommands++;
+            continue;
+          }
+        }
+
         const handler = WhatsAppWebhookEventService.COMMAND_HANDLERS[cleanBody];
         if (handler) {
           const res = await handler(this, msg);
@@ -470,6 +500,25 @@ export class WhatsAppWebhookEventService {
       return { phone, command, success: false, reason: "RATE_LIMITED" };
     }
 
+    // V2: Check for active resident context first — skip selection entirely
+    const cachedResident = await resolveActiveResident(phone);
+    if (cachedResident) {
+      await refreshResidentContext(phone);
+      const tenant = await prisma.tenants.findFirst({
+        where: { id: cachedResident.residentId, status: { in: ["ACTIVE", "INVITED"] } },
+        include: { profiles: true },
+      });
+      if (tenant) {
+        const candidates = getPhoneCandidates(phone);
+        let senderRole: "TENANT" | "GUARDIAN" = "TENANT";
+        const guardianPhones = tenant.guardian_phone ? getPhoneCandidates(tenant.guardian_phone) : [];
+        if (guardianPhones.some((p) => candidates.includes(p))) senderRole = "GUARDIAN";
+        return this.sendV2BalanceForTenant(tenant, phone, command, senderRole);
+      }
+      // Tenant no longer active — clear stale context and continue
+      await clearActiveResident(phone);
+    }
+
     // 2. Resolve Phone to Active/Invited Tenants
     const candidates = getPhoneCandidates(phone);
     const matchingTenants = await prisma.tenants.findMany({
@@ -569,26 +618,13 @@ export class WhatsAppWebhookEventService {
       return { phone, command, success: false, reason: "UNAUTHORIZED", matches: activeTenants.length };
     }
 
-    // If multiple active tenants match, trigger guardian selection workflow
+    // If multiple active tenants match, trigger interactive selection
     if (activeTenants.length > 1) {
-      // Create and save selection state
-      await setSelectionState(phone, {
-        phone,
-        action: "BALANCE_SELECTION",
-        tenantIds: activeTenants.map((t) => t.id),
-      });
-
       // Fetch allocations to display room numbers
       const allocations = await prisma.roomAllocation.findMany({
-        where: {
-          tenant_id: { in: activeTenants.map((t) => t.id) },
-        },
-        orderBy: {
-          created_at: "desc",
-        },
-        include: {
-          room: true,
-        },
+        where: { tenant_id: { in: activeTenants.map((t) => t.id) } },
+        orderBy: { created_at: "desc" },
+        include: { room: true },
       });
 
       const roomMap = new Map<string, string>();
@@ -598,26 +634,52 @@ export class WhatsAppWebhookEventService {
         }
       }
 
-      const tenantLines = activeTenants
-        .map((t, idx) => {
-          const name = t.profiles?.name || t.guardian_name || "Resident";
-          const roomNo = roomMap.get(t.id);
-          return `${idx + 1}. ${name}${roomNo ? ` (Room ${roomNo})` : ""}`;
-        })
-        .join("\n");
-
-      const replyText = `Your number is linked to multiple residents.\n\nReply with the resident name:\n\n${tenantLines}\n\nThis selection expires in 10 minutes.`;
+      // Save selection state for text fallback (backward compat)
+      await setSelectionState(phone, {
+        phone,
+        action: "BALANCE_SELECTION",
+        tenantIds: activeTenants.map((t) => t.id),
+      });
 
       const provider = new MetaWhatsAppProvider();
       let providerMessageId: string | null = null;
-      let providerResponse: any = null;
-      let success = false;
       let errorMsg: string | null = null;
+      let success = false;
 
       try {
-        const sendResult = await provider.sendTextMessage(phone, replyText);
-        providerMessageId = sendResult.providerMessageId;
-        providerResponse = sendResult.raw;
+        const bodyText = "Your number is linked to multiple residents.\n\nSelect a resident:";
+
+        if (activeTenants.length <= 3) {
+          // V2: WhatsApp Interactive Buttons (≤3 residents)
+          const buttons = activeTenants.map((t) => {
+            const name = t.profiles?.name || t.guardian_name || "Resident";
+            const roomNo = roomMap.get(t.id);
+            const title = roomNo ? `${name}`.slice(0, 20) : name.slice(0, 20);
+            return { id: `SELECT_RESIDENT:${t.id}`, title };
+          });
+
+          const sendResult = await provider.sendButtonMessage(phone, bodyText, buttons);
+          providerMessageId = sendResult.providerMessageId;
+        } else {
+          // V2: WhatsApp Interactive List (>3 residents)
+          const rows = activeTenants.map((t) => {
+            const name = t.profiles?.name || t.guardian_name || "Resident";
+            const roomNo = roomMap.get(t.id);
+            return {
+              id: `SELECT_RESIDENT:${t.id}`,
+              title: name.slice(0, 24),
+              description: roomNo ? `Room ${roomNo}` : undefined,
+            };
+          });
+
+          const sendResult = await provider.sendListMessage(
+            phone,
+            bodyText,
+            [{ title: "Residents", rows }],
+            "Select Resident"
+          );
+          providerMessageId = sendResult.providerMessageId;
+        }
         success = true;
       } catch (err: any) {
         errorMsg = err.message || String(err);
@@ -627,42 +689,27 @@ export class WhatsAppWebhookEventService {
         command,
         sender_role: "GUARDIAN",
         success,
-        template_used: "text",
+        template_used: "interactive",
         state: "selection_pending",
         failure_reason: errorMsg,
       };
 
       await prisma.$executeRaw`
         INSERT INTO whatsapp_logs (
-          id,
-          phone,
-          template,
-          template_name,
-          status,
-          delivery_status,
-          attempt_count,
-          provider_message_id,
-          provider_response,
-          error_message
+          id, phone, template, template_name, status, delivery_status,
+          attempt_count, provider_message_id, provider_response, error_message
         )
         VALUES (
-          gen_random_uuid(),
-          ${phone},
-          'text',
-          'BAL',
-          'MULTIPLE_MATCHES',
-          'SENT',
-          1,
-          ${providerMessageId},
-          ${JSON.stringify(auditLog)}::jsonb,
-          ${errorMsg}
+          gen_random_uuid(), ${phone}, 'interactive', 'BAL',
+          'MULTIPLE_MATCHES', 'SENT', 1, ${providerMessageId},
+          ${JSON.stringify(auditLog)}::jsonb, ${errorMsg}
         )
       `;
 
       return { phone, command, success: true, reason: "MULTIPLE_MATCHES", matches: activeTenants.length };
     }
 
-    // Exactly 1 active tenant
+    // Exactly 1 active tenant — set context and respond
     const tenant = activeTenants[0];
 
     // Determine sender role (Tenant vs Guardian)
@@ -672,7 +719,21 @@ export class WhatsAppWebhookEventService {
       senderRole = "GUARDIAN";
     }
 
-    return this.sendBalanceTemplateForTenant(tenant, phone, command, senderRole);
+    // Set resident context for future commands
+    const allocation = await prisma.roomAllocation.findFirst({
+      where: { tenant_id: tenant.id },
+      orderBy: { created_at: "desc" },
+      include: { room: true },
+    });
+    await setActiveResident(phone, {
+      residentId: tenant.id,
+      residentName: tenant.profiles?.name || tenant.guardian_name || "Resident",
+      residentRoom: allocation?.room?.room_no || "N/A",
+      hostelId: tenant.hostel_id,
+      ownerId: tenant.owner_id,
+    });
+
+    return this.sendV2BalanceForTenant(tenant, phone, command, senderRole);
   }
 
   private async sendBalanceTemplateForTenant(
@@ -1231,6 +1292,442 @@ export class WhatsAppWebhookEventService {
         updated_otps: Number(count || 0),
       });
     }
+  }
+
+  // ─── V2 Balance Response (replaces sendBalanceTemplateForTenant) ───
+
+  private async sendV2BalanceForTenant(
+    tenant: any,
+    phone: string,
+    command: string,
+    senderRole: "TENANT" | "GUARDIAN"
+  ) {
+    let success = false;
+    let providerMessageId: string | null = null;
+    let errorMsg: string | null = null;
+
+    try {
+      const obligations = await prisma.rent_obligations.findMany({
+        where: { tenant_id: tenant.id, status: { not: "WAIVED" }, is_superseded: false },
+        include: { payments: { select: { amount_paid: true, payment_date: true } } },
+      });
+
+      const summary = financialService.getTenantPaymentSummary(tenant.id, obligations);
+      const [nextBilling, health] = await Promise.all([
+        getNextBillingInfo(tenant.id),
+        getPaymentHealth(tenant.id),
+      ]);
+
+      const activeAllocation = await prisma.roomAllocation.findFirst({
+        where: { tenant_id: tenant.id, is_active: true },
+        orderBy: { created_at: "desc" },
+        include: { room: true },
+      });
+      const allocation = activeAllocation || await prisma.roomAllocation.findFirst({
+        where: { tenant_id: tenant.id },
+        orderBy: { created_at: "desc" },
+        include: { room: true },
+      });
+
+      const tenantName = tenant.profiles?.name || tenant.guardian_name || "Resident";
+      const roomNo = allocation?.room?.room_no || "N/A";
+
+      // Check for move-out
+      let moveOutDate: Date | null = null;
+      if (tenant.status === "ACTIVE") {
+        const moveOut = await prisma.move_out_requests.findFirst({
+          where: {
+            tenant_id: tenant.id,
+            status: { notIn: ["COMPLETED", "REJECTED"] }
+          },
+          orderBy: { created_at: "desc" },
+          select: { planned_exit_date: true }
+        });
+        if (moveOut) moveOutDate = moveOut.planned_exit_date;
+      }
+
+      const balanceText = formatBalanceResponse({
+        residentName: tenantName,
+        roomNumber: roomNo,
+        health,
+        totalBilled: summary.total_billed,
+        totalPaid: summary.total_paid,
+        pendingAmount: summary.pending_amount,
+        lastPaymentAmount: summary.last_payment_amount,
+        lastPaymentDate: summary.last_paid_at,
+        nextBilling,
+        agreement: {
+          startDate: allocation?.start_date || tenant.joined_on || null,
+          endDate: allocation?.end_date || null,
+          billingFrequency: null,
+          moveOutDate,
+        },
+      });
+
+      const provider = new MetaWhatsAppProvider();
+      const sendResult = await provider.sendTextMessage(phone, balanceText);
+      providerMessageId = sendResult.providerMessageId;
+      success = true;
+
+      // Send quick action buttons
+      await this.sendQuickActions(provider, phone);
+
+      const auditLog = {
+        command,
+        sender_role: senderRole,
+        success: true,
+        template_used: "v2_balance_text",
+        failure_reason: null,
+      };
+
+      await prisma.$executeRaw`
+        INSERT INTO whatsapp_logs (
+          id, phone, template, template_name, status, delivery_status,
+          attempt_count, provider_message_id, provider_response,
+          tenant_id, owner_id, hostel_id
+        )
+        VALUES (
+          gen_random_uuid(), ${phone}, 'v2_balance_text', 'BAL',
+          'SENT', 'SENT', 1, ${providerMessageId},
+          ${JSON.stringify(auditLog)}::jsonb,
+          ${tenant.id}::uuid, ${tenant.owner_id}::uuid, ${tenant.hostel_id}::uuid
+        )
+      `;
+
+      return { phone, command, success: true, tenant_id: tenant.id };
+    } catch (err: any) {
+      errorMsg = err.message || String(err);
+      logger.error("whatsapp.command.failed", { phone, error: errorMsg });
+
+      const auditLog = {
+        command,
+        sender_role: senderRole,
+        success: false,
+        template_used: "v2_balance_text",
+        failure_reason: errorMsg,
+      };
+
+      await prisma.$executeRaw`
+        INSERT INTO whatsapp_logs (
+          id, phone, template, template_name, status, delivery_status,
+          attempt_count, provider_response, error_message,
+          tenant_id, owner_id, hostel_id
+        )
+        VALUES (
+          gen_random_uuid(), ${phone}, 'v2_balance_text', 'BAL',
+          'FAILED', 'FAILED', 1,
+          ${JSON.stringify(auditLog)}::jsonb, ${errorMsg},
+          ${tenant.id}::uuid, ${tenant.owner_id}::uuid, ${tenant.hostel_id}::uuid
+        )
+      `;
+
+      throw err;
+    }
+  }
+
+  // ─── V2 Interactive Reply Handler ───
+
+  private async handleInteractiveReply(msg: ExtractedMessageEvent): Promise<any | null> {
+    const phone = msg.from;
+    const replyId = msg.body.trim();
+
+    // Handle SELECT_RESIDENT:{tenantId} from buttons/list
+    if (replyId.startsWith("SELECT_RESIDENT:")) {
+      const tenantId = replyId.replace("SELECT_RESIDENT:", "");
+      const tenant = await prisma.tenants.findFirst({
+        where: { id: tenantId, status: { in: ["ACTIVE", "INVITED"] } },
+        include: { profiles: true },
+      });
+
+      if (!tenant) {
+        const provider = new MetaWhatsAppProvider();
+        await provider.sendTextMessage(phone, "Resident not found or no longer active. Send BAL to try again.");
+        return { phone, success: false, reason: "TENANT_NOT_FOUND" };
+      }
+
+      // Set resident context
+      const allocation = await prisma.roomAllocation.findFirst({
+        where: { tenant_id: tenant.id },
+        orderBy: { created_at: "desc" },
+        include: { room: true },
+      });
+
+      await setActiveResident(phone, {
+        residentId: tenant.id,
+        residentName: tenant.profiles?.name || tenant.guardian_name || "Resident",
+        residentRoom: allocation?.room?.room_no || "N/A",
+        hostelId: tenant.hostel_id,
+        ownerId: tenant.owner_id,
+      });
+
+      // Clear old balance selection state
+      await deleteSelectionState(phone);
+      // Re-set the resident context (deleteSelectionState cleared it)
+      await setActiveResident(phone, {
+        residentId: tenant.id,
+        residentName: tenant.profiles?.name || tenant.guardian_name || "Resident",
+        residentRoom: allocation?.room?.room_no || "N/A",
+        hostelId: tenant.hostel_id,
+        ownerId: tenant.owner_id,
+      });
+
+      // Confirm selection
+      const provider = new MetaWhatsAppProvider();
+      const confirmText = `✅ Active Resident: ${tenant.profiles?.name || tenant.guardian_name || "Resident"} (Room ${allocation?.room?.room_no || "N/A"})\n\nYou can now use:\nBAL — Balance summary\nDUES — View dues\nPAY — Pay now\nSTATUS — Agreement status\nSWITCH — Change resident`;
+      await provider.sendTextMessage(phone, confirmText);
+
+      // Determine role and send balance
+      const candidates = getPhoneCandidates(phone);
+      let senderRole: "TENANT" | "GUARDIAN" = "TENANT";
+      const guardianPhones = tenant.guardian_phone ? getPhoneCandidates(tenant.guardian_phone) : [];
+      if (guardianPhones.some((p) => candidates.includes(p))) senderRole = "GUARDIAN";
+
+      return this.sendV2BalanceForTenant(tenant, phone, "BAL", senderRole);
+    }
+
+    // Handle CMD:* quick action buttons
+    if (replyId.startsWith("CMD:")) {
+      const cmd = replyId.replace("CMD:", "").toUpperCase();
+      const syntheticMsg: ExtractedMessageEvent = {
+        ...msg,
+        body: cmd,
+        messageType: "text",
+      };
+      const handler = WhatsAppWebhookEventService.COMMAND_HANDLERS[cmd];
+      if (handler) return handler(this, syntheticMsg);
+    }
+
+    return null;
+  }
+
+  // ─── V2 SWITCH Command ───
+
+  private async handleSwitchCommand(msg: ExtractedMessageEvent) {
+    const phone = msg.from;
+    await clearActiveResident(phone);
+
+    // Re-trigger balance command which will show selection
+    return this.handleBalanceCommand(msg);
+  }
+
+  // ─── V2 DUES Command ───
+
+  private async handleDuesCommand(msg: ExtractedMessageEvent) {
+    const phone = msg.from;
+    const resident = await this.resolveResidentOrPromptSelection(phone, "DUES");
+    if (!resident) return { phone, command: "DUES", success: false, reason: "NO_CONTEXT" };
+
+    const tenant = await prisma.tenants.findFirst({
+      where: { id: resident.residentId, status: { in: ["ACTIVE", "INVITED"] } },
+    });
+    if (!tenant) {
+      await clearActiveResident(phone);
+      return { phone, command: "DUES", success: false, reason: "TENANT_NOT_FOUND" };
+    }
+
+    const dues = await financialService.getTenantDues(tenant.id, tenant.owner_id, tenant.hostel_id);
+    await refreshResidentContext(phone);
+
+    const provider = new MetaWhatsAppProvider();
+    if (dues.items.length === 0) {
+      await provider.sendTextMessage(phone, `✅ ${resident.residentName} (Room ${resident.residentRoom})\n\nNo pending dues. All payments are up to date!`);
+      await this.sendQuickActions(provider, phone);
+      return { phone, command: "DUES", success: true, items: 0 };
+    }
+
+    const lines = [`📋 Dues — ${resident.residentName} (Room ${resident.residentRoom})\n`];
+    for (const item of dues.items.slice(0, 10)) {
+      const typeLabel = item.type === "RENT" ? "Rent" : item.type === "SECURITY_DEPOSIT" ? "Deposit" : item.type === "MAINTENANCE" ? "Maintenance" : item.type;
+      const dueStr = formatShortDate(item.due_date);
+      lines.push(`• ${typeLabel} — ₹${formatAmountWithoutSymbol(item.outstanding)} (Due: ${dueStr})`);
+    }
+    lines.push(`\nTotal Due: ₹${formatAmountWithoutSymbol(dues.total_due)}`);
+
+    await provider.sendTextMessage(phone, lines.join("\n"));
+    await this.sendQuickActions(provider, phone);
+
+    return { phone, command: "DUES", success: true, items: dues.items.length };
+  }
+
+  // ─── V2 PAY Command ───
+
+  private async handlePayCommand(msg: ExtractedMessageEvent) {
+    const phone = msg.from;
+    const resident = await this.resolveResidentOrPromptSelection(phone, "PAY");
+    if (!resident) return { phone, command: "PAY", success: false, reason: "NO_CONTEXT" };
+
+    const tenant = await prisma.tenants.findFirst({
+      where: { id: resident.residentId, status: { in: ["ACTIVE", "INVITED"] } },
+    });
+    if (!tenant) {
+      await clearActiveResident(phone);
+      return { phone, command: "PAY", success: false, reason: "TENANT_NOT_FOUND" };
+    }
+
+    const nextBilling = await getNextBillingInfo(tenant.id);
+    await refreshResidentContext(phone);
+
+    const provider = new MetaWhatsAppProvider();
+
+    if (!nextBilling) {
+      await provider.sendTextMessage(phone, `✅ ${resident.residentName} (Room ${resident.residentRoom})\n\nNo pending dues to pay!`);
+      return { phone, command: "PAY", success: true, reason: "NO_DUES" };
+    }
+
+    // Generate payment link
+    let paymentUrl: string | null = null;
+    try {
+      const token = await prisma.payment_link_tokens.create({
+        data: {
+          obligation_id: nextBilling.obligationId,
+          tenant_id: tenant.id,
+          hostel_id: tenant.hostel_id,
+          owner_id: tenant.owner_id,
+          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        },
+        select: { token: true },
+      });
+      const appUrl = getFrontendUrl().replace(/\/+$/, "");
+      paymentUrl = `${appUrl}/pay/${token.token}`;
+    } catch (err: any) {
+      logger.warn("whatsapp.pay.link_generation_failed", { error: err.message });
+    }
+
+    const lines = [
+      `💳 Secure Payment`,
+      ``,
+      `Resident: ${resident.residentName} (Room ${resident.residentRoom})`,
+      `Amount Due: ₹${formatAmountWithoutSymbol(nextBilling.remainingAmount)}`,
+      `Due Date: ${formatShortDate(nextBilling.dueDate)}`,
+    ];
+
+    if (paymentUrl) {
+      lines.push("", `Pay securely: ${paymentUrl}`);
+    }
+
+    await provider.sendTextMessage(phone, lines.join("\n"));
+    return { phone, command: "PAY", success: true, tenant_id: tenant.id };
+  }
+
+  // ─── V2 STATUS Command ───
+
+  private async handleStatusCommand(msg: ExtractedMessageEvent) {
+    const phone = msg.from;
+    const resident = await this.resolveResidentOrPromptSelection(phone, "STATUS");
+    if (!resident) return { phone, command: "STATUS", success: false, reason: "NO_CONTEXT" };
+
+    const tenant = await prisma.tenants.findFirst({
+      where: { id: resident.residentId, status: { in: ["ACTIVE", "INVITED"] } },
+    });
+    if (!tenant) {
+      await clearActiveResident(phone);
+      return { phone, command: "STATUS", success: false, reason: "TENANT_NOT_FOUND" };
+    }
+
+    const allocation = await prisma.roomAllocation.findFirst({
+      where: { tenant_id: tenant.id },
+      orderBy: { created_at: "desc" },
+      include: { room: true },
+    });
+
+    let moveOutDate: Date | null = null;
+    const moveOut = await prisma.move_out_requests.findFirst({
+      where: {
+        tenant_id: tenant.id,
+        status: { notIn: ["COMPLETED", "REJECTED"] }
+      },
+      orderBy: { created_at: "desc" },
+      select: { planned_exit_date: true }
+    });
+    if (moveOut) moveOutDate = moveOut.planned_exit_date;
+
+    const { formatAgreementStatus } = await import("./whatsapp-agreement-formatter");
+    const agreement = formatAgreementStatus({
+      startDate: allocation?.start_date || tenant.joined_on || null,
+      endDate: allocation?.end_date || null,
+      billingFrequency: null,
+      moveOutDate,
+    });
+
+    await refreshResidentContext(phone);
+    const provider = new MetaWhatsAppProvider();
+    const text = `📄 Agreement Status\n${resident.residentName} (Room ${resident.residentRoom})\n\n${agreement.text}`;
+    await provider.sendTextMessage(phone, text);
+    await this.sendQuickActions(provider, phone);
+
+    return { phone, command: "STATUS", success: true, tenant_id: tenant.id };
+  }
+
+  // ─── V2 HELP Command ───
+
+  private async handleHelpCommand(msg: ExtractedMessageEvent) {
+    const phone = msg.from;
+    const provider = new MetaWhatsAppProvider();
+    const cached = await resolveActiveResident(phone);
+
+    let text: string;
+    if (cached) {
+      text = [
+        `Active Resident: ${cached.residentName} (Room ${cached.residentRoom})`,
+        "",
+        "Available commands:",
+        "BAL — Balance summary",
+        "DUES — View pending dues",
+        "PAY — Pay now",
+        "STATUS — Agreement status",
+        "SWITCH — Change resident",
+        "HELP — Show this menu",
+      ].join("\n");
+    } else {
+      text = [
+        "Welcome to Sri Adithya Hostels",
+        "",
+        "Send BAL to view your balance and select a resident.",
+        "",
+        "After selecting a resident, you can use:",
+        "BAL, DUES, PAY, STATUS, SWITCH, HELP",
+      ].join("\n");
+    }
+
+    await provider.sendTextMessage(phone, text);
+    return { phone, command: "HELP", success: true };
+  }
+
+  // ─── V2 Quick Actions ───
+
+  private async sendQuickActions(provider: MetaWhatsAppProvider, phone: string) {
+    try {
+      await provider.sendButtonMessage(
+        phone,
+        "What would you like to do?",
+        [
+          { id: "CMD:DUES", title: "View Dues" },
+          { id: "CMD:PAY", title: "Pay Now" },
+          { id: "CMD:SWITCH", title: "Switch Resident" },
+        ]
+      );
+    } catch (err: any) {
+      // Non-critical — log and continue
+      logger.warn("whatsapp.quick_actions.failed", { phone, error: err.message });
+    }
+  }
+
+  // ─── V2 Resident Resolution Helper ───
+
+  private async resolveResidentOrPromptSelection(
+    phone: string,
+    command: string
+  ): Promise<ResolvedResident | null> {
+    const cached = await resolveActiveResident(phone);
+    if (cached) return cached;
+
+    // No context — prompt them to use BAL first
+    const provider = new MetaWhatsAppProvider();
+    await provider.sendTextMessage(
+      phone,
+      `No active resident selected.\n\nSend BAL to select a resident first.`
+    );
+    return null;
   }
 }
 
