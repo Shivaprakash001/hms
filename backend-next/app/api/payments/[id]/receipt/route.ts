@@ -9,6 +9,7 @@ import { ApiError } from "@/src/lib/api-error";
 import { receiptService } from "@/src/services/payments/receipt-service";
 import { authService } from "@/lib/services/auth-service";
 import { prisma } from "@/lib/db";
+import { checkFixedWindowLimit } from "@/lib/redis/rate-limit";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -18,6 +19,54 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     }
 
     const { id: paymentId } = params;
+
+    // 1. Rate Limiting: Tenant limit (Max 10 requests/min)
+    if (session.role === "TENANT") {
+      const tenantLimit = await checkFixedWindowLimit({
+        scope: "receipt:tenant",
+        identifier: session.sub,
+        maxAttempts: 10,
+        windowSeconds: 60,
+      });
+
+      if (!tenantLimit.allowed) {
+        return ApiResponse.error(
+          new ApiError(
+            "Rate limit exceeded: Max 10 receipt downloads per minute allowed.",
+            429,
+            "TOO_MANY_REQUESTS",
+            {
+              limit_type: "tenant",
+              attempts_remaining: tenantLimit.attemptsRemaining,
+              retry_after: tenantLimit.retryAfterSeconds,
+            }
+          )
+        );
+      }
+    }
+
+    // 2. Rate Limiting: Payment limit (Max 3 requests/min per payment ID)
+    const paymentLimit = await checkFixedWindowLimit({
+      scope: "receipt:payment",
+      identifier: paymentId,
+      maxAttempts: 3,
+      windowSeconds: 60,
+    });
+
+    if (!paymentLimit.allowed) {
+      return ApiResponse.error(
+        new ApiError(
+          "Rate limit exceeded: Max 3 downloads per payment ID allowed per minute.",
+          429,
+          "TOO_MANY_REQUESTS",
+          {
+            limit_type: "payment",
+            attempts_remaining: paymentLimit.attemptsRemaining,
+            retry_after: paymentLimit.retryAfterSeconds,
+          }
+        )
+      );
+    }
 
     if (paymentId.startsWith("advance-")) {
       const ledgerId = paymentId.replace("advance-", "");

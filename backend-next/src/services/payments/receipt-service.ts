@@ -20,6 +20,8 @@ import { timed } from "@/lib/perf";
 import { imagekit } from "@/lib/imagekit";
 import { incrementPdfCache } from "@/lib/metrics";
 import { acquireSystemLock, releaseSystemLock, sleep } from "@/lib/lock";
+import { financialService } from "./financial-service";
+import { tenantFinancialLedgerService } from "./tenant-financial-ledger-service";
 
 async function resolveHostelForPayment(payment: any): Promise<{ hostel: any; prefs: any }> {
   const ownerId = payment.tenants?.owner_id || payment.owner_id || "";
@@ -49,7 +51,7 @@ async function resolveHostelForPayment(payment: any): Promise<{ hostel: any; pre
 
 // ── Template version: bump when receipt layout changes ──
 // This triggers a one-time re-render for all existing receipts.
-const RECEIPT_TEMPLATE_VERSION = 2;
+const RECEIPT_TEMPLATE_VERSION = 3;
 
 const RECEIPT_NUMBER_RETRY_LIMIT = 10;
 
@@ -239,120 +241,225 @@ export class ReceiptService {
     }
 
     try {
-    let hostel: any = null;
-    let prefs: any;
+      let hostel: any = null;
+      let prefs: any;
 
-    if (!receipt.hostel_id) {
-      throw new Error("HOSTEL_CONTEXT_REQUIRED: Receipt is missing immutable hostel context");
-    }
-    if ((receipt as any).payments?.hostel_id && (receipt as any).payments.hostel_id !== receipt.hostel_id) {
-      throw new Error("HOSTEL_CONTEXT_MISMATCH: Receipt hostel does not match payment hostel");
-    }
-    hostel = await prisma.hostels.findUnique({ where: { id: receipt.hostel_id } });
-    if (!hostel) throw new Error("HOSTEL_NOT_FOUND: Receipt hostel not found");
-    prefs = resolvePreferences(hostel);
+      if (!receipt.hostel_id) {
+        throw new Error("HOSTEL_CONTEXT_REQUIRED: Receipt is missing immutable hostel context");
+      }
+      if ((receipt as any).payments?.hostel_id && (receipt as any).payments.hostel_id !== receipt.hostel_id) {
+        throw new Error("HOSTEL_CONTEXT_MISMATCH: Receipt hostel does not match payment hostel");
+      }
+      hostel = await prisma.hostels.findUnique({ where: { id: receipt.hostel_id } });
+      if (!hostel) throw new Error("HOSTEL_NOT_FOUND: Receipt hostel not found");
+      prefs = resolvePreferences(hostel);
 
-    const allocation = await prisma.roomAllocation.findFirst({
-      where: { tenant_id: receipt.tenant_id, hostel_id: receipt.hostel_id, is_active: true },
-      include: { room: true },
-      orderBy: { start_date: "desc" },
-    });
+      const allocation = await prisma.roomAllocation.findFirst({
+        where: { tenant_id: receipt.tenant_id, hostel_id: receipt.hostel_id, is_active: true },
+        include: { room: true },
+        orderBy: { start_date: "desc" },
+      });
 
-    // If no active allocation, try the most recent one
-    const fallbackAllocation = allocation || await prisma.roomAllocation.findFirst({
-      where: { tenant_id: receipt.tenant_id, hostel_id: receipt.hostel_id },
-      include: { room: true },
-      orderBy: { start_date: "desc" },
-    });
+      // If no active allocation, try the most recent one
+      const fallbackAllocation = allocation || await prisma.roomAllocation.findFirst({
+        where: { tenant_id: receipt.tenant_id, hostel_id: receipt.hostel_id },
+        include: { room: true },
+        orderBy: { start_date: "desc" },
+      });
 
-    // 3. Build render data
-    const renderData: ReceiptRenderData = {
-      // Hostel
-      hostel_name: hostel?.name || receipt.hostel_name || "HMS Hostel",
-      hostel_address: hostel?.address || "",
-      hostel_city: hostel?.city || null,
-      hostel_state: hostel?.state || null,
-      hostel_pincode: hostel?.pincode || null,
-      hostel_phone: hostel?.phone || null,
-      hostel_gst: hostel?.gst_number || null,
-      hostel_logo_url: hostel?.logo_url || null,
+      // Fetch settlement allocations and future credits
+      let groupPayments: any[] = [];
+      let ledgerCredits: any[] = [];
 
-      // Receipt
-      receipt_number: receipt.receipt_number,
-      issued_at: receipt.issued_at,
+      const anchorPayment = await prisma.payments.findUnique({
+        where: { id: receipt.payment_id },
+        include: {
+          obligation: true,
+        }
+      });
 
-      // Tenant
-      tenant_name: (receipt as any).tenants?.profiles?.name || receipt.tenant_name || "Tenant",
-      tenant_phone: (receipt as any).tenants?.profiles?.phone || null,
-      tenant_email: (receipt as any).tenants?.profiles?.email || null,
-      room_no: fallbackAllocation?.room?.room_no || null,
-      room_floor: fallbackAllocation?.room?.floor != null
-        ? String(fallbackAllocation.room.floor)
-        : null,
+      if (anchorPayment) {
+        const groupConditions = [];
+        if (anchorPayment.payment_group_id) {
+          groupConditions.push({ payment_group_id: anchorPayment.payment_group_id });
+        }
+        if (anchorPayment.payment_attempt_id) {
+          groupConditions.push({ payment_attempt_id: anchorPayment.payment_attempt_id });
+        }
 
-      // Payment
-      amount: Number(receipt.amount),
-      payment_method: receipt.payment_method,
-      transaction_id: receipt.transaction_id || null,
-      reference_number: (receipt as any).payments?.reference_number || null,
-      payment_date: (receipt as any).payments?.payment_date || receipt.issued_at,
+        if (groupConditions.length > 0) {
+          groupPayments = await prisma.payments.findMany({
+            where: {
+              OR: groupConditions,
+              hostel_id: receipt.hostel_id,
+            },
+            include: {
+              obligation: true,
+            },
+          });
 
-      // Obligation
-      rent_month: receipt.rent_month || (receipt as any).payments?.obligation?.rent_month || null,
-      due_date: (receipt as any).payments?.obligation?.due_date || null,
-      obligation_amount: (receipt as any).payments?.obligation
-        ? Number((receipt as any).payments.obligation.amount)
-        : null,
-      obligation_status: (receipt as any).payments?.obligation?.status || null,
+          const refIds = [anchorPayment.payment_group_id, anchorPayment.payment_attempt_id].filter(Boolean) as string[];
+          ledgerCredits = await prisma.tenant_financial_ledger.findMany({
+            where: {
+              tenant_id: receipt.tenant_id,
+              reference_id: { in: refIds },
+              reason: "FUTURE_RENT_CREDIT_TOPUP",
+            },
+          });
+        } else {
+          groupPayments = [anchorPayment];
+        }
+      } else {
+        if ((receipt as any).payments) {
+          groupPayments = [(receipt as any).payments];
+        }
+      }
 
-      // Preferences
-      prefs,
-      footer: prefs.receipt_footer || null,
-    };
+      const settlement_allocations = groupPayments.map((p: any) => {
+        let label = "Obligation Settlement";
+        if (p.obligation) {
+          const type = p.obligation.obligation_type || "RENT";
+          const monthLabel = p.obligation.rent_month
+            ? new Date(p.obligation.rent_month).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" })
+            : "";
+          if (type === "RENT") {
+            label = `Rent Payment${monthLabel ? ` - ${monthLabel}` : ""}`;
+          } else if (type === "MAINTENANCE") {
+            label = `Maintenance Charge${monthLabel ? ` - ${monthLabel}` : ""}`;
+          } else if (type === "SECURITY_DEPOSIT" || type === "ADVANCE") {
+            label = "Security Deposit";
+          } else {
+            label = `${type.charAt(0) + type.slice(1).toLowerCase()} Charge${monthLabel ? ` - ${monthLabel}` : ""}`;
+          }
+        }
+        return {
+          type: p.obligation?.obligation_type || "RENT",
+          rent_month: p.obligation?.rent_month || null,
+          allocated: Number(p.amount_paid),
+          label,
+        };
+      });
 
-    // 4. Render PDF directly via pdf-lib
-    const pdfUint8Array = await timed(
-      "pdf.render.pdflib",
-      () => generateReceiptPdf(renderData),
-      { payment_id: paymentId, slow_ms: 3_000 }
-    );
-    const pdfBuffer = Buffer.from(pdfUint8Array);
-
-    // 5. Upload & cache the rendered PDF ──────────────────────────────────────
-    // Best-effort: failure here does not break the response.
-    try {
-      const base64Pdf = pdfBuffer.toString("base64");
-      const uploadRes = await timed(
-        "pdf.receipt.upload",
-        () => imagekit.files.upload({
-          file: base64Pdf,
-          fileName: `receipt_${receipt.receipt_number}.pdf`,
-          folder: "/receipts",
-          tags: ["receipt", receipt.id],
-        }),
-        { payment_id: paymentId, slow_ms: 5_000 }
-      );
-      if (uploadRes.url) {
-        await prisma.receipts.update({
-          where: { id: receipt.id },
-          data: {
-            receipt_pdf_url:          uploadRes.url,
-            receipt_template_version: RECEIPT_TEMPLATE_VERSION,
-          },
+      const future_credit_allocated = ledgerCredits.reduce((sum, c) => sum + Number(c.amount), 0);
+      if (future_credit_allocated > 0) {
+        settlement_allocations.push({
+          type: "FUTURE_RENT_CREDIT",
+          rent_month: null,
+          allocated: future_credit_allocated,
+          label: "Future Rent Credit Top-up",
         });
       }
-    } catch (uploadErr: any) {
-      // Non-fatal: log and continue — client still receives the buffer
-      console.warn("[ReceiptService] PDF upload failed (non-fatal):", uploadErr?.message);
-    }
-    
-    return pdfBuffer;
-  } finally {
-    if (acquired) {
-      await releaseSystemLock(lockKey);
+
+      const total_transaction_paid = settlement_allocations.reduce((sum, item) => sum + item.allocated, 0);
+
+      // Current Financial Position (After settlement)
+      const dues = await financialService.getTenantDues(receipt.tenant_id, undefined, receipt.hostel_id);
+      const ledgerBalance = await tenantFinancialLedgerService.getBalance(receipt.tenant_id, receipt.owner_id || "");
+
+      const outstanding_balance_after = dues.total_due;
+      const future_credit_balance_after = ledgerBalance.future_rent_credit;
+
+      // 3. Build render data
+      const renderData: ReceiptRenderData = {
+        // Hostel
+        hostel_name: hostel?.name || receipt.hostel_name || "HMS Hostel",
+        hostel_address: hostel?.address || "",
+        hostel_city: hostel?.city || null,
+        hostel_state: hostel?.state || null,
+        hostel_pincode: hostel?.pincode || null,
+        hostel_phone: hostel?.phone || null,
+        hostel_gst: hostel?.gst_number || null,
+        hostel_logo_url: hostel?.logo_url || null,
+
+        // Receipt
+        receipt_number: receipt.receipt_number,
+        issued_at: receipt.issued_at,
+
+        // Tenant
+        tenant_name: (receipt as any).tenants?.profiles?.name || receipt.tenant_name || "Tenant",
+        tenant_phone: (receipt as any).tenants?.profiles?.phone || null,
+        tenant_email: (receipt as any).tenants?.profiles?.email || null,
+        room_no: fallbackAllocation?.room?.room_no || null,
+        room_floor: fallbackAllocation?.room?.floor != null
+          ? String(fallbackAllocation.room.floor)
+          : null,
+
+        // Payment
+        amount: Number(receipt.amount),
+        payment_method: receipt.payment_method,
+        transaction_id: receipt.transaction_id || null,
+        reference_number: (receipt as any).payments?.reference_number || null,
+        payment_date: (receipt as any).payments?.payment_date || receipt.issued_at,
+
+        // Obligation
+        rent_month: receipt.rent_month || (receipt as any).payments?.obligation?.rent_month || null,
+        due_date: (receipt as any).payments?.obligation?.due_date || null,
+        obligation_amount: (receipt as any).payments?.obligation
+          ? Number((receipt as any).payments.obligation.amount)
+          : null,
+        obligation_status: (receipt as any).payments?.obligation?.status || null,
+
+        // New Breakdown & Position Details
+        settlement_allocations,
+        future_credit_allocated,
+        total_transaction_paid,
+        outstanding_balance_after,
+        future_credit_balance_after,
+
+        // Audit Details
+        payment_id: receipt.payment_id,
+        tenant_id: receipt.tenant_id,
+        receipt_id: receipt.id,
+        template_version: RECEIPT_TEMPLATE_VERSION,
+
+        // Preferences
+        prefs,
+        footer: prefs.receipt_footer || null,
+      };
+
+      // 4. Render PDF directly via pdf-lib
+      const pdfUint8Array = await timed(
+        "pdf.render.pdflib",
+        () => generateReceiptPdf(renderData),
+        { payment_id: paymentId, slow_ms: 3_000 }
+      );
+      const pdfBuffer = Buffer.from(pdfUint8Array);
+
+      // 5. Upload & cache the rendered PDF ──────────────────────────────────────
+      // Best-effort: failure here does not break the response.
+      try {
+        const base64Pdf = pdfBuffer.toString("base64");
+        const uploadRes = await timed(
+          "pdf.receipt.upload",
+          () => imagekit.files.upload({
+            file: base64Pdf,
+            fileName: `receipt_${receipt.receipt_number}.pdf`,
+            folder: "/receipts",
+            tags: ["receipt", receipt.id],
+          }),
+          { payment_id: paymentId, slow_ms: 5_000 }
+        );
+        if (uploadRes.url) {
+          await prisma.receipts.update({
+            where: { id: receipt.id },
+            data: {
+              receipt_pdf_url:          uploadRes.url,
+              receipt_template_version: RECEIPT_TEMPLATE_VERSION,
+            },
+          });
+        }
+      } catch (uploadErr: any) {
+        // Non-fatal: log and continue — client still receives the buffer
+        console.warn("[ReceiptService] PDF upload failed (non-fatal):", uploadErr?.message);
+      }
+      
+      return pdfBuffer;
+    } finally {
+      if (acquired) {
+        await releaseSystemLock(lockKey);
+      }
     }
   }
-}
 
   /**
    * Generate a PDF buffer for an advance ledger entry.
@@ -389,6 +496,17 @@ export class ReceiptService {
 
     const year = new Date(ledgerEntry.created_at).getFullYear();
     const receiptNumber = `ADV-${prefs.receipt_prefix || "HMS"}-${year}-${ledgerEntry.id.substring(0, 8).toUpperCase()}`;
+
+    // Get current financial position
+    const dues = await financialService.getTenantDues(ledgerEntry.tenant_id, undefined, ledgerEntry.hostel_id);
+    const ledgerBalance = await tenantFinancialLedgerService.getBalance(ledgerEntry.tenant_id, ledgerEntry.owner_id || "");
+
+    const settlement_allocations = [{
+      type: "FUTURE_RENT_CREDIT",
+      rent_month: null,
+      allocated: Number(ledgerEntry.amount),
+      label: ledgerEntry.reason === "FUTURE_RENT_CREDIT_TOPUP" ? "Future Rent Credit Top-up" : "Ledger Credit Entry",
+    }];
 
     const renderData: ReceiptRenderData = {
       // Hostel
@@ -427,6 +545,19 @@ export class ReceiptService {
       obligation_amount: null,
       obligation_status: "PAID",
 
+      // New Breakdown & Position Details
+      settlement_allocations,
+      future_credit_allocated: Number(ledgerEntry.amount),
+      total_transaction_paid: Number(ledgerEntry.amount),
+      outstanding_balance_after: dues.total_due,
+      future_credit_balance_after: ledgerBalance.future_rent_credit,
+
+      // Audit Details
+      payment_id: ledgerEntry.reference_id || "",
+      tenant_id: ledgerEntry.tenant_id,
+      receipt_id: ledgerEntry.id,
+      template_version: RECEIPT_TEMPLATE_VERSION,
+
       // Preferences
       prefs,
       footer: prefs.receipt_footer || null,
@@ -435,7 +566,6 @@ export class ReceiptService {
     const pdfUint8Array = await generateReceiptPdf(renderData);
     return Buffer.from(pdfUint8Array);
   }
-
 
   /**
    * Render receipt PDF directly from a receipt record with context.
@@ -453,6 +583,7 @@ export class ReceiptService {
       issued_at: Date;
       owner_id?: string | null;
       payment_id?: string;
+      tenant_id?: string;
     },
     context?: {
       footer?: string | null;
@@ -499,6 +630,17 @@ export class ReceiptService {
       due_date: null,
       obligation_amount: null,
       obligation_status: "PAID",
+
+      settlement_allocations: [],
+      future_credit_allocated: 0,
+      total_transaction_paid: Number(receipt.amount),
+      outstanding_balance_after: 0,
+      future_credit_balance_after: 0,
+
+      payment_id: receipt.payment_id || "",
+      tenant_id: receipt.tenant_id || "",
+      receipt_id: receipt.receipt_number || "",
+      template_version: RECEIPT_TEMPLATE_VERSION,
 
       prefs: {
         currency: context?.currency || "INR",

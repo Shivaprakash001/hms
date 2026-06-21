@@ -26,6 +26,7 @@ import { tenantPortalApi } from '@features/tenant-portal/api';
 import { TenantReservationCard } from '@/platforms/tenant/components/TenantReservationCard';
 import { TenantPaymentModal } from '@/portal/components/TenantPaymentModal';
 import { TenantPaymentDetailModal } from '@/domains/payments/components/TenantPaymentDetailModal';
+import { ReceiptGenerationModal } from '@/domains/payments/components/ReceiptGenerationModal';
 import { buildPayableObligations } from '@/portal/utils/payableObligations';
 import { paymentService } from '@features/payments/api';
 
@@ -170,6 +171,8 @@ export function TenantFinancialsPage() {
   
   const [state, dispatch] = useReducer(financialReducer, initialFinancialState);
   const [isTestingPayment, setIsTestingPayment] = useState(false);
+  const [generatingPaymentId, setGeneratingPaymentId] = useState<string | null>(null);
+  const [showReceiptGenModal, setShowReceiptGenModal] = useState(false);
   const isDevelopment = import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname.includes('127.0.0.1');
 
   const handleTestPayment = async () => {
@@ -670,21 +673,10 @@ export function TenantFinancialsPage() {
     toast.success('Payment recorded successfully');
   };
 
-  const handleReceipt = async (paymentId: string) => {
-    try {
-      const blob = await tenantPortalApi.downloadReceipt(paymentId);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Receipt_${paymentId.slice(0, 8)}.pdf`;
-      a.click();
-      setTimeout(() => {
-        window.URL.revokeObjectURL(url);
-      }, 250);
-      toast.success('Receipt downloaded');
-    } catch {
-      toast.error('Could not download receipt');
-    }
+  const handleReceipt = (paymentId: string) => {
+    dispatch({ type: 'SET_SELECTED_PAYMENT_FOR_DETAIL', payload: null });
+    setGeneratingPaymentId(paymentId);
+    setShowReceiptGenModal(true);
   };
 
   if (isLoading) {
@@ -1377,6 +1369,16 @@ export function TenantFinancialsPage() {
         onClose={() => dispatch({ type: 'SET_SELECTED_PAYMENT_FOR_DETAIL', payload: null })}
         payment={state.selectedPaymentForDetail}
         onDownloadReceipt={handleReceipt}
+      />
+
+      <ReceiptGenerationModal
+        open={showReceiptGenModal}
+        onClose={() => {
+          setShowReceiptGenModal(false);
+          setGeneratingPaymentId(null);
+        }}
+        paymentId={generatingPaymentId}
+        receiptNumber={generatingPaymentId}
       />
     </div>
   );
