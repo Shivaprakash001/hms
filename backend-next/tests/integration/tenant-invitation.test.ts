@@ -827,5 +827,53 @@ describe('Tenant Onboarding Integration Flow', () => {
       const acceptancesAfter = await prisma.tenantPolicyAcceptance.findMany({ where: { tenant_id: initial.tenant_id } });
       expect(acceptancesAfter.length).toBe(0);
     });
+
+    it('should store and retrieve monthly_rent on tenant_invitations successfully', async () => {
+      sendInvitationSpy.mockResolvedValueOnce({
+        providerMessageId: 'wamid.rent_history_test_1',
+        attempts: 1,
+      });
+
+      const initial: any = await tenantInvitationLifecycleService.createInvitation({
+        name: 'Rent History Tenant',
+        phone: '9876543288',
+        room_id: room.id,
+        monthly_rent: 9500,
+      }, owner.id);
+
+      expect(initial.action).toBe('INVITED');
+
+      // Verify that the initial invitation has monthly_rent saved as 9500
+      const dbInvite1 = await prisma.tenant_invitations.findUnique({
+        where: { id: initial.invitation_id },
+      });
+      expect(Number(dbInvite1!.monthly_rent)).toBe(9500);
+
+      sendInvitationSpy.mockResolvedValueOnce({
+        providerMessageId: 'wamid.rent_history_test_2',
+        attempts: 1,
+      });
+
+      // Edit and resend with rent 10500
+      const resendResult = await tenantInvitationLifecycleService.resendInvitation(
+        initial.invitation_id,
+        { id: owner.id, role: 'OWNER' },
+        { monthly_rent: 10500 }
+      );
+
+      expect(resendResult.action).toBe('RESENT');
+
+      // Verify old invitation's rent is preserved as 9500
+      const oldInvite = await prisma.tenant_invitations.findUnique({
+        where: { id: initial.invitation_id },
+      });
+      expect(Number(oldInvite!.monthly_rent)).toBe(9500);
+
+      // Verify new invitation's rent is stored as 10500
+      const newInvite = await prisma.tenant_invitations.findFirst({
+        where: { tenant_id: initial.tenant_id, status: 'PENDING' },
+      });
+      expect(Number(newInvite!.monthly_rent)).toBe(10500);
+    });
   });
 });

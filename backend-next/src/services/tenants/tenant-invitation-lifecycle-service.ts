@@ -338,6 +338,7 @@ export class TenantInvitationLifecycleService {
           token,
           expires_at: expiresAt,
           status: "PENDING",
+          monthly_rent: monthlyRent,
           agreement_duration_months: data.agreement_duration_months !== undefined && data.agreement_duration_months !== null
             ? Number(data.agreement_duration_months)
             : (resolved.agreement_duration_months ? Number(resolved.agreement_duration_months) : 12),
@@ -670,6 +671,7 @@ export class TenantInvitationLifecycleService {
           activation_started_at: null,
           activated_at: null,
           cancelled_at: null,
+          monthly_rent: typeof monthlyRent !== "undefined" ? monthlyRent : (invitation.monthly_rent ? Number(invitation.monthly_rent) : Number(invitation.tenant.monthly_rent)),
           agreement_duration_months: agreementDuration,
           agreement_start_date: typeof overrides?.agreement_start_date !== "undefined"
             ? (overrides.agreement_start_date ? new Date(overrides.agreement_start_date) : null)
