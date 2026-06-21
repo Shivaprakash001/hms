@@ -49,7 +49,15 @@ describe("Payment Link Token Public Flow", () => {
         expires_at: new Date(Date.now() - 1000), // Expired
         rent_obligations: { status: "PENDING", amount: 5000, rent_month: new Date() },
         tenants: { profiles: { name: "John Doe" } },
-        hostels: { name: "Adithya Hostel", phone: "1234567890" },
+        hostels: {
+          name: "Adithya Hostel",
+          phone: "1234567890",
+          address: "123 Main St",
+          city: "Hyderabad",
+          state: "Telangana",
+          pincode: "500081",
+          logo_url: "https://example.com/logo.png"
+        },
       });
 
       const request = new NextRequest(`http://localhost/api/payments/pay/${mockToken}`);
@@ -57,7 +65,7 @@ describe("Payment Link Token Public Flow", () => {
 
       expect(response.status).toBe(410);
       const text = await response.text();
-      expect(text).toContain("Payment link expired");
+      expect(text).toContain("Payment Link Expired");
     });
 
     it("returns 200 with PAID status if obligation is already paid", async () => {
@@ -66,7 +74,15 @@ describe("Payment Link Token Public Flow", () => {
         expires_at: new Date(Date.now() + 100000),
         rent_obligations: { status: "PAID", amount: 5000, rent_month: new Date(), payments: [] },
         tenants: { profiles: { name: "John Doe" } },
-        hostels: { name: "Adithya Hostel", phone: "1234567890" },
+        hostels: {
+          name: "Adithya Hostel",
+          phone: "1234567890",
+          address: "123 Main St",
+          city: "Hyderabad",
+          state: "Telangana",
+          pincode: "500081",
+          logo_url: "https://example.com/logo.png"
+        },
       });
 
       const request = new NextRequest(`http://localhost/api/payments/pay/${mockToken}`);
@@ -74,7 +90,7 @@ describe("Payment Link Token Public Flow", () => {
 
       expect(response.status).toBe(200);
       const text = await response.text();
-      expect(text).toContain("Payment already completed");
+      expect(text).toContain("Payment Completed");
     });
 
     it("returns 200 with DUE status and payment button if obligation is pending", async () => {
@@ -83,7 +99,15 @@ describe("Payment Link Token Public Flow", () => {
         expires_at: new Date(Date.now() + 100000),
         rent_obligations: { status: "PENDING", amount: 5000, rent_month: new Date(), payments: [] },
         tenants: { profiles: { name: "John Doe" } },
-        hostels: { name: "Adithya Hostel", phone: "1234567890" },
+        hostels: {
+          name: "Adithya Hostel",
+          phone: "1234567890",
+          address: "123 Main St",
+          city: "Hyderabad",
+          state: "Telangana",
+          pincode: "500081",
+          logo_url: "https://example.com/logo.png"
+        },
       });
 
       const request = new NextRequest(`http://localhost/api/payments/pay/${mockToken}`);
@@ -92,7 +116,7 @@ describe("Payment Link Token Public Flow", () => {
       expect(response.status).toBe(200);
       const text = await response.text();
       expect(text).toContain("Amount Due");
-      expect(text).toContain("Pay Now");
+      expect(text).toContain("Proceed to Secure Payment");
     });
 
     it("returns 200 with DUE status when token has {{1}} prefix or is URL encoded", async () => {
@@ -101,7 +125,15 @@ describe("Payment Link Token Public Flow", () => {
         expires_at: new Date(Date.now() + 100000),
         rent_obligations: { status: "PENDING", amount: 5000, rent_month: new Date(), payments: [] },
         tenants: { profiles: { name: "John Doe" } },
-        hostels: { name: "Adithya Hostel", phone: "1234567890" },
+        hostels: {
+          name: "Adithya Hostel",
+          phone: "1234567890",
+          address: "123 Main St",
+          city: "Hyderabad",
+          state: "Telangana",
+          pincode: "500081",
+          logo_url: "https://example.com/logo.png"
+        },
       });
 
       // Case 1: {{1}} prefix
@@ -127,7 +159,15 @@ describe("Payment Link Token Public Flow", () => {
         owner_id: "owner-1",
         rent_obligations: { status: "PENDING", amount: 5000 },
         tenants: { profiles: { name: "John Doe" } },
-        hostels: { name: "Adithya Hostel", phone: "1234567890" },
+        hostels: {
+          name: "Adithya Hostel",
+          phone: "1234567890",
+          address: "123 Main St",
+          city: "Hyderabad",
+          state: "Telangana",
+          pincode: "500081",
+          logo_url: "https://example.com/logo.png"
+        },
       });
 
       mocks.paymentService.createMultiObligationPaymentIntent.mockResolvedValueOnce({
@@ -154,7 +194,15 @@ describe("Payment Link Token Public Flow", () => {
         owner_id: "owner-1",
         rent_obligations: { status: "PENDING", amount: 5000 },
         tenants: { profiles: { name: "John Doe" } },
-        hostels: { name: "Adithya Hostel", phone: "1234567890" },
+        hostels: {
+          name: "Adithya Hostel",
+          phone: "1234567890",
+          address: "123 Main St",
+          city: "Hyderabad",
+          state: "Telangana",
+          pincode: "500081",
+          logo_url: "https://example.com/logo.png"
+        },
       });
 
       const mockVerifyResult = {

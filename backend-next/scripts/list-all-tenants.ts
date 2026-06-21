@@ -1,23 +1,24 @@
+import * as dotenv from "dotenv";
+import * as path from "path";
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
+
 import { prisma } from "../lib/db";
 
 async function main() {
   const tenants = await prisma.tenants.findMany({
     include: {
-      profiles: true,
-      agreements: true,
-      identification_documents: true
+      profiles: true
     }
   });
 
-  console.log(`Found ${tenants.length} tenants:`);
-  for (const t of tenants) {
-    console.log(`- TenantID: ${t.id}, ProfileID: ${t.profile_id}, Name: ${t.profiles?.name || 'N/A'}, Agreements: ${t.agreements.length}, Ident Docs: ${t.identification_documents.length}`);
-    for (const a of t.agreements) {
-      console.log(`  * Agreement ID: ${a.id}, Status: ${a.status}, PDF: ${a.pdf_url}`);
-    }
-  }
+  console.log("Tenants in DB:", tenants.map((t: any) => ({
+    id: t.id,
+    name: t.profiles?.name,
+    phone: t.profiles?.phone,
+    guardian_phone: t.guardian_phone,
+    personal_email: t.personal_email,
+    status: t.status
+  })));
 }
 
-main()
-  .catch((err) => console.error(err))
-  .finally(() => prisma.$disconnect());
+main().catch(console.error).finally(() => prisma.$disconnect());

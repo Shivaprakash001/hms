@@ -35,12 +35,34 @@ function renderPage(content: {
   tenantName: string;
   status: "DUE" | "PAID" | "EXPIRED" | "ERROR";
   dueMonth?: string;
+  dueDate?: string;
   amount?: number;
   supportPhone?: string;
   token?: string;
   errorMessage?: string;
+  roomNo?: string;
+  breakdown?: { label: string; value: number }[];
+  openedFromWhatsApp?: boolean;
+  hostelAddress?: string;
+  logoUrl?: string;
 }): string {
-  const { title, hostelName, tenantName, status, dueMonth, amount, supportPhone, token, errorMessage } = content;
+  const {
+    title,
+    hostelName,
+    tenantName,
+    status,
+    dueMonth,
+    dueDate,
+    amount,
+    supportPhone,
+    token,
+    errorMessage,
+    roomNo = "N/A",
+    breakdown = [],
+    openedFromWhatsApp = false,
+    hostelAddress = "",
+    logoUrl = "",
+  } = content;
 
   const statusBlock = (() => {
     switch (status) {
@@ -49,31 +71,61 @@ function renderPage(content: {
           <div class="amount-card">
             <p class="label">Amount Due</p>
             <p class="amount">${formatCurrency(amount || 0)}</p>
-            <p class="due-month">${dueMonth || ""}</p>
+            <p class="due-month">Due Date: ${dueDate || "N/A"}</p>
           </div>
-          <button type="button" id="pay-btn" class="pay-btn">Pay Now</button>
+
+          <div class="breakdown-box">
+            <p class="breakdown-title">Payment Breakdown</p>
+            <table class="breakdown-table">
+              ${breakdown
+                .map(
+                  (item) => `
+                <tr class="breakdown-row">
+                  <td>${item.label}</td>
+                  <td>${formatCurrency(item.value)}</td>
+                </tr>
+              `
+                )
+                .join("")}
+              <tr class="breakdown-row total">
+                <td>Total Amount</td>
+                <td>${formatCurrency(amount || 0)}</td>
+              </tr>
+            </table>
+          </div>
+
+          <button type="button" id="pay-btn" class="pay-btn">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            Proceed to Secure Payment
+          </button>
           <div id="error-message" class="error-msg" style="display: none;"></div>
         `;
       case "PAID":
         return `
           <div class="status-card paid">
-            <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="#16a34a" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12l2.5 2.5L16 9"/></svg>
-            <p class="status-text">Payment already completed</p>
-            <p class="status-sub">This obligation has been settled. No action needed.</p>
+            <div class="status-icon">
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            </div>
+            <p class="status-text">Payment Completed</p>
+            <p class="status-sub">This obligation has been fully settled. Thank you!</p>
           </div>
         `;
       case "EXPIRED":
         return `
           <div class="status-card expired">
-            <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="#dc2626" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 7v5l3 3"/></svg>
-            <p class="status-text">Payment link expired</p>
-            <p class="status-sub">Please contact your hostel for a new payment link.</p>
+            <div class="status-icon">
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+            <p class="status-text">Payment Link Expired</p>
+            <p class="status-sub">Please contact your hostel administration for a new payment link.</p>
           </div>
         `;
       case "ERROR":
         return `
           <div class="status-card error">
-            <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="#dc2626" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+            <div class="status-icon">
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            </div>
             <p class="status-text">${errorMessage || "Something went wrong"}</p>
             <p class="status-sub">Please contact your hostel for assistance.</p>
           </div>
@@ -88,6 +140,7 @@ function renderPage(content: {
       (function() {
         const payBtn = document.getElementById('pay-btn');
         const errorMsg = document.getElementById('error-message');
+        const logoUrl = "${logoUrl}";
 
         if (payBtn) {
           payBtn.addEventListener('click', async () => {
@@ -117,15 +170,16 @@ function renderPage(content: {
                 amount: raw.amount,
                 currency: raw.currency || 'INR',
                 name: '${hostelName.replace(/'/g, "\\'")}',
-                description: 'Rent Payment',
+                description: '${dueMonth} Rent Payment',
                 order_id: attempt.gateway_txn_id,
+                image: logoUrl || 'https://sriadithyahostels.in/hostel_icon.png',
                 prefill: {
                   name: raw.notes?.tenant_name || '',
                   email: raw.notes?.tenant_email || '',
                   contact: raw.notes?.tenant_phone || '',
                 },
                 theme: {
-                  color: '#3b82f6',
+                  color: '#F97316',
                 },
                 handler: async (rzpResponse) => {
                   payBtn.innerText = 'Verifying...';
@@ -147,14 +201,31 @@ function renderPage(content: {
                     const verifyData = await verifyRes.json();
                     if (verifyData.success && (verifyData.status === 'SUCCESS' || verifyData.attempt?.status === 'SUCCESS')) {
                       document.querySelector('.container').innerHTML = \`
-                        <p class="hostel-name">\${escapeHtml("${hostelName}")}</p>
-                        <p class="tenant-name">\${escapeHtml("${tenantName}")}</p>
+                        <div class="header-section">
+                          <div class="hostel-logo-container">
+                            \${logoUrl ? \`<img class="hostel-logo" src="\${logoUrl}" alt="Hostel Logo"/>\` : \`<span class="hostel-logo-fallback">🏠</span>\`}
+                          </div>
+                          <p class="hostel-name">\${escapeHtml("${hostelName}")}</p>
+                          <div class="verified-badge">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                            <span>Verified Hostel</span>
+                          </div>
+                        </div>
+                        
                         <div class="status-card paid">
-                          <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="#16a34a" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12l2.5 2.5L16 9"/></svg>
+                          <div class="status-icon">
+                            <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                          </div>
                           <p class="status-text">Payment Successful</p>
                           <p class="status-sub">Your payment has been successfully recorded. Thank you!</p>
                         </div>
                         \${"${supportPhone}" ? \`<p class="support">Need help? Call <a href="tel:${supportPhone}">${supportPhone}</a></p>\` : ""}
+                        \${"${hostelAddress}" ? \`
+                        <div class="footer-section">
+                          <p class="footer-hostel-info">\${escapeHtml("${hostelName}")}</p>
+                          <p>\${escapeHtml("${hostelAddress}")}</p>
+                        </div>
+                        \` : ""}
                       \`;
                     } else {
                       throw new Error(verifyData.error?.message || verifyData.error || 'Payment verification pending or failed');
@@ -165,13 +236,13 @@ function renderPage(content: {
                       errorMsg.style.display = 'block';
                     }
                     payBtn.disabled = false;
-                    payBtn.innerText = 'Pay Now';
+                    payBtn.innerText = 'Proceed to Secure Payment';
                   }
                 },
                 modal: {
                   ondismiss: () => {
                     payBtn.disabled = false;
-                    payBtn.innerText = 'Pay Now';
+                    payBtn.innerText = 'Proceed to Secure Payment';
                   }
                 }
               };
@@ -184,7 +255,7 @@ function renderPage(content: {
                 errorMsg.style.display = 'block';
               }
               payBtn.disabled = false;
-              payBtn.innerText = 'Pay Now';
+              payBtn.innerText = 'Proceed to Secure Payment';
             }
           });
         }
@@ -196,6 +267,16 @@ function renderPage(content: {
     </script>
   ` : "";
 
+  const whatsappContinuityHtml = (openedFromWhatsApp && status === "DUE") ? `
+    <div class="wa-banner">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <div>
+        <p class="wa-badge">WhatsApp Reminder</p>
+        <span>Hello ${tenantName} 👋 You're paying your ${dueMonth} hostel rent.</span>
+      </div>
+    </div>
+  ` : "";
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -204,117 +285,386 @@ function renderPage(content: {
   <title>${title}</title>
   <meta name="description" content="Payment for ${hostelName}">
   <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   ${razorpayScript}
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-      color: #e2e8f0;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #FAF9F6;
+      color: #1E293B;
       min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 16px;
+      padding: 24px 16px;
     }
     .container {
-      max-width: 420px;
+      max-width: 480px;
       width: 100%;
-      background: rgba(30, 41, 59, 0.8);
-      backdrop-filter: blur(12px);
-      border: 1px solid rgba(148, 163, 184, 0.15);
-      border-radius: 20px;
-      padding: 32px 24px;
+      background: #ffffff;
+      border-radius: 24px;
+      padding: 36px 28px;
+      box-shadow: 0 10px 30px -5px rgba(24, 24, 27, 0.04), 0 1px 3px rgba(24, 24, 27, 0.01);
+      border: 1px solid rgba(226, 232, 240, 0.8);
       text-align: center;
+      animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .wa-banner {
+      background: #F0FDF4;
+      border: 1px solid #DCFCE7;
+      border-radius: 16px;
+      padding: 14px 16px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      text-align: left;
+      font-size: 13px;
+      color: #166534;
+      font-weight: 500;
+      line-height: 1.4;
+    }
+    .wa-banner svg {
+      flex-shrink: 0;
+      color: #16A34A;
+      margin-top: 2px;
+    }
+    .wa-badge {
+      display: inline-block;
+      font-size: 10px;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: #16A34A;
+      letter-spacing: 0.5px;
+      margin-bottom: 2px;
+    }
+    .header-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 28px;
+    }
+    .hostel-logo-container {
+      width: 64px;
+      height: 64px;
+      background: #FFF7ED;
+      border: 1px solid #FFEDD5;
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+    .hostel-logo {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .hostel-logo-fallback {
+      font-size: 28px;
     }
     .hostel-name {
-      font-size: 13px;
-      text-transform: uppercase;
-      letter-spacing: 1.5px;
-      color: #94a3b8;
+      font-size: 18px;
+      font-weight: 750;
+      color: #0F172A;
       margin-bottom: 4px;
+      line-height: 1.2;
     }
-    .tenant-name {
-      font-size: 22px;
-      font-weight: 700;
-      color: #f1f5f9;
+    .verified-badge {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      color: #16A34A;
+      font-weight: 600;
+    }
+    .verified-badge svg {
+      fill: #16A34A;
+      color: white;
+    }
+    .details-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
       margin-bottom: 24px;
+      text-align: left;
+    }
+    .detail-card {
+      background: #F8FAFC;
+      border: 1px solid #F1F5F9;
+      border-radius: 14px;
+      padding: 12px 14px;
+    }
+    .detail-card .label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #64748B;
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+    .detail-card .val {
+      font-size: 13px;
+      color: #0f172a;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .amount-card {
-      background: rgba(59, 130, 246, 0.1);
-      border: 1px solid rgba(59, 130, 246, 0.25);
-      border-radius: 14px;
-      padding: 24px 16px;
+      background: linear-gradient(135deg, #FFF7ED 0%, #FFFDFA 100%);
+      border: 1px solid #FFEDD5;
+      border-radius: 18px;
+      padding: 24px 20px;
       margin-bottom: 24px;
     }
     .amount-card .label {
-      font-size: 13px;
-      color: #94a3b8;
-      margin-bottom: 8px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #C2410C;
+      font-weight: 700;
+      margin-bottom: 4px;
     }
     .amount-card .amount {
-      font-size: 36px;
+      font-size: 38px;
       font-weight: 800;
-      color: #f1f5f9;
+      color: #F97316;
       letter-spacing: -1px;
+      line-height: 1.1;
     }
     .amount-card .due-month {
-      font-size: 14px;
-      color: #64748b;
+      font-size: 13px;
+      color: #9A3412;
       margin-top: 6px;
+      font-weight: 500;
+    }
+    .breakdown-box {
+      margin-bottom: 24px;
+      text-align: left;
+      background: #ffffff;
+      border: 1px solid #F1F5F9;
+      border-radius: 16px;
+      padding: 16px;
+    }
+    .breakdown-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #64748B;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+    .breakdown-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .breakdown-row {
+      font-size: 13px;
+      color: #475569;
+    }
+    .breakdown-row td {
+      padding: 8px 0;
+      border-bottom: 1px dashed #F1F5F9;
+    }
+    .breakdown-row td:last-child {
+      text-align: right;
+      font-weight: 600;
+      color: #0f172a;
+    }
+    .breakdown-row.total td {
+      border-bottom: none;
+      padding-top: 12px;
+      font-weight: 800;
+      color: #0f172a;
+      font-size: 15px;
+    }
+    .breakdown-row.total td:last-child {
+      font-size: 16px;
+      color: #F97316;
+      font-weight: 800;
     }
     .pay-btn {
-      display: block;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
       width: 100%;
       padding: 16px;
-      font-size: 17px;
+      font-size: 16px;
       font-weight: 700;
-      color: #fff;
-      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      color: #ffffff;
+      background: linear-gradient(135deg, #F97316 0%, #EA580C 100%);
       border: none;
-      border-radius: 12px;
+      border-radius: 14px;
       cursor: pointer;
-      transition: transform 0.1s, box-shadow 0.2s;
-      box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 8px 24px rgba(249, 115, 22, 0.2);
     }
-    .pay-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(37, 99, 235, 0.5); }
-    .pay-btn:active { transform: translateY(0); }
-    .pay-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
+    .pay-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 12px 28px rgba(249, 115, 22, 0.3);
+    }
+    .pay-btn:active {
+      transform: translateY(0);
+    }
+    .pay-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
     .error-msg {
-      background: rgba(220, 38, 38, 0.1);
-      border: 1px solid rgba(220, 38, 38, 0.25);
-      color: #f87171;
-      padding: 12px;
-      border-radius: 8px;
+      background: #FEF2F2;
+      border: 1px solid #FEE2E2;
+      color: #EF4444;
+      padding: 12px 16px;
+      border-radius: 12px;
       margin-top: 16px;
-      font-size: 14px;
+      font-size: 13px;
       text-align: left;
+      font-weight: 500;
     }
     .status-card {
-      padding: 32px 16px;
-      border-radius: 14px;
-      margin-bottom: 8px;
+      background: #ffffff;
+      border: 1px solid #F1F5F9;
+      border-radius: 18px;
+      padding: 32px 20px;
+      margin-bottom: 16px;
     }
-    .status-card.paid { background: rgba(22, 163, 106, 0.1); border: 1px solid rgba(22, 163, 106, 0.25); }
-    .status-card.expired { background: rgba(220, 38, 38, 0.1); border: 1px solid rgba(220, 38, 38, 0.25); }
-    .status-card.error { background: rgba(220, 38, 38, 0.1); border: 1px solid rgba(220, 38, 38, 0.25); }
-    .status-card svg { margin-bottom: 16px; }
-    .status-text { font-size: 18px; font-weight: 600; color: #f1f5f9; margin-bottom: 8px; }
-    .status-sub { font-size: 14px; color: #94a3b8; }
-    .support {
+    .status-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 16px;
+    }
+    .status-card.paid .status-icon { background: #E8F5E9; border: 1px solid #C8E6C9; }
+    .status-card.expired .status-icon { background: #FEF2F2; border: 1px solid #FEE2E2; }
+    .status-card.error .status-icon { background: #FEF2F2; border: 1px solid #FEE2E2; }
+    .status-text { font-size: 18px; font-weight: 800; color: #0f172a; margin-bottom: 6px; }
+    .status-sub { font-size: 13px; color: #64748b; line-height: 1.5; }
+    .trust-container {
       margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid #F1F5F9;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      text-align: left;
+    }
+    .trust-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #475569;
+      font-weight: 500;
+    }
+    .trust-item svg {
+      color: #16A34A;
+      flex-shrink: 0;
+    }
+    .footer-section {
+      margin-top: 28px;
+      padding-top: 20px;
+      border-top: 1px solid #F1F5F9;
+      text-align: center;
+      font-size: 12px;
+      color: #64748B;
+      line-height: 1.5;
+    }
+    .footer-hostel-info {
+      font-weight: 600;
+      color: #334155;
+      margin-bottom: 4px;
+    }
+    .support {
+      margin-top: 12px;
       font-size: 12px;
       color: #64748b;
     }
-    .support a { color: #3b82f6; text-decoration: none; }
+    .support a { color: #F97316; font-weight: 600; text-decoration: none; }
+    .support a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
   <div class="container">
-    <p class="hostel-name">${hostelName}</p>
-    <p class="tenant-name">${tenantName}</p>
+    ${whatsappContinuityHtml}
+    
+    <div class="header-section">
+      <div class="hostel-logo-container">
+        ${logoUrl ? `<img class="hostel-logo" src="${logoUrl}" alt="Hostel Logo"/>` : `<span class="hostel-logo-fallback">🏠</span>`}
+      </div>
+      <p class="hostel-name">${hostelName}</p>
+      <div class="verified-badge">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+        <span>Verified Hostel</span>
+      </div>
+    </div>
+
+    ${status === "DUE" ? `
+      <div class="details-grid">
+        <div class="detail-card">
+          <p class="label">Resident</p>
+          <p class="val" title="${tenantName}">${tenantName}</p>
+        </div>
+        <div class="detail-card">
+          <p class="label">Room No</p>
+          <p class="val">${roomNo}</p>
+        </div>
+        <div class="detail-card">
+          <p class="label">Rent Period</p>
+          <p class="val">${dueMonth || "N/A"}</p>
+        </div>
+        <div class="detail-card">
+          <p class="label">Payment Status</p>
+          <p class="val" style="color: #F97316;">Pending</p>
+        </div>
+      </div>
+    ` : ""}
+
     ${statusBlock}
+
+    ${status === "DUE" ? `
+      <div class="trust-container">
+        <div class="trust-item">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zm-1-6l-3-3 1.41-1.41L11 13.17l4.59-4.59L17 10l-6 6z"/></svg>
+          <span>Secure Razorpay</span>
+        </div>
+        <div class="trust-item">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+          <span>Instant Receipt</span>
+        </div>
+        <div class="trust-item">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/></svg>
+          <span>WhatsApp Updates</span>
+        </div>
+        <div class="trust-item">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>
+          <span>Hostel Verified</span>
+        </div>
+      </div>
+    ` : ""}
+
     ${supportPhone ? `<p class="support">Need help? Call <a href="tel:${supportPhone}">${supportPhone}</a></p>` : ""}
+
+    ${hostelAddress ? `
+      <div class="footer-section">
+        <p class="footer-hostel-info">${hostelName}</p>
+        <p>${hostelAddress}</p>
+      </div>
+    ` : ""}
   </div>
   ${clientScript}
 </body>
@@ -353,10 +703,25 @@ export async function GET(
           },
         },
         tenants: {
-          include: { profiles: { select: { name: true } } },
+          include: {
+            profiles: { select: { name: true } },
+            room_allocations: {
+              where: { is_active: true },
+              include: { room: { select: { room_no: true } } },
+              take: 1
+            }
+          },
         },
         hostels: {
-          select: { name: true, phone: true },
+          select: {
+            name: true,
+            phone: true,
+            address: true,
+            city: true,
+            state: true,
+            pincode: true,
+            logo_url: true,
+          },
         },
       },
     });
@@ -377,6 +742,38 @@ export async function GET(
     const hostelName = linkToken.hostels.name || "Sri Adithya Boys Hostel";
     const tenantName = linkToken.tenants.profiles?.name || "Tenant";
     const supportPhone = linkToken.hostels.phone || "";
+    const obligation = linkToken.rent_obligations;
+
+    const hostelAddressParts = [
+      linkToken.hostels.address,
+      linkToken.hostels.city,
+      linkToken.hostels.state,
+      linkToken.hostels.pincode,
+    ].filter(Boolean);
+    const hostelAddress = hostelAddressParts.join(", ");
+    const logoUrl = linkToken.hostels.logo_url || "";
+
+    // Room Number resolution
+    const roomNo = linkToken.tenants.room_allocations?.[0]?.room?.room_no || "N/A";
+
+    // WhatsApp continuity resolution
+    let openedFromWhatsApp = false;
+    try {
+      const url = new URL(_req.url);
+      const sourceParam = url.searchParams.get("source");
+      if (sourceParam === "wa" || sourceParam === "whatsapp") {
+        openedFromWhatsApp = true;
+      } else {
+        const hasWaLog = await prisma.whatsapp_logs.findFirst({
+          where: { obligation_id: obligation.id }
+        });
+        if (hasWaLog) {
+          openedFromWhatsApp = true;
+        }
+      }
+    } catch (err) {
+      logger.error("whatsapp_source_check.failed", { error: String(err) });
+    }
 
     // 2. Expiry check
     if (linkToken.expires_at < new Date()) {
@@ -387,13 +784,14 @@ export async function GET(
           tenantName,
           status: "EXPIRED",
           supportPhone,
+          hostelAddress,
+          logoUrl,
         }),
         { status: 410, headers: { "Content-Type": "text/html; charset=utf-8" } }
       );
     }
 
     // 3. Obligation status check
-    const obligation = linkToken.rent_obligations;
     if (obligation.status === "PAID") {
       return new NextResponse(
         renderPage({
@@ -402,6 +800,8 @@ export async function GET(
           tenantName,
           status: "PAID",
           supportPhone,
+          hostelAddress,
+          logoUrl,
         }),
         { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } }
       );
@@ -423,12 +823,47 @@ export async function GET(
           tenantName,
           status: "PAID",
           supportPhone,
+          hostelAddress,
+          logoUrl,
         }),
         { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } }
       );
     }
 
-    // 5. Render summary page with Pay Now button
+    // Breakdown generation
+    const monthlyRent = Number(linkToken.tenants.monthly_rent || 0);
+    const maintenance = Number(linkToken.tenants.maintenance_charge || 0);
+    const breakdown: { label: string; value: number }[] = [];
+    const obligationType = obligation?.obligation_type || "RENT";
+
+    if (obligationType === "RENT") {
+      if (monthlyRent > 0) {
+        breakdown.push({ label: "Monthly Rent", value: monthlyRent });
+      }
+      if (maintenance > 0) {
+        breakdown.push({ label: "Maintenance Charges", value: maintenance });
+      }
+      const structuredTotal = monthlyRent + maintenance;
+      if (outstanding > structuredTotal) {
+        breakdown.push({ label: "Other Dues / Late Fee", value: outstanding - structuredTotal });
+      } else if (outstanding < structuredTotal) {
+        // If the outstanding is less, adjust the items proportionally or just show as Rent Portion
+        breakdown.length = 0;
+        breakdown.push({ label: `${formatMonth(obligation.rent_month)} Rent (Partial)`, value: outstanding });
+      }
+    } else if (obligationType === "SECURITY_DEPOSIT") {
+      breakdown.push({ label: "Security Deposit", value: outstanding });
+    } else {
+      breakdown.push({ label: `${obligationType.replace(/_/g, " ")}`, value: outstanding });
+    }
+
+    const formatDate = (date: Date | string | null): string => {
+      if (!date) return "N/A";
+      const d = new Date(date);
+      return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
+    };
+
+    // 5. Render summary page with Proceed to Secure Payment button
     return new NextResponse(
       renderPage({
         title: `Pay ${formatCurrency(outstanding)} — ${hostelName}`,
@@ -436,13 +871,20 @@ export async function GET(
         tenantName,
         status: "DUE",
         dueMonth: formatMonth(obligation.rent_month),
+        dueDate: formatDate(obligation.due_date),
         amount: outstanding,
         supportPhone,
         token,
+        roomNo,
+        breakdown,
+        openedFromWhatsApp,
+        hostelAddress,
+        logoUrl,
       }),
       { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } }
     );
   } catch (error: any) {
+    console.error("GET error:", error);
     logger.error("payment_link.get.failed", { token, error: String(error?.message || error) });
     return new NextResponse(
       renderPage({
