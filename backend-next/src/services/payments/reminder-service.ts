@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { prisma } from "@/lib/db";
 import { eventSystem } from "@/lib/events";
 import { EmailService } from "@/lib/services/email-service";
@@ -394,11 +395,12 @@ export class ReminderService {
       result.in_app.attempted = true;
       await prisma.reminder_logs.create({
         data: {
+          id: randomUUID(),
           obligation_id: obligation.id,
           tenant_id: obligation.tenant.id,
           reminder_type: type,
           channel: "IN_APP",
-          hostel_id: obligation.hostel_id || null, // Phase 2: immutable hostel context
+          hostel_id: obligation.hostel_id,
         }
       });
       result.in_app.sent = true;
