@@ -22,6 +22,9 @@ const mockFinancialStatus = {
   requiredDeposit: 10000,
   paidDeposit: 0,
   depositOutstanding: 10000,
+  depositActivationThreshold: 10000,
+  depositThresholdOutstanding: 10000,
+  isDepositFullyPaid: false,
   requiredMaintenance: 1000,
   paidMaintenance: 0,
   maintenanceOutstanding: 1000,
@@ -89,6 +92,7 @@ describe("ReservationStatusService", () => {
 
     vi.mocked(activationFinancialStatusService.getActivationFinancialStatus).mockResolvedValue({
       ...mockFinancialStatus,
+      depositActivationThreshold: 3000,
       paidDeposit: 4000,
       depositOutstanding: 6000,
       paidMaintenance: 1000,
@@ -112,6 +116,7 @@ describe("ReservationStatusService", () => {
 
     vi.mocked(activationFinancialStatusService.getActivationFinancialStatus).mockResolvedValue({
       ...mockFinancialStatus,
+      depositActivationThreshold: 3000,
       paidDeposit: 2000,
       depositOutstanding: 8000,
       paidMaintenance: 1000,

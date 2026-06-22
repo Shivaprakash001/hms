@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 import { renewalOfferService } from "@/src/services/tenants/renewal-offer-service";
 
 /** PATCH — Revise an offer (owner creates revised version, supersedes old) */
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const session = await getServerSession();
-    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const session = await getSession(req);
+    if (!session?.sub) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const body = await req.json();
     const { proposed_rent, proposed_security_deposit, proposed_duration_months,
@@ -17,7 +17,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ error: "proposed_rent, proposed_security_deposit, and proposed_duration_months are required" }, { status: 400 });
     }
 
-    const revised = await renewalOfferService.reviseOffer(params.id, session.user.id, {
+    const revised = await renewalOfferService.reviseOffer(params.id, session.sub, {
       proposed_rent: Number(proposed_rent),
       proposed_security_deposit: Number(proposed_security_deposit),
       proposed_duration_months: Number(proposed_duration_months),

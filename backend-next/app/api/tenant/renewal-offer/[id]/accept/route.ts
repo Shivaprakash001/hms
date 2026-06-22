@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 import { renewalOfferService } from "@/src/services/tenants/renewal-offer-service";
 
 /** POST — Tenant accepts a renewal offer */
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const session = await getServerSession();
-    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const session = await getSession(req);
+    if (!session?.sub) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const result = await renewalOfferService.acceptOffer(params.id, session.user.id);
+    const result = await renewalOfferService.acceptOffer(params.id, session.sub);
     return NextResponse.json(result);
   } catch (error: any) {
     const status = error.message?.startsWith("NOT_FOUND") ? 404

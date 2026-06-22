@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 import { renewalOfferService } from "@/src/services/tenants/renewal-offer-service";
 import type { RenewalStrategy } from "@/src/services/tenants/renewal-offer-service";
 
 /** GET — List renewal offers for a hostel (owner pipeline view) */
 export async function GET(req: NextRequest) {
   try {
-    const session = await getServerSession();
-    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const session = await getSession(req);
+    if (!session?.sub) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const hostelId = req.nextUrl.searchParams.get("hostelId");
     if (!hostelId) return NextResponse.json({ error: "hostelId is required" }, { status: 400 });
@@ -27,8 +27,8 @@ export async function GET(req: NextRequest) {
 /** POST — Generate bulk renewal offers */
 export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession();
-    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const session = await getSession(req);
+    if (!session?.sub) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const body = await req.json();
     const { hostelId, renewal_strategy, proposed_duration_months, proposed_rent, proposed_deposit,
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await renewalOfferService.generateBulkOffers({
-      ownerId: session.user.id,
+      ownerId: session.sub,
       hostelId,
       renewal_strategy: strategy,
       proposed_duration_months: Number(proposed_duration_months),
