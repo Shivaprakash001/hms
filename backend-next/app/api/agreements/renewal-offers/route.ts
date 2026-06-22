@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     const status = req.nextUrl.searchParams.get("status") || undefined;
     const limit = Number(req.nextUrl.searchParams.get("limit") || 100);
 
-    const result = await renewalOfferService.listOffers(session.user.id, hostelId, { status, limit });
+    const result = await renewalOfferService.listOffers(session.sub, hostelId, { status, limit });
     return NextResponse.json(result);
   } catch (error: any) {
     const status = error.message?.startsWith("NOT_FOUND") ? 404
