@@ -67,7 +67,8 @@ export const agreementService = {
   },
   getTenantRenewalOffer: async () => {
     const response = await api.get('/tenant/renewal-offer');
-    return unwrap(response);
+    const unwrapped = unwrap(response);
+    return unwrapped?.offer ?? unwrapped;
   },
   acceptRenewalOffer: async (offerId) => {
     const response = await api.post(`/tenant/renewal-offer/${offerId}/accept`);

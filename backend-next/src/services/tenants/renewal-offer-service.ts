@@ -143,8 +143,9 @@ export class RenewalOfferService {
       throw new Error("BAD_REQUEST: No active agreement template covers the proposed effective date for this room category");
     }
 
-    const templateRent = template?.default_rent ? Number(template.default_rent) : Number(agreement.contract_rent || 0);
-    const templateDeposit = template?.default_security_deposit ? Number(template.default_security_deposit) : Number(agreement.contract_security_deposit || 0);
+    const activeContract = getAgreementContract(agreement);
+    const templateRent = template?.default_rent ? Number(template.default_rent) : Number(activeContract.rent || 0);
+    const templateDeposit = template?.default_security_deposit ? Number(template.default_security_deposit) : Number(activeContract.security_deposit || 0);
     const templateDuration = template?.default_duration_months || Number(agreement.agreement_duration_months || 6);
 
     const proposedRent = proposed.proposed_rent ?? templateRent;
@@ -165,16 +166,16 @@ export class RenewalOfferService {
         owner_id: ownerId,
         proposed_rent: proposedRent,
         proposed_security_deposit: proposedDeposit,
-        proposed_maintenance: proposed.proposed_maintenance ?? 0,
-        proposed_maintenance_type: proposed.proposed_maintenance_type || null,
+        proposed_maintenance: proposed.proposed_maintenance ?? Number(activeContract.maintenance || 0),
+        proposed_maintenance_type: proposed.proposed_maintenance_type || agreement.contract_maintenance_type || null,
         proposed_duration_months: proposedDuration,
         proposed_start_date: proposedStartDate,
         proposed_end_date: proposedEndDate,
         proposed_payment_frequency: proposed.proposed_payment_frequency || null,
         effective_from: effectiveFrom,
-        current_rent: Number(agreement.contract_rent || 0),
-        current_security_deposit: Number(agreement.contract_security_deposit || 0),
-        current_maintenance: Number(agreement.contract_maintenance || 0),
+        current_rent: Number(activeContract.rent || 0),
+        current_security_deposit: Number(activeContract.security_deposit || 0),
+        current_maintenance: Number(activeContract.maintenance || 0),
         deposit_held: depositHeld,
         additional_deposit_required: additionalDeposit,
         deposit_refund_eligible: depositRefund,
@@ -267,7 +268,8 @@ export class RenewalOfferService {
 
       const offerIds: string[] = [];
       for (const agreement of filtered) {
-        const currentRent = Number(agreement.contract_rent || 0);
+        const activeContract = getAgreementContract(agreement);
+        const currentRent = Number(activeContract.rent || 0);
         const roomType = agreement.tenant?.room_allocations?.[0]?.room?.room_type || null;
 
         const effectiveFrom = agreement.agreement_end_date || new Date();
@@ -276,7 +278,7 @@ export class RenewalOfferService {
         const template = await this._resolveTemplateInTx(tx, hostelId, roomType, effectiveFrom);
 
         const templateRent = template?.default_rent ? Number(template.default_rent) : currentRent;
-        const templateDeposit = template?.default_security_deposit ? Number(template.default_security_deposit) : Number(agreement.contract_security_deposit || 0);
+        const templateDeposit = template?.default_security_deposit ? Number(template.default_security_deposit) : Number(activeContract.security_deposit || 0);
         const templateDuration = template?.default_duration_months || input.proposed_duration_months || 6;
 
         // Apply strategy to determine proposed rent
@@ -301,7 +303,7 @@ export class RenewalOfferService {
             hostel_id: hostelId, owner_id: ownerId, batch_id: batch.id,
             proposed_rent: proposedRent,
             proposed_security_deposit: proposedDeposit,
-            proposed_maintenance: Number(agreement.contract_maintenance || 0),
+            proposed_maintenance: Number(activeContract.maintenance || 0),
             proposed_maintenance_type: agreement.contract_maintenance_type || null,
             proposed_duration_months: proposedDuration,
             proposed_start_date: effectiveFrom,
@@ -309,8 +311,8 @@ export class RenewalOfferService {
             proposed_payment_frequency: null,
             effective_from: effectiveFrom,
             current_rent: currentRent,
-            current_security_deposit: Number(agreement.contract_security_deposit || 0),
-            current_maintenance: Number(agreement.contract_maintenance || 0),
+            current_security_deposit: Number(activeContract.security_deposit || 0),
+            current_maintenance: Number(activeContract.maintenance || 0),
             deposit_held: depositHeld,
             additional_deposit_required: Math.max(0, proposedDeposit - depositHeld),
             deposit_refund_eligible: Math.max(0, depositHeld - proposedDeposit),
@@ -472,6 +474,62 @@ export class RenewalOfferService {
         depositObligationId = obligation.id;
       }
 
+      // Excess deposit handling
+      const refundEligible = Number(offer.deposit_refund_eligible || 0);
+      if (refundEligible > 0) {
+        // Compute current ledger balance inside this transaction to ensure correct balance_after snapshot
+        const [credits, debits] = await Promise.all([
+          tx.tenant_financial_ledger.aggregate({
+            where: { tenant_id: offer.tenant_id, type: "CREDIT" },
+            _sum: { amount: true },
+          }),
+          tx.tenant_financial_ledger.aggregate({
+            where: { tenant_id: offer.tenant_id, type: "DEBIT" },
+            _sum: { amount: true },
+          }),
+        ]);
+        const currentBalance = Number(credits._sum.amount ?? 0) - Number(debits._sum.amount ?? 0);
+
+        if (offer.deposit_refund_policy === "KEEP_AS_CREDIT") {
+          const newBalance = Math.round((currentBalance + refundEligible) * 100) / 100;
+          await tx.tenant_financial_ledger.create({
+            data: {
+              id: randomUUID(),
+              tenant_id: offer.tenant_id,
+              owner_id: offer.owner_id,
+              hostel_id: offer.hostel_id,
+              type: "CREDIT",
+              reason: "FUTURE_RENT_CREDIT_TOPUP",
+              amount: refundEligible,
+              balance_after: newBalance,
+              notes: `Excess security deposit from renewal offer ${offer.id} carried forward as credit`,
+              reference_id: offer.id,
+              reference_type: "RENEWAL_OFFER",
+              created_by: "SYSTEM",
+            },
+          });
+        } else if (offer.deposit_refund_policy === "REFUND") {
+          const newBalance = Math.max(0, Math.round((currentBalance - refundEligible) * 100) / 100);
+          await tx.tenant_financial_ledger.create({
+            data: {
+              id: randomUUID(),
+              tenant_id: offer.tenant_id,
+              owner_id: offer.owner_id,
+              hostel_id: offer.hostel_id,
+              type: "DEBIT",
+              reason: "SECURITY_DEPOSIT_REFUNDED",
+              amount: refundEligible,
+              balance_after: newBalance,
+              notes: `Excess security deposit refund pending from renewal offer ${offer.id}`,
+              reference_id: offer.id,
+              reference_type: "RENEWAL_OFFER",
+              refund_status: "PENDING",
+              created_by: "SYSTEM",
+            },
+          });
+        }
+      }
+
       if (offer.batch_id) {
         await tx.bulkRenewalBatch.update({ where: { id: offer.batch_id }, data: { offers_accepted: { increment: 1 } } });
       }
@@ -479,6 +537,7 @@ export class RenewalOfferService {
       logger.info("renewal-offer.accepted", {
         offer_id: offerId, tenant_id: offer.tenant_id,
         new_agreement_id: newAgreement.id, additional_deposit: additionalDeposit,
+        refund_eligible: refundEligible, refund_policy: offer.deposit_refund_policy,
         effective_from: offer.effective_from.toISOString(),
       });
 
@@ -631,20 +690,55 @@ export class RenewalOfferService {
     const where: any = { hostel_id: hostelId, owner_id: ownerId };
     if (opts.status) where.status = opts.status;
 
-    const [offers, counts] = await Promise.all([
+    const [offers, allOffersForCounts] = await Promise.all([
       this.db.renewalOffer.findMany({
         where, orderBy: { created_at: "desc" }, take: opts.limit || 100,
         include: {
           tenant: { include: { profiles: { select: { name: true, phone: true } }, room_allocations: { where: { is_active: true, end_date: null }, include: { room: { select: { room_no: true } } }, take: 1 } } },
           agreement: { select: { id: true, agreement_version: true, agreement_end_date: true, status: true } },
+          decisions: true,
         },
       }),
-      this.db.renewalOffer.groupBy({ by: ["status"], where: { hostel_id: hostelId, owner_id: ownerId }, _count: { id: true } }),
+      this.db.renewalOffer.findMany({
+        where: { hostel_id: hostelId, owner_id: ownerId },
+        select: {
+          id: true,
+          status: true,
+          additional_deposit_required: true,
+          decisions: {
+            select: {
+              decision: true,
+            },
+          },
+        },
+      }),
     ]);
 
-    const pipeline: Record<string, number> = {};
-    for (const c of counts) pipeline[c.status] = c._count.id;
-    return { offers, pipeline };
+    const pipeline = {
+      SENT: 0,
+      NEGOTIATING: 0,
+      ACCEPTED: 0,
+      AWAITING_PAYMENT: 0,
+      READY_FOR_SIGNATURE: 0,
+      DECLINED: 0,
+      DRAFT: 0,
+    };
+
+    for (const o of allOffersForCounts) {
+      const pStatus = computePipelineStatus(o);
+      if (pStatus in pipeline) {
+        pipeline[pStatus as keyof typeof pipeline]++;
+      } else {
+        (pipeline as any)[pStatus] = ((pipeline as any)[pStatus] || 0) + 1;
+      }
+    }
+
+    const mappedOffers = offers.map((o) => ({
+      ...o,
+      pipeline_status: computePipelineStatus(o),
+    }));
+
+    return { offers: mappedOffers, pipeline };
   }
 
   /** Get the active renewal offer for a tenant (portal view). */
@@ -652,7 +746,7 @@ export class RenewalOfferService {
     const tenant = await this.db.tenants.findUnique({ where: { profile_id: profileId }, select: { id: true } });
     if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
 
-    return this.db.renewalOffer.findFirst({
+    const offer = await this.db.renewalOffer.findFirst({
       where: { tenant_id: tenant.id, status: "SENT" },
       include: {
         agreement: { select: { id: true, agreement_version: true, agreement_end_date: true, contract_rent: true, contract_security_deposit: true } },
@@ -660,6 +754,27 @@ export class RenewalOfferService {
       },
       orderBy: { created_at: "desc" },
     });
+
+    if (!offer) return null;
+
+    const revisions: any[] = [];
+    let currentId = offer.revised_from_offer_id;
+    while (currentId) {
+      const prevOffer = await this.db.renewalOffer.findUnique({
+        where: { id: currentId },
+        include: {
+          agreement: { select: { id: true, agreement_version: true, agreement_end_date: true, contract_rent: true, contract_security_deposit: true } },
+        }
+      });
+      if (!prevOffer) break;
+      revisions.push(prevOffer);
+      currentId = prevOffer.revised_from_offer_id;
+    }
+
+    return {
+      ...offer,
+      revisions,
+    };
   }
 
   /** Expire stale offers past their expiry date. Called by lifecycle cron. */
@@ -685,6 +800,37 @@ function addMonths(date: Date, months: number): Date {
 
 function addDays(date: Date, days: number): Date {
   const d = new Date(date); d.setDate(d.getDate() + days); return d;
+}
+
+function getAgreementContract(agreement: any) {
+  const snapshot = (agreement?.content_snapshot || {}) as Record<string, any>;
+  const numberValue = (val: any) => {
+    const num = Number(val);
+    return Number.isFinite(num) ? num : null;
+  };
+  return {
+    rent: numberValue(agreement?.contract_rent ?? snapshot.monthly_rent),
+    security_deposit: numberValue(agreement?.contract_security_deposit ?? snapshot.advance_deposit),
+    maintenance: numberValue(agreement?.contract_maintenance ?? snapshot.maintenance_charge),
+  };
+}
+
+function computePipelineStatus(offer: any): string {
+  const status = offer.status;
+  const decisions = offer.decisions || [];
+  const additionalDeposit = Number(offer.additional_deposit_required || 0);
+
+  if (status === "SENT") {
+    const hasNegotiatingDecision = decisions.some((d: any) => d.decision === "SENT");
+    return hasNegotiatingDecision ? "NEGOTIATING" : "SENT";
+  }
+  if (status === "ACCEPTED") {
+    return additionalDeposit > 0 ? "AWAITING_PAYMENT" : "READY_FOR_SIGNATURE";
+  }
+  if (status === "DECLINED") {
+    return "DECLINED";
+  }
+  return status;
 }
 
 export const renewalOfferService = new RenewalOfferService();

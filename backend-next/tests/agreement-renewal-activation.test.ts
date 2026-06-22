@@ -3,9 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   agreementFindMany: vi.fn(),
   agreementUpdate: vi.fn(),
+  tenantsUpdate: vi.fn(),
   eventLogLog: vi.fn(),
   transaction: vi.fn(async (cb: any) => cb({
     agreement: { update: mocks.agreementUpdate },
+    tenants: { update: mocks.tenantsUpdate },
   })),
 }));
 
@@ -155,6 +157,19 @@ describe("AgreementRenewalActivation", () => {
           rules_snapshot: { rules: ["Existing Rules"] },
           rule_version_id: "rule-v1",
           rule_version_number: "v1",
+        }),
+      })
+    );
+
+    // Verify transaction updates tenants model active parameters
+    expect(mocks.tenantsUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "tenant-id" },
+        data: expect.objectContaining({
+          monthly_rent: 8500,
+          security_deposit: 6000,
+          maintenance_charge: 1000,
+          maintenance_type: "MONTHLY",
         }),
       })
     );

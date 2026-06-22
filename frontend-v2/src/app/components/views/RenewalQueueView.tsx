@@ -16,10 +16,12 @@ import {
   Info, 
   Coins, 
   ArrowRight,
-  RefreshCw
+  RefreshCw,
+  Users
 } from 'lucide-react';
 import { ownerService } from '@features/owners/api';
 import { agreementService } from '@features/agreements/api';
+import { roomService, allocationService } from '@features/rooms/api';
 import { hmsToast } from '@lib/toast';
 
 type QueueFilter = 'all' | 'expiring' | 'expired' | 'overdue' | 'move_out';
@@ -83,13 +85,16 @@ export function RenewalQueueView() {
   const [bulkDeposit, setBulkDeposit] = useState('');
   const [bulkPercent, setBulkPercent] = useState('5');
   const [bulkCategoryRents, setBulkCategoryRents] = useState<Record<string, string>>({});
-  const [bulkTitle, setBulkTitle] = useState('Bulk Renewal Offer');
+  const [bulkTitle, setBulkTitle] = useState('Renewal Campaign');
 
   // Single / Revise form state
   const [singleRent, setSingleRent] = useState('');
   const [singleDeposit, setSingleDeposit] = useState('');
   const [singleDuration, setSingleDuration] = useState('11');
   const [singleNotes, setSingleNotes] = useState('');
+  const [offersFilter, setOffersFilter] = useState<string>('ALL');
+  const [selectedRoomId, setSelectedRoomId] = useState<string>('');
+  const [isShifting, setIsShifting] = useState(false);
 
   // Fetch hostels
   const { data: hostelsRaw } = useQuery({
@@ -116,10 +121,33 @@ export function RenewalQueueView() {
     staleTime: 30_000,
   });
 
+  // Fetch all rooms in the hostel
+  const { data: roomsRaw = [] } = useQuery({
+    queryKey: ['rooms', 'list', hostelId],
+    queryFn: () => roomService.getAll(hostelId),
+    enabled: Boolean(hostelId),
+    staleTime: 5 * 60_000,
+  });
+  const rooms = Array.isArray(roomsRaw) ? roomsRaw : [];
+  const currentRoomId = selectedRow?.tenant?.room?.id || selectedRow?.tenant?.room_id || '';
+  const availableRooms = useMemo(() => {
+    return rooms.filter((r: any) => {
+      const occupied = Number(r.occupied_count ?? 0);
+      const capacity = Number(r.capacity ?? 1);
+      return occupied < capacity || r.id === currentRoomId;
+    });
+  }, [rooms, currentRoomId]);
+
   const queueRows = Array.isArray(queueData?.renewals) ? queueData.renewals : [];
   const queueCounts = queueData?.counts || {};
 
-  const offerRows = Array.isArray(offersData) ? offersData : [];
+  const offerRows = Array.isArray(offersData?.offers) ? offersData.offers : [];
+  const pipelineCounts = offersData?.pipeline || {};
+
+  const filteredOfferRows = useMemo(() => {
+    if (offersFilter === 'ALL') return offerRows;
+    return offerRows.filter((offer: any) => offer.pipeline_status === offersFilter);
+  }, [offerRows, offersFilter]);
 
   const filters = useMemo(() => [
     ['all', `All ${queueCounts.total ?? 0}`],
@@ -156,12 +184,12 @@ export function RenewalQueueView() {
   const generateBulkMutation = useMutation({
     mutationFn: (data: any) => agreementService.generateBulkRenewalOffers(data),
     onSuccess: (res: any) => {
-      hmsToast.success(`Bulk offer batch created: ${res.offersGenerated} offers generated`);
+      hmsToast.success(`Renewal campaign launched successfully! Generated ${res.offersGenerated} offers.`);
       queryClient.invalidateQueries({ queryKey: ['agreements', 'renewal-queue'] });
       queryClient.invalidateQueries({ queryKey: ['agreements', 'renewal-offers'] });
       setShowBulkModal(false);
     },
-    onError: (err) => hmsToast.fromApiError(err, 'Failed to generate bulk renewal offers'),
+    onError: (err) => hmsToast.fromApiError(err, 'Failed to launch renewal campaign'),
   });
 
   const sendOfferMutation = useMutation({
@@ -189,10 +217,15 @@ export function RenewalQueueView() {
   const handleOpenSingleModal = (row: any) => {
     setSelectedRow(row);
     const agreement = row.current_agreement || {};
-    setSingleRent(String(agreement.contract_rent || ''));
-    setSingleDeposit(String(agreement.contract_security_deposit || ''));
-    setSingleDuration('11');
+    setSingleRent(String(agreement.contract?.rent ?? agreement.contract_rent ?? ''));
+    setSingleDeposit(String(agreement.contract?.security_deposit ?? agreement.contract_security_deposit ?? ''));
+    setSingleDuration(String(agreement.contract?.agreement_duration_months ?? agreement.contract_duration_months ?? '11'));
     setSingleNotes('');
+    
+    // Set selected room ID to tenant's current room ID
+    const roomVal = row.tenant?.room?.id || row.tenant?.room_id || '';
+    setSelectedRoomId(roomVal);
+    
     setShowSingleModal(true);
   };
 
@@ -210,7 +243,7 @@ export function RenewalQueueView() {
     setBulkDeposit('');
     setBulkPercent('5');
     setBulkDuration('11');
-    setBulkTitle(`Bulk Renewal - ${new Date().toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}`);
+    setBulkTitle(`Renewal Campaign - ${new Date().toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}`);
     
     // Initialize category rents mapping
     const catMapping: Record<string, string> = {};
@@ -222,22 +255,49 @@ export function RenewalQueueView() {
     setShowBulkModal(true);
   };
 
-  const submitSingleOffer = () => {
+  const submitSingleOffer = async () => {
     if (!selectedRow) return;
     if (!singleRent || !singleDeposit || !singleDuration) {
       hmsToast.warning('Validation Error', 'Please fill in all required fields');
       return;
     }
+    const currentRoomId = selectedRow.tenant?.room?.id || selectedRow.tenant?.room_id;
     const agreementId = selectedRow.current_agreement?.id;
-    generateSingleMutation.mutate({
-      agreementId,
-      data: {
-        proposed_rent: Number(singleRent),
-        proposed_security_deposit: Number(singleDeposit),
-        proposed_duration_months: Number(singleDuration),
-        owner_notes: singleNotes || undefined,
+
+    if (!agreementId) {
+      hmsToast.error('No active agreement found');
+      return;
+    }
+
+    try {
+      setIsShifting(true);
+      if (selectedRoomId && selectedRoomId !== currentRoomId) {
+        // Shift room first
+        const shiftRes = await allocationService.shift(hostelId, {
+          tenant_id: selectedRow.tenant?.id,
+          new_room_id: selectedRoomId,
+          shift_date: new Date().toISOString().split('T')[0],
+        });
+        if (shiftRes?.error || (shiftRes?.success === false)) {
+          throw new Error(shiftRes?.message || 'Failed to shift room');
+        }
+        hmsToast.success('Room shifted successfully');
       }
-    });
+
+      generateSingleMutation.mutate({
+        agreementId,
+        data: {
+          proposed_rent: Number(singleRent),
+          proposed_security_deposit: Number(singleDeposit),
+          proposed_duration_months: Number(singleDuration),
+          owner_notes: singleNotes || undefined,
+        }
+      });
+    } catch (err: any) {
+      hmsToast.error(err?.message || 'Failed to shift room prior to generating offer');
+    } finally {
+      setIsShifting(false);
+    }
   };
 
   const submitReviseOffer = () => {
@@ -330,18 +390,99 @@ export function RenewalQueueView() {
               className="flex h-10 items-center gap-1.5 rounded-lg bg-accent px-4 text-sm font-bold text-accent-foreground shadow-sm transition-all hover:bg-accent/90"
             >
               <Plus className="h-4 w-4" />
-              Bulk Offers Wizard
+              Renewal Campaigns Wizard
             </button>
           )}
         </div>
       </header>
 
-      {/* Metrics Section */}
+      {/* Stay Renewal Pipeline Tracker */}
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Metric label="Expiring Stays" value={Number(queueCounts.expiring || 0)} icon={<CalendarDays className="h-5 w-5 text-amber-500" />} />
-        <Metric label="Expired Stay Contracts" value={Number(queueCounts.expired || 0)} icon={<AlertTriangle className="h-5 w-5 text-rose-500" />} />
-        <Metric label="Stay Overdue Alert" value={Number(queueCounts.overdue || 0)} icon={<ShieldAlert className="h-5 w-5 text-rose-500 animate-pulse" />} />
-        <Metric label="Move-out Pipeline" value={Number(queueCounts.move_out || 0)} icon={<FileText className="h-5 w-5 text-blue-500" />} />
+        {/* Stage 1: Expiring (Needs Offer) */}
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('expiring');
+            setFilter('all');
+          }}
+          className={`text-left transition-all rounded-xl border p-4 shadow-sm focus:outline-none ${
+            activeTab === 'expiring'
+              ? 'border-accent bg-accent/5 ring-1 ring-accent'
+              : 'border-border bg-card hover:bg-muted/30'
+          }`}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">1. Expiring (Needs Offer)</span>
+            <CalendarDays className="h-4 w-4 text-amber-500" />
+          </div>
+          <p className="mt-2 text-2xl font-bold text-foreground">{Number(queueCounts.total || 0)}</p>
+          <p className="text-[10px] text-muted-foreground mt-1">Stays needing attention</p>
+        </button>
+
+        {/* Stage 2: Renewal Draft */}
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('offers');
+            setOffersFilter('SENT');
+          }}
+          className={`text-left transition-all rounded-xl border p-4 shadow-sm focus:outline-none ${
+            activeTab === 'offers' && offersFilter === 'SENT'
+              ? 'border-accent bg-accent/5 ring-1 ring-accent'
+              : 'border-border bg-card hover:bg-muted/30'
+          }`}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">2. Renewal Draft</span>
+            <FileText className="h-4 w-4 text-blue-500" />
+          </div>
+          <p className="mt-2 text-2xl font-bold text-foreground">{Number((pipelineCounts.DRAFT || 0) + (pipelineCounts.SENT || 0))}</p>
+          <p className="text-[10px] text-muted-foreground mt-1">Offers created & sent</p>
+        </button>
+
+        {/* Stage 3: Under Negotiation */}
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('offers');
+            setOffersFilter('NEGOTIATING');
+          }}
+          className={`text-left transition-all rounded-xl border p-4 shadow-sm focus:outline-none ${
+            activeTab === 'offers' && offersFilter === 'NEGOTIATING'
+              ? 'border-accent bg-accent/5 ring-1 ring-accent'
+              : 'border-border bg-card hover:bg-muted/30'
+          }`}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">3. Under Negotiation</span>
+            <Users className="h-4 w-4 text-amber-600" />
+          </div>
+          <p className="mt-2 text-2xl font-bold text-foreground">{Number(pipelineCounts.NEGOTIATING || 0)}</p>
+          <p className="text-[10px] text-muted-foreground mt-1">Active discussions</p>
+        </button>
+
+        {/* Stage 4: Renewed */}
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('offers');
+            setOffersFilter('ACCEPTED');
+          }}
+          className={`text-left transition-all rounded-xl border p-4 shadow-sm focus:outline-none ${
+            activeTab === 'offers' && ['ACCEPTED', 'AWAITING_PAYMENT', 'READY_FOR_SIGNATURE'].includes(offersFilter)
+              ? 'border-accent bg-accent/5 ring-1 ring-accent'
+              : 'border-border bg-card hover:bg-muted/30'
+          }`}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">4. Renewed (Active/Pending)</span>
+            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+          </div>
+          <p className="mt-2 text-2xl font-bold text-foreground">
+            {Number((pipelineCounts.ACCEPTED || 0) + (pipelineCounts.READY_FOR_SIGNATURE || 0) + (pipelineCounts.AWAITING_PAYMENT || 0))}
+          </p>
+          <p className="text-[10px] text-muted-foreground mt-1">Ready or finalized stays</p>
+        </button>
       </section>
 
       {/* Main Tabs */}
@@ -424,8 +565,8 @@ export function RenewalQueueView() {
                             Room {tenant.room?.room_no || 'N/A'} ({tenant.room?.room_type || 'N/A'}) · Agreement v{agreement.agreement_version || 1} · Ends {fmtDate(agreement.agreement_end_date)}
                           </p>
                           <div className="flex gap-4 text-xs font-medium text-muted-foreground">
-                            <span>Current Rent: <strong className="text-foreground">₹{Number(agreement.contract_rent || 0).toLocaleString('en-IN')}</strong></span>
-                            <span>Current Deposit: <strong className="text-foreground">₹{Number(agreement.contract_security_deposit || 0).toLocaleString('en-IN')}</strong></span>
+                            <span>Current Rent: <strong className="text-foreground">₹{Number(agreement.contract?.rent ?? agreement.contract_rent ?? 0).toLocaleString('en-IN')}</strong></span>
+                            <span>Current Deposit: <strong className="text-foreground">₹{Number(agreement.contract?.security_deposit ?? agreement.contract_security_deposit ?? 0).toLocaleString('en-IN')}</strong></span>
                           </div>
                           {row.overdue_rent?.count > 0 && (
                             <p className="text-xs font-bold text-rose-700 dark:text-rose-400 flex items-center gap-1">
@@ -462,6 +603,32 @@ export function RenewalQueueView() {
       {/* Tab Content: Renewal Offers Pipeline */}
       {activeTab === 'offers' && (
         <div className="space-y-4">
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {[
+              ['ALL', `All (${offerRows.length})`],
+              ['DRAFT', `Drafts (${pipelineCounts.DRAFT ?? 0})`],
+              ['SENT', `Sent (${pipelineCounts.SENT ?? 0})`],
+              ['NEGOTIATING', `Negotiating (${pipelineCounts.NEGOTIATING ?? 0})`],
+              ['ACCEPTED', `Accepted (${pipelineCounts.ACCEPTED ?? 0})`],
+              ['AWAITING_PAYMENT', `Awaiting Payment (${pipelineCounts.AWAITING_PAYMENT ?? 0})`],
+              ['READY_FOR_SIGNATURE', `Ready for Sign (${pipelineCounts.READY_FOR_SIGNATURE ?? 0})`],
+              ['DECLINED', `Declined (${pipelineCounts.DECLINED ?? 0})`],
+            ].map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setOffersFilter(id as any)}
+                className={`shrink-0 rounded-full border px-4 py-1.5 text-xs font-bold transition-all ${
+                  offersFilter === id 
+                    ? 'border-accent bg-accent text-accent-foreground' 
+                    : 'border-border bg-card text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
           <section className="rounded-xl border border-border bg-card overflow-hidden">
             {isOffersLoading ? (
               <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
@@ -478,9 +645,21 @@ export function RenewalQueueView() {
                 <p className="text-sm font-semibold text-foreground">No renewal offers generated yet</p>
                 <p className="mt-1 text-xs text-muted-foreground">Generate renewal offers from the 'Expiring Stays' tab.</p>
               </div>
+            ) : filteredOfferRows.length === 0 ? (
+              <div className="py-16 text-center">
+                <p className="text-sm font-semibold text-foreground">No offers matching status filter</p>
+                <p className="mt-1 text-xs text-muted-foreground">Try clearing the status filter to see all active offers.</p>
+                <button
+                  type="button"
+                  onClick={() => setOffersFilter('ALL')}
+                  className="mt-3 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-bold text-foreground transition-all hover:bg-muted"
+                >
+                  Clear Filter
+                </button>
+              </div>
             ) : (
               <div className="divide-y divide-border">
-                {offerRows.map((offer: any) => {
+                {filteredOfferRows.map((offer: any) => {
                   const tenant = offer.tenant || {};
                   const isDraft = offer.status === 'DRAFT';
                   const isSent = offer.status === 'SENT';
@@ -518,7 +697,7 @@ export function RenewalQueueView() {
                               Timeline: <span className="text-foreground font-semibold">{fmtDate(offer.proposed_start_date)} - {fmtDate(offer.proposed_end_date)} ({offer.proposed_duration_months}m)</span>
                             </div>
                           </div>
-
+ 
                           {/* Delta and explanation */}
                           <div className="flex flex-wrap gap-4 text-xs font-semibold">
                             {Number(offer.additional_deposit_required) > 0 && (
@@ -532,7 +711,7 @@ export function RenewalQueueView() {
                               </span>
                             )}
                           </div>
-
+ 
                           {/* Notes / Decline Reason */}
                           {offer.owner_notes && (
                             <p className="text-xs text-muted-foreground bg-muted p-2 rounded border border-border">
@@ -545,7 +724,7 @@ export function RenewalQueueView() {
                             </p>
                           )}
                         </div>
-
+ 
                         {/* Actions */}
                         <div className="flex items-center gap-2 shrink-0 sm:self-center">
                           {isDraft && (
@@ -589,7 +768,7 @@ export function RenewalQueueView() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="w-full max-w-2xl rounded-xl border border-border bg-card p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-border pb-3">
-              <h2 className="text-xl font-extrabold text-foreground">Bulk Renewal Offers Wizard</h2>
+              <h2 className="text-xl font-extrabold text-foreground">Renewal Campaigns Wizard</h2>
               <button onClick={() => setShowBulkModal(false)} className="rounded-lg p-1 hover:bg-muted text-muted-foreground hover:text-foreground">
                 <XCircle className="h-6 w-6" />
               </button>
@@ -598,7 +777,7 @@ export function RenewalQueueView() {
             <div className="space-y-4">
               {/* Batch title */}
               <div>
-                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Batch Name / Title</label>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Campaign Name / Title</label>
                 <input
                   type="text"
                   value={bulkTitle}
@@ -782,7 +961,7 @@ export function RenewalQueueView() {
                 ) : (
                   <>
                     <CheckCircle2 className="h-4 w-4" />
-                    Generate Bulk Offers
+                    Launch Renewal Campaign
                   </>
                 )}
               </button>
@@ -792,94 +971,316 @@ export function RenewalQueueView() {
       )}
 
       {/* MODAL 2: Create Custom Single Offer */}
-      {showSingleModal && selectedRow && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg rounded-xl border border-border bg-card p-6 shadow-2xl space-y-5">
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <h2 className="text-xl font-extrabold text-foreground">Create Custom Stay Offer</h2>
-              <button onClick={() => setShowSingleModal(false)} className="rounded-lg p-1 hover:bg-muted text-muted-foreground hover:text-foreground">
-                <XCircle className="h-6 w-6" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div className="bg-muted/40 border border-border rounded-lg p-3 text-xs space-y-1">
-                <p className="font-bold text-foreground">Tenant: {selectedRow.tenant?.name || 'Tenant'}</p>
-                <p className="text-muted-foreground font-semibold">Room {selectedRow.tenant?.room?.room_no} · Current Rent: ₹{Number(selectedRow.current_agreement?.contract_rent).toLocaleString('en-IN')}</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-bold text-foreground">Proposed Monthly Rent (₹) *</label>
-                  <input
-                    type="number"
-                    value={singleRent}
-                    onChange={(e) => setSingleRent(e.target.value)}
-                    className="mt-1 w-full h-10 rounded-lg border border-border bg-card px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
-                  />
+      {showSingleModal && selectedRow && (() => {
+        const agreement = selectedRow.current_agreement;
+        if (!agreement) {
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+              <div className="w-full max-w-lg rounded-xl border border-border bg-card p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+                <div className="flex items-center justify-between border-b border-border pb-3">
+                  <h2 className="text-xl font-extrabold text-foreground">Create Custom Stay Offer</h2>
+                  <button onClick={() => setShowSingleModal(false)} className="rounded-lg p-1 hover:bg-muted text-muted-foreground hover:text-foreground">
+                    <XCircle className="h-6 w-6" />
+                  </button>
                 </div>
-                <div>
-                  <label className="text-xs font-bold text-foreground">Proposed Security Deposit (₹) *</label>
-                  <input
-                    type="number"
-                    value={singleDeposit}
-                    onChange={(e) => setSingleDeposit(e.target.value)}
-                    className="mt-1 w-full h-10 rounded-lg border border-border bg-card px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
-                  />
+                <div className="p-5 rounded-xl bg-destructive/10 border border-destructive/20 text-center space-y-3">
+                  <AlertTriangle className="h-10 w-10 text-destructive mx-auto animate-bounce" />
+                  <div>
+                    <h3 className="text-sm font-bold text-destructive">No Active Agreement</h3>
+                    <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                      This tenant does not have an active signed stay agreement. A renewal offer cannot be created without an active baseline.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-end gap-3 pt-3 border-t border-border">
+                  <button
+                    type="button"
+                    onClick={() => setShowSingleModal(false)}
+                    className="rounded-lg border border-border bg-card px-4 py-2.5 text-xs font-bold text-foreground transition-all hover:bg-muted"
+                  >
+                    Close
+                  </button>
                 </div>
               </div>
-
-              <div>
-                <label className="text-xs font-bold text-foreground">Proposed Duration (Months) *</label>
-                <input
-                  type="number"
-                  value={singleDuration}
-                  onChange={(e) => setSingleDuration(e.target.value)}
-                  className="mt-1 w-full h-10 rounded-lg border border-border bg-card px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-foreground">Owner Notes / Custom Terms</label>
-                <textarea
-                  value={singleNotes}
-                  onChange={(e) => setSingleNotes(e.target.value)}
-                  placeholder="e.g. Discussed rent raise on call, agreed to premium room top-up."
-                  className="mt-1 w-full h-20 rounded-lg border border-border bg-card p-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
-                />
-              </div>
             </div>
+          );
+        }
 
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-border">
-              <button
-                type="button"
-                onClick={() => setShowSingleModal(false)}
-                className="rounded-lg border border-border bg-card px-4 py-2.5 text-xs font-bold text-foreground transition-all hover:bg-muted"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={submitSingleOffer}
-                disabled={generateSingleMutation.isPending}
-                className="rounded-lg bg-accent px-5 py-2.5 text-xs font-bold text-accent-foreground transition-all hover:bg-accent/90 flex items-center gap-1 shadow-sm"
-              >
-                {generateSingleMutation.isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="h-4 w-4" />
-                    Generate Offer
-                  </>
-                )}
-              </button>
+        const currentRentVal = Number(agreement.contract?.rent ?? agreement.contract_rent ?? 0);
+        const currentDepositVal = Number(agreement.contract?.security_deposit ?? agreement.contract_security_deposit ?? 0);
+        const currentDurationVal = Number(agreement.contract?.agreement_duration_months ?? agreement.contract_duration_months ?? 11);
+
+        const proposedRentVal = Number(singleRent || 0);
+        const proposedDepositVal = Number(singleDeposit || 0);
+        const proposedDurationVal = Number(singleDuration || 0);
+
+        const rentDiff = proposedRentVal - currentRentVal;
+        const depositDiff = proposedDepositVal - currentDepositVal;
+        const durationDiff = proposedDurationVal - currentDurationVal;
+
+        const handleResetToCurrent = () => {
+          setSingleRent(String(currentRentVal));
+          setSingleDeposit(String(currentDepositVal));
+          setSingleDuration(String(currentDurationVal));
+        };
+
+        const currentRoomId = selectedRow.tenant?.room?.id || selectedRow.tenant?.room_id;
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div className="w-full max-w-lg rounded-xl border border-border bg-card p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between border-b border-border pb-3">
+                <h2 className="text-xl font-extrabold text-foreground">Create Custom Stay Offer</h2>
+                <button onClick={() => setShowSingleModal(false)} className="rounded-lg p-1 hover:bg-muted text-muted-foreground hover:text-foreground">
+                  <XCircle className="h-6 w-6" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Tenant Context Summary */}
+                <div className="bg-muted/40 border border-border rounded-xl p-4 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase font-bold tracking-wide">Tenant</p>
+                      <h4 className="text-sm font-bold text-foreground">{selectedRow.tenant?.name || 'Tenant'}</h4>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-muted-foreground uppercase font-bold tracking-wide">Current Room</p>
+                      <h4 className="text-sm font-bold text-foreground">Room {selectedRow.tenant?.room?.room_no || 'N/A'}</h4>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Current Agreement Terms Snapshot */}
+                <div className="bg-secondary/40 border border-border rounded-xl p-4 space-y-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Current Agreement Summary</h3>
+                  
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                    <div>
+                      <span className="text-muted-foreground block text-[10px] uppercase font-bold tracking-wide">Monthly Rent</span>
+                      <strong className="text-foreground text-sm">₹{currentRentVal.toLocaleString('en-IN')}</strong>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground block text-[10px] uppercase font-bold tracking-wide">Deposit Held</span>
+                      <strong className="text-foreground text-sm">₹{currentDepositVal.toLocaleString('en-IN')}</strong>
+                    </div>
+                    <div className="mt-1">
+                      <span className="text-muted-foreground block text-[10px] uppercase font-bold tracking-wide">Maintenance Charge</span>
+                      <strong className="text-foreground">
+                        ₹{Number(agreement.contract?.maintenance_charge ?? agreement.maintenance_charge ?? 0).toLocaleString('en-IN')}
+                        {agreement.contract?.maintenance_type === 'MONTHLY' ? '/mo' : ''}
+                      </strong>
+                    </div>
+                    <div className="mt-1">
+                      <span className="text-muted-foreground block text-[10px] uppercase font-bold tracking-wide">Duration</span>
+                      <strong className="text-foreground">{currentDurationVal} months</strong>
+                    </div>
+                    <div className="mt-1">
+                      <span className="text-muted-foreground block text-[10px] uppercase font-bold tracking-wide">Agreement Start</span>
+                      <strong className="text-foreground">{fmtDate(agreement.agreement_start_date)}</strong>
+                    </div>
+                    <div className="mt-1">
+                      <span className="text-muted-foreground block text-[10px] uppercase font-bold tracking-wide">Agreement End</span>
+                      <strong className="text-foreground">{fmtDate(agreement.agreement_end_date)}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Room Selector */}
+                <div>
+                  <label className="text-xs font-bold text-foreground">Room Assignment (Stay Location) *</label>
+                  <select
+                    value={selectedRoomId}
+                    onChange={(e) => setSelectedRoomId(e.target.value)}
+                    className="mt-1 w-full h-10 rounded-lg border border-border bg-card px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent cursor-pointer"
+                  >
+                    {availableRooms.map((r: any) => {
+                      const occ = Number(r.occupied_count ?? 0);
+                      const cap = Number(r.capacity ?? 1);
+                      const floor = r.floor_name ? ` · ${r.floor_name}` : '';
+                      const isCurrent = r.id === currentRoomId;
+                      return (
+                        <option key={r.id} value={r.id}>
+                          {r.room_no}{floor} ({r.room_type || 'N/A'}) · {occ}/{cap} beds occupied {isCurrent ? '(Current Room)' : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                {/* Proposed stay offer terms */}
+                <div className="space-y-3.5 border-t border-border pt-4">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Proposed Renewal Offer Terms</h3>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs font-bold text-foreground">Proposed Monthly Rent (₹) *</label>
+                      <input
+                        type="number"
+                        value={singleRent}
+                        onChange={(e) => setSingleRent(e.target.value)}
+                        className="mt-1 w-full h-10 rounded-lg border border-border bg-card px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-foreground">Proposed Security Deposit (₹) *</label>
+                      <input
+                        type="number"
+                        value={singleDeposit}
+                        onChange={(e) => setSingleDeposit(e.target.value)}
+                        className="mt-1 w-full h-10 rounded-lg border border-border bg-card px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-foreground">Proposed Duration (Months) *</label>
+                    <input
+                      type="number"
+                      value={singleDuration}
+                      onChange={(e) => setSingleDuration(e.target.value)}
+                      className="mt-1 w-full h-10 rounded-lg border border-border bg-card px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-foreground">Owner Notes / Custom Terms</label>
+                    <textarea
+                      value={singleNotes}
+                      onChange={(e) => setSingleNotes(e.target.value)}
+                      placeholder="e.g. Discussed rent raise on call, agreed to premium room top-up."
+                      className="mt-1 w-full h-20 rounded-lg border border-border bg-card p-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent resize-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Comparison & Breakdown Panel */}
+                <div className="border-t border-border pt-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Offer Comparison Summary</h3>
+                    <button
+                      type="button"
+                      onClick={handleResetToCurrent}
+                      className="text-xs font-bold text-accent hover:underline flex items-center gap-1"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      Reset to Current
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2.5">
+                    {/* Rent Comparison Card */}
+                    <div className="bg-card border border-border rounded-xl p-3 text-center space-y-1">
+                      <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wide">Rent Change</span>
+                      <div className="text-xs text-muted-foreground">
+                        ₹{currentRentVal.toLocaleString('en-IN')} ➜ <strong className="text-foreground">₹{proposedRentVal.toLocaleString('en-IN')}</strong>
+                      </div>
+                      <div className={`text-[10px] font-bold ${rentDiff > 0 ? 'text-amber-600 dark:text-amber-400' : rentDiff < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}>
+                        {rentDiff > 0 ? `+₹${rentDiff.toLocaleString('en-IN')} (+${currentRentVal > 0 ? ((rentDiff/currentRentVal)*100).toFixed(1) : 0}%)` : rentDiff < 0 ? `-₹${Math.abs(rentDiff).toLocaleString('en-IN')}` : 'No Change'}
+                      </div>
+                    </div>
+
+                    {/* Deposit Comparison Card */}
+                    <div className="bg-card border border-border rounded-xl p-3 text-center space-y-1">
+                      <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wide">Deposit Change</span>
+                      <div className="text-xs text-muted-foreground">
+                        ₹{currentDepositVal.toLocaleString('en-IN')} ➜ <strong className="text-foreground">₹{proposedDepositVal.toLocaleString('en-IN')}</strong>
+                      </div>
+                      <div className={`text-[10px] font-bold ${depositDiff > 0 ? 'text-amber-600 dark:text-amber-400' : depositDiff < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}>
+                        {depositDiff > 0 ? `+₹${depositDiff.toLocaleString('en-IN')}` : depositDiff < 0 ? `-₹${Math.abs(depositDiff).toLocaleString('en-IN')}` : 'No Change'}
+                      </div>
+                    </div>
+
+                    {/* Duration Comparison Card */}
+                    <div className="bg-card border border-border rounded-xl p-3 text-center space-y-1">
+                      <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wide">Duration</span>
+                      <div className="text-xs text-muted-foreground">
+                        {currentDurationVal}m ➜ <strong className="text-foreground">{proposedDurationVal}m</strong>
+                      </div>
+                      <div className="text-[10px] font-bold text-muted-foreground">
+                        {durationDiff > 0 ? `+${durationDiff} months` : durationDiff < 0 ? `${durationDiff} months` : 'No Change'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Visual Breakdown Card */}
+                  <div className={`p-4 rounded-xl border text-xs font-semibold ${
+                    depositDiff > 0 
+                      ? 'bg-amber-500/10 border-amber-500/20 text-amber-800 dark:text-amber-300' 
+                      : depositDiff < 0 
+                      ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-800 dark:text-emerald-300' 
+                      : 'bg-muted/40 border-border text-muted-foreground'
+                  }`}>
+                    <div className="flex items-center justify-between mb-1.5 font-bold text-foreground">
+                      <span>Deposit Financial Action</span>
+                      <span className="uppercase tracking-wide text-[9px] px-2 py-0.5 rounded-full bg-background border border-border font-bold">
+                        {depositDiff > 0 ? 'Payment Action' : depositDiff < 0 ? 'Credit/Refund Action' : 'No Action'}
+                      </span>
+                    </div>
+                    <div className="space-y-1 font-medium text-muted-foreground">
+                      <div className="flex justify-between">
+                        <span>Current Deposit Held:</span>
+                        <span className="text-foreground font-bold">₹{currentDepositVal.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Proposed Deposit:</span>
+                        <span className="text-foreground font-bold">₹{proposedDepositVal.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div className="border-t border-dashed border-border my-1.5"></div>
+                      <div className="flex justify-between font-bold text-foreground">
+                        {depositDiff > 0 ? (
+                          <>
+                            <span className="text-amber-700 dark:text-amber-400">Tenant Top-up Required:</span>
+                            <span className="text-amber-700 dark:text-amber-400 font-extrabold text-sm">₹{depositDiff.toLocaleString('en-IN')}</span>
+                          </>
+                        ) : depositDiff < 0 ? (
+                          <>
+                            <span className="text-emerald-700 dark:text-emerald-400">Excess Refund / Credit to Account:</span>
+                            <span className="text-emerald-700 dark:text-emerald-400 font-extrabold text-sm">₹{Math.abs(depositDiff).toLocaleString('en-IN')}</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>No Change in Deposit:</span>
+                            <span>₹0</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setShowSingleModal(false)}
+                  className="rounded-lg border border-border bg-card px-4 py-2.5 text-xs font-bold text-foreground transition-all hover:bg-muted"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={submitSingleOffer}
+                  disabled={generateSingleMutation.isPending || isShifting}
+                  className="rounded-lg bg-accent px-5 py-2.5 text-xs font-bold text-accent-foreground transition-all hover:bg-accent/90 flex items-center gap-1 shadow-sm"
+                >
+                  {generateSingleMutation.isPending || isShifting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      {isShifting ? 'Shifting Room...' : 'Generating...'}
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="h-4 w-4" />
+                      Generate Offer
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* MODAL 3: Revise Renewal Offer */}
       {showReviseModal && selectedOffer && (

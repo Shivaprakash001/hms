@@ -135,7 +135,7 @@ describe('Owner Test Payment API - /api/payments/test-intent', () => {
     expect(Number(json.attempt.amount)).toBe(1);
   });
 
-  it('should successfully create a test payment intent if logged in as TENANT in production environment', async () => {
+  it('should reject test payment intent creation if logged in as TENANT in production environment', async () => {
     const originalNodeEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'production';
     try {
@@ -155,11 +155,8 @@ describe('Owner Test Payment API - /api/payments/test-intent', () => {
       const res = await POST(req);
       const json = await res.json();
 
-      expect(res.status).toBe(200);
-      expect(json.success).toBe(true);
-      expect(Number(json.obligation.amount)).toBe(1);
-      expect(json.obligation.obligation_type).toBe('EXTRA_CHARGE');
-      expect(Number(json.attempt.amount)).toBe(1);
+      expect(res.status).toBe(403);
+      expect(json.error.code).toBe('FORBIDDEN');
     } finally {
       process.env.NODE_ENV = originalNodeEnv;
     }

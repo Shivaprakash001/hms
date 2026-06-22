@@ -329,6 +329,67 @@ describe("RenewalOfferService", () => {
       );
     });
 
+    it("handles excess deposit by creating a credit ledger entry when policy is KEEP_AS_CREDIT", async () => {
+      const { dbMock, txMock } = createDbMock();
+      const mockOfferWithExcessCredit = {
+        ...mockOfferFull,
+        additional_deposit_required: 0,
+        deposit_refund_eligible: 1500,
+        deposit_refund_policy: "KEEP_AS_CREDIT",
+      };
+      dbMock.renewalOffer.findUnique = vi.fn().mockResolvedValue(mockOfferWithExcessCredit);
+
+      txMock.tenant_financial_ledger = {
+        create: vi.fn().mockImplementation(async ({ data }: any) => ({ id: randomUUID(), ...data })),
+        aggregate: vi.fn().mockResolvedValue({ _sum: { amount: 1000 } }),
+      };
+
+      const service = new RenewalOfferService(dbMock as any);
+      await service.acceptOffer("offer-1", "profile-1");
+
+      expect(txMock.tenant_financial_ledger.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            type: "CREDIT",
+            reason: "FUTURE_RENT_CREDIT_TOPUP",
+            amount: 1500,
+            reference_type: "RENEWAL_OFFER",
+          }),
+        })
+      );
+    });
+
+    it("handles excess deposit by creating a debit ledger entry when policy is REFUND", async () => {
+      const { dbMock, txMock } = createDbMock();
+      const mockOfferWithExcessRefund = {
+        ...mockOfferFull,
+        additional_deposit_required: 0,
+        deposit_refund_eligible: 1500,
+        deposit_refund_policy: "REFUND",
+      };
+      dbMock.renewalOffer.findUnique = vi.fn().mockResolvedValue(mockOfferWithExcessRefund);
+
+      txMock.tenant_financial_ledger = {
+        create: vi.fn().mockImplementation(async ({ data }: any) => ({ id: randomUUID(), ...data })),
+        aggregate: vi.fn().mockResolvedValue({ _sum: { amount: 1000 } }),
+      };
+
+      const service = new RenewalOfferService(dbMock as any);
+      await service.acceptOffer("offer-1", "profile-1");
+
+      expect(txMock.tenant_financial_ledger.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            type: "DEBIT",
+            reason: "SECURITY_DEPOSIT_REFUNDED",
+            amount: 1500,
+            reference_type: "RENEWAL_OFFER",
+            refund_status: "PENDING",
+          }),
+        })
+      );
+    });
+
     it("fails if the offer has expired", async () => {
       const { dbMock } = createDbMock();
       // Mock an expired offer

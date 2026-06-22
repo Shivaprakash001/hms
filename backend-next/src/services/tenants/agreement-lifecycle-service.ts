@@ -380,6 +380,17 @@ export class AgreementLifecycleService {
             },
           });
 
+          // Update active parameters on the main tenants model
+          await tx.tenants.update({
+            where: { id: draft.tenant_id },
+            data: {
+              monthly_rent: draft.contract_rent,
+              security_deposit: draft.contract_security_deposit,
+              maintenance_charge: draft.contract_maintenance,
+              maintenance_type: draft.contract_maintenance_type || "MONTHLY",
+            },
+          });
+
           // Log activation event
           const ownerId = draft.tenant?.owner_id || draft.hostel?.owner_id || null;
           await eventLog.log(AGREEMENT_ACTIVITY_EVENTS.RENEWED, ownerId, {
