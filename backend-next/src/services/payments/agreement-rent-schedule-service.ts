@@ -119,6 +119,9 @@ export class AgreementRentScheduleService {
       const sequence = i + 1;
       months.push({ rent_month: rentMonth, status });
 
+      // Duplicate guard: check by agreement_id, allocation_id, AND tenant_id.
+      // The tenant_id clause catches onboarding-created obligations that have
+      // both agreement_id=NULL and allocation_id=NULL (P0 duplicate rent fix).
       const existing = await tx.rent_obligations.findFirst({
         where: {
           is_superseded: false,
@@ -126,6 +129,7 @@ export class AgreementRentScheduleService {
           OR: [
             { agreement_id: id, rent_month: rentMonth },
             ...(allocation?.id ? [{ allocation_id: allocation.id, rent_month: rentMonth }] : []),
+            { tenant_id: agreement.tenant_id, rent_month: rentMonth },
           ],
         },
         include: { payments: { select: { id: true } } },
