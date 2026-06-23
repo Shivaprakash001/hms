@@ -218,9 +218,25 @@ export class TenantService {
       where.OR = [
         { profiles: { name: { contains: search, mode: "insensitive" } } },
         { profiles: { email: { contains: search, mode: "insensitive" } } },
+        { profiles: { phone: { contains: search, mode: "insensitive" } } },
         { tenant_invitations: { some: { name: { contains: search, mode: "insensitive" } } } },
         { tenant_invitations: { some: { email: { contains: search, mode: "insensitive" } } } },
+        { tenant_invitations: { some: { phone: { contains: search, mode: "insensitive" } } } },
         { roll_number: { contains: search, mode: "insensitive" } },
+        { personal_email: { contains: search, mode: "insensitive" } },
+        { phone_1: { contains: search, mode: "insensitive" } },
+        { phone_2: { contains: search, mode: "insensitive" } },
+        {
+          room_allocations: {
+            some: {
+              is_active: true,
+              end_date: null,
+              room: {
+                room_no: { contains: search, mode: "insensitive" }
+              }
+            }
+          }
+        }
       ];
     }
 

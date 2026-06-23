@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ownerService } from '@features/owners/api';
+import { tenantService } from '@features/tenants/api';
 import { useTenantStore } from '@features/tenants/store/tenantStore';
 import { useTenantsList } from '@features/tenants/hooks/useTenantsList';
 import { useTenantActions } from '@features/tenants/hooks/useTenantActions';
@@ -177,6 +178,7 @@ function BulkActions({
   overdueCount: number;
   allTenants: NormalizedTenant[];
 }) {
+  const [isExporting, setIsExporting] = useState(false);
   const bulkReminderMutation = useMutation({
     mutationFn: (ids: string[]) => reminderService.sendBulk(ids),
     onSuccess: (result) => {
@@ -199,7 +201,29 @@ function BulkActions({
     bulkReminderMutation.mutate(overdueTenants.map((t) => t.id));
   };
 
-  const exportCsv = () => {
+  const exportMasterCsv = async () => {
+    try {
+      setIsExporting(true);
+      const data = await tenantService.exportMasterCsv({ hostelId });
+      const blob = new Blob([data], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'tenant_master_export.csv';
+      a.click();
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 250);
+      toast.success('Tenant Master Export downloaded successfully');
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to export tenant master report');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const exportLightweightCsv = () => {
     const headers = 'Name,Room,Rent,Status,Outstanding\n';
     const rows = allTenants
       .map((t) => `"${t.name}","${t.room}","${t.rent}","${t.status}","${t.outstandingAmount}"`)
@@ -213,7 +237,7 @@ function BulkActions({
     setTimeout(() => {
       URL.revokeObjectURL(url);
     }, 250);
-    toast.success('Exported tenants');
+    toast.success('Exported quick list of tenants');
   };
 
   return (
@@ -227,11 +251,20 @@ function BulkActions({
       </Link>
       <button
         type="button"
-        onClick={exportCsv}
+        onClick={exportMasterCsv}
+        disabled={isExporting}
+        className="shrink-0 inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm font-medium text-foreground hover:border-accent/40 transition-colors disabled:opacity-50"
+      >
+        <Download className="w-4 h-4 text-muted-foreground" />
+        {isExporting ? 'Exporting…' : 'Export'}
+      </button>
+      <button
+        type="button"
+        onClick={exportLightweightCsv}
         className="shrink-0 inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm font-medium text-foreground hover:border-accent/40 transition-colors"
       >
         <Download className="w-4 h-4 text-muted-foreground" />
-        Export
+        Quick Export
       </button>
       <button
         type="button"

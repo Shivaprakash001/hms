@@ -224,4 +224,11 @@ export const tenantService = {
         });
         return unwrap(response);
     },
+    exportMasterCsv: async ({ hostelId } = {}) => {
+        const response = await api.get('/tenants/export', {
+            params: hostelId ? { hostelId } : {},
+            responseType: 'blob',
+        });
+        return response.data;
+    },
 };
