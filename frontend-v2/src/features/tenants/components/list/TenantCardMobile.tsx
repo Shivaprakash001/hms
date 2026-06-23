@@ -1,6 +1,6 @@
 import { memo, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useWindowVirtualizer } from '@tanstack/react-virtual';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { ChevronRight, Bell, Phone, Send } from 'lucide-react';
 import { TenantStatusBadge } from '@features/tenants/components/badges/TenantStatusBadge';
 import { getInitials, type NormalizedTenant } from '@features/tenants/utils/normalize';
@@ -27,16 +27,24 @@ export function TenantCardMobile({ tenants, hostelId, onSelect, onReminder, onCa
     const updateOffset = () => {
       const node = listRef.current;
       if (!node) return;
-      setScrollMargin(node.getBoundingClientRect().top + window.scrollY);
+      const scrollContainer = node.closest('main');
+      if (!scrollContainer) return;
+      const rect = node.getBoundingClientRect();
+      const containerRect = scrollContainer.getBoundingClientRect();
+      const offset = rect.top - containerRect.top + scrollContainer.scrollTop;
+      if (Math.abs(scrollMargin - offset) > 1) {
+        setScrollMargin(offset);
+      }
     };
 
     updateOffset();
     window.addEventListener('resize', updateOffset);
     return () => window.removeEventListener('resize', updateOffset);
-  }, [tenants.length]);
+  });
 
-  const virtualizer = useWindowVirtualizer({
+  const virtualizer = useVirtualizer({
     count: tenants.length,
+    getScrollElement: () => listRef.current?.closest('main') || null,
     estimateSize: () => 156,
     overscan: 5,
     scrollMargin,
@@ -52,7 +60,7 @@ export function TenantCardMobile({ tenants, hostelId, onSelect, onReminder, onCa
     <div
       ref={listRef}
       className="md:hidden relative"
-      style={{ height: virtualizer.getTotalSize() }}
+      style={{ height: virtualizer.getTotalSize() - scrollMargin }}
     >
       {virtualizer.getVirtualItems().map((virtualRow) => {
         const tenant = tenants[virtualRow.index];

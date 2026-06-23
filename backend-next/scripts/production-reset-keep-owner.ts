@@ -1,5 +1,11 @@
 import { prisma } from "../lib/db";
 import { invalidateOwnerDashboardCache, invalidatePortfolioCache } from "../lib/cache/dashboard-cache";
+import { dashboardService } from "../lib/services/dashboard-service";
+import { activityService } from "../lib/services/activity-service";
+import { analyticsService } from "../lib/services/analytics-service";
+import { agreementLifecycleRecoveryService } from "../src/services/tenants/agreement-lifecycle-recovery-service";
+import { renewalDecisionService } from "../src/services/tenants/renewal-decision-service";
+import { paymentService } from "../src/services/payments/payment-service";
 import type { PrismaClient } from "@prisma/client";
 
 const APPLY = process.argv.includes("--apply");
@@ -10,7 +16,7 @@ type DbClient = PrismaClient | Parameters<Parameters<typeof prisma.$transaction>
 
 const PRESERVED_TABLES = [
   "_prisma_migrations",
-  "profiles", // Handled manually to preserve ONLY the single OWNER profile
+  "profiles", // Handled manually to preserve OWNER profiles
   "hostels",
   "floors",
   "rooms",
@@ -19,7 +25,8 @@ const PRESERVED_TABLES = [
   "owner_whatsapp_identities",
   "whatsapp_owner_sessions",
   "message_packs",
-  "system_locks"
+  "system_locks",
+  "expenses" // Handled manually to preserve production expense records and categories
 ];
 
 function quoteIdent(identifier: string) {
@@ -95,6 +102,28 @@ async function deletionOrder(tables: string[]) {
   return ordered;
 }
 
+function printInstructions() {
+  console.log(`
+========================================================================
+🛡️  HMS V1 PRODUCTION RESET CHECKLIST & ROLLBACK INSTRUCTIONS  🛡️
+========================================================================
+
+1️⃣  BACKUP VERIFICATION CHECKLIST
+- [ ] Connect to your database CLI / server.
+- [ ] Run pg_dump to create a secure backup:
+      pg_dump "$DATABASE_URL" --format=custom --file=backups/pre_reset_backup_$(date +%F_%T).dump
+- [ ] Verify that the backup file size is greater than 0 bytes.
+- [ ] Store the backup file in a secure, non-temporary directory.
+
+2️⃣  ROLLBACK INSTRUCTIONS
+To restore your database from this backup:
+1. Terminate all active database connections (or restart database).
+2. Run pg_restore:
+   pg_restore --clean --no-owner --no-acl -d "$DATABASE_URL" backups/pre_reset_backup_xxxx.dump
+========================================================================
+`);
+}
+
 async function validatePreservedConfigurations(db: DbClient = prisma) {
   console.log("=== Validating Preserved Configurations ===");
   
@@ -156,7 +185,7 @@ async function getRoleCounts(db: DbClient = prisma): Promise<Record<string, numb
   return counts;
 }
 
-async function runFinalRoleAudit(db: DbClient = prisma) {
+async function runFinalRoleAudit(preOwnerCount: number, db: DbClient = prisma) {
   console.log("=== Running Final Role Audit ===");
   const auditResult = await getRoleCounts(db);
 
@@ -167,29 +196,145 @@ async function runFinalRoleAudit(db: DbClient = prisma) {
     throw new Error(`Validation failed: Non-owner accounts found! ADMIN: ${auditResult.ADMIN}, WARDEN: ${auditResult.WARDEN}, TENANT: ${auditResult.TENANT}`);
   }
 
-  if (auditResult.OWNER !== 1) {
-    throw new Error(`Validation failed: Expected exactly 1 OWNER, found ${auditResult.OWNER}`);
+  if (auditResult.OWNER !== preOwnerCount) {
+    throw new Error(`Validation failed: Expected exactly ${preOwnerCount} OWNER profiles, found ${auditResult.OWNER}`);
   }
 
-  console.log("✅ Final Role Audit validation passed (only 1 OWNER remaining, all others 0).");
+  console.log("✅ Final Role Audit validation passed (only OWNER profiles remaining, all others 0).");
+}
+
+async function runDashboardHealthChecks(db: DbClient = prisma) {
+  // Invalidate all dashboard caches first
+  const ownersList = await db.profile.findMany({
+    where: { role: "OWNER" },
+    select: { id: true }
+  });
+  for (const o of ownersList) {
+    invalidateOwnerDashboardCache(o.id);
+    invalidatePortfolioCache(o.id);
+  }
+
+  console.log("=== Running Zero-Tenant Dashboard Health Checks ===");
+  const rangeStart = new Date();
+  rangeStart.setMonth(rangeStart.getMonth() - 1);
+  const rangeEnd = new Date();
+
+  for (const owner of ownersList) {
+    const hostelsList = await db.hostels.findMany({
+      where: { owner_id: owner.id },
+      select: { id: true }
+    });
+
+    for (const hostel of hostelsList) {
+      console.log(`  - Checking dashboards for Owner: ${owner.id}, Hostel: ${hostel.id}`);
+
+      // 1. Home Dashboard stats (getOwnerStatsShell, getMonthlyStats, getOwnerActivity)
+      try {
+        await dashboardService.getOwnerStatsShell(owner.id, hostel.id);
+        await dashboardService.getMonthlyStats(owner.id, hostel.id, 6);
+        await activityService.getOwnerActivity({ userId: owner.id, hostelId: hostel.id, limit: 5, offset: 0 });
+        await dashboardService.getOwnerStats(owner.id, hostel.id);
+        console.log(`    ✅ Home Dashboard health check passed.`);
+      } catch (err: any) {
+        throw new Error(`Home Dashboard health check failed for owner ${owner.id}: ${err.message || err}`);
+      }
+
+      // 2. Tenants Dashboard (getTenantIntelligenceDashboard)
+      try {
+        await analyticsService.getTenantIntelligenceDashboard(owner.id, rangeStart, rangeEnd, hostel.id);
+        console.log(`    ✅ Tenants Dashboard health check passed.`);
+      } catch (err: any) {
+        throw new Error(`Tenants Dashboard health check failed for owner ${owner.id}: ${err.message || err}`);
+      }
+
+      // 3. Money Dashboard (getCashflowDashboard, getDuesReport)
+      try {
+        await analyticsService.getCashflowDashboard(owner.id, rangeStart, rangeEnd, hostel.id);
+        await paymentService.getDuesReport(owner.id, hostel.id);
+        console.log(`    ✅ Money Dashboard health check passed.`);
+      } catch (err: any) {
+        throw new Error(`Money Dashboard health check failed for owner ${owner.id}: ${err.message || err}`);
+      }
+
+      // 4. Agreements Dashboard (getRecoveryReport)
+      try {
+        await agreementLifecycleRecoveryService.getRecoveryReport({ ownerId: owner.id, hostelId: hostel.id });
+        console.log(`    ✅ Agreements Dashboard health check passed.`);
+      } catch (err: any) {
+        throw new Error(`Agreements Dashboard health check failed for owner ${owner.id}: ${err.message || err}`);
+      }
+
+      // 5. Renewals Dashboard (getOwnerRenewalQueue)
+      try {
+        await renewalDecisionService.getOwnerRenewalQueue(owner.id, { hostelId: hostel.id, filter: "all" });
+        console.log(`    ✅ Renewals Dashboard health check passed.`);
+      } catch (err: any) {
+        throw new Error(`Renewals Dashboard health check failed for owner ${owner.id}: ${err.message || err}`);
+      }
+
+      // 6. Alerts Dashboard Checks (pending documents, pending verification, move out requests)
+      try {
+        await db.identificationDocument.findMany({
+          where: { document_status: "PENDING", is_active: true, tenant: { owner_id: owner.id, hostel_id: hostel.id } }
+        });
+        await db.paymentAttempt.findMany({
+          where: { owner_id: owner.id, hostel_id: hostel.id, status: { in: ["PENDING_VERIFICATION", "PENDING_MANUAL_CONFIRMATION"] } }
+        });
+        await db.move_out_requests.findMany({
+          where: { hostel_id: hostel.id, status: "REQUESTED" }
+        });
+        console.log(`    ✅ Alerts Dashboard health check passed.`);
+      } catch (err: any) {
+        throw new Error(`Alerts/Pending Counts health check failed for owner ${owner.id}: ${err.message || err}`);
+      }
+    }
+  }
+  console.log("✅ Zero-Tenant Dashboard Health Checks completed successfully.");
 }
 
 async function main() {
+  printInstructions();
+
   const tables = await getTablesToDelete();
   const orderedTables = await deletionOrder(tables);
 
   const initialRoleCounts = await getRoleCounts(prisma);
+  const preOwnerCount = initialRoleCounts.OWNER;
+  const preHostelCount = await prisma.hostels.count();
+  const preRoomCount = await prisma.rooms.count();
+  const preBedsCount = await prisma.rooms.aggregate({
+    where: { is_active: true },
+    _sum: { capacity: true }
+  }).then(res => Number(res._sum.capacity || 0));
+  const preTemplateCount = await prisma.agreementTemplate.count();
+  const preExpenseCount = await countTable("expenses");
+
+  // Capture payment configurations for each hostel to verify no mutation
+  const preHostelsConfig = await prisma.hostels.findMany({
+    select: {
+      id: true,
+      upi_id: true,
+      phonepe_merchant_id: true,
+      preferences_config: true,
+      timezone: true,
+      rent_cycle: true,
+      auto_rent_day: true
+    }
+  });
+
   const beforeCounts: Record<string, number> = {
     profiles_total: await countTable("profiles"),
     profiles_OWNER: initialRoleCounts.OWNER,
     profiles_ADMIN: initialRoleCounts.ADMIN,
     profiles_WARDEN: initialRoleCounts.WARDEN,
     profiles_TENANT: initialRoleCounts.TENANT,
+    beds: preBedsCount
   };
 
   for (const table of tables) {
     beforeCounts[table] = await countTable(table);
   }
+  beforeCounts["expenses"] = preExpenseCount;
 
   if (!APPLY) {
     console.log(JSON.stringify({
@@ -217,9 +362,9 @@ async function main() {
   const result = await prisma.$transaction(async (tx) => {
     const deletedRowCounts: Record<string, number> = {};
 
-    // 1. Disable user triggers on the payments table (specifically user triggers to avoid system constraint errors)
+    // 1. Disable user triggers on the payments table to bypass ledger protections
     if (orderedTables.includes("payments")) {
-      console.log("  - Disabling user triggers on 'payments' table to bypass ledger protections...");
+      console.log("  - Disabling user triggers on 'payments' table...");
       await tx.$executeRawUnsafe('ALTER TABLE "payments" DISABLE TRIGGER USER');
     }
 
@@ -240,25 +385,23 @@ async function main() {
     deletedRowCounts["profiles_NON_OWNERS"] = nonOwnerCount;
     console.log(`  - Deleted ${nonOwnerCount} non-owner profiles`);
 
-    // 5. Purge credentials from auth.users for deleted profiles
-    try {
-      const activeIds = await tx.profile.findMany({
-        select: { id: true }
-      });
-      const idList = activeIds.map((p) => p.id);
-      if (idList.length > 0) {
-        await tx.$executeRawUnsafe(
-          `delete from auth.users where id not in (${idList.map((_, idx) => `$${idx + 1}::uuid`).join(", ")})`,
-          ...idList
-        );
-        console.log(`  - Cleaned up credentials from auth.users`);
-      }
-    } catch (authErr: any) {
-      console.log(`  - Note: auth.users cleanup skipped or not supported in this context (${authErr.message || authErr})`);
-      // Since it's inside transaction, we cannot allow the error to abort transaction if we want to bypass. 
-      // But adding ::uuid typecast will make it succeed, so we don't expect it to fail now.
-      throw authErr;
-    }
+    // 5. Selective Expenses deletion: Preserve expense categories but delete expense records unless marked as production data
+    const expenseDeleteResult = await tx.$executeRawUnsafe(`
+      DELETE FROM expenses 
+      WHERE NOT (
+        tags @> array['production'] 
+        OR (metadata->>'is_production') = 'true' 
+        OR (metadata->>'production') = 'true'
+        OR title ILIKE '%production%' 
+        OR notes ILIKE '%production%'
+      )
+    `);
+    const postExpenseCount = await countTable("expenses", tx);
+    const deletedExpensesCount = preExpenseCount - postExpenseCount;
+    deletedRowCounts["expenses"] = deletedExpensesCount;
+    console.log(`  - Deleted ${deletedExpensesCount} expense records (preserved ${postExpenseCount} production expenses)`);
+
+    // Note: auth.users cleanup skipped as requested ("Do not delete from auth.users automatically")
 
     // 6. Re-enable user triggers on 'payments'
     if (orderedTables.includes("payments")) {
@@ -268,7 +411,101 @@ async function main() {
 
     // 7. Post-reset validations inside transaction
     await validatePreservedConfigurations(tx);
-    await runFinalRoleAudit(tx);
+    await runFinalRoleAudit(preOwnerCount, tx);
+
+    // Verify operational counts are zero
+    const activeTenants = await tx.tenants.count({ where: { status: "ACTIVE" } });
+    const totalTenants = await tx.tenants.count();
+    const activeAgreements = await tx.agreement.count({ where: { status: "SIGNED" } });
+    const totalAgreements = await tx.agreement.count();
+    const activeAllocations = await tx.roomAllocation.count({ where: { is_active: true } });
+    const totalAllocations = await tx.roomAllocation.count();
+    const obligations = await tx.rent_obligations.count();
+    const paymentAttempts = await tx.paymentAttempt.count();
+    const ledgerEntries = await tx.tenant_financial_ledger.count();
+    const renewalOffers = await tx.renewalOffer.count();
+    const moveOutRequests = await tx.move_out_requests.count();
+
+    console.log("=== Verifying Operational Data Purge ===");
+    console.log(`  - Active Tenants: ${activeTenants} (Total: ${totalTenants})`);
+    console.log(`  - Active Agreements: ${activeAgreements} (Total: ${totalAgreements})`);
+    console.log(`  - Active Allocations: ${activeAllocations} (Total: ${totalAllocations})`);
+    console.log(`  - Obligations: ${obligations}`);
+    console.log(`  - Payment Attempts: ${paymentAttempts}`);
+    console.log(`  - Ledger Entries: ${ledgerEntries}`);
+    console.log(`  - Renewal Offers: ${renewalOffers}`);
+    console.log(`  - Move-out Requests: ${moveOutRequests}`);
+
+    if (
+      activeTenants !== 0 ||
+      totalTenants !== 0 ||
+      activeAgreements !== 0 ||
+      totalAgreements !== 0 ||
+      activeAllocations !== 0 ||
+      totalAllocations !== 0 ||
+      obligations !== 0 ||
+      paymentAttempts !== 0 ||
+      ledgerEntries !== 0 ||
+      renewalOffers !== 0 ||
+      moveOutRequests !== 0
+    ) {
+      throw new Error("Validation failed: Some operational entities were not completely purged!");
+    }
+
+    // Verify preserved counts remain identical
+    const postOwnerCount = await tx.profile.count({ where: { role: "OWNER" } });
+    const postHostelCount = await tx.hostels.count();
+    const postRoomCount = await tx.rooms.count();
+    const postBedsCount = await tx.rooms.aggregate({
+      where: { is_active: true },
+      _sum: { capacity: true }
+    }).then(res => Number(res._sum.capacity || 0));
+    const postTemplateCount = await tx.agreementTemplate.count();
+
+    if (
+      preOwnerCount !== postOwnerCount ||
+      preHostelCount !== postHostelCount ||
+      preRoomCount !== postRoomCount ||
+      preBedsCount !== postBedsCount ||
+      preTemplateCount !== postTemplateCount
+    ) {
+      throw new Error("Validation failed: Preserved entity counts do not match pre-reset counts!");
+    }
+
+    // Verify payment configurations are exactly identical
+    const postHostelsConfig = await tx.hostels.findMany({
+      select: {
+        id: true,
+        upi_id: true,
+        phonepe_merchant_id: true,
+        preferences_config: true,
+        timezone: true,
+        rent_cycle: true,
+        auto_rent_day: true
+      }
+    });
+
+    for (const preConfig of preHostelsConfig) {
+      const postConfig = postHostelsConfig.find(h => h.id === preConfig.id);
+      if (!postConfig) {
+        throw new Error(`Hostel ${preConfig.id} was not preserved!`);
+      }
+      if (
+        postConfig.upi_id !== preConfig.upi_id ||
+        postConfig.phonepe_merchant_id !== preConfig.phonepe_merchant_id ||
+        postConfig.timezone !== preConfig.timezone ||
+        postConfig.rent_cycle !== preConfig.rent_cycle ||
+        postConfig.auto_rent_day !== preConfig.auto_rent_day ||
+        JSON.stringify(postConfig.preferences_config) !== JSON.stringify(preConfig.preferences_config)
+      ) {
+        throw new Error(`Validation failed: Payment configuration/settings for hostel ${preConfig.id} were mutated or lost!`);
+      }
+    }
+
+    console.log("✅ Post-reset integrity check validations passed successfully.");
+
+    // 8. Run dashboard health checks to ensure dashboards load successfully with 0 tenants
+    await runDashboardHealthChecks(tx);
 
     const finalRoleCounts = await getRoleCounts(tx);
     const afterCounts: Record<string, number> = {
@@ -277,24 +514,19 @@ async function main() {
       profiles_ADMIN: finalRoleCounts.ADMIN,
       profiles_WARDEN: finalRoleCounts.WARDEN,
       profiles_TENANT: finalRoleCounts.TENANT,
+      beds: postBedsCount
     };
     for (const table of tables) {
       afterCounts[table] = await countTable(table, tx);
     }
+    afterCounts["expenses"] = postExpenseCount;
 
     return { deletedRowCounts, afterCounts };
   }, { maxWait: 15000, timeout: 120000 });
 
-  const owners = await prisma.profile.findMany({
-    where: { role: "OWNER" },
-    select: { id: true }
-  });
-  for (const o of owners) {
-    invalidateOwnerDashboardCache(o.id);
-    invalidatePortfolioCache(o.id);
-  }
-
-  console.log("\n=== RESET APPLIED SUCCESSFULLY ===");
+  console.log("\n========================================================================");
+  console.log("🏆 HMS V1 PRODUCTION RESET APPLIED & VERIFIED SUCCESSFULLY 🏆");
+  console.log("========================================================================\n");
   console.log(JSON.stringify({
     mode: "APPLIED",
     deleted_row_counts: result.deletedRowCounts,
