@@ -2,19 +2,39 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { inferAttemptFinancialMetadata, PAYMENT_DOMAIN, PAYMENT_FLOW, SETTLEMENT_STATUS } from "@/src/services/payments/financial-domain";
 
 const mocks = vi.hoisted(() => {
+  const ledgerEntries: any[] = [];
   const tx = {
     $queryRaw: vi.fn(),
     paymentAttempt: {
       update: vi.fn(),
+      findUnique: vi.fn(),
     },
     payment_attempt_obligations: {
       findMany: vi.fn(async () => []),
       createMany: vi.fn(async () => ({ count: 0 })),
     },
+    rent_obligations: {
+      findMany: vi.fn(async () => []),
+    },
+    tenant_financial_ledger: {
+      findMany: vi.fn(async (params?: any) => {
+        const where = params?.where || {};
+        return ledgerEntries.filter(entry => {
+          if (where.tenant_id && entry.tenant_id !== where.tenant_id) return false;
+          if (where.reference_id && entry.reference_id !== where.reference_id) return false;
+          if (where.type && entry.type !== where.type) return false;
+          return true;
+        });
+      }),
+    },
+    payments: {
+      findMany: vi.fn(async () => []),
+    },
   };
 
   return {
     tx,
+    ledgerEntries,
     prisma: {
       paymentAttempt: {
         findUnique: vi.fn(),
@@ -108,6 +128,7 @@ describe("Release C5 deposit payment flow", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.ledgerEntries.length = 0;
     mocks.prisma.$transaction.mockImplementation(async (callback: any) => callback(mocks.tx));
     mocks.prisma.paymentAttempt.updateMany.mockResolvedValue({ count: 1 });
     mocks.tx.paymentAttempt.update.mockImplementation(async ({ data }: any) => ({
@@ -115,7 +136,19 @@ describe("Release C5 deposit payment flow", () => {
       ...data,
       settlement_status: data.settlement_status ?? SETTLEMENT_STATUS.SETTLED,
     }));
-    mocks.tenantFinancialLedgerService.creditIdempotentInTx.mockResolvedValue({ alreadyCredited: false });
+    mocks.tx.paymentAttempt.findUnique.mockImplementation(async () => ({
+      ...baseAttempt,
+      status: "SUCCESS",
+    }));
+    mocks.tenantFinancialLedgerService.creditIdempotentInTx.mockImplementation(async (tx, params) => {
+      mocks.ledgerEntries.push({
+        amount: params.amount,
+        type: "CREDIT",
+        reference_id: params.referenceId,
+        tenant_id: params.tenantId,
+      });
+      return { alreadyCredited: false };
+    });
   });
 
   it("credits successful onboarding deposit payments as SECURITY_DEPOSIT_COLLECTED ledger entries", async () => {

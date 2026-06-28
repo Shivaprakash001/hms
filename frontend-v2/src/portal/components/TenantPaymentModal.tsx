@@ -65,11 +65,7 @@ interface Props {
   open: boolean;
   onClose: () => void;
   amount: number;
-  obligationIds: string[];
-  paymentType?: 'RENT' | 'ADVANCE';
-  paymentContext?: PayableObligation[];
   onSuccess?: () => void;
-  allInstallments?: any[];
   tenantId?: string;
   hostelId?: string;
 }
@@ -78,11 +74,7 @@ export function TenantPaymentModal({
   open,
   onClose,
   amount,
-  obligationIds,
-  paymentType = 'RENT',
-  paymentContext = [],
   onSuccess,
-  allInstallments = [],
   tenantId,
   hostelId,
 }: Props) {
@@ -95,13 +87,7 @@ export function TenantPaymentModal({
   const [submittingRef, setSubmittingRef] = useState(false);
   const [step, setStep] = useState<'init' | 'pay' | 'reference' | 'done'>('init');
 
-  // Tabs for Rent Payment: 'due' (FIFO Outstanding Today) or 'advance' (Add Advance Credit)
-  const [activeTab, setActiveTab] = useState<'due' | 'advance'>('due');
-  
-  // Selected single installment timeline ID
-  const [selectedTimelineIds, setSelectedTimelineIds] = useState<string[]>([]);
-  
-  // Custom amount state (used for advance credit top-ups)
+  // Custom amount state (used for the unified payment amount)
   const [customAmount, setCustomAmount] = useState<string>('');
 
   useEffect(() => {
@@ -115,57 +101,19 @@ export function TenantPaymentModal({
       setSubmittingRef(false);
       setStep('init');
       setCustomAmount('');
-      setSelectedTimelineIds([]);
     }
   }, [open]);
 
-  // Group payable installments
-  const payableInstallments = useMemo(() => {
-    if (!allInstallments) return [];
-    return allInstallments.filter((inst) => inst.remaining > 0);
-  }, [allInstallments]);
-
-  // Identify the oldest outstanding installment
-  const oldestOutstandingInstallment = useMemo(() => {
-    return payableInstallments[0] || null;
-  }, [payableInstallments]);
-
-  // Default tab and amount logic when modal opens
+  // Amount logic when modal opens
   useEffect(() => {
     if (open) {
-      if (paymentType === 'RENT') {
-        if (payableInstallments.length > 0) {
-          setActiveTab('due');
-        } else {
-          setActiveTab('advance');
-        }
-        setCustomAmount(amount > 0 ? String(amount) : '');
-      } else {
-        setActiveTab('advance');
-      }
+      setCustomAmount(amount > 0 ? String(amount) : '');
     }
-  }, [open, paymentType, amount, payableInstallments.length]);
-
-  // Auto-select the oldest unpaid installment when activeTab is 'due'
-  useEffect(() => {
-    if (open && paymentType === 'RENT') {
-      if (activeTab === 'due' && oldestOutstandingInstallment) {
-        setSelectedTimelineIds([oldestOutstandingInstallment.timeline_id || oldestOutstandingInstallment.id]);
-      } else {
-        setSelectedTimelineIds([]);
-      }
-    }
-  }, [open, activeTab, oldestOutstandingInstallment, paymentType]);
-
-  const selectedObligationIds = useMemo(() => {
-    return payableInstallments
-      .filter((inst) => selectedTimelineIds.includes(inst.timeline_id || inst.id))
-      .flatMap((inst) => inst.obligations?.map((o: any) => o.obligation_id) || []);
-  }, [payableInstallments, selectedTimelineIds]);
+  }, [open, amount]);
 
   // Mode B: Settlement Preview Query (React Query)
   const parsedCustomAmount = Number(customAmount) || 0;
-  const previewEnabled = open && activeTab === 'advance' && paymentType === 'RENT' && Boolean(tenantId) && parsedCustomAmount > 0 && Boolean(hostelId);
+  const previewEnabled = open && Boolean(tenantId) && parsedCustomAmount > 0 && Boolean(hostelId);
 
   const { data: previewData, isLoading: previewLoading } = useQuery({
     queryKey: ['tenant-settlement-preview', tenantId, parsedCustomAmount, hostelId],
@@ -175,11 +123,7 @@ export function TenantPaymentModal({
     retry: false,
   });
 
-  const displayAmount = useMemo(() => {
-    if (paymentType === 'ADVANCE') return amount;
-    if (activeTab === 'advance') return parsedCustomAmount;
-    return oldestOutstandingInstallment?.remaining || 0;
-  }, [paymentType, activeTab, amount, parsedCustomAmount, oldestOutstandingInstallment]);
+  const displayAmount = parsedCustomAmount;
 
   useEffect(() => {
     if (!open || !attempt?.id || TERMINAL_STATUSES.includes(status)) return undefined;
@@ -208,35 +152,21 @@ export function TenantPaymentModal({
     setError('');
     try {
       let intent;
-      if (paymentType === 'ADVANCE') {
-        intent = await tenantPortalApi.createPaymentIntent({
-          payment_type: 'ADVANCE',
-          amount,
-        });
-      } else if (activeTab === 'advance') {
-        if (!parsedCustomAmount || parsedCustomAmount <= 0) {
-          setError('Please enter a valid positive payment amount.');
-          setLoading(false);
-          return;
-        }
-        if (parsedCustomAmount < 100) {
-          setError('Minimum payment amount is ₹100.');
-          setLoading(false);
-          return;
-        }
-        intent = await tenantPortalApi.createPaymentIntent({
-          payment_type: 'ADVANCE',
-          amount: parsedCustomAmount,
-        });
-      } else {
-        const ids = [...new Set(selectedObligationIds.filter(Boolean))];
-        if (ids.length === 0) {
-          setError('Please select at least one installment to pay.');
-          setLoading(false);
-          return;
-        }
-        intent = await tenantPortalApi.createPaymentIntent({ obligation_ids: ids });
+      if (!parsedCustomAmount || parsedCustomAmount <= 0) {
+        setError('Please enter a valid positive payment amount.');
+        setLoading(false);
+        return;
       }
+      if (previewData && previewData.payment_accepted === false) {
+        setError(previewData.rejection_reason || 'Payment policy check failed.');
+        setLoading(false);
+        return;
+      }
+      intent = await tenantPortalApi.createPaymentIntent({
+        payment_type: 'RENT',
+        amount: parsedCustomAmount,
+        tenant_id: tenantId,
+      });
 
       if (intent.provider === 'RAZORPAY') {
         const loaded = await loadRazorpayScript();
@@ -355,7 +285,7 @@ export function TenantPaymentModal({
     <Dialog open={open} onOpenChange={(v) => !loading && status !== 'SUCCESS' && !v && onClose()}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto p-0 gap-0">
         <DialogHeader className="p-5 border-b border-border bg-muted/30">
-          <DialogTitle>{paymentType === 'ADVANCE' ? 'Pay security deposit' : 'Make Payment'}</DialogTitle>
+          <DialogTitle>Make Payment</DialogTitle>
           <p className="text-sm text-muted-foreground">
             {step === 'init' && 'Review amount and continue to secure payment'}
             {step === 'pay' && 'Complete payment or enter UPI reference'}
@@ -368,189 +298,113 @@ export function TenantPaymentModal({
           {step === 'init' && (
             <div className="rounded-xl border border-accent/30 bg-accent/5 px-4 py-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-accent">
-                {paymentType === 'ADVANCE' ? 'Total security deposit' : (activeTab === 'advance' ? 'Advance Credit Top-up' : 'Outstanding Today')}
+                Payment Amount
               </p>
               <p className="text-3xl font-bold text-foreground mt-1">{fmt(displayAmount)}</p>
             </div>
           )}
 
-          {step === 'init' && paymentType === 'RENT' && (
-            <div className="flex bg-muted p-1 rounded-xl gap-1">
-              <button
-                type="button"
-                onClick={() => { setActiveTab('due'); setError(''); }}
-                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-                  activeTab === 'due'
-                    ? 'bg-card text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:bg-card/50'
-                }`}
-              >
-                Pay Due Amount
-              </button>
-              <button
-                type="button"
-                onClick={() => { setActiveTab('advance'); setError(''); }}
-                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-                  activeTab === 'advance'
-                    ? 'bg-card text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:bg-card/50'
-                }`}
-              >
-                Add Advance Credit
-              </button>
-            </div>
-          )}
-
           {step === 'init' && (
             <div className="space-y-4">
-              {paymentType === 'ADVANCE' && paymentContext.length > 0 && (
-                <div className="rounded-xl border border-border p-3 space-y-2">
-                  <p className="text-sm font-semibold text-foreground">
-                    You are paying security deposit for
-                  </p>
-                  {paymentContext.map((item) => (
-                    <div key={item.id} className="rounded-lg bg-muted/50 px-3 py-2 text-sm">
-                      <div className="flex justify-between gap-2">
-                        <span className="font-medium">{item.label}</span>
-                        <span className="font-bold">{fmt(item.amount)}</span>
-                      </div>
-                    </div>
-                  ))}
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                    Amount to Pay (₹)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-bold text-muted-foreground">₹</span>
+                    <input
+                      type="number"
+                      placeholder="Enter amount (e.g. 8500)"
+                      value={customAmount}
+                      onChange={(e) => setCustomAmount(e.target.value)}
+                      className="w-full pl-8 pr-4 py-3 rounded-xl border border-border bg-background text-lg font-bold placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
+                    />
+                  </div>
                 </div>
-              )}
 
-              {paymentType === 'RENT' && activeTab === 'due' && (
-                <div className="space-y-4">
-                  {oldestOutstandingInstallment ? (
-                    <div className="space-y-4">
-                      {/* Oldest Outstanding Installment Card */}
-                      <div className="rounded-xl border-2 border-accent bg-accent/5 p-4 space-y-3 relative overflow-hidden">
-                        <div className="absolute right-0 top-0 bg-accent text-accent-foreground text-[10px] font-extrabold px-3 py-1 rounded-bl-xl uppercase tracking-wider">
-                          Payable Now
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Current Outstanding Dues</p>
-                          <h4 className="text-lg font-extrabold text-foreground mt-1">
-                            {oldestOutstandingInstallment.label}
-                          </h4>
-                          <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                            <Info className="w-3.5 h-3.5 text-muted-foreground/75" />
-                            Due: {new Date(oldestOutstandingInstallment.due_date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
-                          </p>
-                        </div>
-                        <div className="pt-2 border-t border-accent/20 flex justify-between items-baseline">
-                          <span className="text-sm font-semibold text-muted-foreground">Due Amount</span>
-                          <span className="text-2xl font-black text-foreground">{fmt(oldestOutstandingInstallment.remaining)}</span>
-                        </div>
+                {/* Settlement Preview Section */}
+                {parsedCustomAmount > 0 && (
+                  <div className="rounded-xl border border-border p-4 bg-muted/10 space-y-3">
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                      <Info className="w-4 h-4 text-accent" />
+                      Settlement Preview
+                    </p>
+
+                    {previewLoading ? (
+                      <div className="animate-pulse space-y-2">
+                        <div className="h-4 bg-muted rounded w-1/3"></div>
+                        <div className="h-10 bg-muted rounded"></div>
                       </div>
+                    ) : previewData ? (
+                      <div className="space-y-3">
+                        {/* Rejection Alert */}
+                        {previewData.payment_accepted === false && (
+                          <div className="flex gap-2 text-xs text-destructive rounded-xl border border-destructive/30 bg-destructive/5 p-3 font-semibold">
+                            <AlertCircle className="w-4 h-4 shrink-0" />
+                            <div>
+                              <p className="font-bold">Payment Policy Alert</p>
+                              <p className="mt-0.5">{previewData.rejection_reason}</p>
+                            </div>
+                          </div>
+                        )}
 
-                      {/* Future Locked Obligations */}
-                      {payableInstallments.length > 1 && (
-                        <div className="space-y-2.5">
-                          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                            <Lock className="w-3.5 h-3.5" />
-                            Future Installments (Locked)
-                          </p>
+                        {/* Allocation Items */}
+                        {previewData.allocations?.some((a: any) => a.allocated > 0) ? (
                           <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
-                            {payableInstallments.slice(1).map((inst) => (
-                              <div
-                                key={inst.timeline_id || inst.id}
-                                className="flex items-center justify-between p-3 rounded-xl border border-border bg-muted/20 opacity-60 select-none"
-                              >
-                                <div className="flex items-center gap-3">
-                                  <div className="p-2 rounded-lg bg-muted text-muted-foreground">
-                                    <Lock className="w-4 h-4 text-muted-foreground" />
-                                  </div>
+                            {previewData.allocations.map((alloc: any, idx: number) => {
+                              if (alloc.allocated <= 0) return null;
+                              return (
+                                <div key={idx} className="flex justify-between items-center text-xs py-1.5 border-b border-border/40 last:border-0">
                                   <div>
-                                    <p className="text-sm font-bold text-foreground">{inst.label}</p>
-                                    <p className="text-[10px] text-muted-foreground mt-0.5">
-                                      Clear previous installment first
-                                    </p>
+                                    <p className="font-semibold text-foreground">{alloc.label}</p>
+                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{alloc.type.replaceAll('_', ' ')}</p>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="font-bold text-foreground">{fmt(alloc.allocated)}</p>
+                                    <p className={`text-[10px] font-bold uppercase mt-0.5 ${
+                                      alloc.result === 'PAID' ? 'text-emerald-600' : 'text-amber-600'
+                                    }`}>{alloc.result}</p>
                                   </div>
                                 </div>
-                                <div className="text-right">
-                                  <p className="text-sm font-bold text-foreground/80">{fmt(inst.remaining)}</p>
-                                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                                    Due {new Date(inst.due_date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                  </p>
-                                </div>
-                              </div>
-                            ))}
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground italic">No obligations will be settled by this payment amount.</p>
+                        )}
+
+                        {/* Future Credit Alert */}
+                        {previewData.future_credit > 0 && (
+                          <div className="rounded-xl border border-emerald-500/20 bg-emerald-50/5 p-3 flex flex-col gap-1 text-xs">
+                            <span className="font-bold text-emerald-800 flex items-center gap-1">
+                              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                              Future Rent Credit: {fmt(previewData.future_credit)}
+                            </span>
+                            <p className="text-emerald-700/90 leading-relaxed text-[11px]">
+                              This excess amount will be added to your ledger balance and automatically applied to future bills.
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Summary Details */}
+                        <div className="pt-2 border-t border-border/60 space-y-1 text-[11px] text-muted-foreground">
+                          <div className="flex justify-between">
+                            <span>Total Outstanding Balance:</span>
+                            <span className="font-medium text-foreground">{fmt(previewData.total_outstanding)}</span>
+                          </div>
+                          <div className="flex justify-between font-bold text-foreground">
+                            <span>Remaining Balance After Payment:</span>
+                            <span>{fmt(previewData.remaining_outstanding)}</span>
                           </div>
                         </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="rounded-xl border border-dashed border-border p-8 text-center space-y-3">
-                      <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center mx-auto">
-                        <Sparkles className="w-6 h-6" />
                       </div>
-                      <div>
-                        <p className="text-sm font-bold text-foreground">You are all caught up!</p>
-                        <p className="text-xs text-muted-foreground mt-1">No outstanding dues are currently pending.</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab('advance')}
-                        className="text-xs font-bold text-accent hover:underline mt-2 flex items-center gap-1 mx-auto"
-                      >
-                        Want to pay in advance? Add Advance Credit →
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {paymentType === 'RENT' && activeTab === 'advance' && (
-                <div className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                      Add Advance Credit Amount (₹)
-                    </label>
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-bold text-muted-foreground">₹</span>
-                      <input
-                        type="number"
-                        placeholder="Enter amount (e.g. 8500)"
-                        value={customAmount}
-                        onChange={(e) => setCustomAmount(e.target.value)}
-                        className="w-full pl-8 pr-4 py-3 rounded-xl border border-border bg-background text-lg font-bold placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
-                      />
-                    </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Unable to fetch settlement plan.</p>
+                    )}
                   </div>
-
-                  {/* Quick-add buttons */}
-                  <div className="grid grid-cols-3 gap-2">
-                    {[5000, 10000, 25000].map((amt) => (
-                      <button
-                        key={amt}
-                        type="button"
-                        onClick={() => setCustomAmount(String(amt))}
-                        className={`py-2 px-3 rounded-lg border text-xs font-bold transition-all ${
-                          customAmount === String(amt)
-                            ? 'bg-accent border-accent text-accent-foreground'
-                            : 'border-border bg-background hover:bg-muted/50 text-foreground'
-                        }`}
-                      >
-                        + {fmt(amt)}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="rounded-xl border border-dashed border-border p-4 bg-muted/10 space-y-2 text-xs leading-relaxed text-muted-foreground">
-                    <p className="font-semibold text-foreground flex items-center gap-1.5">
-                      <Info className="w-4 h-4 text-accent" />
-                      About Advance Payments
-                    </p>
-                    <p>
-                      This payment will be recorded as **Future Rent Credit** on your ledger balance. It does not settle specific historical months directly.
-                    </p>
-                    <p>
-                      When the hostel generates new monthly rent bills, the system will automatically consume your credit balance to pay them off.
-                    </p>
-                  </div>
-                </div>
-              )}
+                )}
+              </div>
 
               <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 flex gap-3">
                 <Smartphone className="w-5 h-5 text-emerald-600 shrink-0" />
@@ -567,19 +421,14 @@ export function TenantPaymentModal({
               <button
                 type="button"
                 onClick={handleCreateIntent}
-                disabled={loading || displayAmount <= 0}
+                disabled={loading || displayAmount <= 0 || previewData?.payment_accepted === false}
                 className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-accent text-accent-foreground font-bold disabled:opacity-50"
               >
                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShieldCheck className="w-5 h-5" />}
                 {loading 
                   ? 'Starting checkout…' 
-                  : (paymentType === 'ADVANCE'
-                      ? `Pay ${fmt(displayAmount)}`
-                      : (activeTab === 'advance' 
-                          ? `Add Advance Credit ${fmt(displayAmount)}` 
-                          : `Pay ${fmt(displayAmount)}`
-                        )
-                    )}
+                  : `Pay ${fmt(displayAmount)}`
+                }
               </button>
             </div>
           )}

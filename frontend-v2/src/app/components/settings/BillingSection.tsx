@@ -425,11 +425,41 @@ export function BillingSection({ hostelId, policy }: Props) {
         )}
       </div>
 
-      {/* ── Partial payments ──────────────────────────────────────── */}
+      {/* ── Payment Collection Policy ─────────────────────────── */}
       <div className="border-t border-border pt-5 space-y-4">
-        <FieldRow label="Allow partial rent payments" hint="Tenants can pay less than the full amount due for rent invoices">
-          <Toggle checked={local.partial_payments_enabled} onChange={v => upd('partial_payments_enabled', v)} />
-        </FieldRow>
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Payment Collection Policy
+        </p>
+
+        <label className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition-colors ${
+          !local.partial_payments_enabled ? 'border-accent/40 bg-accent/5' : 'border-border bg-card opacity-70'
+        }`}>
+          <input type="radio" name="payment_policy" checked={!local.partial_payments_enabled}
+            onChange={() => upd('partial_payments_enabled', false)}
+            className="mt-0.5 h-4 w-4 accent-accent" />
+          <span>
+            <span className="block text-sm font-medium">Mandatory obligations first</span>
+            <span className="block text-xs text-muted-foreground">
+              Tenants must pay at least their first group of outstanding obligations in full
+              (e.g., Security Deposit + Maintenance before Rent).
+            </span>
+          </span>
+        </label>
+
+        <label className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition-colors ${
+          local.partial_payments_enabled ? 'border-accent/40 bg-accent/5' : 'border-border bg-card opacity-70'
+        }`}>
+          <input type="radio" name="payment_policy" checked={local.partial_payments_enabled}
+            onChange={() => upd('partial_payments_enabled', true)}
+            className="mt-0.5 h-4 w-4 accent-accent" />
+          <span>
+            <span className="block text-sm font-medium">Partial payments allowed</span>
+            <span className="block text-xs text-muted-foreground">
+              Tenants can pay any amount above the minimum threshold.
+            </span>
+          </span>
+        </label>
+
         {local.partial_payments_enabled && (
           <Field label="Minimum payment amount (₹)" hint="0 = no minimum">
             <input type="number" min={0} className={inp} value={local.partial_min_amount}

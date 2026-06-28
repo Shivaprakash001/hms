@@ -2202,3 +2202,19 @@ enum HostelStatus {
   INACTIVE
   ARCHIVED
 }
+
+model payment_recovery_operations {
+  id                   String    @id @db.Uuid
+  payment_id           String    @unique
+  attempt_id           String    @db.Uuid
+  incorrect_attempt_id String?   @db.Uuid
+  status               String
+  operator             String
+  checksum             String
+  started_at           DateTime  @default(now()) @db.Timestamptz(6)
+  finished_at          DateTime? @db.Timestamptz(6)
+  metadata             Json?
+
+  @@map("payment_recovery_operations")
+}
+

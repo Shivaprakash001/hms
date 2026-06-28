@@ -20,6 +20,7 @@ const PUBLIC_ROUTES = [
   "/api/tenants/activate",
   "/api/visit",
   "/api/webhooks/notifications/whatsapp",
+  "/api/webhooks/payments/razorpay",
   "/api/plans",
   "/api/revalidate",
   "/api/payments/pay",

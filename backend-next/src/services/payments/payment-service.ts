@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { sortObligationsByPriority, SETTLEMENT_PRIORITY, SETTLEMENT_TIERS, TYPE_LABELS, toObligationSnapshot } from "./settlement-planner";
 import { Prisma } from "@prisma/client";
 import { eventSystem } from "@/lib/events";
 import { PaymentProviderFactory } from "./provider-factory";
@@ -62,6 +63,119 @@ export class PaymentService {
     return (attempt?.payment_domain === PAYMENT_DOMAIN.PLATFORM_BILLING
       && attempt?.flow_type === PAYMENT_FLOW.ADDON)
       || attempt?.payment_type === "ADDON";
+  }
+
+  private async getTenantOutstandingInTx(tx: any, tenantId: string, hostelId: string | null): Promise<number> {
+    if (!hostelId) return 0;
+    const obligations = await tx.rent_obligations.findMany({
+      where: {
+        tenant_id: tenantId,
+        hostel_id: hostelId,
+        status: { in: ["OVERDUE", "PENDING", "PARTIAL"] },
+      },
+      include: {
+        payments: {
+          select: { amount_paid: true },
+        },
+      },
+    });
+    let totalOutstanding = 0;
+    for (const ob of obligations) {
+      const paid = ob.payments.reduce((sum: number, p: any) => sum + Number(p.amount_paid), 0);
+      const outstanding = Math.max(Number(ob.amount) - paid, 0);
+      totalOutstanding += outstanding;
+    }
+    return totalOutstanding;
+  }
+
+  private async getTenantLedgerBalanceInTx(tx: any, tenantId: string): Promise<number> {
+    const aggregate = await tx.tenant_financial_ledger.findMany({
+      where: { tenant_id: tenantId },
+      select: { amount: true, type: true },
+    });
+    return aggregate.reduce((acc: number, entry: any) => {
+      const amt = Number(entry.amount);
+      return entry.type === "CREDIT" ? acc + amt : acc - amt;
+    }, 0);
+  }
+
+  private async validatePaymentAttemptSettlementInTx(
+    tx: any,
+    params: {
+      attemptId: string;
+      initialOutstanding: number;
+      initialLedgerBalance: number;
+      tenantId: string;
+      hostelId: string | null;
+    }
+  ) {
+    const { attemptId, initialOutstanding, initialLedgerBalance, tenantId, hostelId } = params;
+
+    const attempt = await tx.paymentAttempt.findUnique({
+      where: { id: attemptId },
+      include: { payments: true },
+    });
+    if (!attempt) {
+      throw new Error(`INVARIANT_VIOLATION: Payment attempt ${attemptId} not found`);
+    }
+
+    if (this.isPlatformBillingAttempt(attempt) || this.isAddonAttempt(attempt)) {
+      return;
+    }
+
+    if (attempt.status !== "SUCCESS") {
+      throw new Error(`INVARIANT_VIOLATION: Payment attempt ${attemptId} is not in SUCCESS status (status is ${attempt.status})`);
+    }
+
+    const capturedAmount = Number(attempt.amount);
+
+    // Sum allocations (payments)
+    const paymentsAllocations = await tx.payments.findMany({
+      where: { payment_attempt_id: attemptId },
+    });
+    const totalAllocated = paymentsAllocations.reduce((sum: number, p: any) => sum + Number(p.amount_paid), 0);
+
+    // Sum ledger credits
+    const ledgerCredits = await tx.tenant_financial_ledger.findMany({
+      where: {
+        tenant_id: tenantId,
+        reference_id: attemptId,
+        type: "CREDIT",
+      },
+    });
+    const totalLedgerCredited = ledgerCredits.reduce((sum: number, e: any) => sum + Number(e.amount), 0);
+
+    // Invariants checks:
+    // 1. Captured Amount = Obligation Allocations + Net Ledger Credit Increase
+    const totalSettled = totalAllocated + totalLedgerCredited;
+    if (Math.abs(totalSettled - capturedAmount) > 0.01) {
+      throw new Error(
+        `INVARIANT_VIOLATION: Settlement mismatch. Captured: ₹${capturedAmount.toFixed(2)}, ` +
+        `Allocated Dues: ₹${totalAllocated.toFixed(2)}, Ledger Credits: ₹${totalLedgerCredited.toFixed(2)}, ` +
+        `Total Settled: ₹${totalSettled.toFixed(2)}. Difference: ₹${(capturedAmount - totalSettled).toFixed(2)}`
+      );
+    }
+
+    // 2. Outstanding Before - Obligation Allocations = Outstanding After
+    const finalOutstanding = await this.getTenantOutstandingInTx(tx, tenantId, hostelId);
+    const expectedOutstandingAfter = Math.max(0, initialOutstanding - totalAllocated);
+    if (Math.abs(finalOutstanding - expectedOutstandingAfter) > 0.01) {
+      throw new Error(
+        `INVARIANT_VIOLATION: Outstanding accounting inconsistency. ` +
+        `Outstanding Before: ₹${initialOutstanding.toFixed(2)}, Allocated: ₹${totalAllocated.toFixed(2)}, ` +
+        `Expected Outstanding After: ₹${expectedOutstandingAfter.toFixed(2)}, Actual Outstanding After: ₹${finalOutstanding.toFixed(2)}`
+      );
+    }
+
+    // 3. Ledger Balance After - Ledger Balance Before = Net Ledger Credit Increase
+    const finalLedgerBalance = await this.getTenantLedgerBalanceInTx(tx, tenantId);
+    if (Math.abs((finalLedgerBalance - initialLedgerBalance) - totalLedgerCredited) > 0.01) {
+      throw new Error(
+        `INVARIANT_VIOLATION: Ledger balance inconsistency. ` +
+        `Ledger Balance Before: ₹${initialLedgerBalance.toFixed(2)}, Ledger Balance After: ₹${finalLedgerBalance.toFixed(2)}, ` +
+        `Expected Ledger Change: ₹${totalLedgerCredited.toFixed(2)}, Actual Ledger Change: ₹${(finalLedgerBalance - initialLedgerBalance).toFixed(2)}`
+      );
+    }
   }
 
   private async getProviderInstanceForAttempt(attempt: any, label: string) {
@@ -331,20 +445,10 @@ export class PaymentService {
     }
 
     // V2: Sort by settlement priority, then chronologically
-    const OBLIGATION_PRIORITY: Record<string, number> = {
-      SECURITY_DEPOSIT: 1,
-      MAINTENANCE: 2,
-      RENT: 3,
-      EXTRA_CHARGE: 4,
-    };
-    obligations.sort((a: any, b: any) => {
-      const priorityA = OBLIGATION_PRIORITY[a.obligation_type] ?? 5;
-      const priorityB = OBLIGATION_PRIORITY[b.obligation_type] ?? 5;
-      if (priorityA !== priorityB) return priorityA - priorityB;
-      const dateDiff = new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
-      if (dateDiff !== 0) return dateDiff;
-      return new Date(a.rent_month).getTime() - new Date(b.rent_month).getTime();
-    });
+    // Uses the canonical priority from settlement-planner.ts (single source of truth)
+    const sorted = sortObligationsByPriority(obligations as any[]);
+    obligations.length = 0;
+    obligations.push(...sorted);
 
     const obData = obligations.map((ob: any) => {
       const paidPaisa = ob.payments.reduce(
@@ -389,16 +493,11 @@ export class PaymentService {
       await tx.rent_obligations.update({ where: { id: ob.id }, data: { status: newStatus } });
 
       // V2: Generate human-readable label for JSONB snapshot
+      // Uses TYPE_LABELS from settlement-planner.ts (single source of truth)
       const monthLabel = ob.rent_month
         ? new Date(ob.rent_month).toLocaleDateString("en-IN", { month: "short", year: "numeric" })
         : "";
-      const typeLabels: Record<string, string> = {
-        RENT: "Rent",
-        MAINTENANCE: "Maintenance",
-        SECURITY_DEPOSIT: "Security Deposit",
-        EXTRA_CHARGE: "Extra Charge",
-      };
-      const typeLabel = typeLabels[ob.obligation_type] || ob.obligation_type;
+      const typeLabel = TYPE_LABELS[ob.obligation_type] || ob.obligation_type;
       const installmentLabel = monthLabel ? `${monthLabel} ${typeLabel}` : typeLabel;
 
       allocations.push({
@@ -750,10 +849,51 @@ export class PaymentService {
 
     const groupId = crypto.randomUUID();
 
-    // ── 3. ATOMIC TRANSACTION WITH ROW-LEVEL LOCKING ──
-    const txResult = await prisma.$transaction((tx: any) =>
-      this._settleTenantRentPaymentInTx(tx, data, data.idempotencyKey || groupId)
-    );
+    // ── 3. ATOMIC TRANSACTION WITH ROW-LEVEL LOCKING + SETTLEMENT INVARIANT ──
+    const txResult = await prisma.$transaction(async (tx: any) => {
+      // Capture pre-settlement state for invariant validation
+      const initialOutstanding = await this.getTenantOutstandingInTx(tx, data.tenantId, hostelId);
+      const initialLedgerBalance = await this.getTenantLedgerBalanceInTx(tx, data.tenantId);
+
+      const result = await this._settleTenantRentPaymentInTx(tx, data, data.idempotencyKey || groupId);
+
+      // Settlement invariant: Paid = ΣAllocations + FutureCredit
+      const totalAllocated = result.allocations.reduce((s: number, a: any) => s + a.allocated, 0);
+      const totalSettled = totalAllocated + (result.futureCredit || 0);
+      const tolerance = 0.01;
+
+      if (Math.abs(totalSettled - data.amountPaid) > tolerance) {
+        // Log anomaly before rollback
+        try {
+          await paymentOperationalAnomalyService.logAnomaly({
+            type: "SETTLEMENT_INVARIANT_VIOLATION",
+            source: "recordTenantPayment",
+            severity: "CRITICAL",
+            tenantId: data.tenantId,
+            hostelId,
+            details: {
+              amount_paid: data.amountPaid,
+              total_allocated: totalAllocated,
+              future_credit: result.futureCredit || 0,
+              total_settled: totalSettled,
+              difference: data.amountPaid - totalSettled,
+              initial_outstanding: initialOutstanding,
+              initial_ledger_balance: initialLedgerBalance,
+            },
+          });
+        } catch (anomalyErr) {
+          logger.error("payments.invariant.anomaly_log_failed", { error: String(anomalyErr) });
+        }
+
+        throw new Error(
+          `INVARIANT_VIOLATION: Settlement mismatch in recordTenantPayment. ` +
+          `Paid: ₹${data.amountPaid}, Allocated: ₹${totalAllocated}, ` +
+          `Credit: ₹${result.futureCredit || 0}, Total Settled: ₹${totalSettled}`
+        );
+      }
+
+      return result;
+    });
 
     // ── 5. POST-TRANSACTION: Events, receipt, audit log ──
     // (Outside transaction — idempotent side-effects)
@@ -1917,6 +2057,48 @@ export class PaymentService {
     return this.mapAttemptWithRawResponse(attempt);
   }
 
+  async replayCapturedPayment(
+    attemptId: string,
+    gatewayTxnId: string,
+    rawPayload?: any,
+    context?: { requestId?: string; source?: string; actor?: { id: string; ip?: string } }
+  ) {
+    const preAttempt = await prisma.paymentAttempt.findUnique({
+      where: { id: attemptId },
+    });
+
+    if (!preAttempt) {
+      throw new Error(`NOT_FOUND: Payment attempt ${attemptId} not found`);
+    }
+
+    // Record the verification snapshot for this replayed payment attempt
+    await paymentProviderVerificationSnapshotService.record({
+      provider: "RAZORPAY",
+      source: "RECONCILE",
+      attempt: preAttempt,
+      providerTransactionId: gatewayTxnId,
+      providerOrderId: rawPayload?.order_id || null,
+      providerStatus: "captured",
+      normalizedStatus: "SUCCESS",
+      amount: Number(preAttempt.amount),
+      rawResponse: rawPayload || {},
+    });
+
+    // Force transition the attempt from terminal back to PENDING so finalizePaymentAttempt can run normally
+    await prisma.paymentAttempt.update({
+      where: { id: attemptId },
+      data: { 
+        status: "PENDING",
+        flow_type: "RENT"
+      },
+    });
+
+    return this.finalizePaymentAttempt(attemptId, "SUCCESS", gatewayTxnId, rawPayload, {
+      ...context,
+      lockAcquired: false,
+    } as any);
+  }
+
   async finalizePaymentAttempt(
     attemptId: string,
     status: string,
@@ -1925,6 +2107,13 @@ export class PaymentService {
     context?: { requestId?: string; source?: string; actor?: { id: string; ip?: string } }
   ) {
     const requestMeta = context?.requestId ? { request_id: context.requestId } : {};
+    const resolveSource = (isManual?: boolean) => {
+      const s = context?.source?.toUpperCase();
+      if (s === "RECONCILE") return "RECONCILE";
+      if (s === "WEBHOOK") return "WEBHOOK";
+      if (s === "MANUAL_CONFIRM" || isManual) return "MANUAL_CONFIRM";
+      return "VERIFY";
+    };
 
     // ── Step 1: Acquire exclusive PROCESSING lock ──────────────────────────────
     // Atomically claim the attempt before reading or writing anything.
@@ -1969,7 +2158,7 @@ export class PaymentService {
         attemptId,
         fromStatus: preLockAttempt?.status || null,
         toStatus: "PROCESSING",
-        source: context?.source === "reconcile" ? "RECONCILE" : context?.source === "MANUAL_CONFIRM" ? "MANUAL_CONFIRM" : "VERIFY",
+        source: resolveSource(),
         reason: "attempt claimed for settlement",
         actorId: context?.actor?.id || null,
         operationalOwnerId: preLockAttempt?.owner_id || null,
@@ -1996,7 +2185,7 @@ export class PaymentService {
           attemptId,
           fromStatus: "PROCESSING",
           toStatus: status,
-          source: context?.source === "reconcile" ? "RECONCILE" : "VERIFY",
+          source: resolveSource(),
           reason: "provider returned non-success status for addon",
           operationalOwnerId: attempt.owner_id,
           financialOwnerId: this.hmsFinancialOwnerId(),
@@ -2037,7 +2226,7 @@ export class PaymentService {
           attemptId,
           fromStatus: "PROCESSING",
           toStatus: "FAILED",
-          source: context?.source === "reconcile" ? "RECONCILE" : "VERIFY",
+          source: resolveSource(),
           reason: "addon amount mismatch",
           operationalOwnerId: attempt.owner_id,
           financialOwnerId: this.hmsFinancialOwnerId(),
@@ -2075,7 +2264,7 @@ export class PaymentService {
           attemptId,
           fromStatus: "PROCESSING",
           toStatus: "SUCCESS",
-          source: context?.source === "reconcile" ? "RECONCILE" : "VERIFY",
+          source: resolveSource(),
           reason: "addon credits credited atomically",
           operationalOwnerId: attempt.owner_id,
           financialOwnerId: this.hmsFinancialOwnerId(),
@@ -2153,7 +2342,7 @@ export class PaymentService {
         attemptId,
         fromStatus: "PROCESSING",
         toStatus: status,
-        source: context?.source === "reconcile" ? "RECONCILE" : "VERIFY",
+        source: resolveSource(),
         reason: "provider returned non-success status",
         operationalOwnerId: attempt.owner_id,
         financialOwnerId: attempt.owner_id,
@@ -2180,6 +2369,9 @@ export class PaymentService {
       const finalizedAdvance = await prisma.$transaction(async (tx) => {
         // Lock ordering: tenant row first (consistent with adjustAgainstObligation)
         await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${advanceTenantId}::uuid FOR UPDATE`;
+        const initialOutstanding = await this.getTenantOutstandingInTx(tx, advanceTenantId, attempt.hostel_id);
+        const initialLedgerBalance = await this.getTenantLedgerBalanceInTx(tx, advanceTenantId);
+
         await tenantFinancialLedgerService.creditIdempotentInTx(tx, {
           tenantId: advanceTenantId,
           ownerId: attempt.owner_id,
@@ -2190,11 +2382,11 @@ export class PaymentService {
           reason: "TOPUP",
           notes: "Gateway future rent payment credited",
         });
-        return this.updateAttemptStatus(tx, {
+        const finalized = await this.updateAttemptStatus(tx, {
           attemptId,
           fromStatus: "PROCESSING",
           toStatus: "SUCCESS",
-          source: context?.source === "reconcile" ? "RECONCILE" : isManualConfirm ? "MANUAL_CONFIRM" : "VERIFY",
+          source: resolveSource(isManualConfirm),
           reason: "advance ledger credited atomically",
           actorId: context?.actor?.id || null,
           operationalOwnerId: attempt.owner_id,
@@ -2213,6 +2405,16 @@ export class PaymentService {
             } : {}),
           },
         });
+
+        await this.validatePaymentAttemptSettlementInTx(tx, {
+          attemptId,
+          initialOutstanding,
+          initialLedgerBalance,
+          tenantId: advanceTenantId,
+          hostelId: attempt.hostel_id,
+        });
+
+        return finalized;
       });
       logger.info("payments.finalize.advance_credited", {
         ...requestMeta,
@@ -2272,6 +2474,9 @@ export class PaymentService {
       const depositTenantId: string = attempt.tenant_id;
       const finalizedDeposit = await prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${depositTenantId}::uuid FOR UPDATE`;
+        const initialOutstanding = await this.getTenantOutstandingInTx(tx, depositTenantId, attempt.hostel_id);
+        const initialLedgerBalance = await this.getTenantLedgerBalanceInTx(tx, depositTenantId);
+
         await tenantFinancialLedgerService.creditIdempotentInTx(tx, {
           tenantId: depositTenantId,
           ownerId: attempt.owner_id,
@@ -2282,11 +2487,11 @@ export class PaymentService {
           reason: "SECURITY_DEPOSIT_COLLECTED",
           notes: "Gateway security deposit payment credited",
         });
-        return this.updateAttemptStatus(tx, {
+        const finalized = await this.updateAttemptStatus(tx, {
           attemptId,
           fromStatus: "PROCESSING",
           toStatus: "SUCCESS",
-          source: context?.source === "reconcile" ? "RECONCILE" : isManualConfirm ? "MANUAL_CONFIRM" : "VERIFY",
+          source: resolveSource(isManualConfirm),
           reason: "deposit ledger credited atomically",
           actorId: context?.actor?.id || null,
           operationalOwnerId: attempt.owner_id,
@@ -2305,6 +2510,16 @@ export class PaymentService {
             } : {}),
           },
         });
+
+        await this.validatePaymentAttemptSettlementInTx(tx, {
+          attemptId,
+          initialOutstanding,
+          initialLedgerBalance,
+          tenantId: depositTenantId,
+          hostelId: attempt.hostel_id,
+        });
+
+        return finalized;
       });
       logger.info("payments.finalize.deposit_credited", {
         ...requestMeta,
@@ -2348,7 +2563,7 @@ export class PaymentService {
         attemptId,
         fromStatus: "PROCESSING",
         toStatus: "SUCCESS",
-        source: context?.source === "reconcile" ? "RECONCILE" : isManualConfirm ? "MANUAL_CONFIRM" : "VERIFY",
+        source: resolveSource(isManualConfirm),
         reason: "rent attempt already has ledger payments",
         actorId: context?.actor?.id || null,
         operationalOwnerId: attempt.owner_id,
@@ -2364,6 +2579,16 @@ export class PaymentService {
       });
     } else {
     updatedAttempt = await prisma.$transaction(async (tx) => {
+      if (attempt.tenant_id) {
+        await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${attempt.tenant_id}::uuid FOR UPDATE`;
+      }
+      const initialOutstanding = attempt.tenant_id
+        ? await this.getTenantOutstandingInTx(tx, attempt.tenant_id, attempt.hostel_id)
+        : 0;
+      const initialLedgerBalance = attempt.tenant_id
+        ? await this.getTenantLedgerBalanceInTx(tx, attempt.tenant_id)
+        : 0;
+
       if (obligationLinks.length > 0) {
         // Multi-obligation payment: use junction table
         for (const link of obligationLinks) {
@@ -2435,7 +2660,7 @@ export class PaymentService {
         attemptId,
         fromStatus: "PROCESSING",
         toStatus: "SUCCESS",
-        source: context?.source === "reconcile" ? "RECONCILE" : isManualConfirm ? "MANUAL_CONFIRM" : "VERIFY",
+        source: resolveSource(isManualConfirm),
         reason: "rent ledger settled atomically",
         actorId: context?.actor?.id || null,
         operationalOwnerId: attempt.owner_id,
@@ -2454,6 +2679,17 @@ export class PaymentService {
           } : {}),
         },
       });
+
+      if (attempt.tenant_id) {
+        await this.validatePaymentAttemptSettlementInTx(tx, {
+          attemptId,
+          initialOutstanding,
+          initialLedgerBalance,
+          tenantId: attempt.tenant_id,
+          hostelId: attempt.hostel_id,
+        });
+      }
+
       return finalized;
     });
     }
@@ -3707,11 +3943,11 @@ export class PaymentService {
     // engineers can force-reconcile a specific attempt at any time.
     const pendingCutoff = new Date(now.getTime() - 48 * 60 * 60 * 1000);
     const backoffFloor = options?.attemptIds?.length
-      ? new Date(0)                                      // no floor for explicit IDs
+      ? new Date(now.getTime() + 24 * 60 * 60 * 1000)    // no floor for explicit IDs (include future to be safe)
       : new Date(now.getTime() - 15 * 60 * 1000);      // 15-minute floor for sweeps
     const pending = await prisma.paymentAttempt.findMany({
       where: {
-        status: "PENDING",
+        status: { in: ["PENDING", "PENDING_VERIFICATION"] },
         created_at: { gte: pendingCutoff, lt: backoffFloor },
         ...ownerFilter,
         ...hostelFilter,

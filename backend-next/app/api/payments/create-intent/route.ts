@@ -9,6 +9,8 @@ import { prisma } from "@/lib/db";
 import { getLogger } from "@/lib/logger";
 import { assertBodySize, getClientIp, parseObligationIds } from "@/lib/security/api-guard";
 import { rateLimitService } from "@/lib/services/rate-limit-service";
+import { normalizeHostelPolicy } from "@/lib/services/hostel-policy-service";
+import { buildSettlementPlan, toObligationSnapshot } from "@/src/services/payments/settlement-planner";
 
 const logger = getLogger("create-intent");
 
@@ -103,9 +105,30 @@ export async function POST(req: Request) {
       }
       const tenant = await prisma.tenants.findUnique({
         where: { id: tenantId },
-        select: { owner_id: true },
+        select: { owner_id: true, hostel_id: true },
       });
       if (!tenant?.owner_id) return apiError("Tenant has no owner assigned", "NOT_FOUND", 404);
+      if (!tenant.hostel_id) return apiError("Tenant is not assigned to a hostel", "VALIDATION_ERROR", 400);
+
+      // Load obligations and validate amount against policy
+      const obligations = await prisma.rent_obligations.findMany({
+        where: { tenant_id: tenantId, hostel_id: tenant.hostel_id, status: { in: ["OVERDUE", "PENDING", "PARTIAL"] } },
+        include: { payments: { select: { amount_paid: true } } },
+      });
+      const snapshots = obligations.map(ob => toObligationSnapshot(ob as any));
+      const hostel = await prisma.hostels.findUnique({
+        where: { id: tenant.hostel_id },
+        select: { preferences_config: true },
+      });
+      const hostelPolicy = normalizeHostelPolicy(hostel);
+      const plan = buildSettlementPlan(snapshots, amount, {
+        allow_partial: hostelPolicy.billing.partial_payments.enabled,
+        minimum_amount: hostelPolicy.billing.partial_payments.minimum_amount,
+      });
+
+      if (!plan.payment_accepted) {
+        return apiError(plan.rejection_reason || "Payment amount too low", "VALIDATION_ERROR", 400);
+      }
 
       const result = await paymentService.createTenantRentPaymentIntent({
         tenantId,

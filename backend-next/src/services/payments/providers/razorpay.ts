@@ -1,6 +1,5 @@
 import axios from "axios";
 import { PaymentProvider, CreateIntentResult, WebhookVerificationResult, FetchStatusResult } from "../provider-base";
-import * as crypto from "crypto";
 
 export class RazorpayProvider extends PaymentProvider {
   private get auth() {
@@ -56,23 +55,11 @@ export class RazorpayProvider extends PaymentProvider {
 
   async verifyWebhook(headers: any, body: any): Promise<WebhookVerificationResult> {
     const signature = headers["x-razorpay-signature"];
-    const secret = this.config.webhook_secret;
 
-    let rawBody = body;
-    if (typeof body !== "string" && !Buffer.isBuffer(body)) {
-      rawBody = JSON.stringify(body);
-    }
-
-    if (secret && signature) {
-      const shasum = crypto.createHmac("sha256", secret);
-      shasum.update(rawBody);
-      const digest = shasum.digest("hex");
-      if (digest !== signature) {
-        throw new Error("Invalid Razorpay signature");
-      }
-    } else if (secret) {
-      throw new Error("Missing Razorpay signature header");
-    }
+    // NOTE: HMAC signature verification is performed once at the route level
+    // against the original raw bytes. We do NOT re-verify here because
+    // JSON.stringify(JSON.parse(rawBody)) is not byte-equivalent to rawBody,
+    // causing HMAC mismatches. This method only parses and extracts fields.
 
     const data = typeof body === "string" || Buffer.isBuffer(body)
       ? JSON.parse(body.toString())

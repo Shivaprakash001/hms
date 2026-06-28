@@ -61,9 +61,8 @@ const canSelectTimelineItem = (item: any) => item.state === 'upcoming' && timeli
 
 interface FinancialState {
   selectedIds: string[];
-  selectedProjectedIds: string[];
   showPayModal: boolean;
-  showAdvancePayModal: boolean;
+  amountToPay: number;
   selectedPaymentForDetail: any | null;
   requestedFrequency: string;
   requestReason: string;
@@ -73,9 +72,8 @@ interface FinancialState {
 
 const initialFinancialState: FinancialState = {
   selectedIds: [],
-  selectedProjectedIds: [],
   showPayModal: false,
-  showAdvancePayModal: false,
+  amountToPay: 0,
   selectedPaymentForDetail: null,
   requestedFrequency: 'QUARTERLY',
   requestReason: '',
@@ -85,44 +83,33 @@ const initialFinancialState: FinancialState = {
 
 type FinancialAction =
   | { type: 'SET_SELECTED_IDS'; payload: string[] }
-  | { type: 'SET_SELECTED_PROJECTED_IDS'; payload: string[] }
   | { type: 'SYNC_PAYABLE_ITEMS'; payload: any[] }
   | { type: 'SYNC_TIMELINE_ITEMS'; payload: any[] }
   | { type: 'SET_SHOW_PAY_MODAL'; payload: boolean }
-  | { type: 'SET_SHOW_ADVANCE_PAY_MODAL'; payload: boolean }
   | { type: 'SET_SELECTED_PAYMENT_FOR_DETAIL'; payload: any }
   | { type: 'SET_REQUESTED_FREQUENCY'; payload: string }
   | { type: 'SET_REQUEST_REASON'; payload: string }
   | { type: 'SET_HISTORY_EXPANDED'; payload: boolean }
   | { type: 'SET_TIMELINE_EXPANDED'; payload: boolean }
-  | { type: 'PREPAY_INSTALLMENT'; payload: { id: string } }
-  | { type: 'PAY_CURRENT_INSTALLMENT'; payload: { ids: string[] } }
+  | { type: 'PREPAY_INSTALLMENT'; payload: { amount: number } }
+  | { type: 'PAY_CURRENT_INSTALLMENT'; payload: { ids: string[]; amount: number } }
   | { type: 'RECORD_PAYMENT_SUCCESS' }
-  | { type: 'RECORD_ADVANCE_SUCCESS' }
-  | { type: 'TRIGGER_DIRECT_PAYMENT'; payload: string[] };
+  | { type: 'TRIGGER_DIRECT_PAYMENT'; payload: { ids: string[]; amount: number } };
 
 function financialReducer(state: FinancialState, action: FinancialAction): FinancialState {
   switch (action.type) {
     case 'SET_SELECTED_IDS':
       return { ...state, selectedIds: action.payload };
-    case 'SET_SELECTED_PROJECTED_IDS':
-      return { ...state, selectedProjectedIds: action.payload };
     case 'SYNC_PAYABLE_ITEMS': {
       const filtered = state.selectedIds.filter((id) => action.payload.some((p) => p.id === id));
       const hasChanged = filtered.length !== state.selectedIds.length || !filtered.every((val, idx) => val === state.selectedIds[idx]);
       return hasChanged ? { ...state, selectedIds: filtered } : state;
     }
     case 'SYNC_TIMELINE_ITEMS': {
-      const filtered = state.selectedProjectedIds.filter((id) =>
-        action.payload.some((item) => item.timeline_id === id && canSelectTimelineItem(item))
-      );
-      const hasChanged = filtered.length !== state.selectedProjectedIds.length || !filtered.every((val, idx) => val === state.selectedProjectedIds[idx]);
-      return hasChanged ? { ...state, selectedProjectedIds: filtered } : state;
+      return state;
     }
     case 'SET_SHOW_PAY_MODAL':
       return { ...state, showPayModal: action.payload };
-    case 'SET_SHOW_ADVANCE_PAY_MODAL':
-      return { ...state, showAdvancePayModal: action.payload };
     case 'SET_SELECTED_PAYMENT_FOR_DETAIL':
       return { ...state, selectedPaymentForDetail: action.payload };
     case 'SET_REQUESTED_FREQUENCY':
@@ -136,13 +123,14 @@ function financialReducer(state: FinancialState, action: FinancialAction): Finan
     case 'PREPAY_INSTALLMENT':
       return {
         ...state,
-        selectedProjectedIds: [action.payload.id],
-        showAdvancePayModal: true,
+        amountToPay: action.payload.amount,
+        showPayModal: true,
       };
     case 'PAY_CURRENT_INSTALLMENT':
       return {
         ...state,
         selectedIds: action.payload.ids,
+        amountToPay: action.payload.amount,
         showPayModal: true,
       };
     case 'RECORD_PAYMENT_SUCCESS':
@@ -150,17 +138,13 @@ function financialReducer(state: FinancialState, action: FinancialAction): Finan
         ...state,
         showPayModal: false,
         selectedIds: [],
-      };
-    case 'RECORD_ADVANCE_SUCCESS':
-      return {
-        ...state,
-        showAdvancePayModal: false,
-        selectedProjectedIds: [],
+        amountToPay: 0,
       };
     case 'TRIGGER_DIRECT_PAYMENT':
       return {
         ...state,
-        selectedIds: action.payload,
+        selectedIds: action.payload.ids,
+        amountToPay: action.payload.amount,
         showPayModal: true,
       };
     default:
@@ -294,43 +278,15 @@ export function TenantFinancialsPage() {
     dispatch({ type: 'SYNC_TIMELINE_ITEMS', payload: timelineItems });
   }, [timelineItems]);
 
-  const selectedProjectedItems = useMemo(
-    () => timelineItems.filter((item: any) => state.selectedProjectedIds.includes(item.timeline_id) && canSelectTimelineItem(item)),
-    [timelineItems, state.selectedProjectedIds]
-  );
-
-  const selectedProjectedTotal = useMemo(
-    () => selectedProjectedItems.reduce((s: number, item: any) => s + timelineAmount(item), 0),
-    [selectedProjectedItems]
-  );
-
-  const advancePaymentContext = useMemo(() => {
-    return selectedProjectedItems.map((item: any) => ({
-      id: item.timeline_id,
-      amount: timelineAmount(item),
-      label: item.label,
-      due_date: item.due_date,
-      cycle: item.period_start || item.rent_month,
-    }));
-  }, [selectedProjectedItems]);
-
   // Handle direct payment trigger (e.g. from priority strip link / dashboard checkout)
   useEffect(() => {
     if (searchParams.get('pay') === '1' && payableItems.length > 0) {
-      dispatch({ type: 'TRIGGER_DIRECT_PAYMENT', payload: payableItems.map((p) => p.id) });
+      const allPayableIds = payableItems.map((p) => p.id);
+      const totalAmount = payableItems.reduce((s: number, p: any) => s + Number(p.amount ?? p.remaining ?? 0), 0);
+      dispatch({ type: 'TRIGGER_DIRECT_PAYMENT', payload: { ids: allPayableIds, amount: totalAmount } });
       setSearchParams({}, { replace: true });
     }
   }, [searchParams, payableItems, setSearchParams]);
-
-  const selectedItems = useMemo(
-    () => payableItems.filter((p) => state.selectedIds.includes(p.id)),
-    [payableItems, state.selectedIds]
-  );
-  
-  const selectedTotal = useMemo(
-    () => selectedItems.reduce((s, p) => s + p.amount, 0),
-    [selectedItems]
-  );
 
   // Group obligations underneath installments (Installment ViewModel)
   const installments = useMemo(() => {
@@ -682,7 +638,7 @@ export function TenantFinancialsPage() {
 
   // Interactive prepayment handler
   const handlePrepay = (inst: any) => {
-    dispatch({ type: 'PREPAY_INSTALLMENT', payload: { id: inst.timeline_id } });
+    dispatch({ type: 'PREPAY_INSTALLMENT', payload: { amount: Number(inst.remaining) || 0 } });
   };
 
   const handlePayCurrentInstallment = () => {
@@ -693,12 +649,14 @@ export function TenantFinancialsPage() {
     if (unpaidObs.length === 0) return;
 
     const ids = unpaidObs.map((o: any) => o.obligation_id);
-    dispatch({ type: 'PAY_CURRENT_INSTALLMENT', payload: { ids } });
+    const amount = unpaidObs.reduce((s: number, o: any) => s + Number(o.remaining_amount ?? o.remaining ?? 0), 0);
+    dispatch({ type: 'PAY_CURRENT_INSTALLMENT', payload: { ids, amount } });
   };
 
   const handleOpenPaymentModal = () => {
     const allPayableIds = payableItems.map((p) => p.id);
-    dispatch({ type: 'TRIGGER_DIRECT_PAYMENT', payload: allPayableIds });
+    const totalAmount = payableItems.reduce((s: number, p: any) => s + Number(p.amount ?? p.remaining ?? 0), 0);
+    dispatch({ type: 'TRIGGER_DIRECT_PAYMENT', payload: { ids: allPayableIds, amount: totalAmount } });
   };
 
   const handlePaymentSuccess = () => {
@@ -1372,28 +1330,8 @@ export function TenantFinancialsPage() {
       <TenantPaymentModal
         open={state.showPayModal}
         onClose={() => dispatch({ type: 'SET_SHOW_PAY_MODAL', payload: false })}
-        amount={selectedTotal}
-        obligationIds={state.selectedIds}
-        paymentContext={selectedItems}
+        amount={state.amountToPay}
         onSuccess={handlePaymentSuccess}
-        allInstallments={installments}
-        tenantId={profile?.tenant?.id}
-        hostelId={profile?.hostel?.id}
-      />
-
-      <TenantPaymentModal
-        open={state.showAdvancePayModal}
-        onClose={() => dispatch({ type: 'SET_SHOW_ADVANCE_PAY_MODAL', payload: false })}
-        amount={selectedProjectedTotal}
-        obligationIds={[]}
-        paymentType="ADVANCE"
-        paymentContext={advancePaymentContext}
-        onSuccess={() => {
-          dispatch({ type: 'RECORD_ADVANCE_SUCCESS' });
-          queryClient.invalidateQueries({ queryKey: ['tenant'] });
-          toast.success('Prepayment recorded successfully!');
-        }}
-        allInstallments={installments}
         tenantId={profile?.tenant?.id}
         hostelId={profile?.hostel?.id}
       />
