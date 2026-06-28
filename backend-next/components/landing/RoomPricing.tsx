@@ -58,7 +58,7 @@ export function RoomPricing({
             const cmsImage = hostel?.roomTypesImages?.find(
               (item: any) => item.roomType === room.roomType
             )?.image;
-            let roomImage = '/hostel_room.png';
+            let roomImage = '/SAH_Room.webp';
             if (cmsImage) {
               roomImage = urlFor(cmsImage).url();
             } else if (hostel?.roomImage) {

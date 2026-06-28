@@ -1,3 +1,5 @@
+'use client';
+
 import { useState, useEffect, useRef } from 'react';
 import { Play, Pause, Volume2, VolumeX, Maximize, Bed, Building2, UtensilsCrossed, Tv, Wifi, Shield } from 'lucide-react';
 import type { TourVideoContent } from '@lib/sanity/landingContent';
@@ -6,6 +8,8 @@ interface TourVideo {
   id: string;
   label: string;
   url: string;
+  mobileUrl?: string;
+  poster?: string;
   icon: React.ComponentType<{ className?: string }>;
 }
 
@@ -22,19 +26,25 @@ const FALLBACK_VIDEOS: TourVideo[] = [
   {
     id: 'common',
     label: 'Hostel Tour',
-    url: '/SAH_Common.mp4',
+    url: '/SAH_Common_desktop.mp4',
+    mobileUrl: '/SAH_Common_mobile.mp4',
+    poster: '/SAH_Common_poster.webp',
     icon: Building2,
   },
   {
     id: 'room',
     label: 'Room Interior',
-    url: '/SAH_Room.mp4',
+    url: '/SAH_Room_desktop.mp4',
+    mobileUrl: '/SAH_Room_mobile.mp4',
+    poster: '/SAH_Room_poster.webp',
     icon: Bed,
   },
   {
     id: 'dining',
     label: 'Dining Hall',
-    url: '/SAH_Dining.mp4',
+    url: '/SAH_Dining_desktop.mp4',
+    mobileUrl: '/SAH_Dining_mobile.mp4',
+    poster: '/SAH_Dining_poster.webp',
     icon: UtensilsCrossed,
   },
 ];
@@ -44,14 +54,18 @@ interface VideoPlayerProps {
 }
 
 export function VideoPlayer({ videos }: VideoPlayerProps) {
-  // Map input videos from Sanity to resolved TourVideo items using the icon map
   const tourVideos: TourVideo[] = Array.isArray(videos) && videos.length > 0
-    ? videos.map((v) => ({
-        id: v.id,
-        label: v.label,
-        url: v.url,
-        icon: ICON_MAP[v.icon] || Bed,
-      }))
+    ? videos.map((v) => {
+        const fallback = FALLBACK_VIDEOS.find((f) => f.id === v.id);
+        return {
+          id: v.id,
+          label: v.label,
+          url: v.url || fallback?.url || '',
+          mobileUrl: v.mobileUrl || fallback?.mobileUrl,
+          poster: v.poster || fallback?.poster,
+          icon: ICON_MAP[v.icon] || Bed,
+        };
+      })
     : FALLBACK_VIDEOS;
 
   const [activeTab, setActiveTab] = useState<string>('');
@@ -70,21 +84,71 @@ export function VideoPlayer({ videos }: VideoPlayerProps) {
   const [currentTime, setCurrentTime] = useState<string>('0:00');
   const [duration, setDuration] = useState<string>('0:00');
   const [showControls, setShowControls] = useState<boolean>(false);
+  
+  // Mobile / responsive source detection
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+  
+  // Intersection Observer / lazy loading state
+  const [hasEnteredViewport, setHasEnteredViewport] = useState<boolean>(false);
+  const [isVisible, setIsVisible] = useState<boolean>(false);
+  const [userPaused, setUserPaused] = useState<boolean>(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const activeVideo = tourVideos.find((v) => v.id === activeTab) || tourVideos[0] || FALLBACK_VIDEOS[0];
+  const activeSrc = (isMobile && activeVideo.mobileUrl) ? activeVideo.mobileUrl : activeVideo.url;
+  const activePoster = activeVideo.poster || '';
 
-  // AutoPlay / Reset state on tab change
+  // Listen to mobile size changes
   useEffect(() => {
-    if (videoRef.current && activeVideo?.url) {
-      setIsLoading(true);
-      // Explicitly set muted property on DOM node to prevent autoplay failure
-      videoRef.current.muted = isMuted;
-      videoRef.current.load();
-      videoRef.current.play()
+    if (typeof window === 'undefined') return;
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Intersection Observer to detect when the player is near viewport
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsVisible(entry.isIntersecting);
+        if (entry.isIntersecting) {
+          setHasEnteredViewport(true);
+        }
+      },
+      {
+        rootMargin: '200px 0px 200px 0px',
+        threshold: 0.01,
+      }
+    );
+
+    observer.observe(container);
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
+  // AutoPlay / Reset source & state when activeSrc or hasEnteredViewport changes
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !activeSrc || !hasEnteredViewport) return;
+
+    setIsLoading(true);
+    video.muted = isMuted;
+    video.src = activeSrc;
+    video.load();
+
+    // If the element is currently visible, play it
+    if (isVisible && !userPaused) {
+      video.play()
         .then(() => {
           setIsPlaying(true);
           setIsLoading(false);
@@ -94,9 +158,80 @@ export function VideoPlayer({ videos }: VideoPlayerProps) {
           setIsPlaying(false);
           setIsLoading(false);
         });
+    } else {
+      setIsPlaying(false);
+      setIsLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, activeVideo?.url]);
+  }, [activeSrc, hasEnteredViewport]);
+
+  // Handle visibility changes (scrolling in/out of viewport)
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !hasEnteredViewport) return;
+
+    if (isVisible && !userPaused) {
+      video.play()
+        .then(() => setIsPlaying(true))
+        .catch((err) => {
+          console.warn("Auto-play on visibility change failed:", err);
+          setIsPlaying(false);
+        });
+    } else if (!isVisible && isPlaying) {
+      video.pause();
+      setIsPlaying(false);
+    }
+  }, [isVisible, userPaused, hasEnteredViewport]);
+
+  // Handle page visibility change (minimizing page, switching browser tabs)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden && isPlaying && videoRef.current) {
+        videoRef.current.pause();
+        setIsPlaying(false);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isPlaying]);
+
+  // Browser Idle Prefetching of non-active videos
+  useEffect(() => {
+    if (!activeSrc) return;
+
+    const prefetchNextVideos = () => {
+      const otherVideos = tourVideos.filter((v) => v.id !== activeTab);
+      otherVideos.forEach((v) => {
+        const urlToPrefetch = (isMobile && v.mobileUrl) ? v.mobileUrl : v.url;
+        if (!urlToPrefetch) return;
+
+        if (document.querySelector(`link[href="${urlToPrefetch}"]`)) return;
+
+        const link = document.createElement('link');
+        link.rel = 'prefetch';
+        link.as = 'video';
+        link.href = urlToPrefetch;
+        document.head.appendChild(link);
+      });
+    };
+
+    if (typeof window !== 'undefined') {
+      if ('requestIdleCallback' in window) {
+        const idleId = window.requestIdleCallback(() => {
+          prefetchNextVideos();
+        }, { timeout: 3000 });
+        return () => {
+          if ('cancelIdleCallback' in window) {
+            window.cancelIdleCallback(idleId);
+          }
+        };
+      } else {
+        const timerId = setTimeout(prefetchNextVideos, 2000);
+        return () => clearTimeout(timerId);
+      }
+    }
+  }, [activeTab, activeSrc, isMobile, tourVideos]);
 
   // Handle pointer/mouse movement to show/hide controls
   const handleMouseMove = () => {
@@ -121,14 +256,23 @@ export function VideoPlayer({ videos }: VideoPlayerProps) {
 
   const togglePlay = (e?: React.MouseEvent) => {
     e?.stopPropagation();
+    if (!hasEnteredViewport) {
+      setHasEnteredViewport(true);
+      setUserPaused(false);
+      return;
+    }
     if (!videoRef.current) return;
     if (isPlaying) {
       videoRef.current.pause();
       setIsPlaying(false);
+      setUserPaused(true);
       setShowControls(true);
     } else {
       videoRef.current.play()
-        .then(() => setIsPlaying(true))
+        .then(() => {
+          setIsPlaying(true);
+          setUserPaused(false);
+        })
         .catch(console.error);
     }
   };
@@ -194,7 +338,11 @@ export function VideoPlayer({ videos }: VideoPlayerProps) {
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                setActiveTab(tab.id);
+                // When explicitly changing tab, reset pause state to allow auto-playing the next tour video scene
+                setUserPaused(false);
+              }}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-1 rounded-lg text-[10px] sm:text-xs font-semibold transition-all duration-300 ${
                 isActive
                   ? 'bg-white text-[#1B2D5B] shadow-md scale-[1.02]'
@@ -211,31 +359,37 @@ export function VideoPlayer({ videos }: VideoPlayerProps) {
       {/* Main Video Container */}
       <div
         ref={containerRef}
-        className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden shadow-2xl bg-black border border-[#1B2D5B]/10 group"
+        className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden shadow-2xl bg-black border border-[#1B2D5B]/10 group cursor-pointer"
         onMouseMove={handleMouseMove}
         onMouseLeave={() => isPlaying && setShowControls(false)}
         onClick={togglePlay}
       >
-        <video
-          key={activeVideo.url}
-          ref={videoRef}
-          src={activeVideo.url}
-          className="w-full h-full object-cover"
-          autoPlay
-          muted={isMuted}
-          loop
-          playsInline
-          preload="auto"
-          onTimeUpdate={handleTimeUpdate}
-          onLoadedMetadata={handleLoadedMetadata}
-          onWaiting={() => setIsLoading(true)}
-          onPlaying={() => setIsLoading(false)}
-          onCanPlay={() => setIsLoading(false)}
-          onError={() => setIsLoading(false)}
-        />
+        {hasEnteredViewport ? (
+          <video
+            ref={videoRef}
+            className="w-full h-full object-cover"
+            muted={isMuted}
+            loop
+            playsInline
+            poster={activePoster}
+            onTimeUpdate={handleTimeUpdate}
+            onLoadedMetadata={handleLoadedMetadata}
+            onWaiting={() => setIsLoading(true)}
+            onPlaying={() => setIsLoading(false)}
+            onCanPlay={() => setIsLoading(false)}
+            onError={() => setIsLoading(false)}
+          />
+        ) : (
+          <img
+            src={activePoster}
+            alt={activeVideo.label}
+            className="w-full h-full object-cover"
+            loading="eager"
+          />
+        )}
 
         {/* Glassmorphic Loading Spinner */}
-        {isLoading && (
+        {isLoading && hasEnteredViewport && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 backdrop-blur-sm z-10 pointer-events-none transition-all duration-300">
             <div className="w-12 h-12 border-4 border-white/20 border-t-[#F07B1D] rounded-full animate-spin mb-3" />
             <span className="text-white text-xs font-semibold tracking-wider uppercase bg-black/40 px-3.5 py-1.5 rounded-full border border-white/10 backdrop-blur-md">
@@ -270,7 +424,7 @@ export function VideoPlayer({ videos }: VideoPlayerProps) {
         {/* Custom Controller Bar */}
         <div
           className={`absolute bottom-0 left-0 right-0 p-4 space-y-3 transition-all duration-300 flex flex-col justify-end ${
-            showControls ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0 pointer-events-none'
+            showControls && hasEnteredViewport ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0 pointer-events-none'
           }`}
           onClick={(e) => e.stopPropagation()}
         >

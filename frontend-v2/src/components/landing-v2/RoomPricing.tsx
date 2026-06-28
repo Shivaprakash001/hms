@@ -29,7 +29,7 @@ export function RoomPricing({
     .replace('{{price}}', formattedPrice)
     .replace('8200', Number(cleanPrice).toLocaleString('en-IN'));
 
-  const imageSrc = roomImage?.url || "/SAH_Room.jpg";
+  const imageSrc = roomImage?.url || "/SAH_Room.webp";
   const imageAlt = roomImage?.alt || "Modern boys student hostel room";
 
   return (

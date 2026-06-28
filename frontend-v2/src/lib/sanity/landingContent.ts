@@ -40,6 +40,8 @@ export type TourVideoContent = {
   id: string;
   label: string;
   url: string;
+  mobileUrl?: string;
+  poster?: string;
   icon: 'bed' | 'building' | 'utensils' | 'tv' | 'wifi' | 'security';
 };
 
@@ -144,9 +146,9 @@ export type LandingMarketingContent = {
 };
 
 const fallbackImages = {
-  room: '/SAH_Room.jpg',
-  food: '/Hostel_Galary_Food_chicken_birany.png',
-  building: '/SAH_Hostel_Galary_Building.png',
+  room: '/SAH_Room.webp',
+  food: '/Hostel_Galary_Food_chicken_birany.webp',
+  building: '/SAH_Hostel_Galary_Building.webp',
 };
 
 export const fallbackLandingContent: LandingMarketingContent = {
@@ -184,29 +186,35 @@ export const fallbackLandingContent: LandingMarketingContent = {
     secondaryCta: { label: 'Check Availability on WhatsApp', href: 'https://api.whatsapp.com/send?phone=919392433422' },
     ownerImage: { url: '/hostel_icon.png', alt: 'Sri Adithya Boys Hostel Logo' },
     carouselImages: [
-      { url: '/SAH_Hostel_Galary_Building.png', alt: 'Hostel Building', caption: 'Hostel Building' },
-      { url: '/SAH_Room.jpg', alt: 'Room', caption: '4-Sharing Room' },
-      { url: '/SAH_Hostel_Galary_Common_area.png', alt: 'Common Area', caption: 'Common Area' },
-      { url: '/Hostel_Galary_Room_interior.png', alt: 'Room Interior', caption: 'Room Interior' },
-      { url: '/Hostel_Galary_Food_chicken_birany.png', alt: 'Chicken Biryani', caption: 'Chicken Biryani' },
+      { url: '/SAH_Hostel_Galary_Building.webp', alt: 'Hostel Building', caption: 'Hostel Building' },
+      { url: '/SAH_Room.webp', alt: 'Room', caption: '4-Sharing Room' },
+      { url: '/SAH_Hostel_Galary_Common_area.webp', alt: 'Common Area', caption: 'Common Area' },
+      { url: '/Hostel_Galary_Room_interior.webp', alt: 'Room Interior', caption: 'Room Interior' },
+      { url: '/Hostel_Galary_Food_chicken_birany.webp', alt: 'Chicken Biryani', caption: 'Chicken Biryani' },
     ],
     tourVideos: [
       {
         id: 'common',
         label: 'Hostel Tour',
-        url: '/SAH_Common.mp4',
+        url: '/SAH_Common_desktop.mp4',
+        mobileUrl: '/SAH_Common_mobile.mp4',
+        poster: '/SAH_Common_poster.webp',
         icon: 'building',
       },
       {
         id: 'room',
         label: 'Room Interior',
-        url: '/SAH_Room.mp4',
+        url: '/SAH_Room_desktop.mp4',
+        mobileUrl: '/SAH_Room_mobile.mp4',
+        poster: '/SAH_Room_poster.webp',
         icon: 'bed',
       },
       {
         id: 'dining',
         label: 'Dining Hall',
-        url: '/SAH_Dining.mp4',
+        url: '/SAH_Dining_desktop.mp4',
+        mobileUrl: '/SAH_Dining_mobile.mp4',
+        poster: '/SAH_Dining_poster.webp',
         icon: 'utensils',
       },
     ],
@@ -328,11 +336,11 @@ export const fallbackLandingContent: LandingMarketingContent = {
     },
   ],
   gallery: [
-    { url: '/SAH_Hostel_Galary_Building.png', alt: 'Hostel Building', caption: 'Hostel Building' },
-    { url: '/SAH_Room.jpg', alt: 'Room', caption: '4-Sharing Room' },
-    { url: '/SAH_Hostel_Galary_Common_area.png', alt: 'Common Area', caption: 'Common Area' },
-    { url: '/Hostel_Galary_Room_interior.png', alt: 'Room Interior', caption: 'Room Interior' },
-    { url: '/Hostel_Galary_Food_chicken_birany.png', alt: 'Chicken Biryani', caption: 'Chicken Biryani' },
+    { url: '/SAH_Hostel_Galary_Building.webp', alt: 'Hostel Building', caption: 'Hostel Building' },
+    { url: '/SAH_Room.webp', alt: 'Room', caption: '4-Sharing Room' },
+    { url: '/SAH_Hostel_Galary_Common_area.webp', alt: 'Common Area', caption: 'Common Area' },
+    { url: '/Hostel_Galary_Room_interior.webp', alt: 'Room Interior', caption: 'Room Interior' },
+    { url: '/Hostel_Galary_Food_chicken_birany.webp', alt: 'Chicken Biryani', caption: 'Chicken Biryani' },
   ],
   admissionSteps: [
     { stepNumber: 1, title: 'Reach Out', description: 'Call or WhatsApp Srinivasa Rao — get answers in minutes.' },
