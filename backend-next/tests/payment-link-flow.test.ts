@@ -354,7 +354,7 @@ describe("PaymentLinkService", () => {
     expect(mocks.prisma.rent_obligations.findFirst).toHaveBeenCalledWith({
       where: {
         tenant_id: "tenant-1",
-        status: { in: ["PENDING", "PARTIALLY_PAID"] },
+        status: { in: ["PENDING", "PARTIAL"] },
         is_superseded: false,
       },
       orderBy: { billing_period_start: "asc" },

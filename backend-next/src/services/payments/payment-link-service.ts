@@ -24,7 +24,7 @@ export class PaymentLinkService {
       const obligation = await prisma.rent_obligations.findFirst({
         where: {
           tenant_id: tenantId,
-          status: { in: ["PENDING", "PARTIALLY_PAID"] },
+          status: { in: ["PENDING", "PARTIAL"] },
           is_superseded: false,
         },
         orderBy: { billing_period_start: "asc" },
