@@ -210,7 +210,7 @@ describe("Middleware PUBLIC_ROUTES audit", () => {
     const requiredRoutes = [
       "/api/webhooks/payments/razorpay",
       "/api/webhooks/notifications/whatsapp",
-      "/api/payments/pay",
+      "/api/payments/pay/",
     ];
 
     for (const route of requiredRoutes) {
