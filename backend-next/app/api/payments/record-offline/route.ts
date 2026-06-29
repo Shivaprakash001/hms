@@ -55,10 +55,7 @@ export async function POST(req: Request) {
     
     console.log(`[payments.record-offline] Recording payment for owner ${user.id}, hostel ${hostelId}`, body);
 
-    if (!hostelId) {
-      console.warn("[payments.record-offline] Missing hostelId context");
-      return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
-    }
+    let effectiveHostelId = hostelId;
 
     // ── 2 + 3. Identity token verification ────────────────────────────────────
     if (!identity_token || typeof identity_token !== "string") {
@@ -118,40 +115,49 @@ export async function POST(req: Request) {
     }
 
     // ── 5. Ownership check ─────────────────────────────────────────────────────
-    if (tenant_id && !obligation_id) {
-      const tenant = await prisma.tenants.findUnique({
+    let tenantObj = null;
+    if (tenant_id) {
+      tenantObj = await prisma.tenants.findUnique({
         where: { id: tenant_id },
         select: { owner_id: true, hostel_id: true },
       });
-      if (!tenant) return apiError("Tenant not found", "NOT_FOUND", 404);
-      if (tenant.owner_id !== user.owner_id && tenant.owner_id !== user.id) {
+      if (!tenantObj) return apiError("Tenant not found", "NOT_FOUND", 404);
+      if (tenantObj.owner_id !== user.owner_id && tenantObj.owner_id !== user.id) {
         return apiError("You can only record payments for your own tenants", "FORBIDDEN", 403);
       }
-      if (tenant.hostel_id !== hostelId) {
+      if (hostelId && tenantObj.hostel_id !== hostelId) {
         return apiError("Tenant does not belong to requested hostel", "HOSTEL_ACCESS_DENIED", 403);
       }
+      effectiveHostelId = tenantObj.hostel_id;
     }
 
-    const obligation = await prisma.rent_obligations.findUnique({
-      where: { id: obligation_id || "00000000-0000-0000-0000-000000000000" },
-      select: { owner_id: true, hostel_id: true, status: true },
-    });
-    
-    if (obligation_id && !obligation) return apiError("Obligation not found", "NOT_FOUND", 404);
-    if (obligation_id && obligation?.owner_id !== user.owner_id && obligation?.owner_id !== user.id) {
-      logger.warn("payments.record_offline.cross_owner", {
-        session_owner: user.owner_id ?? user.id,
-        obligation_owner: obligation?.owner_id,
-        obligation_id,
+    let obligationObj = null;
+    if (obligation_id) {
+      obligationObj = await prisma.rent_obligations.findUnique({
+        where: { id: obligation_id },
+        select: { owner_id: true, hostel_id: true, status: true },
       });
-      return apiError("You can only record payments for your own tenants", "FORBIDDEN", 403);
+      if (!obligationObj) return apiError("Obligation not found", "NOT_FOUND", 404);
+      if (obligationObj.owner_id !== user.owner_id && obligationObj.owner_id !== user.id) {
+        logger.warn("payments.record_offline.cross_owner", {
+          session_owner: user.owner_id ?? user.id,
+          obligation_owner: obligationObj.owner_id,
+          obligation_id,
+        });
+        return apiError("You can only record payments for your own tenants", "FORBIDDEN", 403);
+      }
+      if (hostelId && obligationObj.hostel_id !== hostelId) {
+        return apiError("Obligation does not belong to requested hostel", "HOSTEL_ACCESS_DENIED", 403);
+      }
+      effectiveHostelId = obligationObj.hostel_id;
     }
-    if (obligation_id && obligation?.hostel_id !== hostelId) {
-      return apiError("Obligation does not belong to requested hostel", "HOSTEL_ACCESS_DENIED", 403);
+
+    if (!effectiveHostelId) {
+      return apiError("Cannot determine hostel context", "HOSTEL_CONTEXT_REQUIRED", 400);
     }
 
     // ── 6. Idempotency — already fully paid ───────────────────────────────────
-    if (obligation_id && obligation?.status === "PAID") {
+    if (obligation_id && obligationObj?.status === "PAID") {
       return apiResponse({
         success: true,
         message: "Obligation is already fully paid.",
@@ -195,7 +201,7 @@ export async function POST(req: Request) {
 
     const result = tenant_id && !obligation_id
       ? await paymentService.recordTenantRentPaymentWithToken(identity.jti, {
-          hostelId,
+          hostelId: effectiveHostelId,
           tenantId: tenant_id,
           amountPaid: parsedAmount,
           paymentMethod: method,
@@ -210,7 +216,7 @@ export async function POST(req: Request) {
           idempotencyKey: body.idempotency_key || undefined,
         })
       : await paymentService.recordOfflinePaymentWithToken(identity.jti, {
-          hostelId,
+          hostelId: effectiveHostelId,
           obligationId: obligation_id,
           amountPaid: parsedAmount,
           paymentMethod: method,

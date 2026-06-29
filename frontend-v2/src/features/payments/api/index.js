@@ -253,6 +253,12 @@ export const paymentService = {
             idempotency_key: idempotencyKey,
         });
         return unwrap(response);
+    },
+    quickCollectSearch: async (search) => {
+        const response = await api.get('/payments/quick-collect/search', {
+            params: { search }
+        });
+        return unwrap(response);
     }
 };
 
