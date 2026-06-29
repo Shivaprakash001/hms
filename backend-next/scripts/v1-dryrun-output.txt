@@ -1,0 +1,89 @@
+◇ injected env (0) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+╔══════════════════════════════════════════════════════════════╗
+║     V1 PRODUCTION DATA CORRECTION (DRY RUN)              ║
+╚══════════════════════════════════════════════════════════════╝
+Timestamp: 2026-06-25T16:44:29.916Z
+
+═══ PHASE 0: BACKUP ═══
+  Backup saved: /home/sp/Desktop/hms/backend-next/scripts/v1-backup-1782405875365.json
+
+  Loaded 27 rooms
+
+═══ PHASE 2: CORRECTIONS ═══
+
+  ⚠ DRY RUN — showing planned changes only
+
+  📋 1. M. Sreekar — M.Sreekar (3f929422-878c-49f1-aa2a-c678b59ee8e1)
+     Tenant: rent ₹8100→₹8100 | deposit ₹0→₹16200 | joined 2026-07-01→2026-06-01
+     Agreement: 2026-07-01→2026-06-01 | 2026-08-01→2026-08-01 | dur 1→2 | rent ₹8100→₹8100 | deposit ₹0→₹16200
+     Obligations: 1 current | 0 to supersede | 2 target
+
+  📋 2. Deepak — Deepak (654ab380-833c-4ac4-a2b8-24943b09036c)
+     Tenant: rent ₹8000→₹8000 | deposit ₹0→₹16000 | joined 2026-07-01→2026-05-01
+     Agreement: 2026-07-01→2026-05-01 | 2026-09-01→2026-09-01 | dur 2→4 | rent ₹8000→₹8000 | deposit ₹0→₹16000
+     Obligations: 2 current | 0 to supersede | 4 target
+
+  📋 3. MD Abdul Rehman — MD. Abdul Rehman (62843eb1-2ba9-45db-a47e-21e930cd35d4)
+     Tenant: rent ₹8500→₹8500 | deposit ₹0→₹17000 | joined 2026-07-01→2026-06-01
+     Agreement: 2026-07-01→2026-06-01 | 2026-08-01→2026-08-01 | dur 1→2 | rent ₹8500→₹8500 | deposit ₹0→₹17000
+     Obligations: 1 current | 0 to supersede | 2 target
+
+  📋 4. Mohammed Shoeb — Mohammed Shoeb (0596578e-492c-49bd-89b3-159681f765eb)
+     Tenant: rent ₹6500→₹6500 | deposit ₹0→₹13000 | joined 2026-07-01→2026-06-01
+     Agreement: 2026-07-01→2026-06-01 | 2026-08-01→2026-08-01 | dur 1→2 | rent ₹6500→₹6500 | deposit ₹0→₹13000
+     Obligations: 1 current | 0 to supersede | 2 target
+
+  📋 5. Charan Sai — Charan Sai Panuganti (41919125-b18c-42a0-98e4-e6c690445841)
+     Tenant: rent ₹8100→₹8000 | deposit ₹0→₹17000 | joined 2026-07-01→2026-04-01
+     Agreement: 2026-07-01→2026-04-01 | 2026-08-01→2026-08-01 | dur 1→4 | rent ₹8100→₹8000 | deposit ₹0→₹17000
+     Obligations: 1 current | 0 to supersede | 4 target
+
+  📋 6. CH Hemanth — CH HEMANTH (ab46313e-04d3-4a53-9058-709f907e944f)
+     Tenant: rent ₹8500→₹8500 | deposit ₹0→₹17500 | joined 2026-06-22→2026-05-01
+     Agreement: 2026-06-01→2026-05-01 | 2026-08-01→2026-08-01 | dur 2→3 | rent ₹8500→₹8500 | deposit ₹0→₹17500
+     Obligations: 2 current | 0 to supersede | 3 target
+
+  📋 7. Ch. Yashwant — Ch. Yashwant (541901dd-332f-4e41-927d-3ae00a562d31)
+     Tenant: rent ₹8500→₹8500 | deposit ₹0→₹17000 | joined 2026-06-22→2026-06-01
+     Agreement: 2026-06-01→2026-06-01 | 2026-08-01→2026-08-01 | dur 2→2 | rent ₹8500→₹8500 | deposit ₹0→₹17000
+     Obligations: 2 current | 0 to supersede | 2 target
+
+  📋 8. G. Bhargav — NO PROFILE (9122ab3c-2ba0-4adf-b0ee-f0a8799793d4)
+     Tenant: rent ₹8400→₹8400 | deposit ₹16799→₹16800 | joined 2026-03-01→2026-03-01
+     Agreement: NONE → will CREATE
+     Obligations: 1 current | 0 to supersede | 5 target
+     Room: NEEDS allocation → G1 (63184ffe-99a5-4dcf-828a-a5a24ec80959)
+     Payment: ₹7200 to record
+
+  📋 9. Dongari Vamshi Nadh — Dongari Vamshi Nadh (66552722-844d-4007-9cc7-7be54099bd12)
+     Tenant: rent ₹8250→₹8250 | deposit ₹0→₹0 | joined 2025-08-01→2026-04-01
+     Agreement: 2025-04-01→2026-04-01 | 2025-08-01→2026-08-01 | dur 4→4 | rent ₹8250→₹8250 | deposit ₹0→₹0
+     Obligations: 5 current | 5 to supersede | 4 target
+
+  📋 10. K. Ashish — K.Ashish (bdbccc3a-260f-47e5-accc-5b042ffa1fab)
+     Tenant: rent ₹8000→₹8000 | deposit ₹16000→₹16000 | joined 2025-09-01→2026-06-01
+     Agreement: 2025-06-01→2026-06-01 | 2025-09-01→2026-09-01 | dur 3→3 | rent ₹8000→₹8000 | deposit ₹16000→₹16000
+     Obligations: 5 current | 5 to supersede | 3 target
+
+  📋 11. Md. Faizaan — Md.Faizaan (a21506a0-62d3-4194-9403-2070a07958b0)
+     Tenant: rent ₹8000→₹8000 | deposit ₹16000→₹16000 | joined 2025-09-01→2026-05-01
+     Agreement: 2026-06-01→2026-05-01 | 2026-09-01→2026-09-01 | dur 3→4 | rent ₹8000→₹8000 | deposit ₹16000→₹16000
+     Obligations: 5 current | 2 to supersede | 4 target
+     Payment: ₹7000 to record
+
+  📋 12. Akshay Kolipaka — Akshay kolipaka (d8f1f0f3-801f-425b-98a3-b706c0bf896c)
+     Tenant: rent ₹8000→₹8000 | deposit ₹16000→₹16000 | joined 2025-09-01→2026-05-01
+     Agreement: 2026-07-01→2026-05-01 | 2026-09-01→2026-09-01 | dur 2→4 | rent ₹8000→₹8000 | deposit ₹16000→₹16000
+     Obligations: 4 current | 2 to supersede | 4 target
+     Room: NEEDS allocation → 203 (283fe6a8-af34-417d-b6a4-705168b32090)
+
+  📋 13. Mohammed Afreed — Mohammed Afreed (270f118a-db23-4258-8639-697ca98269dc)
+     Tenant: rent ₹8500→₹8500 | deposit ₹5000→₹0 | joined 2026-06-22→2026-05-01
+     Agreement: 2026-04-01→2026-05-01 | 2026-09-01→2026-09-01 | dur 5→4 | rent ₹8500→₹8500 | deposit ₹5000→₹0
+     Obligations: 6 current | 1 to supersede | 4 target
+
+  📋 Global Joining Date Fix:
+     Unknown (3900e0bd-8a08-4c43-b975-2f4f9f51cd86): 2025-06-01 → 2026-06-01
+
+
+Log saved: /home/sp/Desktop/hms/backend-next/scripts/v1-correction-log-1782405880043.txt

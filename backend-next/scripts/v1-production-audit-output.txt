@@ -1,0 +1,323 @@
+◇ injected env (0) from .env // tip: ⌘ suppress logs { quiet: true }
+╔══════════════════════════════════════════════════════════════╗
+║          V1 PRODUCTION DATA AUDIT — FULL REPORT            ║
+╚══════════════════════════════════════════════════════════════╝
+Timestamp : 2026-06-25T16:19:20.173Z
+Owner ID  : c39676a0-c867-4435-9660-a060b8bceab6
+
+─── CHECK 1: Joining date before 2026 ───────────────────────
+  ⚠ Unknown (Room —) — joined_on=2025-06-01, status=INVITED
+  ⚠ Akshay kolipaka (Room —) — joined_on=2025-09-01, status=ACTIVE
+  ⚠ Dongari Vamshi Nadh (Room 301) — joined_on=2025-08-01, status=ACTIVE
+  ⚠ K.Ashish (Room —) — joined_on=2025-09-01, status=ACTIVE
+  ⚠ Md.Faizaan (Room —) — joined_on=2025-09-01, status=ACTIVE
+  Total: 5
+
+─── CHECK 2: Agreement date/duration mismatch ───────────────
+  ✅ No issues
+  Total: 0
+
+─── CHECK 3: Active tenant without active agreement ─────────
+  ⚠ Dongari Vamshi Nadh (Room 301) — best agr status: AGREEMENT_EXPIRED
+  ⚠ K.Ashish (Room —) — best agr status: AGREEMENT_EXPIRED
+  Total: 2
+
+─── CHECK 4: Active tenant without room allocation ──────────
+  ⚠ Mohammed Zaraar Javed — no active room allocation, joined=2026-06-01
+  ⚠ Akshay kolipaka — no active room allocation, joined=2025-09-01
+  ⚠ K.Ashish — no active room allocation, joined=2025-09-01
+  ⚠ Md.Faizaan — no active room allocation, joined=2025-09-01
+  ⚠ Jashwanth rao — no active room allocation, joined=2026-06-23
+  Total: 5
+
+─── CHECK 5: Deposit config mismatch (agreement vs tenant) ──
+  ✅ No issues
+  Total: 0
+
+─── CHECK 6: Duplicate active obligations ───────────────────
+  ✅ No issues
+  Total: 0
+
+─── CHECK 7: Orphan obligations on dead agreements ──────────
+  ✅ No issues
+  Total: 0
+
+─── CHECK 8: Balance vs unpaid obligations mismatch ─────────
+  ⚠ Akshay kolipaka (Room —) — 1 unpaid obligations from before 2026: 2025-09-01
+  ⚠ Dongari Vamshi Nadh (Room 301) — 5 unpaid obligations from before 2026: 2025-04-01, 2025-05-01, 2025-06-01, 2025-07-01, 2025-08-01
+  ⚠ K.Ashish (Room —) — 4 unpaid obligations from before 2026: 2025-06-01, 2025-07-01, 2025-08-01, 2025-09-01
+  ⚠ Md.Faizaan (Room —) — 1 unpaid obligations from before 2026: 2025-09-01
+  Total: 4
+
+─── CHECK 9: Invitations on dead agreements ─────────────────
+  ✅ No issues
+  Total: 0
+
+─── CHECK 10: Active tenant with expired agreement ──────────
+  ⚠ Dongari Vamshi Nadh (Room 301) — agr expired on 2025-08-01
+  ⚠ K.Ashish (Room —) — agr expired on 2025-09-01
+  Total: 2
+
+╔══════════════════════════════════════════════════════════════╗
+║                       AUDIT SUMMARY                        ║
+╚══════════════════════════════════════════════════════════════╝
+  ⚠️ 1. Joining date before 2026: 5
+  ✅ 2. Agreement date/duration mismatch: 0
+  ⚠️ 3. Active tenant, no active agreement: 2
+  ⚠️ 4. Active tenant, no room allocation: 5
+  ✅ 5. Deposit config mismatch: 0
+  ✅ 6. Duplicate active obligations: 0
+  ✅ 7. Orphan obligations on dead agreements: 0
+  ⚠️ 8. Pre-2026 unpaid balance anomalies: 4
+  ✅ 9. Invitations on dead agreements: 0
+  ⚠️ 10. Active tenant, expired agreement: 2
+
+  ────────────────────────────────
+  TOTAL ISSUES: 18
+  TENANTS AUDITED: 27
+  HOSTELS AUDITED: 4
+  OBLIGATIONS AUDITED: 80
+  INVITATIONS AUDITED: 33
+
+  ⛔ 18 issue(s) found. Review the report above before proceeding.
+
+─── DETAILED ISSUE LIST (JSON) ──────────────────────────────
+[
+  {
+    "check": "1_joining_date_before_2026",
+    "tenantId": "3900e0bd-8a08-4c43-b975-2f4f9f51cd86",
+    "tenantName": "Unknown",
+    "room": "—",
+    "details": {
+      "joined_on": "2025-06-01",
+      "status": "INVITED",
+      "billing_start_date": "2025-06-01",
+      "agreement_start": "2026-06-01"
+    }
+  },
+  {
+    "check": "1_joining_date_before_2026",
+    "tenantId": "d8f1f0f3-801f-425b-98a3-b706c0bf896c",
+    "tenantName": "Akshay kolipaka",
+    "room": "—",
+    "details": {
+      "joined_on": "2025-09-01",
+      "status": "ACTIVE",
+      "billing_start_date": "2026-06-23",
+      "agreement_start": "2026-07-01"
+    }
+  },
+  {
+    "check": "1_joining_date_before_2026",
+    "tenantId": "66552722-844d-4007-9cc7-7be54099bd12",
+    "tenantName": "Dongari Vamshi Nadh",
+    "room": "301",
+    "details": {
+      "joined_on": "2025-08-01",
+      "status": "ACTIVE",
+      "billing_start_date": "2026-06-22",
+      "agreement_start": "2025-04-01"
+    }
+  },
+  {
+    "check": "1_joining_date_before_2026",
+    "tenantId": "bdbccc3a-260f-47e5-accc-5b042ffa1fab",
+    "tenantName": "K.Ashish",
+    "room": "—",
+    "details": {
+      "joined_on": "2025-09-01",
+      "status": "ACTIVE",
+      "billing_start_date": "2026-06-23",
+      "agreement_start": "2025-06-01"
+    }
+  },
+  {
+    "check": "1_joining_date_before_2026",
+    "tenantId": "a21506a0-62d3-4194-9403-2070a07958b0",
+    "tenantName": "Md.Faizaan",
+    "room": "—",
+    "details": {
+      "joined_on": "2025-09-01",
+      "status": "ACTIVE",
+      "billing_start_date": "2026-06-23",
+      "agreement_start": "2026-06-01"
+    }
+  },
+  {
+    "check": "3_active_tenant_no_active_agreement",
+    "tenantId": "66552722-844d-4007-9cc7-7be54099bd12",
+    "tenantName": "Dongari Vamshi Nadh",
+    "room": "301",
+    "details": {
+      "tenant_status": "ACTIVE",
+      "agreements_count": 1,
+      "best_agreement_status": "AGREEMENT_EXPIRED",
+      "best_agreement_end": "2025-08-01"
+    }
+  },
+  {
+    "check": "3_active_tenant_no_active_agreement",
+    "tenantId": "bdbccc3a-260f-47e5-accc-5b042ffa1fab",
+    "tenantName": "K.Ashish",
+    "room": "—",
+    "details": {
+      "tenant_status": "ACTIVE",
+      "agreements_count": 1,
+      "best_agreement_status": "AGREEMENT_EXPIRED",
+      "best_agreement_end": "2025-09-01"
+    }
+  },
+  {
+    "check": "4_active_tenant_no_room",
+    "tenantId": "2ad5f929-a4d4-4b6e-9596-e3594ff09d95",
+    "tenantName": "Mohammed Zaraar Javed",
+    "room": "—",
+    "details": {
+      "tenant_status": "ACTIVE",
+      "joined_on": "2026-06-01"
+    }
+  },
+  {
+    "check": "4_active_tenant_no_room",
+    "tenantId": "d8f1f0f3-801f-425b-98a3-b706c0bf896c",
+    "tenantName": "Akshay kolipaka",
+    "room": "—",
+    "details": {
+      "tenant_status": "ACTIVE",
+      "joined_on": "2025-09-01"
+    }
+  },
+  {
+    "check": "4_active_tenant_no_room",
+    "tenantId": "bdbccc3a-260f-47e5-accc-5b042ffa1fab",
+    "tenantName": "K.Ashish",
+    "room": "—",
+    "details": {
+      "tenant_status": "ACTIVE",
+      "joined_on": "2025-09-01"
+    }
+  },
+  {
+    "check": "4_active_tenant_no_room",
+    "tenantId": "a21506a0-62d3-4194-9403-2070a07958b0",
+    "tenantName": "Md.Faizaan",
+    "room": "—",
+    "details": {
+      "tenant_status": "ACTIVE",
+      "joined_on": "2025-09-01"
+    }
+  },
+  {
+    "check": "4_active_tenant_no_room",
+    "tenantId": "c212dd13-c4d9-4f7a-90ad-c0ea56e09f06",
+    "tenantName": "Jashwanth rao",
+    "room": "—",
+    "details": {
+      "tenant_status": "ACTIVE",
+      "joined_on": "2026-06-23"
+    }
+  },
+  {
+    "check": "8_balance_anomaly_pre2026_unpaid",
+    "tenantId": "d8f1f0f3-801f-425b-98a3-b706c0bf896c",
+    "tenantName": "Akshay kolipaka",
+    "room": "—",
+    "details": {
+      "total_expected": 24000,
+      "total_paid": 0,
+      "unpaid_balance": 24000,
+      "deposit_required": 16000,
+      "deposit_paid": 0,
+      "deposit_deficit": 16000,
+      "pre2026_unpaid_count": 1,
+      "pre2026_months": [
+        "2025-09-01"
+      ]
+    }
+  },
+  {
+    "check": "8_balance_anomaly_pre2026_unpaid",
+    "tenantId": "66552722-844d-4007-9cc7-7be54099bd12",
+    "tenantName": "Dongari Vamshi Nadh",
+    "room": "301",
+    "details": {
+      "total_expected": 41250,
+      "total_paid": 0,
+      "unpaid_balance": 41250,
+      "deposit_required": 0,
+      "deposit_paid": 0,
+      "deposit_deficit": 0,
+      "pre2026_unpaid_count": 5,
+      "pre2026_months": [
+        "2025-04-01",
+        "2025-05-01",
+        "2025-06-01",
+        "2025-07-01",
+        "2025-08-01"
+      ]
+    }
+  },
+  {
+    "check": "8_balance_anomaly_pre2026_unpaid",
+    "tenantId": "bdbccc3a-260f-47e5-accc-5b042ffa1fab",
+    "tenantName": "K.Ashish",
+    "room": "—",
+    "details": {
+      "total_expected": 32000,
+      "total_paid": 0,
+      "unpaid_balance": 32000,
+      "deposit_required": 16000,
+      "deposit_paid": 0,
+      "deposit_deficit": 16000,
+      "pre2026_unpaid_count": 4,
+      "pre2026_months": [
+        "2025-06-01",
+        "2025-07-01",
+        "2025-08-01",
+        "2025-09-01"
+      ]
+    }
+  },
+  {
+    "check": "8_balance_anomaly_pre2026_unpaid",
+    "tenantId": "a21506a0-62d3-4194-9403-2070a07958b0",
+    "tenantName": "Md.Faizaan",
+    "room": "—",
+    "details": {
+      "total_expected": 32000,
+      "total_paid": 0,
+      "unpaid_balance": 32000,
+      "deposit_required": 16000,
+      "deposit_paid": 0,
+      "deposit_deficit": 16000,
+      "pre2026_unpaid_count": 1,
+      "pre2026_months": [
+        "2025-09-01"
+      ]
+    }
+  },
+  {
+    "check": "10_active_tenant_expired_agreement",
+    "tenantId": "66552722-844d-4007-9cc7-7be54099bd12",
+    "tenantName": "Dongari Vamshi Nadh",
+    "room": "301",
+    "details": {
+      "agreement_id": "677282a5-75f8-4726-8b69-003bd901b0eb",
+      "agreement_status": "AGREEMENT_EXPIRED",
+      "agreement_end": "2025-08-01",
+      "tenant_status": "ACTIVE"
+    }
+  },
+  {
+    "check": "10_active_tenant_expired_agreement",
+    "tenantId": "bdbccc3a-260f-47e5-accc-5b042ffa1fab",
+    "tenantName": "K.Ashish",
+    "room": "—",
+    "details": {
+      "agreement_id": "ed988569-5b3d-43b3-8a0a-652367cd3255",
+      "agreement_status": "AGREEMENT_EXPIRED",
+      "agreement_end": "2025-09-01",
+      "tenant_status": "ACTIVE"
+    }
+  }
+]

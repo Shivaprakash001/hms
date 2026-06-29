@@ -14,6 +14,8 @@ import { useTenantsList } from '@features/tenants/hooks/useTenantsList';
 import { useTenantActions } from '@features/tenants/hooks/useTenantActions';
 import { reminderService } from '@features/notifications/api';
 import { TenantCardMobile } from '@features/tenants/components/list/TenantCardMobile';
+import { TenantQuickPreview } from '@features/tenants/components/list/TenantQuickPreview';
+import { useIsMobile } from '@/app/components/ui/use-mobile';
 import type { NormalizedTenant } from '@features/tenants/utils/normalize';
 
 const AddTenantModal = lazy(() =>
@@ -337,9 +339,11 @@ export function TenantsPortfolioView() {
   const pageSize = useTenantStore((s) => s.pageSize);
   const setPage = useTenantStore((s) => s.setPage);
 
+  const isMobile = useIsMobile();
   const [showInvite, setShowInvite] = useState(false);
   const [editingTenantId, setEditingTenantId] = useState<string | null>(null);
   const [drawerTenant, setDrawerTenant] = useState<NormalizedTenant | null>(null);
+  const [previewTenant, setPreviewTenant] = useState<NormalizedTenant | null>(null);
 
   // Load hostels
   const { data: hostelsRaw } = useQuery({
@@ -368,7 +372,11 @@ export function TenantsPortfolioView() {
   const allTenants = useMemo(() => tenants, [tenants]);
 
   const handleSelectTenant = (t: NormalizedTenant) => {
-    setDrawerTenant(t);
+    if (isMobile) {
+      setDrawerTenant(t);
+    } else {
+      setPreviewTenant(t);
+    }
   };
 
   return (
@@ -490,6 +498,7 @@ export function TenantsPortfolioView() {
                     onReminder={(t) => reminderMutation.mutate(t.id)}
                     onMoveOut={() => navigate(`/hostels/${activeHostelId}/move-outs`)}
                     onResend={(t) => setEditingTenantId(t.id)}
+                    onRowClick={handleSelectTenant}
                   />
                 </Suspense>
 
@@ -552,6 +561,26 @@ export function TenantsPortfolioView() {
             hostelId={activeHostelId}
             tenantId={drawerTenant.id}
             onClose={() => setDrawerTenant(null)}
+          />
+        </Suspense>
+      )}
+
+      {previewTenant && activeHostelId && (
+        <Suspense fallback={null}>
+          <TenantQuickPreview
+            open={!!previewTenant}
+            onClose={() => setPreviewTenant(null)}
+            tenant={previewTenant}
+            actions={actions}
+            onFullProfile={() => {
+              setPreviewTenant(null);
+              navigate(`/hostels/${activeHostelId}/tenants/${previewTenant.id}`);
+            }}
+            onCollect={() => {
+              setPreviewTenant(null);
+              navigate(`/hostels/${activeHostelId}/tenants/${previewTenant.id}`);
+            }}
+            onReminder={(t) => reminderMutation.mutate(t.id)}
           />
         </Suspense>
       )}

@@ -1,0 +1,515 @@
+◇ injected env (0) from .env // tip: ⌁ auth for agents [www.vestauth.com]
+=== Profiles matching 'hargav' ===
+[]
+
+=== G1 Rooms ===
+[
+  {
+    "id": "63184ffe-99a5-4dcf-828a-a5a24ec80959",
+    "room_no": "G1",
+    "hostel_id": "6fa62eca-cbb1-4b12-8567-81756608ed38",
+    "capacity": 4
+  }
+]
+
+=== All allocations for G1 (63184ffe-99a5-4dcf-828a-a5a24ec80959) ===
+  Ch. Yashwant | active=true | tenant_id=541901dd-332f-4e41-927d-3ae00a562d31 | start=Mon Jun 22 2026 05:30:00 GMT+0530 (India Standard Time)
+  Shaik Khaja Zulfiqar Ahad | active=true | tenant_id=1511bcec-82c6-4832-8b7a-0f93b753ab59 | start=Mon Jun 22 2026 05:30:00 GMT+0530 (India Standard Time)
+
+=== Invitations for G1 ===
+  Shaik Khaja Zulfiqar Ahad | status=ACTIVATED | tenant_id=1511bcec-82c6-4832-8b7a-0f93b753ab59 | phone=+919381082499
+  Ch. Yashwant | status=ACTIVATED | tenant_id=541901dd-332f-4e41-927d-3ae00a562d31 | phone=+917670852602
+  G .Bhargav | status=SUPERSEDED | tenant_id=9122ab3c-2ba0-4adf-b0ee-f0a8799793d4 | phone=+919121966651
+  G.Bhargav | status=PENDING | tenant_id=9122ab3c-2ba0-4adf-b0ee-f0a8799793d4 | phone=+919121966651
+
+=== ALL tenant names ===
+  Mohammed Afreed | id=270f118a-db23-4258-8639-697ca98269dc | status=ACTIVE
+  NO PROFILE | id=9122ab3c-2ba0-4adf-b0ee-f0a8799793d4 | status=INVITED
+  NO PROFILE | id=3900e0bd-8a08-4c43-b975-2f4f9f51cd86 | status=INVITED
+  Charan Sai Panuganti | id=41919125-b18c-42a0-98e4-e6c690445841 | status=ACTIVE
+  Nalamothu Yaswanth | id=f7fcc4dd-3284-4560-bf5b-4a1a61a7d260 | status=ACTIVE
+  Ch. Yashwant | id=541901dd-332f-4e41-927d-3ae00a562d31 | status=ACTIVE
+  Mohammed Shoeb | id=0596578e-492c-49bd-89b3-159681f765eb | status=ACTIVE
+  Harsha | id=4a6c5844-5b0f-4a97-bc0f-e48e259259d0 | status=ACTIVE
+  Shaik Khaja Zulfiqar Ahad | id=1511bcec-82c6-4832-8b7a-0f93b753ab59 | status=ACTIVE
+  Deepak | id=654ab380-833c-4ac4-a2b8-24943b09036c | status=ACTIVE
+  M.Sreekar | id=3f929422-878c-49f1-aa2a-c678b59ee8e1 | status=ACTIVE
+  MD. Abdul Rehman | id=62843eb1-2ba9-45db-a47e-21e930cd35d4 | status=ACTIVE
+  CH HEMANTH | id=ab46313e-04d3-4a53-9058-709f907e944f | status=ACTIVE
+  Mohammed Zaraar Javed | id=2ad5f929-a4d4-4b6e-9596-e3594ff09d95 | status=ACTIVE
+  Adnan Pasha | id=27a45039-555c-4059-80fc-f1649ab43527 | status=ACTIVE
+  Birkurwar Rishith | id=c0ba2a1e-5911-4b49-b9aa-a3801c8fc5bf | status=ACTIVE
+  Akshay kolipaka | id=d8f1f0f3-801f-425b-98a3-b706c0bf896c | status=ACTIVE
+  Bingi Vishnu Teja | id=d6b9e193-8953-4a52-b99a-acb99048466c | status=ACTIVE
+  Dongari Vamshi Nadh | id=66552722-844d-4007-9cc7-7be54099bd12 | status=ACTIVE
+  K PAVAN | id=4496aa61-5eae-4500-8d35-a0f4addfe0e4 | status=ACTIVE
+  Sangham Praveen Kumar | id=4a0c5119-b9eb-4e8b-a4c4-4d3e4a374725 | status=ACTIVE
+  K.Ashish | id=bdbccc3a-260f-47e5-accc-5b042ffa1fab | status=ACTIVE
+  Vale adnan maseeh | id=ed54713b-915d-40b4-ac43-0faf265647ce | status=ACTIVE
+  Md.Faizaan | id=a21506a0-62d3-4194-9403-2070a07958b0 | status=ACTIVE
+  Vishnuteja | id=508d433c-7575-4212-8a2b-02b065f13903 | status=INVITED
+  Jashwanth rao | id=c212dd13-c4d9-4f7a-90ad-c0ea56e09f06 | status=ACTIVE
+  N.Vivek | id=61ae2584-93cd-4504-9a24-81b5a0981aa0 | status=ACTIVE
+
+=== Sample content_snapshot keys ===
+[
+  "raw_rules",
+  "owner_name",
+  "hostel_name",
+  "room_number",
+  "template_id",
+  "tenant_name",
+  "custom_rules",
+  "hostel_rules",
+  "joining_date",
+  "monthly_rent",
+  "template_name",
+  "template_type",
+  "advance_deposit",
+  "maintenance_type",
+  "payment_frequency",
+  "agreement_end_date",
+  "interpolated_rules",
+  "maintenance_charge",
+  "agreement_start_date",
+  "terms_and_conditions",
+  "template_published_at",
+  "template_version_number",
+  "agreement_duration_months"
+]
+
+=== Full sample content_snapshot ===
+{
+  "raw_rules": {
+    "categories": [
+      {
+        "id": "payments",
+        "icon": "receipt",
+        "rules": [
+          "Students are required to pay monthly rent of ₹{{MONTHLY_RENT}} and a security deposit of ₹{{SECURITY_DEPOSIT_AMOUNT}}.",
+          "Any delay in fee payment will attract a late fee of ₹50 per day."
+        ],
+        "title": "1. Fee Structure & Payment Policy",
+        "severity": "important",
+        "highlights": [
+          "Hostel fee is applicable only for the academic year period of 12 months.",
+          "Hostel fees once paid are strictly non-refundable and non-adjustable under any circumstances.",
+          "If GST becomes applicable as per government regulations, additional GST charges will be added to the hostel fee."
+        ]
+      },
+      {
+        "id": "facilities",
+        "icon": "wifi",
+        "rules": [
+          "Complaints regarding internet or washing machine issues may take up to 10 days for resolution.",
+          "Hostel rooms may be reshuffled under unavoidable or operational circumstances. Allocation of the same room throughout the year is not guaranteed.",
+          "Visitors who wish to stay in the hostel must pay ₹500 per day, subject to management approval."
+        ],
+        "title": "2. Accommodation & Hostel Facilities",
+        "severity": "standard",
+        "highlights": [
+          "The hostel management is responsible only for providing Accommodation, Breakfast, Lunch, and Dinner.",
+          "Facilities such as Internet/Wi-Fi, Washing machines, and Hot water are provided free of cost and may face occasional interruptions or maintenance delays.",
+          "Hostel premises will remain closed during major college holidays and festival vacations (Semester Holidays, Dussehra, Sankranthi, etc.). Students must vacate during these periods."
+        ]
+      },
+      {
+        "id": "discipline",
+        "icon": "shield",
+        "rules": [
+          "Students must maintain proper discipline and respectful behavior inside the hostel premises at all times.",
+          "Outsiders, friends, parents, or visitors are not allowed inside hostel rooms. Visitors may wait only in the office area or front lobby.",
+          "Hostel gate closes strictly at 9:30 PM every day.",
+          "Students leaving the hostel premises must inform the management through WhatsApp message as proof and record.",
+          "Food is not allowed inside hostel rooms. Students must use the dining hall for meals."
+        ],
+        "title": "3. Discipline & Conduct",
+        "severity": "critical",
+        "highlights": [
+          "Smoking, alcohol consumption, illegal activities, violence, or misconduct inside the hostel premises are strictly prohibited.",
+          "Ragging in any form is strictly prohibited. Involved students will be immediately removed without any fee refund."
+        ]
+      },
+      {
+        "id": "safety",
+        "icon": "lock",
+        "rules": [
+          "The hostel management is not responsible for theft, loss, damage, injuries, accidents, personal disputes, or matters occurring outside hostel responsibility.",
+          "Students found using prohibited appliances will be charged a fine of ₹1000.",
+          "Any damage caused to hostel property (beds, mattresses, lockers, furniture, fittings, etc.) must be repaired or compensated by the student(s) responsible."
+        ],
+        "title": "4. Safety & Responsibility",
+        "severity": "important",
+        "highlights": [
+          "Students are fully responsible for their personal belongings (Mobile phones, Laptops, Gold, Cash, Certificates, etc.).",
+          "Use of electrical appliances such as iron boxes, water heaters, micro-ovens, or inflammable items is strictly prohibited inside rooms."
+        ]
+      },
+      {
+        "id": "vacating",
+        "icon": "door-open",
+        "rules": [
+          "If a student vacates the hostel during the academic year, hostel charges will be recalculated at ₹12,000 per month for the occupied duration.",
+          "Students vacating the hostel during the academic year must additionally pay ₹{{MAINTENANCE_CHARGE_AMOUNT}} as maintenance charges."
+        ],
+        "title": "5. Vacating & Maintenance Charges",
+        "severity": "important",
+        "highlights": [
+          "No refund will be provided for early vacating under any circumstances."
+        ]
+      },
+      {
+        "id": "rights",
+        "icon": "shield",
+        "rules": [
+          "The hostel management reserves the full right to discontinue hostel accommodation for any student involved in misconduct, indiscipline, rule violations, or behavior affecting hostel operations."
+        ],
+        "title": "6. Management Rights",
+        "severity": "standard",
+        "highlights": [
+          "Decisions made by hostel management regarding hostel administration, discipline, and accommodation shall be final and binding."
+        ]
+      }
+    ],
+    "terms_and_conditions": [
+      {
+        "id": "residential_use",
+        "title": "Residential Use Only",
+        "content": "The Lessee shall use the allocated room solely for residential purposes. Sub-letting or transferring the room to any other person is strictly prohibited."
+      },
+      {
+        "id": "rent_payment",
+        "title": "Rent Payment",
+        "content": "Monthly rent is payable in advance as per the agreed rent cycle. Late payments may attract fees or lead to suspension of access."
+      },
+      {
+        "id": "security_deposit",
+        "title": "Security Deposit",
+        "content": "The security deposit is refundable upon vacating the premises, subject to clearance of all pending dues and room inspection for damages."
+      },
+      {
+        "id": "hostel_rules_compliance",
+        "title": "Hostel Rules Compliance",
+        "content": "Hostel Rules Compliance: The Lessee explicitly agrees to comply fully with, follow, and be bound by each and every rule, policy, and regulation of the hostel as set forth in the hostel rules snapshot incorporated herein. The Lessee acknowledges that the specific rule version accepted during account activation is legally binding and forms an integral part of this residency agreement."
+      }
+    ]
+  },
+  "owner_name": "Srinivasa Rao Yanamadala",
+  "hostel_name": "Sri Adithya Boys Hostel-1",
+  "room_number": "G2",
+  "template_id": "d37dd8e9-3ae9-4c34-8275-eb1f2556020c",
+  "tenant_name": "N.Vivek",
+  "custom_rules": "",
+  "hostel_rules": {
+    "categories": [
+      {
+        "id": "payments",
+        "icon": "receipt",
+        "rules": [
+          "Students are required to pay monthly rent of ₹8000 and a security deposit of ₹0.",
+          "Any delay in fee payment will attract a late fee of ₹50 per day."
+        ],
+        "title": "1. Fee Structure & Payment Policy",
+        "severity": "important",
+        "highlights": [
+          "Hostel fee is applicable only for the academic year period of 12 months.",
+          "Hostel fees once paid are strictly non-refundable and non-adjustable under any circumstances.",
+          "If GST becomes applicable as per government regulations, additional GST charges will be added to the hostel fee."
+        ]
+      },
+      {
+        "id": "facilities",
+        "icon": "wifi",
+        "rules": [
+          "Complaints regarding internet or washing machine issues may take up to 10 days for resolution.",
+          "Hostel rooms may be reshuffled under unavoidable or operational circumstances. Allocation of the same room throughout the year is not guaranteed.",
+          "Visitors who wish to stay in the hostel must pay ₹500 per day, subject to management approval."
+        ],
+        "title": "2. Accommodation & Hostel Facilities",
+        "severity": "standard",
+        "highlights": [
+          "The hostel management is responsible only for providing Accommodation, Breakfast, Lunch, and Dinner.",
+          "Facilities such as Internet/Wi-Fi, Washing machines, and Hot water are provided free of cost and may face occasional interruptions or maintenance delays.",
+          "Hostel premises will remain closed during major college holidays and festival vacations (Semester Holidays, Dussehra, Sankranthi, etc.). Students must vacate during these periods."
+        ]
+      },
+      {
+        "id": "discipline",
+        "icon": "shield",
+        "rules": [
+          "Students must maintain proper discipline and respectful behavior inside the hostel premises at all times.",
+          "Outsiders, friends, parents, or visitors are not allowed inside hostel rooms. Visitors may wait only in the office area or front lobby.",
+          "Hostel gate closes strictly at 9:30 PM every day.",
+          "Students leaving the hostel premises must inform the management through WhatsApp message as proof and record.",
+          "Food is not allowed inside hostel rooms. Students must use the dining hall for meals."
+        ],
+        "title": "3. Discipline & Conduct",
+        "severity": "critical",
+        "highlights": [
+          "Smoking, alcohol consumption, illegal activities, violence, or misconduct inside the hostel premises are strictly prohibited.",
+          "Ragging in any form is strictly prohibited. Involved students will be immediately removed without any fee refund."
+        ]
+      },
+      {
+        "id": "safety",
+        "icon": "lock",
+        "rules": [
+          "The hostel management is not responsible for theft, loss, damage, injuries, accidents, personal disputes, or matters occurring outside hostel responsibility.",
+          "Students found using prohibited appliances will be charged a fine of ₹1000.",
+          "Any damage caused to hostel property (beds, mattresses, lockers, furniture, fittings, etc.) must be repaired or compensated by the student(s) responsible."
+        ],
+        "title": "4. Safety & Responsibility",
+        "severity": "important",
+        "highlights": [
+          "Students are fully responsible for their personal belongings (Mobile phones, Laptops, Gold, Cash, Certificates, etc.).",
+          "Use of electrical appliances such as iron boxes, water heaters, micro-ovens, or inflammable items is strictly prohibited inside rooms."
+        ]
+      },
+      {
+        "id": "vacating",
+        "icon": "door-open",
+        "rules": [
+          "If a student vacates the hostel during the academic year, hostel charges will be recalculated at ₹12,000 per month for the occupied duration.",
+          "Students vacating the hostel during the academic year must additionally pay ₹0 as maintenance charges."
+        ],
+        "title": "5. Vacating & Maintenance Charges",
+        "severity": "important",
+        "highlights": [
+          "No refund will be provided for early vacating under any circumstances."
+        ]
+      },
+      {
+        "id": "rights",
+        "icon": "shield",
+        "rules": [
+          "The hostel management reserves the full right to discontinue hostel accommodation for any student involved in misconduct, indiscipline, rule violations, or behavior affecting hostel operations."
+        ],
+        "title": "6. Management Rights",
+        "severity": "standard",
+        "highlights": [
+          "Decisions made by hostel management regarding hostel administration, discipline, and accommodation shall be final and binding."
+        ]
+      }
+    ],
+    "terms_and_conditions": [
+      {
+        "id": "residential_use",
+        "title": "Residential Use Only",
+        "content": "The Lessee shall use the allocated room solely for residential purposes. Sub-letting or transferring the room to any other person is strictly prohibited."
+      },
+      {
+        "id": "rent_payment",
+        "title": "Rent Payment",
+        "content": "Monthly rent is payable in advance as per the agreed rent cycle. Late payments may attract fees or lead to suspension of access."
+      },
+      {
+        "id": "security_deposit",
+        "title": "Security Deposit",
+        "content": "The security deposit is refundable upon vacating the premises, subject to clearance of all pending dues and room inspection for damages."
+      },
+      {
+        "id": "hostel_rules_compliance",
+        "title": "Hostel Rules Compliance",
+        "content": "Hostel Rules Compliance: The Lessee explicitly agrees to comply fully with, follow, and be bound by each and every rule, policy, and regulation of the hostel as set forth in the hostel rules snapshot incorporated herein. The Lessee acknowledges that the specific rule version accepted during account activation is legally binding and forms an integral part of this residency agreement."
+      }
+    ]
+  },
+  "joining_date": "2026-07-01",
+  "monthly_rent": 8000,
+  "template_name": "Sri Adithya Boys Hostel Residency Agreement",
+  "template_type": "RESIDENCY",
+  "advance_deposit": 0,
+  "maintenance_type": "ONE_TIME",
+  "payment_frequency": "MONTHLY",
+  "agreement_end_date": "2026-09-01",
+  "interpolated_rules": {
+    "categories": [
+      {
+        "id": "payments",
+        "icon": "receipt",
+        "rules": [
+          "Students are required to pay monthly rent of ₹8000 and a security deposit of ₹0.",
+          "Any delay in fee payment will attract a late fee of ₹50 per day."
+        ],
+        "title": "1. Fee Structure & Payment Policy",
+        "severity": "important",
+        "highlights": [
+          "Hostel fee is applicable only for the academic year period of 12 months.",
+          "Hostel fees once paid are strictly non-refundable and non-adjustable under any circumstances.",
+          "If GST becomes applicable as per government regulations, additional GST charges will be added to the hostel fee."
+        ]
+      },
+      {
+        "id": "facilities",
+        "icon": "wifi",
+        "rules": [
+          "Complaints regarding internet or washing machine issues may take up to 10 days for resolution.",
+          "Hostel rooms may be reshuffled under unavoidable or operational circumstances. Allocation of the same room throughout the year is not guaranteed.",
+          "Visitors who wish to stay in the hostel must pay ₹500 per day, subject to management approval."
+        ],
+        "title": "2. Accommodation & Hostel Facilities",
+        "severity": "standard",
+        "highlights": [
+          "The hostel management is responsible only for providing Accommodation, Breakfast, Lunch, and Dinner.",
+          "Facilities such as Internet/Wi-Fi, Washing machines, and Hot water are provided free of cost and may face occasional interruptions or maintenance delays.",
+          "Hostel premises will remain closed during major college holidays and festival vacations (Semester Holidays, Dussehra, Sankranthi, etc.). Students must vacate during these periods."
+        ]
+      },
+      {
+        "id": "discipline",
+        "icon": "shield",
+        "rules": [
+          "Students must maintain proper discipline and respectful behavior inside the hostel premises at all times.",
+          "Outsiders, friends, parents, or visitors are not allowed inside hostel rooms. Visitors may wait only in the office area or front lobby.",
+          "Hostel gate closes strictly at 9:30 PM every day.",
+          "Students leaving the hostel premises must inform the management through WhatsApp message as proof and record.",
+          "Food is not allowed inside hostel rooms. Students must use the dining hall for meals."
+        ],
+        "title": "3. Discipline & Conduct",
+        "severity": "critical",
+        "highlights": [
+          "Smoking, alcohol consumption, illegal activities, violence, or misconduct inside the hostel premises are strictly prohibited.",
+          "Ragging in any form is strictly prohibited. Involved students will be immediately removed without any fee refund."
+        ]
+      },
+      {
+        "id": "safety",
+        "icon": "lock",
+        "rules": [
+          "The hostel management is not responsible for theft, loss, damage, injuries, accidents, personal disputes, or matters occurring outside hostel responsibility.",
+          "Students found using prohibited appliances will be charged a fine of ₹1000.",
+          "Any damage caused to hostel property (beds, mattresses, lockers, furniture, fittings, etc.) must be repaired or compensated by the student(s) responsible."
+        ],
+        "title": "4. Safety & Responsibility",
+        "severity": "important",
+        "highlights": [
+          "Students are fully responsible for their personal belongings (Mobile phones, Laptops, Gold, Cash, Certificates, etc.).",
+          "Use of electrical appliances such as iron boxes, water heaters, micro-ovens, or inflammable items is strictly prohibited inside rooms."
+        ]
+      },
+      {
+        "id": "vacating",
+        "icon": "door-open",
+        "rules": [
+          "If a student vacates the hostel during the academic year, hostel charges will be recalculated at ₹12,000 per month for the occupied duration.",
+          "Students vacating the hostel during the academic year must additionally pay ₹0 as maintenance charges."
+        ],
+        "title": "5. Vacating & Maintenance Charges",
+        "severity": "important",
+        "highlights": [
+          "No refund will be provided for early vacating under any circumstances."
+        ]
+      },
+      {
+        "id": "rights",
+        "icon": "shield",
+        "rules": [
+          "The hostel management reserves the full right to discontinue hostel accommodation for any student involved in misconduct, indiscipline, rule violations, or behavior affecting hostel operations."
+        ],
+        "title": "6. Management Rights",
+        "severity": "standard",
+        "highlights": [
+          "Decisions made by hostel management regarding hostel administration, discipline, and accommodation shall be final and binding."
+        ]
+      }
+    ],
+    "terms_and_conditions": [
+      {
+        "id": "residential_use",
+        "title": "Residential Use Only",
+        "content": "The Lessee shall use the allocated room solely for residential purposes. Sub-letting or transferring the room to any other person is strictly prohibited."
+      },
+      {
+        "id": "rent_payment",
+        "title": "Rent Payment",
+        "content": "Monthly rent is payable in advance as per the agreed rent cycle. Late payments may attract fees or lead to suspension of access."
+      },
+      {
+        "id": "security_deposit",
+        "title": "Security Deposit",
+        "content": "The security deposit is refundable upon vacating the premises, subject to clearance of all pending dues and room inspection for damages."
+      },
+      {
+        "id": "hostel_rules_compliance",
+        "title": "Hostel Rules Compliance",
+        "content": "Hostel Rules Compliance: The Lessee explicitly agrees to comply fully with, follow, and be bound by each and every rule, policy, and regulation of the hostel as set forth in the hostel rules snapshot incorporated herein. The Lessee acknowledges that the specific rule version accepted during account activation is legally binding and forms an integral part of this residency agreement."
+      }
+    ]
+  },
+  "maintenance_charge": 0,
+  "agreement_start_date": "2026-07-01",
+  "terms_and_conditions": [
+    {
+      "id": "residential_use",
+      "title": "Residential Use Only",
+      "content": "The Lessee shall use the allocated room solely for residential purposes. Sub-letting or transferring the room to any other person is strictly prohibited."
+    },
+    {
+      "id": "rent_payment",
+      "title": "Rent Payment",
+      "content": "Monthly rent is payable in advance as per the agreed rent cycle. Late payments may attract fees or lead to suspension of access."
+    },
+    {
+      "id": "security_deposit",
+      "title": "Security Deposit",
+      "content": "The security deposit is refundable upon vacating the premises, subject to clearance of all pending dues and room inspection for damages."
+    },
+    {
+      "id": "hostel_rules_compliance",
+      "title": "Hostel Rules Compliance",
+      "content": "Hostel Rules Compliance: The Lessee explicitly agrees to comply fully with, follow, and be bound by each and every rule, policy, and regulation of the hostel as set forth in the hostel rules snapshot incorporated herein. The Lessee acknowledges that the specific rule version accepted during account activation is legally binding and forms an integral part of this residency agreement."
+    }
+  ],
+  "template_published_at": "2026-06-22T10:43:25.440Z",
+  "template_version_number": 5,
+  "agreement_duration_months": 2
+}
+
+=== Akshay full data ===
+{
+  "id": "d8f1f0f3-801f-425b-98a3-b706c0bf896c",
+  "monthly_rent": "8000",
+  "security_deposit": "16000",
+  "joined_on": "2025-09-01T00:00:00.000Z",
+  "agreements": [
+    {
+      "id": "b1fac100-33bd-4bc2-be3a-f00d655dc014",
+      "status": "SIGNED",
+      "agreement_start_date": "2026-07-01T00:00:00.000Z",
+      "agreement_end_date": "2026-09-01T00:00:00.000Z",
+      "agreement_duration_months": 2,
+      "contract_rent": "8000",
+      "contract_security_deposit": "16000"
+    }
+  ],
+  "obligations": [
+    {
+      "id": "7d88c635-d138-4f39-82b7-75da44e4382f",
+      "rent_month": "2025-09-01T00:00:00.000Z",
+      "amount": "16000",
+      "status": "PENDING",
+      "agreement_id": null
+    },
+    {
+      "id": "f3958474-17e8-4ce4-8018-be9205cd1a8e",
+      "rent_month": "2025-09-01T00:00:00.000Z",
+      "amount": "8000",
+      "status": "PENDING",
+      "agreement_id": null
+    },
+    {
+      "id": "e36ebcbf-8613-4682-9df7-9394da1407bd",
+      "rent_month": "2026-07-01T00:00:00.000Z",
+      "amount": "8000",
+      "status": "UPCOMING",
+      "agreement_id": "b1fac100-33bd-4bc2-be3a-f00d655dc014"
+    },
+    {
+      "id": "8980c9a8-52ba-4543-8d1f-fae6340bdfb0",
+      "rent_month": "2026-08-01T00:00:00.000Z",
+      "amount": "8000",
+      "status": "UPCOMING",
+      "agreement_id": "b1fac100-33bd-4bc2-be3a-f00d655dc014"
+    }
+  ]
+}

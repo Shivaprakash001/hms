@@ -231,4 +231,16 @@ export const tenantService = {
         });
         return response.data;
     },
+    getNotes: async (tenantId) => {
+        const response = await api.get(`/tenants/${tenantId}/notes`);
+        return unwrap(response);
+    },
+    addNote: async (tenantId, content) => {
+        const response = await api.post(`/tenants/${tenantId}/notes`, { content });
+        return unwrap(response);
+    },
+    deleteNote: async (tenantId, noteId) => {
+        const response = await api.delete(`/tenants/${tenantId}/notes`, { params: { noteId } });
+        return unwrap(response);
+    },
 };

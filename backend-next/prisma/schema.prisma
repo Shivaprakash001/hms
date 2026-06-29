@@ -1311,8 +1311,22 @@ model tenants {
   payment_link_tokens      payment_link_tokens[]
   renewal_offers           RenewalOffer[]
   renewal_decisions        RenewalDecision[]
+  tenant_notes             tenant_notes[]
 
   @@index([hostel_id])
+  @@index([owner_id])
+}
+
+model tenant_notes {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id  String   @db.Uuid
+  owner_id   String   @db.Uuid
+  content    String
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @db.Timestamptz(6)
+  tenants    tenants  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id, created_at(sort: Desc)])
   @@index([owner_id])
 }
 

@@ -10,6 +10,7 @@ import { TenantsLayout } from '@features/tenants/components/layout/TenantsLayout
 import { TenantFilters } from '@features/tenants/components/list/TenantFilters';
 import { TenantTable } from '@features/tenants/components/list/TenantTable';
 import { TenantCardMobile } from '@features/tenants/components/list/TenantCardMobile';
+import { TenantQuickPreview } from '@features/tenants/components/list/TenantQuickPreview';
 import { reminderService } from '@features/notifications/api';
 import { useIsMobile } from '@/app/components/ui/use-mobile';
 import type { NormalizedTenant } from '@features/tenants/utils/normalize';
@@ -25,14 +26,14 @@ export function TenantsHostelView() {
   const [showInvite, setShowInvite] = useState(false);
   const [editingTenantId, setEditingTenantId] = useState<string | null>(null);
   const [drawerTenant, setDrawerTenant] = useState<NormalizedTenant | null>(null);
+  const [previewTenant, setPreviewTenant] = useState<NormalizedTenant | null>(null);
   const [selectedTenantIds, setSelectedTenantIds] = useState<Set<string>>(new Set());
   const setPage = useTenantStore((s) => s.setPage);
   const page = useTenantStore((s) => s.page);
   const pageSize = useTenantStore((s) => s.pageSize);
 
-  const { tenants, total, dashboard, isLoading, refetch } = useTenantsList(hostelId);
+  const { tenants, total, isLoading, refetch } = useTenantsList(hostelId);
   const actions = useTenantActions(hostelId);
-
 
   const overdueTenants = useMemo(
     () =>
@@ -78,115 +79,139 @@ export function TenantsHostelView() {
   };
 
   const handleView = (t: NormalizedTenant) => {
-    if (isMobile) setDrawerTenant(t);
-    else navigate(`/hostels/${hostelId}/tenants/${t.id}`);
+    if (isMobile) {
+      setDrawerTenant(t);
+    } else {
+      setPreviewTenant(t);
+    }
   };
 
   return (
-  <>
-    <TenantsLayout
-      title="Tenants"
-      subtitle="Manage residents, billing, and lifecycle"
-      backTo={`/hostels/${hostelId}`}
-      actions={
-        <button
-          type="button"
-          onClick={() => setShowInvite(true)}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-accent text-accent-foreground text-sm font-semibold"
-        >
-          <UserPlus className="w-4 h-4" />
-          <span className="hidden sm:inline">Invite</span>
-        </button>
-      }
-    >
-      <div className="space-y-4">
-        <BulkTenantActions
-          overdueCount={overdueTenants.length}
-          selectedCount={selectedTenants.length}
-          onSelectOverdue={selectAllOverdue}
-          onClear={() => setSelectedTenantIds(new Set())}
-          onSend={() => bulkReminderMutation.mutate(selectedTenants.map((tenant) => tenant.id))}
-          busy={bulkReminderMutation.isPending}
-        />
-        <TenantFilters />
-        {isLoading ? (
-          <div className="space-y-3">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-24 rounded-xl bg-secondary animate-pulse" />
-            ))}
-          </div>
-        ) : (
-          <>
-            <TenantTable
-              tenants={tenants}
-              hostelId={hostelId}
-              onReminder={(t) => reminderMutation.mutate(t.id)}
-              onMoveOut={() => navigate(`/hostels/${hostelId}/move-outs`)}
-              onResend={(t) => setEditingTenantId(t.id)}
-              selectedIds={selectedTenantIds}
-              onToggleSelect={toggleTenantSelection}
-            />
-            <TenantCardMobile
-              tenants={tenants}
-              hostelId={hostelId}
-              onSelect={handleView}
-              onReminder={(t) => reminderMutation.mutate(t.id)}
-              onCall={actions.callTenant}
-              onResend={(t) => setEditingTenantId(t.id)}
-              selectedIds={selectedTenantIds}
-              onToggleSelect={toggleTenantSelection}
-            />
-            {total > pageSize && (
-              <div className="flex justify-center gap-2 pt-4">
-                <button
-                  type="button"
-                  disabled={page === 0}
-                  onClick={() => setPage(page - 1)}
-                  className="px-4 py-2 rounded-lg border border-border text-sm disabled:opacity-40"
-                >
-                  Previous
-                </button>
-                <span className="text-sm text-muted-foreground self-center">
-                  Page {page + 1}
-                </span>
-                <button
-                  type="button"
-                  disabled={(page + 1) * pageSize >= total}
-                  onClick={() => setPage(page + 1)}
-                  className="px-4 py-2 rounded-lg border border-border text-sm disabled:opacity-40"
-                >
-                  Next
-                </button>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </TenantsLayout>
+    <>
+      <TenantsLayout
+        title="Tenants"
+        subtitle="Manage residents, billing, and lifecycle"
+        backTo={`/hostels/${hostelId}`}
+        actions={
+          <button
+            type="button"
+            onClick={() => setShowInvite(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-accent text-accent-foreground text-sm font-semibold"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span className="hidden sm:inline">Invite</span>
+          </button>
+        }
+      >
+        <div className="space-y-4">
+          <BulkTenantActions
+            overdueCount={overdueTenants.length}
+            selectedCount={selectedTenants.length}
+            onSelectOverdue={selectAllOverdue}
+            onClear={() => setSelectedTenantIds(new Set())}
+            onSend={() => bulkReminderMutation.mutate(selectedTenants.map((tenant) => tenant.id))}
+            busy={bulkReminderMutation.isPending}
+          />
+          <TenantFilters />
+          {isLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-24 rounded-xl bg-secondary animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <>
+              <TenantTable
+                tenants={tenants}
+                hostelId={hostelId}
+                onReminder={(t) => reminderMutation.mutate(t.id)}
+                onMoveOut={() => navigate(`/hostels/${hostelId}/move-outs`)}
+                onResend={(t) => setEditingTenantId(t.id)}
+                selectedIds={selectedTenantIds}
+                onToggleSelect={toggleTenantSelection}
+                onRowClick={handleView}
+              />
+              <TenantCardMobile
+                tenants={tenants}
+                hostelId={hostelId}
+                onSelect={handleView}
+                onReminder={(t) => reminderMutation.mutate(t.id)}
+                onCall={actions.callTenant}
+                onResend={(t) => setEditingTenantId(t.id)}
+                selectedIds={selectedTenantIds}
+                onToggleSelect={toggleTenantSelection}
+              />
+              {total > pageSize && (
+                <div className="flex justify-center gap-2 pt-4">
+                  <button
+                    type="button"
+                    disabled={page === 0}
+                    onClick={() => setPage(page - 1)}
+                    className="px-4 py-2 rounded-lg border border-border text-sm disabled:opacity-40"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-sm text-muted-foreground self-center">
+                    Page {page + 1}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={(page + 1) * pageSize >= total}
+                    onClick={() => setPage(page + 1)}
+                    className="px-4 py-2 rounded-lg border border-border text-sm disabled:opacity-40"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </TenantsLayout>
 
-    {showInvite && (
-      <Suspense fallback={null}>
-        <AddTenantModal hostelId={hostelId} onClose={() => { setShowInvite(false); refetch(); }} />
-      </Suspense>
-    )}
+      {showInvite && (
+        <Suspense fallback={null}>
+          <AddTenantModal hostelId={hostelId} onClose={() => { setShowInvite(false); refetch(); }} />
+        </Suspense>
+      )}
 
-    {editingTenantId && (
-      <Suspense fallback={null}>
-        <EditInviteModal tenantId={editingTenantId} hostelId={hostelId} onClose={() => { setEditingTenantId(null); refetch(); }} />
-      </Suspense>
-    )}
+      {editingTenantId && (
+        <Suspense fallback={null}>
+          <EditInviteModal tenantId={editingTenantId} hostelId={hostelId} onClose={() => { setEditingTenantId(null); refetch(); }} />
+        </Suspense>
+      )}
 
-    {drawerTenant && (
-      <Suspense fallback={null}>
-        <TenantProfileDrawer
-          open={!!drawerTenant}
-          hostelId={hostelId}
-          tenantId={drawerTenant.id}
-          onClose={() => setDrawerTenant(null)}
-        />
-      </Suspense>
-    )}
-  </>
+      {drawerTenant && (
+        <Suspense fallback={null}>
+          <TenantProfileDrawer
+            open={!!drawerTenant}
+            hostelId={hostelId}
+            tenantId={drawerTenant.id}
+            onClose={() => setDrawerTenant(null)}
+          />
+        </Suspense>
+      )}
+
+      {previewTenant && (
+        <Suspense fallback={null}>
+          <TenantQuickPreview
+            open={!!previewTenant}
+            onClose={() => setPreviewTenant(null)}
+            tenant={previewTenant}
+            actions={actions}
+            onFullProfile={() => {
+              setPreviewTenant(null);
+              navigate(`/hostels/${hostelId}/tenants/${previewTenant.id}`);
+            }}
+            onCollect={() => {
+              setPreviewTenant(null);
+              navigate(`/hostels/${hostelId}/tenants/${previewTenant.id}`);
+            }}
+            onReminder={(t) => reminderMutation.mutate(t.id)}
+          />
+        </Suspense>
+      )}
+    </>
   );
 }
 

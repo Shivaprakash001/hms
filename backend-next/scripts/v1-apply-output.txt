@@ -1,0 +1,158 @@
+◇ injected env (0) from .env // tip: ⌘ enable debugging { debug: true }
+╔══════════════════════════════════════════════════════════════╗
+║     V1 PRODUCTION DATA CORRECTION ** LIVE **              ║
+╚══════════════════════════════════════════════════════════════╝
+Timestamp: 2026-06-25T16:47:45.049Z
+
+═══ PHASE 0: BACKUP ═══
+  Backup saved: /home/sp/Desktop/hms/backend-next/scripts/v1-backup-1782406069370.json
+
+  Loaded 27 rooms
+
+═══ PHASE 2: CORRECTIONS ═══
+
+  ── 1. M. Sreekar (3f929422-878c-49f1-aa2a-c678b59ee8e1) ──
+     Tenant: rent ₹8100→₹8100 | deposit ₹0→₹16200 | joined 2026-07-01→2026-06-01
+     Agreement ff632567: 2026-07-01→2026-06-01 | 2026-08-01→2026-08-01 | dur 1→2 | status SIGNED→SIGNED
+
+  ── 2. Deepak (654ab380-833c-4ac4-a2b8-24943b09036c) ──
+     Tenant: rent ₹8000→₹8000 | deposit ₹0→₹16000 | joined 2026-07-01→2026-05-01
+     Agreement da0fdab8: 2026-07-01→2026-05-01 | 2026-09-01→2026-09-01 | dur 2→4 | status SIGNED→SIGNED
+
+  ── 3. MD Abdul Rehman (62843eb1-2ba9-45db-a47e-21e930cd35d4) ──
+     Tenant: rent ₹8500→₹8500 | deposit ₹0→₹17000 | joined 2026-07-01→2026-06-01
+     Agreement eda625ff: 2026-07-01→2026-06-01 | 2026-08-01→2026-08-01 | dur 1→2 | status SIGNED→SIGNED
+
+  ── 4. Mohammed Shoeb (0596578e-492c-49bd-89b3-159681f765eb) ──
+     Tenant: rent ₹6500→₹6500 | deposit ₹0→₹13000 | joined 2026-07-01→2026-06-01
+     Agreement 10e60344: 2026-07-01→2026-06-01 | 2026-08-01→2026-08-01 | dur 1→2 | status SIGNED→SIGNED
+
+  ── 5. Charan Sai (41919125-b18c-42a0-98e4-e6c690445841) ──
+     Tenant: rent ₹8100→₹8000 | deposit ₹0→₹17000 | joined 2026-07-01→2026-04-01
+     Agreement b6149c74: 2026-07-01→2026-04-01 | 2026-08-01→2026-08-01 | dur 1→4 | status SIGNED→SIGNED
+
+  ── 6. CH Hemanth (ab46313e-04d3-4a53-9058-709f907e944f) ──
+     Tenant: rent ₹8500→₹8500 | deposit ₹0→₹17500 | joined 2026-06-22→2026-05-01
+     Agreement 63501cf2: 2026-06-01→2026-05-01 | 2026-08-01→2026-08-01 | dur 2→3 | status SIGNED→SIGNED
+
+  ── 7. Ch. Yashwant (541901dd-332f-4e41-927d-3ae00a562d31) ──
+     Tenant: rent ₹8500→₹8500 | deposit ₹0→₹17000 | joined 2026-06-22→2026-06-01
+     Agreement 7915e4ae: 2026-06-01→2026-06-01 | 2026-08-01→2026-08-01 | dur 2→2 | status SIGNED→SIGNED
+
+  ── 8. G. Bhargav (9122ab3c-2ba0-4adf-b0ee-f0a8799793d4) ──
+     Tenant: rent ₹8400→₹8400 | deposit ₹16799→₹16800 | joined 2026-03-01→2026-03-01 | status INVITED→ACTIVE
+     Agreement CREATED: 5172a1e2 | 2026-03-01→2026-08-01 | dur 5 | rent ₹8400
+     Superseded deposit ob: ₹16799 [e7d6aaf5]
+     Room allocation CREATED: G1 (63184ffe)
+
+  ── 9. Dongari Vamshi Nadh (66552722-844d-4007-9cc7-7be54099bd12) ──
+     Tenant: rent ₹8250→₹8250 | deposit ₹0→₹0 | joined 2025-08-01→2026-04-01
+     Agreement 677282a5: 2025-04-01→2026-04-01 | 2025-08-01→2026-08-01 | dur 4→4 | status AGREEMENT_EXPIRED→SIGNED
+     Superseded: 2025-04-01 ₹8250 (RENT) [3d239f9d]
+     Superseded: 2025-05-01 ₹8250 (RENT) [6af75487]
+     Superseded: 2025-06-01 ₹8250 (RENT) [3f0ca957]
+     Superseded: 2025-07-01 ₹8250 (RENT) [f68de20e]
+     Superseded: 2025-08-01 ₹8250 (RENT) [5e24471d]
+
+  ── 10. K. Ashish (bdbccc3a-260f-47e5-accc-5b042ffa1fab) ──
+     Tenant: rent ₹8000→₹8000 | deposit ₹16000→₹16000 | joined 2025-09-01→2026-06-01
+     Agreement ed988569: 2025-06-01→2026-06-01 | 2025-09-01→2026-09-01 | dur 3→3 | status AGREEMENT_EXPIRED→SIGNED
+     Superseded: 2025-06-01 ₹8000 (RENT) [46cd1bb1]
+     Superseded: 2025-07-01 ₹8000 (RENT) [21bb9ba5]
+     Superseded: 2025-08-01 ₹8000 (RENT) [0c3b3087]
+     Superseded: 2025-09-01 ₹16000 (SECURITY_DEPOSIT) [3eaba9fe]
+     Superseded: 2025-09-01 ₹8000 (RENT) [2e796b3a]
+
+  ── 11. Md. Faizaan (a21506a0-62d3-4194-9403-2070a07958b0) ──
+     Tenant: rent ₹8000→₹8000 | deposit ₹16000→₹16000 | joined 2025-09-01→2026-05-01
+     Agreement 7a31eb29: 2026-06-01→2026-05-01 | 2026-09-01→2026-09-01 | dur 3→4 | status SIGNED→SIGNED
+     Superseded: 2025-09-01 ₹16000 (SECURITY_DEPOSIT) [d737eb58]
+     Superseded: 2025-09-01 ₹8000 (RENT) [6c5ebed4]
+
+  ── 12. Akshay Kolipaka (d8f1f0f3-801f-425b-98a3-b706c0bf896c) ──
+     Tenant: rent ₹8000→₹8000 | deposit ₹16000→₹16000 | joined 2025-09-01→2026-05-01
+     Agreement b1fac100: 2026-07-01→2026-05-01 | 2026-09-01→2026-09-01 | dur 2→4 | status SIGNED→SIGNED
+     Superseded: 2025-09-01 ₹16000 (SECURITY_DEPOSIT) [7d88c635]
+     Superseded: 2025-09-01 ₹8000 (RENT) [f3958474]
+     Room allocation CREATED: 203 (283fe6a8)
+
+  ── 13. Mohammed Afreed (270f118a-db23-4258-8639-697ca98269dc) ──
+     Tenant: rent ₹8500→₹8500 | deposit ₹5000→₹0 | joined 2026-06-22→2026-05-01
+     Agreement a9bb0418: 2026-04-01→2026-05-01 | 2026-09-01→2026-09-01 | dur 5→4 | status SIGNED→SIGNED
+     Superseded: 2026-04-01 ₹8500 (RENT) [b6963dc0]
+
+  ── Global: Unknown Tenant (3900e0bd) ──
+     joined_on: 2025-06-01 → 2026-06-01
+
+
+  ✅ Transaction committed
+
+═══ PHASE 3: REGENERATE OBLIGATIONS ═══
+
+  1. M. Sreekar: created=1, updated=1, skipped=0
+     2026-06-01 → OVERDUE
+     2026-07-01 → UPCOMING
+  2. Deepak: created=2, updated=2, skipped=0
+     2026-05-01 → OVERDUE
+     2026-06-01 → OVERDUE
+     2026-07-01 → UPCOMING
+     2026-08-01 → UPCOMING
+  3. MD Abdul Rehman: created=1, updated=1, skipped=0
+     2026-06-01 → OVERDUE
+     2026-07-01 → UPCOMING
+  4. Mohammed Shoeb: created=1, updated=1, skipped=0
+     2026-06-01 → OVERDUE
+     2026-07-01 → UPCOMING
+  5. Charan Sai: created=3, updated=1, skipped=0
+     2026-04-01 → OVERDUE
+     2026-05-01 → OVERDUE
+     2026-06-01 → OVERDUE
+     2026-07-01 → UPCOMING
+  6. CH Hemanth: created=1, updated=2, skipped=0
+     2026-05-01 → OVERDUE
+     2026-06-01 → OVERDUE
+     2026-07-01 → UPCOMING
+  7. Ch. Yashwant: created=0, updated=2, skipped=0
+     2026-06-01 → OVERDUE
+     2026-07-01 → UPCOMING
+  8. G. Bhargav: created=5, updated=0, skipped=0
+     2026-03-01 → OVERDUE
+     2026-04-01 → OVERDUE
+     2026-05-01 → OVERDUE
+     2026-06-01 → OVERDUE
+     2026-07-01 → UPCOMING
+  9. Dongari Vamshi Nadh: created=4, updated=0, skipped=0
+     2026-04-01 → OVERDUE
+     2026-05-01 → OVERDUE
+     2026-06-01 → OVERDUE
+     2026-07-01 → UPCOMING
+  10. K. Ashish: created=3, updated=0, skipped=0
+     2026-06-01 → OVERDUE
+     2026-07-01 → UPCOMING
+     2026-08-01 → UPCOMING
+  11. Md. Faizaan: created=1, updated=3, skipped=0
+     2026-05-01 → OVERDUE
+     2026-06-01 → OVERDUE
+     2026-07-01 → UPCOMING
+     2026-08-01 → UPCOMING
+  12. Akshay Kolipaka: created=2, updated=2, skipped=0
+     2026-05-01 → OVERDUE
+     2026-06-01 → OVERDUE
+     2026-07-01 → UPCOMING
+     2026-08-01 → UPCOMING
+  13. Mohammed Afreed: created=0, updated=4, skipped=0
+     2026-05-01 → OVERDUE
+     2026-06-01 → OVERDUE
+     2026-07-01 → UPCOMING
+     2026-08-01 → UPCOMING
+
+═══ PHASE 4: RECORD PAYMENTS ═══
+
+  8. G. Bhargav: ₹7200 payment recorded
+     2026-03-01: ₹7200 → PARTIAL
+
+  11. Md. Faizaan: ₹7000 payment recorded
+     2026-05-01: ₹7000 → PARTIAL
+
+
+Log saved: /home/sp/Desktop/hms/backend-next/scripts/v1-correction-log-1782406088662.txt

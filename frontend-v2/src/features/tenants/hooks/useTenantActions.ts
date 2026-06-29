@@ -111,6 +111,48 @@ export function useTenantActions(hostelId: string) {
     else toast.success('Phone copied to clipboard');
   };
 
+  const whatsAppTenant = (phone: string) => {
+    if (!phone || phone === 'N/A') {
+      hmsToast.warning('Phone number unavailable', 'No phone number is saved for this tenant.');
+      return;
+    }
+    const cleanPhone = phone.replace(/\D/g, '');
+    const formattedPhone = cleanPhone.startsWith('91') && cleanPhone.length === 12 ? cleanPhone : `91${cleanPhone}`;
+    window.open(`https://wa.me/${formattedPhone}`, '_blank');
+  };
+
+  const copyPhone = async (phone: string) => {
+    if (!phone || phone === 'N/A') {
+      hmsToast.warning('Phone number unavailable', 'No phone number is saved for this tenant.');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(phone);
+      toast.success('Phone number copied to clipboard');
+    } catch {
+      hmsToast.error('Failed to copy', 'Could not copy phone number.');
+    }
+  };
+
+  const sharePaymentLink = async (tenantId: string, phone?: string, amount?: number) => {
+    const baseUrl = window.location.origin;
+    const paymentLink = `${baseUrl}/pay/tenant/${tenantId}`;
+    
+    try {
+      await navigator.clipboard.writeText(paymentLink);
+      toast.success('Payment link copied to clipboard');
+    } catch {
+      /* ignore */
+    }
+
+    if (phone) {
+      const message = `Hi, please use this link to make your outstanding payment${amount ? ` of ₹${Number(amount).toLocaleString('en-IN')}` : ''}: ${paymentLink}`;
+      const cleanPhone = phone.replace(/\D/g, '');
+      const formattedPhone = cleanPhone.startsWith('91') && cleanPhone.length === 12 ? cleanPhone : `91${cleanPhone}`;
+      window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
+    }
+  };
+
   return {
     updateInvite,
     cancelInvite,
@@ -119,5 +161,8 @@ export function useTenantActions(hostelId: string) {
     markLeft,
     blockDirectLeft,
     callTenant,
+    whatsAppTenant,
+    copyPhone,
+    sharePaymentLink,
   };
 }

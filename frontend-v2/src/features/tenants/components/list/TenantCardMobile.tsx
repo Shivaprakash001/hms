@@ -1,12 +1,7 @@
-import { memo, useLayoutEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { ChevronRight, Bell, Phone, Send } from 'lucide-react';
-import { TenantStatusBadge } from '@features/tenants/components/badges/TenantStatusBadge';
-import { getInitials, type NormalizedTenant } from '@features/tenants/utils/normalize';
-import { getTenantBillingDisplay } from '@features/tenants/utils/billingDisplay';
-
-const fmt = (n: number) => `₹${Number(n).toLocaleString('en-IN')}`;
+import { TenantCard } from './TenantCard';
+import type { NormalizedTenant } from '@features/tenants/utils/normalize';
 
 interface Props {
   tenants: NormalizedTenant[];
@@ -19,7 +14,14 @@ interface Props {
   onToggleSelect?: (tenantId: string) => void;
 }
 
-export function TenantCardMobile({ tenants, hostelId, onSelect, onReminder, onCall, onResend, selectedIds, onToggleSelect }: Props) {
+export function TenantCardMobile({
+  tenants,
+  onSelect,
+  onReminder,
+  onResend,
+  selectedIds,
+  onToggleSelect,
+}: Props) {
   const listRef = useRef<HTMLDivElement | null>(null);
   const [scrollMargin, setScrollMargin] = useState(0);
 
@@ -45,7 +47,7 @@ export function TenantCardMobile({ tenants, hostelId, onSelect, onReminder, onCa
   const virtualizer = useVirtualizer({
     count: tenants.length,
     getScrollElement: () => listRef.current?.closest('main') || null,
-    estimateSize: () => 156,
+    estimateSize: () => 120,
     overscan: 5,
     scrollMargin,
   });
@@ -69,18 +71,18 @@ export function TenantCardMobile({ tenants, hostelId, onSelect, onReminder, onCa
             key={tenant.id}
             data-index={virtualRow.index}
             ref={virtualizer.measureElement}
-            className="absolute left-0 right-0 pb-3"
+            className="absolute left-0 right-0 pb-3 px-4"
             style={{ transform: `translateY(${virtualRow.start - scrollMargin}px)` }}
           >
-            <TenantMobileRow
+            <TenantCard
               tenant={tenant}
-              hostelId={hostelId}
+              mode="hostel"
               selected={selectedIds?.has(tenant.id) ?? false}
-              onSelect={onSelect}
-              onReminder={onReminder}
-              onCall={onCall}
-              onResend={onResend}
               onToggleSelect={onToggleSelect}
+              onSelect={onSelect}
+              onCollect={onSelect} // Trigger same select/view flow
+              onReminder={onReminder}
+              onResend={onResend}
             />
           </div>
         );
@@ -88,132 +90,3 @@ export function TenantCardMobile({ tenants, hostelId, onSelect, onReminder, onCa
     </div>
   );
 }
-
-const TenantMobileRow = memo(function TenantMobileRow({
-  tenant: t,
-  hostelId,
-  selected,
-  onSelect,
-  onReminder,
-  onCall,
-  onResend,
-  onToggleSelect,
-}: {
-  tenant: NormalizedTenant;
-  hostelId: string;
-  selected: boolean;
-  onSelect?: (t: NormalizedTenant) => void;
-  onReminder?: (t: NormalizedTenant) => void;
-  onCall?: (phone: string) => void;
-  onResend?: (t: NormalizedTenant) => void;
-  onToggleSelect?: (tenantId: string) => void;
-}) {
-  const navigate = useNavigate();
-  const billing = getTenantBillingDisplay(t);
-
-  const handleClick = () => {
-    if (onSelect) {
-      onSelect(t);
-    } else {
-      navigate(`/hostels/${hostelId}/tenants/${t.id}`);
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      if (onSelect) {
-        onSelect(t);
-      } else {
-        navigate(`/hostels/${hostelId}/tenants/${t.id}`);
-      }
-    }
-  };
-  const inner = (
-    <>
-      <div className="flex items-start gap-3">
-        {onToggleSelect && (
-          <input
-            type="checkbox"
-            checked={selected}
-            onChange={(event) => {
-              event.stopPropagation();
-              onToggleSelect(t.id);
-            }}
-            onClick={(event) => event.stopPropagation()}
-            className="mt-3 h-4 w-4 rounded border-border text-accent focus:ring-accent shrink-0"
-            aria-label={`Select ${t.name}`}
-          />
-        )}
-        <div className="w-11 h-11 rounded-full bg-accent/15 overflow-hidden flex items-center justify-center text-sm font-semibold text-accent shrink-0">
-          {t.photoUrl ? (
-            <img src={t.photoUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
-          ) : (
-            getInitials(t.name)
-          )}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2">
-            <p className="font-semibold text-foreground truncate">{t.name}</p>
-            <TenantStatusBadge status={t.status} />
-          </div>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Room {t.room} · {fmt(t.rent)}/mo
-          </p>
-          <div className="flex items-center justify-between mt-2">
-            <span className={`text-sm font-medium ${billing.outstandingClassName}`} title={billing.title}>
-              {billing.mobileLabel}
-            </span>
-            {!onSelect && <ChevronRight className="w-4 h-4 text-muted-foreground" />}
-          </div>
-        </div>
-      </div>
-      {(onCall || onReminder) && (
-        <div className="flex gap-2 mt-3 pt-3 border-t border-border" onClick={(e) => e.stopPropagation()}>
-          {onCall && (
-            <button
-              type="button"
-              onClick={() => onCall(t.phone)}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-secondary text-sm font-medium touch-manipulation"
-            >
-              <Phone className="w-4 h-4" />
-              Call
-            </button>
-          )}
-          {onReminder && t.status === 'ACTIVE' && (
-            <button
-              type="button"
-              onClick={() => onReminder(t)}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-secondary text-sm font-medium touch-manipulation"
-            >
-              <Bell className="w-4 h-4" />
-              Remind
-            </button>
-          )}
-          {onResend && t.status === 'INVITED' && (
-            <button
-              type="button"
-              onClick={() => onResend(t)}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-amber-50 text-amber-700 text-sm font-medium touch-manipulation"
-            >
-              <Send className="w-4 h-4" />
-              Resend Invite
-            </button>
-          )}
-        </div>
-      )}
-    </>
-  );
-
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={handleClick}
-      onKeyDown={handleKeyDown}
-      className="block w-full text-left bg-card border border-border rounded-xl p-4 active:scale-[0.99] transition-transform touch-manipulation cursor-pointer"
-    >
-      {inner}
-    </div>
-  );
-});

@@ -15,28 +15,28 @@ export function useTenantProfile(hostelId: string, tenantId: string, section?: s
   const fullQuery = useQuery({
     queryKey: queryKeys.tenants.full(hostelId, tenantId),
     queryFn: () => tenantService.getFull(tenantId),
-    enabled: Boolean(hostelId && tenantId) && ['documents', 'payments', 'compliance', 'money'].includes(section ?? ''),
+    enabled: Boolean(hostelId && tenantId),
     staleTime: 60_000,
   });
 
   const allocationsQuery = useQuery({
     queryKey: queryKeys.tenants.allocations(hostelId, tenantId),
     queryFn: () => allocationService.getTenantHistory(tenantId, hostelId),
-    enabled: Boolean(hostelId && tenantId) && (section === 'allocation' || section === 'stay' || !section),
+    enabled: Boolean(hostelId && tenantId),
     staleTime: 60_000,
   });
 
   const duesQuery = useQuery({
     queryKey: queryKeys.tenants.obligations(hostelId, tenantId),
     queryFn: () => paymentService.getTenantDues(tenantId, hostelId),
-    enabled: Boolean(hostelId && tenantId) && (section === 'billing' || section === 'payments' || section === 'money' || !section),
+    enabled: Boolean(hostelId && tenantId),
     staleTime: 60_000,
   });
 
   const advanceQuery = useQuery({
     queryKey: queryKeys.tenants.advance(hostelId, tenantId),
     queryFn: () => tenantService.getFinancialLedger(tenantId),
-    enabled: Boolean(hostelId && tenantId) && (section === 'billing' || section === 'money' || !section),
+    enabled: Boolean(hostelId && tenantId),
     staleTime: 60_000,
   });
 

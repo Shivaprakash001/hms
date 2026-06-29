@@ -29,6 +29,15 @@ export interface NormalizedTenant {
   photoUrl: string | null;
   isProfileCompleted: boolean;
   documentVerified: boolean;
+  hostelName: string | null;
+  lastPaymentDate: string | null;
+  overdueDays: number;
+  hasAgreement: boolean;
+  depositStatus: string;
+  score: number | null;
+  securityDeposit: number;
+  guardianPhone: string | null;
+  advanceBalance: number;
   raw: Record<string, unknown>;
 }
 
@@ -71,6 +80,15 @@ export function normalizeTenant(s: Record<string, unknown>): NormalizedTenant {
     photoUrl: s.photo_url != null ? String(s.photo_url) : tenant.photo_url != null ? String(tenant.photo_url) : null,
     isProfileCompleted: Boolean(profile?.is_profile_completed ?? s.is_profile_completed),
     documentVerified: Boolean(s.document_verified ?? profile?.document_verified),
+    hostelName: s.hostel_name != null ? String(s.hostel_name) : null,
+    lastPaymentDate: s.last_payment_date != null ? String(s.last_payment_date) : null,
+    overdueDays: s.overdue_days != null ? Number(s.overdue_days) : 0,
+    hasAgreement: Boolean(s.has_agreement),
+    depositStatus: String(s.deposit_status ?? 'UNKNOWN'),
+    score: s.score != null ? Number(s.score) : null,
+    securityDeposit: Number(s.security_deposit ?? s.advance_deposit ?? 0),
+    guardianPhone: s.phone_2 != null ? String(s.phone_2) : s.guardian_phone != null ? String(s.guardian_phone) : profile?.emergency_contact != null ? String(profile.emergency_contact) : null,
+    advanceBalance: Number(s.advance_balance ?? s.deposit_balance ?? 0),
     raw: s,
   };
 }

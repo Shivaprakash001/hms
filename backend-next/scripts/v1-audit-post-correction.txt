@@ -1,0 +1,69 @@
+◇ injected env (0) from .env // tip: ⌁ auth for agents [www.vestauth.com]
+╔══════════════════════════════════════════════════════════════╗
+║          V1 PRODUCTION DATA AUDIT — FULL REPORT            ║
+╚══════════════════════════════════════════════════════════════╝
+Timestamp : 2026-06-25T16:53:43.214Z
+Owner ID  : c39676a0-c867-4435-9660-a060b8bceab6
+
+─── CHECK 1: Joining date before 2026 ───────────────────────
+  ✅ No issues
+  Total: 0
+
+─── CHECK 2: Agreement date/duration mismatch ───────────────
+  ✅ No issues
+  Total: 0
+
+─── CHECK 3: Active tenant without active agreement ─────────
+  ✅ No issues
+  Total: 0
+
+─── CHECK 4: Active tenant without room allocation ──────────
+  ✅ No issues
+  Total: 0
+
+─── CHECK 5: Deposit config mismatch (agreement vs tenant) ──
+  ✅ No issues
+  Total: 0
+
+─── CHECK 6: Duplicate active obligations ───────────────────
+  ✅ No issues
+  Total: 0
+
+─── CHECK 7: Orphan obligations on dead agreements ──────────
+  ✅ No issues
+  Total: 0
+
+─── CHECK 8: Balance vs unpaid obligations mismatch ─────────
+  ✅ No issues
+  Total: 0
+
+─── CHECK 9: Invitations on dead agreements ─────────────────
+  ✅ No issues
+  Total: 0
+
+─── CHECK 10: Active tenant with expired agreement ──────────
+  ✅ No issues
+  Total: 0
+
+╔══════════════════════════════════════════════════════════════╗
+║                       AUDIT SUMMARY                        ║
+╚══════════════════════════════════════════════════════════════╝
+  ✅ 1. Joining date before 2026: 0
+  ✅ 2. Agreement date/duration mismatch: 0
+  ✅ 3. Active tenant, no active agreement: 0
+  ✅ 4. Active tenant, no room allocation: 0
+  ✅ 5. Deposit config mismatch: 0
+  ✅ 6. Duplicate active obligations: 0
+  ✅ 7. Orphan obligations on dead agreements: 0
+  ✅ 8. Pre-2026 unpaid balance anomalies: 0
+  ✅ 9. Invitations on dead agreements: 0
+  ✅ 10. Active tenant, expired agreement: 0
+
+  ────────────────────────────────
+  TOTAL ISSUES: 0
+  TENANTS AUDITED: 27
+  HOSTELS AUDITED: 4
+  OBLIGATIONS AUDITED: 104
+  INVITATIONS AUDITED: 33
+
+  Production data audit passed. Safe to proceed with V1.

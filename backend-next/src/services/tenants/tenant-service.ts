@@ -263,6 +263,15 @@ export class TenantService {
             orderBy: { created_at: "desc" },
             take: 1,
             select: { id: true, status: true }
+          },
+          hostels: {
+            select: { name: true }
+          },
+          agreements: {
+            select: { id: true, status: true }
+          },
+          tenant_behavior_scores: {
+            select: { score: true }
           }
         },
         take: limit,
@@ -290,6 +299,55 @@ export class TenantService {
         }
       }
 
+      // Compute last payment date
+      let last_payment_date: string | null = null;
+      const allPayments = (tenant.obligations ?? [])
+        .flatMap((o: any) => o.payments ?? [])
+        .filter((p: any) => p.payment_date)
+        .sort((a: any, b: any) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime());
+      if (allPayments.length > 0) {
+        last_payment_date = allPayments[0].payment_date;
+      }
+
+      // Compute overdue days
+      let overdue_days = 0;
+      const unpaidObligations = (tenant.obligations ?? [])
+        .filter((o: any) => ["PENDING", "PARTIAL"].includes(o.status) && o.due_date);
+      if (unpaidObligations.length > 0) {
+        const today = new Date();
+        const overdueDts = unpaidObligations
+          .map((o: any) => new Date(o.due_date))
+          .filter((d: Date) => d < today);
+        if (overdueDts.length > 0) {
+          const oldestDue = new Date(Math.min(...overdueDts.map((d: Date) => d.getTime())));
+          const diffTime = today.getTime() - oldestDue.getTime();
+          if (diffTime > 0) {
+            overdue_days = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          }
+        }
+      }
+
+      // Check for agreement status
+      const has_agreement = (tenant.agreements ?? []).some(
+        (a: any) => ["SIGNED", "EXPIRING_SOON"].includes(a.status)
+      );
+
+      // Compute deposit status
+      const depositObligations = (tenant.obligations ?? []).filter(
+        (o: any) => o.obligation_type === "SECURITY_DEPOSIT"
+      );
+      let deposit_status = "UNKNOWN";
+      if (depositObligations.length > 0) {
+        const isAllPaid = depositObligations.every((o: any) => o.status === "PAID");
+        deposit_status = isAllPaid ? "PAID" : "PENDING";
+      } else {
+        if (Number(tenant.security_deposit || 0) === 0) {
+          deposit_status = "WAIVED";
+        } else {
+          deposit_status = "PENDING";
+        }
+      }
+
       return {
         ...tenant,
         payment_summary: summary,
@@ -304,6 +362,12 @@ export class TenantService {
         outstanding_amount: summary.pending_amount,
         due_date: firstObligation?.due_date ?? null,
         obligation_id: firstObligation?.id ?? null,
+        hostel_name: tenant.hostels?.name ?? null,
+        last_payment_date,
+        overdue_days,
+        has_agreement,
+        deposit_status,
+        score: tenant.tenant_behavior_scores?.score ?? null,
       };
     }));
 
@@ -786,11 +850,61 @@ export class TenantService {
     const currentRoom = legacyTenant.allocations[0]?.room;
 
     if (!legacyTenant.hostel_id) throw new Error("HOSTEL_CONTEXT_REQUIRED: tenant hostel scope unavailable");
-    const dues = await financialService.getTenantDues(tenantId, ownerId, legacyTenant.hostel_id);
-    const paymentAgg = await prisma.payments.aggregate({
-      where: { tenant_id: tenantId, owner_id: ownerId, hostel_id: legacyTenant.hostel_id },
-      _sum: { amount_paid: true },
-    });
+    const [
+      dues,
+      paymentAgg,
+      advanceEntries,
+      allPayments,
+      reminders,
+      allocations,
+      moveOuts,
+      notes
+    ] = await Promise.all([
+      financialService.getTenantDues(tenantId, ownerId, legacyTenant.hostel_id),
+      prisma.payments.aggregate({
+        where: { tenant_id: tenantId, owner_id: ownerId, hostel_id: legacyTenant.hostel_id },
+        _sum: { amount_paid: true },
+      }),
+      prisma.tenant_financial_ledger.findMany({
+        where: { tenant_id: tenantId, owner_id: ownerId },
+        orderBy: { created_at: "asc" },
+      }),
+      prisma.payments.findMany({
+        where: { tenant_id: tenantId, owner_id: ownerId, hostel_id: legacyTenant.hostel_id },
+        orderBy: { payment_date: "desc" },
+        take: 25,
+        select: {
+          id: true,
+          amount_paid: true,
+          payment_date: true,
+          payment_method: true,
+          reference_number: true,
+        },
+      }),
+      prisma.reminder_logs.findMany({
+        where: { tenant_id: tenantId },
+        orderBy: { sent_at: "desc" },
+        take: 10,
+        select: { id: true, channel: true, sent_at: true, reminder_type: true }
+      }),
+      prisma.roomAllocation.findMany({
+        where: { tenant_id: tenantId },
+        include: { room: { select: { room_no: true } } },
+        orderBy: { created_at: "desc" },
+        take: 5
+      }),
+      prisma.move_out_requests.findMany({
+        where: { tenant_id: tenantId, owner_id: ownerId },
+        orderBy: { created_at: "desc" },
+        take: 5
+      }),
+      prisma.tenant_notes.findMany({
+        where: { tenant_id: tenantId, owner_id: ownerId },
+        orderBy: { created_at: "desc" },
+        take: 10
+      })
+    ]);
+
     const totalPaid = Number(paymentAgg._sum.amount_paid || 0);
     const totalDue = dues.total_due;
     const outstanding = dues.total_due;
@@ -799,26 +913,10 @@ export class TenantService {
       if (!dueDate || dueDate.getTime() >= Date.now()) return sum;
       return sum + Number(item.outstanding || 0);
     }, 0);
-    const advanceEntries = await prisma.tenant_financial_ledger.findMany({
-      where: { tenant_id: tenantId, owner_id: ownerId },
-      orderBy: { created_at: "asc" },
-    });
     const advanceBalance = advanceEntries.reduce((acc: number, entry: any) => {
       const amount = Number(entry.amount || 0);
       return entry.type === "CREDIT" ? acc + amount : acc - amount;
     }, 0);
-    const allPayments = await prisma.payments.findMany({
-      where: { tenant_id: tenantId, owner_id: ownerId, hostel_id: legacyTenant.hostel_id },
-      orderBy: { payment_date: "desc" },
-      take: 25,
-      select: {
-        id: true,
-        amount_paid: true,
-        payment_date: true,
-        payment_method: true,
-        reference_number: true,
-      },
-    });
     const recentPayments = allPayments
       .sort((a, b) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime())
       .slice(0, 5)
@@ -830,6 +928,44 @@ export class TenantService {
         status: "paid",
         reference_number: p.reference_number
       }));
+
+    const recentActivity = [
+      ...allPayments.map((p) => ({
+        id: p.id,
+        type: "payment",
+        title: `Payment received: ₹${Number(p.amount_paid).toLocaleString("en-IN")}`,
+        detail: `Paid via ${p.payment_method || "Unknown"}`,
+        date: p.payment_date,
+      })),
+      ...reminders.map((r) => ({
+        id: r.id,
+        type: "reminder",
+        title: `Payment reminder sent (${r.channel})`,
+        detail: `Type: ${r.reminder_type || "Standard"} · Status: SENT`,
+        date: r.sent_at,
+      })),
+      ...allocations.map((a) => ({
+        id: a.id,
+        type: "allocation",
+        title: `Room ${a.room?.room_no || "Unassigned"} allocated`,
+        detail: `Checked in on ${a.start_date ? new Date(a.start_date).toLocaleDateString() : "unknown"}`,
+        date: a.created_at,
+      })),
+      ...moveOuts.map((m) => ({
+        id: m.id,
+        type: "moveout",
+        title: `Move-out request ${m.status.toLowerCase()}`,
+        detail: m.reason_text || "Requested exit",
+        date: m.created_at,
+      })),
+      ...notes.map((n) => ({
+        id: n.id,
+        type: "note",
+        title: "Private note added",
+        detail: n.content,
+        date: n.created_at,
+      }))
+    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 15);
 
     const floor = currentRoom?.floor ?? null;
     const latestRuleAcceptance = legacyTenant.rule_acceptances?.[0] ?? null;
@@ -877,6 +1013,7 @@ export class TenantService {
       overdue_amount: overdueAmount,
       advance_balance: advanceBalance,
       recent_payments: recentPayments,
+      recent_activity: recentActivity,
       current_room: currentRoom
         ? {
             id: currentRoom.id,
