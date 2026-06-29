@@ -119,7 +119,7 @@ describe("Payment Link Token Public Flow", () => {
       expect(text).toContain("Proceed to Secure Payment");
     });
 
-    it("returns 200 with DUE status when token has {{1}} prefix or is URL encoded", async () => {
+    it("returns 200 with DUE status when token has recoverable prefix or is URL encoded", async () => {
       mocks.prisma.payment_link_tokens.findUnique.mockResolvedValue({
         token: mockToken,
         expires_at: new Date(Date.now() + 100000),
@@ -136,20 +136,43 @@ describe("Payment Link Token Public Flow", () => {
         },
       });
 
-      // Case 1: {{1}} prefix
-      const request1 = new NextRequest(`http://localhost/api/payments/pay/{{1}}${mockToken}`);
-      const response1 = await GET(request1, { params: Promise.resolve({ token: `{{1}}${mockToken}` }) });
-      expect(response1.status).toBe(200);
+      const recoverableTokens = [
+        `extra${mockToken}`,
+        `{{1}}${mockToken}`,
+        `%7B%7B1%7D%7D${mockToken}`,
+        `%7B%7B%7B%7D%7Td${mockToken}`,
+      ];
 
-      // Case 2: %7B%7B1%7D%7D prefix
-      const request2 = new NextRequest(`http://localhost/api/payments/pay/%7B%7B1%7D%7D${mockToken}`);
-      const response2 = await GET(request2, { params: Promise.resolve({ token: `%7B%7B1%7D%7D${mockToken}` }) });
-      expect(response2.status).toBe(200);
+      for (const token of recoverableTokens) {
+        const request = new NextRequest(`http://localhost/api/payments/pay/${token}`);
+        const response = await GET(request, { params: Promise.resolve({ token }) });
 
-      // Case 3: %7B%7B%7B%7D%7Td prefix
-      const request3 = new NextRequest(`http://localhost/api/payments/pay/%7B%7B%7B%7D%7Td${mockToken}`);
-      const response3 = await GET(request3, { params: Promise.resolve({ token: `%7B%7B%7B%7D%7Td${mockToken}` }) });
-      expect(response3.status).toBe(200);
+        expect(response.status).toBe(200);
+        const text = await response.text();
+        expect(text).toContain("Amount Due");
+      }
+    });
+
+    it("returns 404 and does not query Prisma for unrecoverable/garbage tokens", async () => {
+      mocks.prisma.payment_link_tokens.findUnique.mockClear();
+
+      const garbageTokens = [
+        "garbageuuid",
+        "random-text-1234",
+        "uuidgarbage",
+        `${mockToken}extra`,
+      ];
+
+      for (const token of garbageTokens) {
+        const request = new NextRequest(`http://localhost/api/payments/pay/${token}`);
+        const response = await GET(request, { params: Promise.resolve({ token }) });
+
+        expect(response.status).toBe(404);
+        const text = await response.text();
+        expect(text).toContain("Payment Not Found");
+      }
+
+      expect(mocks.prisma.payment_link_tokens.findUnique).not.toHaveBeenCalled();
     });
   });
 
@@ -242,6 +265,28 @@ describe("Payment Link Token Public Flow", () => {
         razorpay_order_id: "order-1",
         razorpay_signature: "sig-1"
       });
+    });
+
+    it("returns 400 and does not query Prisma for unrecoverable/garbage tokens on POST", async () => {
+      mocks.prisma.payment_link_tokens.findUnique.mockClear();
+
+      const garbageTokens = [
+        "garbageuuid",
+        "random-text-1234",
+        "uuidgarbage",
+      ];
+
+      for (const token of garbageTokens) {
+        const request = new NextRequest(`http://localhost/api/payments/pay/${token}`, { method: "POST" });
+        const response = await POST(request, { params: Promise.resolve({ token }) });
+
+        expect(response.status).toBe(400);
+        const json = await response.json();
+        expect(json.success).toBe(false);
+        expect(json.error).toBe("Invalid payment token format.");
+      }
+
+      expect(mocks.prisma.payment_link_tokens.findUnique).not.toHaveBeenCalled();
     });
   });
 });

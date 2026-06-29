@@ -695,6 +695,83 @@ function renderPage(content: {
 }
 
 /**
+ * Safely parses and sanitizes a raw token from the URL parameter.
+ * Logs if the token was malformed but successfully recovered, or if it is unrecoverable.
+ */
+function sanitizeAndValidateToken(rawToken: string, requestType: "GET" | "POST"): { token: string | null; errorResponse?: NextResponse } {
+  let token = rawToken;
+  let decoded: string | null = null;
+  try {
+    decoded = decodeURIComponent(rawToken);
+  } catch (e) {
+    // decodeURIComponent threw a URIError (e.g. due to %7T in malformed Meta prefix)
+  }
+
+  const uuidRegex = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  let match = decoded ? decoded.match(uuidRegex) : null;
+  if (!match) {
+    match = rawToken.match(uuidRegex);
+  }
+
+  if (match) {
+    token = match[0];
+    if (token !== rawToken) {
+      logger.warn("payment_link.token.sanitized", {
+        requestType,
+        original: rawToken,
+        sanitized: token,
+        message: "Token was malformed/prefixed but recovered via UUID extraction. This indicates an upstream WhatsApp template configuration anomaly."
+      });
+    }
+  } else if (decoded && decoded.startsWith("{{1}}")) {
+    token = decoded.substring(5);
+    logger.warn("payment_link.token.sanitized", {
+      requestType,
+      original: rawToken,
+      sanitized: token,
+      message: "Token was malformed/prefixed with {{1}} but recovered. This indicates an upstream WhatsApp template configuration anomaly."
+    });
+  } else if (rawToken.startsWith("{{1}}")) {
+    token = rawToken.substring(5);
+    logger.warn("payment_link.token.sanitized", {
+      requestType,
+      original: rawToken,
+      sanitized: token,
+      message: "Token was malformed/prefixed with {{1}} but recovered. This indicates an upstream WhatsApp template configuration anomaly."
+    });
+  }
+
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token);
+  if (!isUuid) {
+    logger.warn("payment_link.token.invalid_format", { requestType, rawToken, parsedToken: token });
+    if (requestType === "GET") {
+      const html = renderPage({
+        title: "Payment Not Found",
+        hostelName: "Sri Adithya Hostels",
+        tenantName: "Resident",
+        status: "ERROR",
+        errorMessage: "Payment Link Not Found",
+      });
+      return {
+        token: null,
+        errorResponse: new NextResponse(html, {
+          status: 404,
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        }) as any
+      };
+    } else {
+      return {
+        token: null,
+        errorResponse: NextResponse.json({ success: false, error: "Invalid payment token format." }, { status: 400 })
+      };
+    }
+  }
+
+  return { token };
+}
+
+/**
  * GET /api/payments/pay/[token]
  *
  * Public endpoint. Renders a payment summary page.
@@ -705,19 +782,11 @@ export async function GET(
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token: rawToken } = await params;
-  let token = rawToken;
-  try {
-    const decoded = decodeURIComponent(rawToken);
-    const uuidRegex = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-    const match = decoded.match(uuidRegex);
-    if (match) {
-      token = match[0];
-    } else if (decoded.startsWith("{{1}}")) {
-      token = decoded.substring(5);
-    }
-  } catch (e) {
-    // Use rawToken as fallback
+  const result = sanitizeAndValidateToken(rawToken, "GET");
+  if (result.errorResponse) {
+    return result.errorResponse;
   }
+  const token = result.token!;
 
   try {
     // 1. Token lookup
@@ -938,19 +1007,11 @@ export async function POST(
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token: rawToken } = await params;
-  let token = rawToken;
-  try {
-    const decoded = decodeURIComponent(rawToken);
-    const uuidRegex = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-    const match = decoded.match(uuidRegex);
-    if (match) {
-      token = match[0];
-    } else if (decoded.startsWith("{{1}}")) {
-      token = decoded.substring(5);
-    }
-  } catch (e) {
-    // Use rawToken as fallback
+  const result = sanitizeAndValidateToken(rawToken, "POST");
+  if (result.errorResponse) {
+    return result.errorResponse;
   }
+  const token = result.token!;
 
   try {
     // 1. Re-validate token
