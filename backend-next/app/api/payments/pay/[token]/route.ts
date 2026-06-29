@@ -708,7 +708,11 @@ export async function GET(
   let token = rawToken;
   try {
     const decoded = decodeURIComponent(rawToken);
-    if (decoded.startsWith("{{1}}")) {
+    const uuidRegex = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+    const match = decoded.match(uuidRegex);
+    if (match) {
+      token = match[0];
+    } else if (decoded.startsWith("{{1}}")) {
       token = decoded.substring(5);
     }
   } catch (e) {
@@ -937,7 +941,11 @@ export async function POST(
   let token = rawToken;
   try {
     const decoded = decodeURIComponent(rawToken);
-    if (decoded.startsWith("{{1}}")) {
+    const uuidRegex = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+    const match = decoded.match(uuidRegex);
+    if (match) {
+      token = match[0];
+    } else if (decoded.startsWith("{{1}}")) {
       token = decoded.substring(5);
     }
   } catch (e) {

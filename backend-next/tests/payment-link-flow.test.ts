@@ -145,6 +145,11 @@ describe("Payment Link Token Public Flow", () => {
       const request2 = new NextRequest(`http://localhost/api/payments/pay/%7B%7B1%7D%7D${mockToken}`);
       const response2 = await GET(request2, { params: Promise.resolve({ token: `%7B%7B1%7D%7D${mockToken}` }) });
       expect(response2.status).toBe(200);
+
+      // Case 3: %7B%7B%7B%7D%7Td prefix
+      const request3 = new NextRequest(`http://localhost/api/payments/pay/%7B%7B%7B%7D%7Td${mockToken}`);
+      const response3 = await GET(request3, { params: Promise.resolve({ token: `%7B%7B%7B%7D%7Td${mockToken}` }) });
+      expect(response3.status).toBe(200);
     });
   });
 
