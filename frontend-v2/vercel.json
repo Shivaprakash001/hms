@@ -8,6 +8,18 @@
       "destination": "https://api.sriadithyahostels.in/api/:path*"
     },
     {
+      "source": "/pay/tenant/%7B%7B1%7D%7D:token",
+      "destination": "https://api.sriadithyahostels.in/api/payments/pay/:token"
+    },
+    {
+      "source": "/pay/tenant/\\{\\{1\\}\\}:token",
+      "destination": "https://api.sriadithyahostels.in/api/payments/pay/:token"
+    },
+    {
+      "source": "/pay/tenant/:token",
+      "destination": "https://api.sriadithyahostels.in/api/payments/pay/:token"
+    },
+    {
       "source": "/pay/%7B%7B1%7D%7D:token",
       "destination": "https://api.sriadithyahostels.in/api/payments/pay/:token"
     },

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { GET, POST } from "../app/api/payments/pay/[token]/route";
 import { NextRequest } from "next/server";
 
@@ -8,17 +8,33 @@ const mocks = vi.hoisted(() => {
       payment_link_tokens: {
         findUnique: vi.fn(),
         create: vi.fn(),
+        findFirst: vi.fn(),
+      },
+      rent_obligations: {
+        findFirst: vi.fn(),
+        findUnique: vi.fn(),
+      },
+      tenants: {
+        findUnique: vi.fn(),
       },
     },
     paymentService: {
       createMultiObligationPaymentIntent: vi.fn(),
     },
+    getSession: vi.fn(),
+    resolveOwnerScope: vi.fn(),
   };
 });
 
 vi.mock("@/lib/db", () => ({ prisma: mocks.prisma }));
 vi.mock("@/src/services/payments/payment-service", () => ({
   paymentService: mocks.paymentService,
+}));
+vi.mock("@/lib/auth", () => ({
+  getSession: mocks.getSession,
+}));
+vi.mock("@/lib/auth/resolve-operational-scope", () => ({
+  resolveOwnerScope: mocks.resolveOwnerScope,
 }));
 vi.mock("@/lib/logger", () => ({
   getLogger: () => ({
@@ -239,7 +255,7 @@ describe("Payment Link Token Public Flow", () => {
       };
       
       const verifySpy = vi.fn().mockResolvedValueOnce(mockVerifyResult);
-      mocks.paymentService.verifyPaymentStatus = verifySpy;
+      (mocks.paymentService as any).verifyPaymentStatus = verifySpy;
 
       const request = new NextRequest(`http://localhost/api/payments/pay/${mockToken}`, {
         method: "POST",
@@ -288,5 +304,132 @@ describe("Payment Link Token Public Flow", () => {
 
       expect(mocks.prisma.payment_link_tokens.findUnique).not.toHaveBeenCalled();
     });
+  });
+});
+
+import { PaymentLinkService } from "../src/services/payments/payment-link-service";
+import { POST as payLinkPOST } from "../app/api/payments/pay-link/route";
+
+describe("PaymentLinkService", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("throws error if neither tenantId nor obligationId is provided", async () => {
+    await expect(PaymentLinkService.getOrCreateToken({})).rejects.toThrow("Either obligationId or tenantId must be provided");
+  });
+
+  it("returns existing non-expired token if found", async () => {
+    const mockTokenRecord = { token: "token-123", expires_at: new Date(Date.now() + 100000) };
+    mocks.prisma.payment_link_tokens.findFirst.mockResolvedValueOnce(mockTokenRecord);
+
+    const result = await PaymentLinkService.getOrCreateToken({ obligationId: "ob-1", tenantId: "tenant-1" });
+    expect(result.token).toBe("token-123");
+    expect(mocks.prisma.payment_link_tokens.findFirst).toHaveBeenCalledWith({
+      where: {
+        obligation_id: "ob-1",
+        tenant_id: "tenant-1",
+        expires_at: { gt: expect.any(Date) },
+      },
+      orderBy: { created_at: "desc" },
+    });
+  });
+
+  it("resolves tenantId to oldest unpaid obligation and creates a new token", async () => {
+    mocks.prisma.payment_link_tokens.findFirst.mockResolvedValueOnce(null);
+    mocks.prisma.rent_obligations.findFirst.mockResolvedValueOnce({ id: "ob-1" });
+    mocks.prisma.rent_obligations.findUnique.mockResolvedValueOnce({
+      id: "ob-1",
+      hostel_id: "hostel-1",
+      owner_id: "owner-1",
+      tenants: { owner_id: "owner-1" },
+    });
+    mocks.prisma.payment_link_tokens.create.mockResolvedValueOnce({
+      token: "new-token-456",
+      expires_at: new Date(Date.now() + 7 * 24 * 3600 * 1000),
+    });
+
+    const result = await PaymentLinkService.getOrCreateToken({ tenantId: "tenant-1" });
+    expect(result.token).toBe("new-token-456");
+    expect(mocks.prisma.rent_obligations.findFirst).toHaveBeenCalledWith({
+      where: {
+        tenant_id: "tenant-1",
+        status: { in: ["PENDING", "PARTIALLY_PAID"] },
+        is_superseded: false,
+      },
+      orderBy: { billing_period_start: "asc" },
+    });
+  });
+});
+
+describe("POST /api/payments/pay-link", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns 403 if session is missing or not OWNER", async () => {
+    mocks.getSession.mockResolvedValueOnce(null);
+    const request = new NextRequest("http://localhost/api/payments/pay-link", {
+      method: "POST",
+      body: JSON.stringify({ tenantId: "tenant-1" }),
+    });
+    const response = await payLinkPOST(request);
+    expect(response.status).toBe(403);
+  });
+
+  it("returns 400 if neither tenantId nor obligationId is provided", async () => {
+    mocks.getSession.mockResolvedValueOnce({ role: "OWNER" });
+    mocks.resolveOwnerScope.mockReturnValueOnce({ owner_id: "owner-1" });
+
+    const request = new NextRequest("http://localhost/api/payments/pay-link", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    const response = await payLinkPOST(request);
+    expect(response.status).toBe(400);
+  });
+
+  it("returns 403 if tenant does not belong to owner", async () => {
+    mocks.getSession.mockResolvedValueOnce({ role: "OWNER" });
+    mocks.resolveOwnerScope.mockReturnValueOnce({ owner_id: "owner-1" });
+    mocks.prisma.tenants.findUnique.mockResolvedValueOnce({ owner_id: "other-owner" });
+
+    const request = new NextRequest("http://localhost/api/payments/pay-link", {
+      method: "POST",
+      body: JSON.stringify({ tenantId: "tenant-1" }),
+    });
+    const response = await payLinkPOST(request);
+    expect(response.status).toBe(403);
+  });
+
+  it("returns canonical pay-link URL on success", async () => {
+    mocks.getSession.mockResolvedValueOnce({ role: "OWNER" });
+    mocks.resolveOwnerScope.mockReturnValueOnce({ owner_id: "owner-1" });
+    mocks.prisma.tenants.findUnique.mockResolvedValueOnce({ owner_id: "owner-1" });
+
+    // PaymentLinkService mock bypass
+    mocks.prisma.payment_link_tokens.findFirst.mockResolvedValueOnce(null);
+    mocks.prisma.rent_obligations.findFirst.mockResolvedValueOnce({ id: "ob-1" });
+    mocks.prisma.rent_obligations.findUnique.mockResolvedValueOnce({
+      id: "ob-1",
+      hostel_id: "hostel-1",
+      owner_id: "owner-1",
+      tenants: { owner_id: "owner-1" },
+    });
+    mocks.prisma.payment_link_tokens.create.mockResolvedValueOnce({
+      token: "mock-token-uuid-xyz",
+      expires_at: new Date(),
+    });
+
+    const request = new NextRequest("http://localhost/api/payments/pay-link", {
+      method: "POST",
+      body: JSON.stringify({ tenantId: "tenant-1" }),
+    });
+    const response = await payLinkPOST(request);
+    expect(response.status).toBe(200);
+    const json = await response.json();
+    expect(json.success).toBe(true);
+    expect(json.data.token).toBe("mock-token-uuid-xyz");
+    expect(json.data.url).toContain("/pay/mock-token-uuid-xyz");
   });
 });

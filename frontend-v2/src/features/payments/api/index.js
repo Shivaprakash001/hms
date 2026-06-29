@@ -259,6 +259,10 @@ export const paymentService = {
             params: { search }
         });
         return unwrap(response);
+    },
+    generatePayLink: async ({ tenantId, obligationId }) => {
+        const response = await api.post('/payments/pay-link', { tenantId, obligationId });
+        return unwrap(response);
     }
 };
 

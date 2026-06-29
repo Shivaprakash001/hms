@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react';
 import { Download, Share2, Info, History, CircleDollarSign, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
+import { paymentService } from '@features/payments/api';
+import { hmsToast } from '@lib/toast';
 
 const fmt = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
 const fmtMonth = (value?: string) => {
@@ -70,13 +72,19 @@ export function RentObligationList({
     return Object.values(grouped).sort((a, b) => b.sort - a.sort || b.label.localeCompare(a.label));
   }, [obligations]);
 
-  const handleSharePaymentLink = (o: Obligation) => {
-    const amount = Number(o.outstanding ?? o.amount ?? 0);
-    const monthLabel = fmtMonth(o.billing_period_start ?? o.rent_month);
-    const message = `Hi, your rent of ${fmt(amount)} for ${monthLabel} is due. Please make payment via this link: https://hms.sriadithyahostels.in/pay/${o.id || o.obligation_id}`;
-    
-    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
-    toast.success('Payment link composed in WhatsApp');
+  const handleSharePaymentLink = async (o: Obligation) => {
+    try {
+      const res = await paymentService.generatePayLink({ obligationId: o.id || o.obligation_id });
+      const paymentLink = res.url;
+      const amount = Number(o.outstanding ?? o.amount ?? 0);
+      const monthLabel = fmtMonth(o.billing_period_start ?? o.rent_month);
+      const message = `Hi, your rent of ${fmt(amount)} for ${monthLabel} is due. Please make payment via this link: ${paymentLink}`;
+      
+      window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
+      toast.success('Payment link composed in WhatsApp');
+    } catch (e: any) {
+      hmsToast.error(e, 'Generate payment link');
+    }
   };
 
   const toggleExpand = (id: string) => {
