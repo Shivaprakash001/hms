@@ -25,11 +25,12 @@ function outstanding(required: number, paid: number) {
 }
 
 export class ActivationFinancialStatusService {
-  async getActivationFinancialStatus(tenantId: string): Promise<ActivationFinancialStatus> {
+  async getActivationFinancialStatus(tenantId: string, tx?: any): Promise<ActivationFinancialStatus> {
     const id = String(tenantId || "").trim();
     if (!id) throw new Error("VALIDATION_ERROR: tenantId is required");
 
-    const tenant = await prisma.tenants.findUnique({
+    const db = tx || prisma;
+    const tenant = await db.tenants.findUnique({
       where: { id },
       select: {
         id: true,
@@ -43,7 +44,7 @@ export class ActivationFinancialStatusService {
     if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
 
     const [depositCredits, maintenanceObligations, paidAdvanceObligations, ledgerDepositPayments] = await Promise.all([
-      prisma.tenant_financial_ledger.aggregate({
+      db.tenant_financial_ledger.aggregate({
         where: {
           tenant_id: id,
           type: "CREDIT",
@@ -51,7 +52,7 @@ export class ActivationFinancialStatusService {
         },
         _sum: { amount: true },
       }),
-      prisma.rent_obligations.findMany({
+      db.rent_obligations.findMany({
         where: {
           tenant_id: id,
           obligation_type: "MAINTENANCE",
@@ -63,7 +64,7 @@ export class ActivationFinancialStatusService {
           },
         },
       }),
-      prisma.payments.aggregate({
+      db.payments.aggregate({
         where: {
           tenant_id: id,
           obligation: {
@@ -74,7 +75,7 @@ export class ActivationFinancialStatusService {
           amount_paid: true,
         },
       }),
-      prisma.tenant_financial_ledger.aggregate({
+      db.tenant_financial_ledger.aggregate({
         where: {
           tenant_id: id,
           type: "CREDIT",
@@ -134,6 +135,6 @@ export class ActivationFinancialStatusService {
 
 export const activationFinancialStatusService = new ActivationFinancialStatusService();
 
-export function getActivationFinancialStatus(tenantId: string) {
-  return activationFinancialStatusService.getActivationFinancialStatus(tenantId);
+export function getActivationFinancialStatus(tenantId: string, tx?: any) {
+  return activationFinancialStatusService.getActivationFinancialStatus(tenantId, tx);
 }

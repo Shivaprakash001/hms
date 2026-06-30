@@ -63,8 +63,8 @@ export async function PUT(
     if (body?.invitation_edit === true) {
       const validated = InvitationUpdateSchema.safeParse(body);
       if (!validated.success) {
-        console.warn(`[tenants.id.PUT] Invitation validation failed for tenant ${params.id}`);
-        return ApiResponse.error(ApiError.validationError("Validation failed"));
+        console.warn(`[tenants.id.PUT] Invitation validation failed for tenant ${params.id}:`, validated.error.format());
+        return ApiResponse.error(ApiError.validationError("Validation failed", { issues: validated.error.errors }));
       }
       
       const result = await invitationService.updateInvitation(params.id, scope.owner_id, validated.data);

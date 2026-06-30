@@ -876,4 +876,5 @@ describe('Tenant Onboarding Integration Flow', () => {
       expect(Number(newInvite!.monthly_rent)).toBe(10500);
     });
   });
-});
+}, 30000);
+

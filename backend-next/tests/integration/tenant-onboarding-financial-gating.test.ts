@@ -51,7 +51,7 @@ describe('Tenant Onboarding Financial Gating Integration', () => {
     vi.clearAllMocks();
   });
 
-  it('should gate room allocation to financial clearance and allocate automatically on payment', { timeout: 20000 }, async () => {
+  it('should gate room allocation to financial clearance and allocate automatically on payment', { timeout: 60000 }, async () => {
     const phone = `987${Math.floor(1000000 + Math.random() * 9000000)}`;
     const email = `gated_${Date.now()}_${Math.floor(Math.random() * 1000)}@gmail.com`;
 

@@ -154,7 +154,7 @@ export function OwnerQuickActions() {
 
       {active === 'payment' && hostelId && (
         <Suspense fallback={null}>
-          <RecordPaymentModal hostelId={hostelId} onClose={() => setActive(null)} />
+          <RecordPaymentModal hostelId={hostelId} context={{ source: 'quick-collect' }} onClose={() => setActive(null)} />
         </Suspense>
       )}
       {active === 'tenant' && hostelId && (

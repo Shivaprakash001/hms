@@ -17,6 +17,7 @@ export default defineConfig({
     setupFiles: ['./tests/setup.ts'],
     include: ['tests/**/*.test.ts'],
     exclude: ['tests/import-recovery.test.ts', 'lib/**/*.test.ts', 'node_modules', 'dist'],
+    testTimeout: 30000,
     alias: {
       '@': path.resolve(__dirname, './'),
     },

@@ -15,8 +15,9 @@ export type ReservationStatusInfo = {
 };
 
 export class ReservationStatusService {
-  async getReservationStatus(tenantId: string): Promise<ReservationStatusInfo> {
-    const tenant = await prisma.tenants.findUnique({
+  async getReservationStatus(tenantId: string, tx?: any): Promise<ReservationStatusInfo> {
+    const db = tx || prisma;
+    const tenant = await db.tenants.findUnique({
       where: { id: tenantId },
       select: {
         reservation_policy: true,
@@ -25,7 +26,7 @@ export class ReservationStatusService {
     });
     if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
 
-    const financialStatus = await activationFinancialStatusService.getActivationFinancialStatus(tenantId);
+    const financialStatus = await activationFinancialStatusService.getActivationFinancialStatus(tenantId, tx);
 
     const reservationPolicy = tenant.reservation_policy ?? "FULL_DEPOSIT";
     const minimumReservationDeposit = Number(tenant.minimum_reservation_deposit ?? 0);

@@ -51,7 +51,7 @@ export class RoomCapacityService {
       (async () => {
         let count = 0;
         for (const alloc of activeAllocations) {
-          const resStatus = await reservationStatusService.getReservationStatus(alloc.tenant_id);
+          const resStatus = await reservationStatusService.getReservationStatus(alloc.tenant_id, db);
           if (resStatus.status !== "PAYMENT_PENDING") {
             count++;
           }

@@ -252,93 +252,14 @@ export class InvitationService {
   }
 
   async activateTenant(token: string, password: string) {
-    logger.info("Attempting to activate account", { token_fingerprint: tokenFingerprint(token) });
-    // 1. Resolve tenant by invitation token
-    const profile = await prisma.profile.findFirst({
-      where: {
-        invitation_token: token,
-        invitation_expires_at: { gte: new Date() },
-      },
-    });
-
-    if (!profile) {
-      logger.warn("Invalid or expired activation token received", {
-        token_fingerprint: tokenFingerprint(token),
-      });
-      throw new Error("INVALID: Token expired or invalid");
-    }
-
-    const tenant = await prisma.tenants.findUnique({
-        where: { profile_id: profile.id }
-    });
-
-    if (!tenant) {
-        logger.error(`No tenant record found for profile ${profile.id} during activation.`);
-        throw new Error("INTERNAL_ERROR: Could not find associated tenant record.");
-    }
-    if (tenant.status !== "INVITED") {
-        logger.warn(`Activation rejected for tenant ${tenant.id}: status=${tenant.status}`);
-        throw new Error("INVALID: Activation link has already been used");
-    }
-
-    const hashedPassword = await hashPassword(password);
-
-    await prisma.$transaction(async (tx: any) => {
-      await tx.profile.update({
-        where: { id: profile.id },
-        data: {
-          password_hash: hashedPassword,
-          is_active: true,
-          invitation_token: null,
-          invitation_expires_at: null,
-        },
-      });
-
-      await tx.tenants.update({
-        where: { id: tenant.id },
-        data: { status: "ACTIVE" },
-      });
-    });
-    await allocationReconciliationService.reconcileTenant(tenant.id).catch((err: any) => {
-      logger.error("reconcile_after_activate_failed", {
-        tenant_id: tenant.id,
-        error: String(err?.message || err),
-      });
-    });
-    const { admissionsService } = await import("@/src/services/admissions/admissions-service");
-    await admissionsService.markJoinedForTenant(tenant.id).catch((err: any) => {
-      logger.warn("admissions_mark_joined_failed", {
-        tenant_id: tenant.id,
-        error: String(err?.message || err),
-      });
-    });
-
-    // Legacy activation path (Path C) — emit onboarding completed event
-    // Primary paths (A/B) emit from ActivationWorkflowService.activate()
-    await eventSystem.trigger("tenant_onboarding_completed", {
-      tenantId: tenant.id,
-    }).catch(() => {});
-    
-    // Auto-login: generate session & tokens for the newly activated tenant
-    const { authService } = await import("../../../lib/services/auth-service");
-    const updatedProfile = await prisma.profile.findUnique({
-      where: { id: profile.id },
-      include: { tenants: true },
-    });
-    const sessionResult = updatedProfile ? await authService.createSessionAndTokens(
-      updatedProfile,
-      updatedProfile.tenants?.id || null,
-      updatedProfile.tenants?.profile_completed || false,
-      {}
-    ) : null;
-
-    logger.info(`Successfully activated account for email: ${profile.email}`);
-
-    return {
-      success: true,
-      message: "Account activated successfully.",
-      session: sessionResult,
-    };
+    logger.info("Delegating account activation to unified activation workflow", { token_fingerprint: tokenFingerprint(token) });
+    const { activationWorkflowService } = await import("./activation-workflow-service");
+    return await activationWorkflowService.mutate(
+      token,
+      "ACTIVATE",
+      { password, confirm_password: password },
+      { ip: "127.0.0.1", userAgent: "Legacy API Activation Path" }
+    );
   }
 
   async validateActivationToken(token: string) {

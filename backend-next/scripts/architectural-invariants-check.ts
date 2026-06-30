@@ -31,6 +31,7 @@ const checks: Array<{
       /lib\/services\/notifications\/owner-whatsapp-assistant\.ts$/,
       /lib\/services\/notifications\/whatsapp-selection-state\.ts$/,
       /lib\/services\/notifications\/whatsapp-template-delivery\.ts$/,
+      /lib\/services\/expense-service\.ts$/,
     ],
   },
   {

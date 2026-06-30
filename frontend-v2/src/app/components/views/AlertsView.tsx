@@ -56,7 +56,13 @@ export function AlertsView() {
   const queryClient = useQueryClient();
   const [selectedHostelId, setSelectedHostelId] = useState<string | null>(null);
   const [showHostelPicker, setShowHostelPicker] = useState(false);
-  const [recordPayment, setRecordPayment] = useState<{ hostelId: string; dueId?: string; amount?: string } | null>(null);
+  const [recordPayment, setRecordPayment] = useState<{
+    hostelId: string;
+    tenantId?: string;
+    dueId?: string;
+    amount?: string;
+    initialTenantData?: any;
+  } | null>(null);
   const [activeFilter, setActiveFilter] = useState<'all' | 'overdue' | 'renewals' | 'docs' | 'payments' | 'move-out'>('all');
 
   const { data: hostelsData } = useQuery({
@@ -512,8 +518,16 @@ export function AlertsView() {
                     onRecordPayment={(dueId, amount) =>
                       activeHostelId && setRecordPayment({
                         hostelId: activeHostelId,
+                        tenantId: gDue.tenant_id,
                         dueId,
                         amount,
+                        initialTenantData: {
+                          id: gDue.tenant_id,
+                          name: gDue.tenant_name,
+                          phone: gDue.tenant_phone,
+                          room_number: gDue.room_no,
+                          outstanding: gDue.total_amount,
+                        }
                       })
                     }
                   />
@@ -696,8 +710,13 @@ export function AlertsView() {
       {recordPayment && (
         <RecordPaymentModal
           hostelId={recordPayment.hostelId}
-          initialDueId={recordPayment.dueId}
-          initialAmount={recordPayment.amount}
+          context={{
+            tenantId: recordPayment.tenantId,
+            obligationId: recordPayment.dueId,
+            defaultAmount: recordPayment.amount,
+            source: 'alerts',
+          }}
+          initialTenantData={recordPayment.initialTenantData}
           onClose={() => setRecordPayment(null)}
         />
       )}

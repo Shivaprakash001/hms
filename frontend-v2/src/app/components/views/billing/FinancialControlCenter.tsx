@@ -208,7 +208,13 @@ export function FinancialControlCenter({ hostelId }: Props) {
   // Modals & Drawers states
   const [showDuesDrawer, setShowDuesDrawer] = useState(false);
   const [showAddExpense, setShowAddExpense] = useState(false);
-  const [recordPayment, setRecordPayment] = useState<{ hostelId: string; dueId?: string; amount?: string } | null>(null);
+  const [recordPayment, setRecordPayment] = useState<{
+    hostelId: string;
+    tenantId?: string;
+    dueId?: string;
+    amount?: string;
+    initialTenantData?: any;
+  } | null>(null);
 
   // Queries
   // Queries
@@ -786,9 +792,17 @@ export function FinancialControlCenter({ hostelId }: Props) {
   // Handle Quick Collect modal launch
   const handleCollect = (due?: any) => {
     setRecordPayment({
-      hostelId: due?.hostelId ?? hostelId,
+      hostelId: due?.hostel_id ?? due?.hostelId ?? hostelId,
+      tenantId: due?.tenant_id ?? due?.tenantId ?? undefined,
       dueId: due ? String(due.obligation_id ?? due.id) : undefined,
-      amount: due ? String(dueBalance(due)) : undefined
+      amount: due ? String(dueBalance(due)) : undefined,
+      initialTenantData: due ? {
+        id: due.tenant_id ?? due.tenantId,
+        name: due.tenant_name ?? due.name,
+        phone: due.phone ?? due.tenant_phone ?? due.tenantPhone,
+        room_number: due.room_no ?? due.room_number,
+        outstanding: due.outstandingAmount ?? dueBalance(due),
+      } : undefined
     });
   };
 
@@ -1300,8 +1314,13 @@ export function FinancialControlCenter({ hostelId }: Props) {
       {recordPayment && (
         <RecordPaymentModal
           hostelId={recordPayment.hostelId}
-          initialDueId={recordPayment.dueId}
-          initialAmount={recordPayment.amount}
+          context={{
+            tenantId: recordPayment.tenantId,
+            obligationId: recordPayment.dueId,
+            defaultAmount: recordPayment.amount,
+            source: recordPayment.tenantId ? 'financial-center' : 'quick-collect',
+          }}
+          initialTenantData={recordPayment.initialTenantData}
           onClose={() => {
             setRecordPayment(null);
             refetchDues();

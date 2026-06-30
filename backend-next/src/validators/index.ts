@@ -150,37 +150,9 @@ export const ExpenseCreateSchema = z.object({
 // Invitation Schemas
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const InvitationSchema = z.object({
-  email: z.string().trim().email().max(SHORT_TEXT).optional().or(z.literal("")).nullable(),
-  name: z.string().min(2).max(SHORT_TEXT).trim(),
-  phone: z.string().min(1).max(20),
-  room_id: z.string().uuid(),
-  monthly_rent: z.number().nonnegative().max(MAX_AMOUNT_INR).optional(),
-  advance_amount: z.number().min(0).max(MAX_AMOUNT_INR).optional(),
-  minimum_deposit_threshold: z.number().min(0).max(MAX_AMOUNT_INR).optional(),
-  maintenance_amount: z.number().min(0).max(MAX_AMOUNT_INR).optional(),
-  joining_date: z.string().max(30).optional(),
-  maintenance_type: z.enum(["MONTHLY", "ONE_TIME", "NONE"]).optional(),
-  agreement_duration_months: z.number().int().positive().max(120).optional(),
-  agreement_start_date: z.string().max(30).optional(),
-  payment_frequency: z.enum(["MONTHLY", "QUARTERLY", "HALF_YEARLY", "ACADEMIC_YEARLY", "CUSTOM_INSTALLMENTS"]).optional(),
-});
+export {
+  InvitationSchema,
+  InvitationUpdateSchema,
+  ActivationSchema,
+} from "./tenants";
 
-export const InvitationUpdateSchema = z.object({
-  email: z.string().trim().email().max(SHORT_TEXT).optional().or(z.literal("")).nullable(),
-  name: z.string().min(2).max(SHORT_TEXT).trim(),
-  phone: z.string().min(1).max(20),
-  room_id: z.string().uuid(),
-  monthly_rent: z.coerce.number().nonnegative().max(MAX_AMOUNT_INR),
-  minimum_deposit_threshold: z.coerce.number().min(0).max(MAX_AMOUNT_INR).optional(),
-  joining_date: z.string().max(30).optional(),
-  agreement_duration_months: z.number().int().positive().max(120).optional(),
-  agreement_start_date: z.string().max(30).optional(),
-  payment_frequency: z.enum(["MONTHLY", "QUARTERLY", "HALF_YEARLY", "ACADEMIC_YEARLY", "CUSTOM_INSTALLMENTS"]).optional(),
-});
-
-export const ActivationSchema = z.object({
-  token: z.string().min(1).max(1024),
-  password: z.string().min(8).max(PASSWORD_MAX),
-  confirm_password: z.string().min(8).max(PASSWORD_MAX),
-});

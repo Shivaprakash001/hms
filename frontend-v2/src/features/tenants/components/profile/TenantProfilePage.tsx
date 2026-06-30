@@ -81,6 +81,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   const tenantId = tenantIdProp ?? params.tenantId ?? '';
   const navigate = useNavigate();
 
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [payObligationId, setPayObligationId] = useState<string | null>(null);
   const [showEditInvite, setShowEditInvite] = useState(false);
   const [isKycExpanded, setIsKycExpanded] = useState(false);
@@ -406,11 +407,8 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
                 type="button"
                 onClick={() => {
                   const pending = obligations.find((o: any) => ['PENDING', 'PARTIAL'].includes(o.status));
-                  if (pending?.id) {
-                    setPayObligationId(pending.id);
-                  } else {
-                    toast.error("No pending rent dues found to record payment.");
-                  }
+                  setPayObligationId(pending?.id || null);
+                  setShowPaymentModal(true);
                 }}
                 className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 px-4.5 py-3 rounded-xl bg-accent text-accent-foreground text-xs font-bold hover:bg-accent/90 active:scale-95 transition-all shadow-sm"
               >
@@ -594,7 +592,10 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
             </div>
             <RentObligationList
               obligations={obligations as never[]}
-              onRecordPayment={(id) => setPayObligationId(id)}
+              onRecordPayment={(id) => {
+                setPayObligationId(id);
+                setShowPaymentModal(true);
+              }}
               hasActivePlan={Number(tenant?.monthly_rent ?? overview?.rent ?? 0) > 0}
             />
           </div>
@@ -866,11 +867,17 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
       </div>
 
       {/* Record Payment Modal */}
-      {payObligationId && (
+      {showPaymentModal && (
         <RecordPaymentModal
           hostelId={hostelId}
-          initialDueId={payObligationId}
+          context={{
+            tenantId,
+            obligationId: payObligationId || undefined,
+            source: 'tenant-profile',
+          }}
+          initialTenantData={overview}
           onClose={() => {
+            setShowPaymentModal(false);
             setPayObligationId(null);
             refetch();
           }}

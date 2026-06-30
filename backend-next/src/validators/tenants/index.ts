@@ -1,5 +1,52 @@
 import { z } from "zod";
 
+const MAX_AMOUNT_INR = 1_000_000;
+
+export const optionalNumber = (maxVal: number = MAX_AMOUNT_INR) =>
+  z.preprocess((val) => {
+    if (val === "" || val === null || val === undefined) return undefined;
+    const num = Number(val);
+    return isNaN(num) ? undefined : num;
+  }, z.number().nonnegative().max(maxVal).optional());
+
+export const requiredNumber = (maxVal: number = MAX_AMOUNT_INR) =>
+  z.preprocess((val) => {
+    if (val === "" || val === null || val === undefined) return undefined;
+    const num = Number(val);
+    return isNaN(num) ? undefined : num;
+  }, z.number().nonnegative().max(maxVal));
+
+export const optionalPositiveNumber = (maxVal: number = MAX_AMOUNT_INR) =>
+  z.preprocess((val) => {
+    if (val === "" || val === null || val === undefined) return undefined;
+    const num = Number(val);
+    return isNaN(num) || num <= 0 ? undefined : num;
+  }, z.number().positive().max(maxVal).optional());
+
+export const optionalInteger = (maxVal?: number) => {
+  let schema = z.number().int();
+  if (maxVal !== undefined) {
+    schema = schema.max(maxVal);
+  }
+  return z.preprocess((val) => {
+    if (val === "" || val === null || val === undefined) return undefined;
+    const num = Number(val);
+    return isNaN(num) || !Number.isInteger(num) ? undefined : num;
+  }, schema.optional());
+};
+
+export const optionalPositiveInteger = (maxVal?: number) => {
+  let schema = z.number().int().positive();
+  if (maxVal !== undefined) {
+    schema = schema.max(maxVal);
+  }
+  return z.preprocess((val) => {
+    if (val === "" || val === null || val === undefined) return undefined;
+    const num = Number(val);
+    return isNaN(num) || !Number.isInteger(num) || num <= 0 ? undefined : num;
+  }, schema.optional());
+};
+
 export const TenantProfileUpdateSchema = z.object({
   name: z.string().optional(),
   phone: z.string().optional(),
@@ -39,33 +86,33 @@ export const ReactivationRequestSchema = z.object({
 });
 
 export const InvitationSchema = z.object({
-  email: z.string().email().optional().or(z.literal("")).nullable(),
+  email: z.string().trim().email().optional().or(z.literal("")).nullable(),
   name: z.string().min(2),
   phone: z.string().min(1),
   room_id: z.string().uuid(),
-  monthly_rent: z.number().nonnegative().optional(),
-  advance_amount: z.number().min(0).optional(),
-  minimum_deposit_threshold: z.number().min(0).optional(),
-  maintenance_amount: z.number().min(0).optional(),
+  monthly_rent: optionalNumber(),
+  advance_amount: optionalNumber(),
+  minimum_deposit_threshold: optionalNumber(),
+  maintenance_amount: optionalNumber(),
   joining_date: z.string().optional(),            // ISO date string, defaults to today
   maintenance_type: z.enum(["MONTHLY", "ONE_TIME", "NONE"]).optional(), // defaults to hostel billing policy
-  agreement_duration_months: z.number().int().positive().max(120).optional(),
+  agreement_duration_months: optionalPositiveInteger(120),
   agreement_start_date: z.string().max(30).optional(),
   payment_frequency: z.enum(["MONTHLY", "QUARTERLY", "HALF_YEARLY", "ACADEMIC_YEARLY", "CUSTOM_INSTALLMENTS"]).optional(),
 });
 
 export const InvitationUpdateSchema = z.object({
-  email: z.string().email().optional().or(z.literal("")).nullable(),
+  email: z.string().trim().email().optional().or(z.literal("")).nullable(),
   name: z.string().min(2),
   phone: z.string().min(1),
   room_id: z.string().uuid(),
-  monthly_rent: z.coerce.number().nonnegative(),
-  advance_amount: z.coerce.number().nonnegative().optional(),
-  minimum_deposit_threshold: z.coerce.number().nonnegative().optional(),
-  maintenance_amount: z.coerce.number().nonnegative().optional(),
+  monthly_rent: optionalNumber(),
+  advance_amount: optionalNumber(),
+  minimum_deposit_threshold: optionalNumber(),
+  maintenance_amount: optionalNumber(),
   joining_date: z.string().optional(),
   maintenance_type: z.enum(["MONTHLY", "ONE_TIME", "NONE"]).optional(),
-  agreement_duration_months: z.number().int().positive().max(120).optional(),
+  agreement_duration_months: optionalPositiveInteger(120),
   agreement_start_date: z.string().max(30).optional(),
   payment_frequency: z.enum(["MONTHLY", "QUARTERLY", "HALF_YEARLY", "ACADEMIC_YEARLY", "CUSTOM_INSTALLMENTS"]).optional(),
 });
@@ -75,3 +122,4 @@ export const ActivationSchema = z.object({
   password: z.string().min(8),
   confirm_password: z.string().min(8),
 });
+

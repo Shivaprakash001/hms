@@ -17,7 +17,7 @@ export function FinancialsTab({ hostelId }: { hostelId: string }) {
       </Suspense>
       {showRecordPayment && (
         <Suspense fallback={null}>
-          <RecordPaymentModal hostelId={hostelId} onClose={() => setShowRecordPayment(false)} />
+          <RecordPaymentModal hostelId={hostelId} context={{ source: 'quick-collect' }} onClose={() => setShowRecordPayment(false)} />
         </Suspense>
       )}
     </>

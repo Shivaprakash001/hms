@@ -26,7 +26,7 @@ const tenantFilters: { id: TenantFilter; label: string }[] = [
 export function TenantsTab({ hostelId }: { hostelId: string }) {
   const navigate = useNavigate();
   const [showAdd, setShowAdd] = useState(false);
-  const [showPayment, setShowPayment] = useState<string>('');
+  const [showPayment, setShowPayment] = useState<{ tenantId: string; obligationId?: string; initialTenantData?: any } | null>(null);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<TenantFilter>('all');
   const [resendOptionsTenant, setResendOptionsTenant] = useState<{ id: string; phone: string } | null>(null);
@@ -317,7 +317,17 @@ export function TenantsTab({ hostelId }: { hostelId: string }) {
                   <button
                     onClick={(event) => {
                       event.stopPropagation();
-                      setShowPayment(paymentTargetId);
+                      setShowPayment({
+                        tenantId: tenant.id,
+                        obligationId: tenant.obligationId || undefined,
+                        initialTenantData: {
+                          id: tenant.id,
+                          name: tenant.name,
+                          phone: tenant.phone,
+                          room_number: tenant.room,
+                          outstanding: tenant.outstandingAmount,
+                        }
+                      });
                     }}
                     className="flex items-center gap-1 px-3 py-2 rounded-xl bg-accent text-accent-foreground text-xs font-semibold hover:bg-accent/90 active:scale-95 transition-transform"
                     title="Record Payment"
@@ -341,8 +351,13 @@ export function TenantsTab({ hostelId }: { hostelId: string }) {
         <Suspense fallback={null}>
           <RecordPaymentModal
             hostelId={hostelId}
-            initialDueId={showPayment}
-            onClose={() => setShowPayment('')}
+            context={{
+              tenantId: showPayment.tenantId,
+              obligationId: showPayment.obligationId,
+              source: 'activity-center',
+            }}
+            initialTenantData={showPayment.initialTenantData}
+            onClose={() => setShowPayment(null)}
           />
         </Suspense>
       )}

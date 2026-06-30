@@ -372,7 +372,7 @@ export class TenantInvitationLifecycleService {
       });
 
       return { tenant, invitation, reservation, room: capacity.room, financials };
-    });
+    }, { timeout: 30000 });
 
     const activationLink = frontendUrl(`/activate/${created.invitation.token}`);
     const delivery = await this.dispatchInvitationNotification(
@@ -705,7 +705,7 @@ export class TenantInvitationLifecycleService {
         changes,
         versionCount,
       };
-    });
+    }, { timeout: 30000 });
 
     const owner = await prisma.profile.findUnique({ where: { id: invitation.owner_id }, select: { name: true } });
     const activationLink = frontendUrl(`/activate/${token}`);
@@ -934,7 +934,7 @@ export class TenantInvitationLifecycleService {
         },
       });
       return profileRecord;
-    });
+    }, { timeout: 30000 });
 
     await eventLog.log("activation_started", invitation.owner_id, {
       tenant_id: tenant.id,
@@ -948,13 +948,58 @@ export class TenantInvitationLifecycleService {
     const completedAt = new Date();
 
     await prisma.$transaction(async (tx: any) => {
+      // 1. Proactive row lock on the tenant row
+      const tenantRow = await tx.$queryRaw`
+        SELECT id, status, joined_on, owner_id FROM tenants 
+        WHERE id = ${tenant.id}::uuid FOR UPDATE
+      `;
+      if (!tenantRow || tenantRow.length === 0) {
+        throw new Error("NOT_FOUND: Tenant not found");
+      }
+      
+      const currentTenantStatus = tenantRow[0].status;
+
+      // 2. Rigorous idempotency guard: check if already in terminal/active states
+      if (["ACTIVE", "CHECKED_IN", "MOVED_IN", "MOVED_OUT"].includes(currentTenantStatus)) {
+        console.log(`[Lifecycle] Tenant ${tenant.id} is already in state ${currentTenantStatus}. Activation is already complete.`);
+        return;
+      }
+
+      // Lock profile row
+      const profileRow = await tx.$queryRaw`
+        SELECT id FROM profiles 
+        WHERE id = ${profile.id}::uuid FOR UPDATE
+      `;
+      if (!profileRow || profileRow.length === 0) {
+        throw new Error("NOT_FOUND: Profile not found");
+      }
+
+      // Lock invitation row
+      const inviteRow = await tx.$queryRaw`
+        SELECT id, status FROM tenant_invitations 
+        WHERE id = ${invitation.id}::uuid FOR UPDATE
+      `;
+      if (!inviteRow || inviteRow.length === 0) {
+        throw new Error("NOT_FOUND: Invitation not found");
+      }
+      if (inviteRow[0].status === "ACTIVATED") {
+        console.log(`[Lifecycle] Invitation ${invitation.id} is already activated. Skipping.`);
+        return;
+      }
+
       const reservation = await tx.tenant_invitation_reservations.findFirst({
         where: { invitation_id: invitation.id, tenant_id: tenant.id, status: "ACTIVE" },
         orderBy: { reserved_at: "desc" },
       });
       if (!reservation) throw new Error("INVALID_TRANSITION: Active room reservation is missing");
 
-      const resStatus = await reservationStatusService.getReservationStatus(tenant.id);
+      // Lock reservation row
+      await tx.$executeRaw`
+        SELECT id FROM tenant_invitation_reservations 
+        WHERE id = ${reservation.id}::uuid FOR UPDATE
+      `;
+
+      const resStatus = await reservationStatusService.getReservationStatus(tenant.id, tx);
       if (resStatus.status !== "PAYMENT_PENDING") {
         await tx.$executeRaw`SELECT id FROM rooms WHERE id = ${reservation.room_id}::uuid FOR UPDATE`;
         const capacity = await this.getRoomCapacitySnapshot(tx, reservation.room_id);
@@ -962,16 +1007,22 @@ export class TenantInvitationLifecycleService {
           throw new Error("CAPACITY_EXCEEDED: Reserved room no longer has available capacity");
         }
 
-        await tx.roomAllocation.create({
-          data: {
-            id: crypto.randomUUID(),
-            tenant_id: tenant.id,
-            room_id: reservation.room_id,
-            hostel_id: reservation.hostel_id,
-            start_date: tenant.joined_on || startOfToday(),
-            is_active: true,
-          },
+        // Check if there is already an active room allocation
+        const existingAllocation = await tx.roomAllocation.findFirst({
+          where: { tenant_id: tenant.id, is_active: true, end_date: null }
         });
+        if (!existingAllocation) {
+          await tx.roomAllocation.create({
+            data: {
+              id: crypto.randomUUID(),
+              tenant_id: tenant.id,
+              room_id: reservation.room_id,
+              hostel_id: reservation.hostel_id,
+              start_date: tenantRow[0].joined_on || startOfToday(),
+              is_active: true,
+            },
+          });
+        }
       }
 
       await tx.tenant_invitation_reservations.update({
@@ -1006,11 +1057,11 @@ export class TenantInvitationLifecycleService {
           profile_completed: true,
           activation_completed_at: completedAt,
           onboarding_last_activity_at: completedAt,
-          payment_frequency_effective_from: tenant.billing_start_date || tenant.joined_on || completedAt,
+          payment_frequency_effective_from: tenantRow[0].joined_on || completedAt,
           ...(paymentFrequency ? { payment_frequency: paymentFrequency } : {}),
         },
       });
-    });
+    }, { timeout: 30000 });
     await eventLog.log("activation_completed", invitation.owner_id, {
       tenant_id: tenant.id,
       invitation_id: invitation.id,
@@ -1091,56 +1142,56 @@ export class TenantInvitationLifecycleService {
   }
 
   async allocateOnboardingTenantIfFinanciallyReady(tenantId: string) {
-    const tenant = await prisma.tenants.findUnique({
-      where: { id: tenantId },
-      include: {
-        room_allocations: {
-          where: { is_active: true, end_date: null },
-        },
-      },
-    });
-
-    if (!tenant || tenant.status !== "ACTIVE") return;
-    if (tenant.room_allocations.length > 0) return; // Already allocated
-
-    // Check if financially ready (status !== "PAYMENT_PENDING")
-    const resStatus = await reservationStatusService.getReservationStatus(tenantId);
-    if (resStatus.status === "PAYMENT_PENDING") return;
-
-    // Find the latest invitation (to know which room and hostel they were invited to)
-    const invitation = await prisma.tenant_invitations.findFirst({
-      where: { tenant_id: tenantId },
-      orderBy: { created_at: "desc" },
-    });
-    if (!invitation || !invitation.room_id) return;
-
-    // Allocate!
     await prisma.$transaction(async (tx: any) => {
-      // Re-verify under lock
+      // 1. SELECT FOR UPDATE on tenants table
+      const tenantRow = await tx.$queryRaw`
+        SELECT id, status, joined_on, owner_id FROM tenants 
+        WHERE id = ${tenantId}::uuid FOR UPDATE
+      `;
+      if (!tenantRow || tenantRow.length === 0) return;
+      const status = tenantRow[0].status;
+      if (status !== "ACTIVE") return;
+
+      // 2. Check if already allocated
       const existing = await tx.roomAllocation.findFirst({
         where: { tenant_id: tenantId, is_active: true, end_date: null },
       });
       if (existing) return;
 
+      // 3. Check if financially ready (status !== "PAYMENT_PENDING") under the transaction
+      const resStatus = await reservationStatusService.getReservationStatus(tenantId, tx);
+      if (resStatus.status === "PAYMENT_PENDING") return;
+
+      // 4. Find the latest invitation (to know which room and hostel they were invited to)
+      const invitation = await tx.tenant_invitations.findFirst({
+        where: { tenant_id: tenantId },
+        orderBy: { created_at: "desc" },
+      });
+      if (!invitation || !invitation.room_id) return;
+
+      // 5. Enforce proactive row lock on room row
       await tx.$executeRaw`SELECT id FROM rooms WHERE id = ${invitation.room_id}::uuid FOR UPDATE`;
+
+      // 6. Check room capacity
       const capacity = await this.getRoomCapacitySnapshot(tx, invitation.room_id);
       if (capacity.occupied >= Number(capacity.room.capacity || 0)) {
         throw new Error("CAPACITY_EXCEEDED: Reserved room no longer has available capacity");
       }
 
+      // 7. Allocate using single centralized room allocation logic
       await tx.roomAllocation.create({
         data: {
           id: crypto.randomUUID(),
           tenant_id: tenantId,
           room_id: invitation.room_id,
           hostel_id: invitation.hostel_id,
-          start_date: tenant.joined_on || startOfToday(),
+          start_date: tenantRow[0].joined_on || startOfToday(),
           is_active: true,
         },
       });
 
       console.log(`[Lifecycle] Automatically allocated tenant ${tenantId} to room ${invitation.room_id} after transition to ${resStatus.status}`);
-    });
+    }, { timeout: 30000 });
   }
 }
 

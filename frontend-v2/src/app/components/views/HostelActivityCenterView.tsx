@@ -41,7 +41,13 @@ export function HostelActivityCenterView({ hostelId }: HostelActivityCenterViewP
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
-  const [recordPayment, setRecordPayment] = useState<{ hostelId: string; dueId?: string; amount?: string } | null>(null);
+  const [recordPayment, setRecordPayment] = useState<{
+    hostelId: string;
+    tenantId?: string;
+    dueId?: string;
+    amount?: string;
+    initialTenantData?: any;
+  } | null>(null);
 
   // Fetch hostel details for header context
   const { data: hostelsData } = useQuery({
@@ -448,8 +454,16 @@ export function HostelActivityCenterView({ hostelId }: HostelActivityCenterViewP
                           <button
                             onClick={() => setRecordPayment({
                               hostelId,
+                              tenantId: tenant.tenantId,
                               dueId: undefined,
-                              amount: String(tenant.amountOverdue)
+                              amount: String(tenant.amountOverdue),
+                              initialTenantData: {
+                                id: tenant.tenantId,
+                                name: tenant.tenantName,
+                                phone: tenant.tenantPhone,
+                                room_number: tenant.roomNo,
+                                outstanding: tenant.amountOverdue,
+                              }
                             })}
                             className="text-[10px] font-bold bg-accent text-accent-foreground px-2.5 py-1 rounded-lg hover:opacity-90"
                           >
@@ -544,8 +558,13 @@ export function HostelActivityCenterView({ hostelId }: HostelActivityCenterViewP
       {recordPayment && (
         <RecordPaymentModal
           hostelId={recordPayment.hostelId}
-          initialDueId={recordPayment.dueId}
-          initialAmount={recordPayment.amount}
+          context={{
+            tenantId: recordPayment.tenantId,
+            obligationId: recordPayment.dueId,
+            defaultAmount: recordPayment.amount,
+            source: 'activity-center',
+          }}
+          initialTenantData={recordPayment.initialTenantData}
           onClose={() => setRecordPayment(null)}
         />
       )}
