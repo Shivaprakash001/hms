@@ -138,6 +138,21 @@ function renderPage(content: {
   const clientScript = status === "DUE" ? `
     <script>
       (function() {
+        window.consoleLogs = window.consoleLogs || [];
+        const originalLog = console.log;
+        console.log = function(...args) {
+          window.consoleLogs.push(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
+          originalLog.apply(console, args);
+        };
+        const originalError = console.error;
+        console.error = function(...args) {
+          window.consoleLogs.push('ERROR: ' + args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
+          originalError.apply(console, args);
+        };
+        window.addEventListener('error', function(e) {
+          window.consoleLogs.push('UNCAUGHT ERROR: ' + e.message + ' at ' + e.filename + ':' + e.lineno);
+        });
+
         const payBtn = document.getElementById('pay-btn');
         const errorMsg = document.getElementById('error-message');
         const logoUrl = "${logoUrl}";
@@ -158,12 +173,26 @@ function renderPage(content: {
               });
 
               const data = await response.json();
+              console.log('[Payment Link Client Debug] Received response:', data);
               if (!data.success) {
                 throw new Error(data.error?.message || data.error || 'Failed to initiate payment');
               }
 
               const attempt = data.attempt;
-              const raw = attempt.raw_response || {};
+              console.log('[Payment Link Client Debug] data.attempt:', attempt);
+              if (attempt) {
+                console.log('[Payment Link Client Debug] data.attempt.raw_response:', attempt.raw_response);
+              }
+              const raw_response = attempt ? attempt.raw_response : null;
+              const raw = typeof raw_response === "string"
+                  ? JSON.parse(raw_response)
+                  : raw_response || {};
+
+              console.log('[Payment Link Client Debug] parsed raw_response (raw):', raw);
+              console.log('[Payment Link Client Debug] raw.key_id:', raw.key_id);
+              console.log('[Payment Link Client Debug] raw.amount:', raw.amount);
+              console.log('[Payment Link Client Debug] raw.currency:', raw.currency);
+              console.log('[Payment Link Client Debug] attempt.gateway_txn_id:', attempt ? attempt.gateway_txn_id : undefined);
 
               const options = {
                 key: raw.key_id,
@@ -171,7 +200,7 @@ function renderPage(content: {
                 currency: raw.currency || 'INR',
                 name: '${hostelName.replace(/'/g, "\\'")}',
                 description: '${dueMonth} Rent Payment',
-                order_id: attempt.gateway_txn_id,
+                order_id: attempt ? attempt.gateway_txn_id : undefined,
                 image: logoUrl || 'https://sriadithyahostels.in/hostel_icon.png',
                 prefill: {
                   name: raw.notes?.tenant_name || '',
@@ -201,9 +230,9 @@ function renderPage(content: {
                       document.querySelector('.container').innerHTML = \`
                         <div class="header-section">
                           <div class="hostel-logo-container">
-                            \\\${logoUrl ? \\\`<img class="hostel-logo" src="\\\${logoUrl}" alt="Hostel Logo"/>\\\` : \\\`<span class="hostel-logo-fallback">🏠</span>\\\`}
+                            \${logoUrl ? \`<img class="hostel-logo" src="\${logoUrl}" alt="Hostel Logo"/>\` : \`<span class="hostel-logo-fallback">🏠</span>\`}
                           </div>
-                          <p class="hostel-name">\\\${escapeHtml("${hostelName}")}</p>
+                          <p class="hostel-name">\${escapeHtml("${hostelName}")}</p>
                           <div class="verified-badge">
                             <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
                             <span>Verified Hostel</span>
@@ -217,21 +246,21 @@ function renderPage(content: {
                           <p class="status-text">Payment Successful</p>
                           <p class="status-sub">Your payment has been successfully recorded. Thank you!</p>
                         </div>
-                        \\\${"${supportPhone}" ? \\\`<p class="support">Need help? Call <a href="tel:${supportPhone}">${supportPhone}</a></p>\\\` : ""}
-                        \\\${"${hostelAddress}" ? \\\`
+                        \${"${supportPhone}" ? \`<p class="support">Need help? Call <a href="tel:${supportPhone}">${supportPhone}</a></p>\` : ""}
+                        \${"${hostelAddress}" ? \`
                         <div class="footer-section">
-                          <p class="footer-hostel-info">\\\${escapeHtml("${hostelName}")}</p>
-                          <p>\\\${escapeHtml("${hostelAddress}")}</p>
+                          <p class="footer-hostel-info">\${escapeHtml("${hostelName}")}</p>
+                          <p>\${escapeHtml("${hostelAddress}")}</p>
                         </div>
-                        \\\` : ""}
-                      \\\`;
+                        \` : ""}
+                      \`;
                     } else if (verifyData.success && (verifyData.status === 'PENDING_VERIFICATION' || verifyData.attempt?.status === 'PENDING_VERIFICATION')) {
-                      document.querySelector('.container').innerHTML = \\\`
+                      document.querySelector('.container').innerHTML = \`
                         <div class="header-section">
                           <div class="hostel-logo-container">
-                            \\\${logoUrl ? \\\`<img class="hostel-logo" src="\\\${logoUrl}" alt="Hostel Logo"/>\\\` : \\\`<span class="hostel-logo-fallback">🏠</span>\\\`}
+                            \${logoUrl ? \`<img class="hostel-logo" src="\${logoUrl}" alt="Hostel Logo"/>\` : \`<span class="hostel-logo-fallback">🏠</span>\`}
                           </div>
-                          <p class="hostel-name">\\\${escapeHtml("${hostelName}")}</p>
+                          <p class="hostel-name">\${escapeHtml("${hostelName}")}</p>
                         </div>
                         
                         <div class="status-card pending">
@@ -241,14 +270,14 @@ function renderPage(content: {
                           <p class="status-text">Payment Received</p>
                           <p class="status-sub">We're confirming your payment. This usually takes a few seconds. Feel free to close this page.</p>
                         </div>
-                        \\\${"${supportPhone}" ? \\\`<p class="support">Need help? Call <a href="tel:${supportPhone}">${supportPhone}</a></p>\\\` : ""}
-                        \\\${"${hostelAddress}" ? \\\`
+                        \${"${supportPhone}" ? \`<p class="support">Need help? Call <a href="tel:${supportPhone}">${supportPhone}</a></p>\` : ""}
+                        \${"${hostelAddress}" ? \`
                         <div class="footer-section">
-                          <p class="footer-hostel-info">\\\${escapeHtml("${hostelName}")}</p>
-                          <p>\\\${escapeHtml("${hostelAddress}")}</p>
+                          <p class="footer-hostel-info">\${escapeHtml("${hostelName}")}</p>
+                          <p>\${escapeHtml("${hostelAddress}")}</p>
                         </div>
-                        \\\` : ""}
-                      \\\`;
+                        \` : ""}
+                      \`;
                     } else {
                       throw new Error(verifyData.error?.message || verifyData.error || 'Payment verification pending or failed');
                     }
@@ -268,6 +297,35 @@ function renderPage(content: {
                   }
                 }
               };
+ 
+              console.log('[Payment Link Client Debug] Razorpay initialization options:');
+              console.table(options);
+              console.log('[Payment Link Client Debug] window.Razorpay definition:', window.Razorpay);
+
+              // DIAGNOSTIC BEACON: Send checkout options to server so we can see them in Vercel logs.
+              // Fire-and-forget — does not block checkout.
+              try {
+                fetch(window.location.pathname, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    action: 'client_diagnostic',
+                    diagnostic: {
+                      key_defined: options.key !== undefined && options.key !== null,
+                      key_type: typeof options.key,
+                      key_length: options.key ? options.key.length : 0,
+                      key_prefix: options.key ? options.key.substring(0, 8) : '__UNDEFINED__',
+                      order_id_defined: options.order_id !== undefined && options.order_id !== null,
+                      order_id: options.order_id || '__UNDEFINED__',
+                      amount: options.amount,
+                      currency: options.currency,
+                      raw_response_type: typeof data.attempt?.raw_response,
+                      raw_response_keys: data.attempt?.raw_response ? Object.keys(data.attempt.raw_response) : [],
+                      window_razorpay_defined: typeof window.Razorpay !== 'undefined',
+                    }
+                  })
+                }).catch(function() {});
+              } catch(e) {}
 
               const rzp = new window.Razorpay(options);
               rzp.open();
@@ -1046,6 +1104,16 @@ export async function POST(
       // Default to initiate if body is missing or malformed
     }
 
+    if (body.action === "client_diagnostic") {
+      // DIAGNOSTIC: Client-side beacon reporting checkout options at runtime.
+      // This lets us see the exact options.key value in Vercel logs.
+      logger.info("payment_link.client_diagnostic", {
+        token,
+        ...body.diagnostic,
+      });
+      return NextResponse.json({ success: true, action: "diagnostic_received" });
+    }
+
     if (body.action === "verify") {
       logger.info("payment_link.verify.initiate", {
         token,
@@ -1090,6 +1158,11 @@ export async function POST(
       if (!attempt.raw_response || typeof attempt.raw_response !== "object") {
         attempt.raw_response = {};
       }
+
+      // DIAGNOSTIC: Capture raw_response state BEFORE key_id injection
+      const preInjectKeyId = attempt.raw_response.key_id;
+      const preInjectKeys = Object.keys(attempt.raw_response);
+
       try {
         const providerContext = await getProviderContext({
           paymentDomain: "RENT_COLLECTION",
@@ -1102,6 +1175,19 @@ export async function POST(
       } catch (e) {
         logger.warn("payment_link.inject_key_failed", { attemptId: attempt.id, error: String(e) });
       }
+
+      // DIAGNOSTIC: Capture key_id state AFTER injection attempt
+      logger.info("payment_link.key_id_diagnostic", {
+        attemptId: attempt.id,
+        attemptStatus: attempt.status,
+        preInjectKeyId: preInjectKeyId ?? "__MISSING__",
+        postInjectKeyId: attempt.raw_response.key_id ?? "__MISSING__",
+        preInjectKeys,
+        postInjectKeys: Object.keys(attempt.raw_response),
+        gatewayTxnId: attempt.gateway_txn_id ?? "__MISSING__",
+        hasRawCreateResponse: attempt.raw_create_response != null,
+        rawCreateResponseType: typeof attempt.raw_create_response,
+      });
 
       if (!attempt.raw_response.amount) {
         attempt.raw_response.amount = Math.round(Number(attempt.amount) * 100);
@@ -1118,10 +1204,49 @@ export async function POST(
       }
     }
 
-    return NextResponse.json({
+    console.log("[Payment Link Server Debug] POST /pay/:token info:", {
+      token,
+      obligation_id: linkToken.obligation_id,
+      payment_attempt_id: attempt?.id,
+      gateway: attempt?.provider,
+      gateway_transaction_id: attempt?.gateway_txn_id,
+      raw_response: attempt?.raw_response,
+      parsed_raw_response_type: typeof attempt?.raw_response,
+      parsed_key_id: attempt?.raw_response?.key_id,
+      parsed_order_id: attempt?.gateway_txn_id,
+      parsed_amount: attempt?.raw_response?.amount,
+      parsed_currency: attempt?.raw_response?.currency,
+    });
+
+    const responsePayload = {
       success: true,
       attempt,
-    });
+    };
+
+    console.log("[Payment Link Server Debug] Returning payload:", JSON.stringify(responsePayload, null, 2));
+
+    // DIAGNOSTIC: Verify key_id survives JSON serialization
+    // This is the definitive server-side checkpoint before the response hits the wire.
+    try {
+      const serialized = JSON.stringify(responsePayload);
+      const reparsed = JSON.parse(serialized);
+      logger.info("payment_link.response_serialization_check", {
+        token,
+        attemptId: attempt?.id,
+        keyIdOnObject: attempt?.raw_response?.key_id ?? "__MISSING__",
+        keyIdAfterReparse: reparsed?.attempt?.raw_response?.key_id ?? "__MISSING__",
+        keyIdMatch: attempt?.raw_response?.key_id === reparsed?.attempt?.raw_response?.key_id,
+        gatewayTxnIdOnObject: attempt?.gateway_txn_id ?? "__MISSING__",
+        gatewayTxnIdAfterReparse: reparsed?.attempt?.gateway_txn_id ?? "__MISSING__",
+        rawResponseKeysOnObject: attempt?.raw_response ? Object.keys(attempt.raw_response) : [],
+        rawResponseKeysAfterReparse: reparsed?.attempt?.raw_response ? Object.keys(reparsed.attempt.raw_response) : [],
+        serializedLength: serialized.length,
+      });
+    } catch (serErr) {
+      logger.error("payment_link.serialization_failed", { token, error: String(serErr) });
+    }
+
+    return NextResponse.json(responsePayload);
   } catch (error: any) {
     logger.error("payment_link.post.failed", { token, error: String(error?.message || error) });
     return NextResponse.json({

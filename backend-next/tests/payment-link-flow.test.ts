@@ -30,6 +30,15 @@ vi.mock("@/lib/db", () => ({ prisma: mocks.prisma }));
 vi.mock("@/src/services/payments/payment-service", () => ({
   paymentService: mocks.paymentService,
 }));
+vi.mock("@/src/services/payments/merchant-context", () => ({
+  getProviderContext: vi.fn().mockResolvedValue({
+    provider: "RAZORPAY",
+    config: {
+      key_id: "rzp_test_mockkey12345",
+      key_secret: "mocksecret",
+    }
+  }),
+}));
 vi.mock("@/lib/auth", () => ({
   getSession: mocks.getSession,
 }));
