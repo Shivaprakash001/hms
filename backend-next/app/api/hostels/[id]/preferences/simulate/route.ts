@@ -42,7 +42,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         include: {
           profiles: true,
           room_allocations: {
-            where: { status: "ACTIVE" },
+            where: { is_active: true },
           },
         },
       });
@@ -59,7 +59,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         include: {
           profiles: true,
           room_allocations: {
-            where: { status: "ACTIVE" },
+            where: { is_active: true },
           },
         },
       });

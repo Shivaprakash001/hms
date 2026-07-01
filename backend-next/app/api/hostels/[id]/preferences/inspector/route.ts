@@ -47,7 +47,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
               },
             },
             room_allocations: {
-              where: { status: "ACTIVE" },
+              where: { is_active: true },
               select: {
                 room_number: true,
               },
