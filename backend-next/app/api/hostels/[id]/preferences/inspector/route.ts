@@ -162,11 +162,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       // 1. Check if paid
       if (paidDate && dateStr > formatDateString(paidDate)) {
         history.push({
-          date: dateLabel,
-          daysOffset,
-          status: "SKIPPED",
+          evalDate: dateObj.toISOString(),
+          offsetDays: daysOffset,
+          outcome: "SKIPPED",
           reason: "Already Paid",
-          message: `Rent was paid on ${paidDate.toLocaleDateString()}. Automation stopped.`,
+          logMessage: `Rent was paid on ${paidDate.toLocaleDateString()}. Automation stopped.`,
           channels: [],
         });
         return;
@@ -179,11 +179,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       if (dailyWhatsapp) {
         const isFailed = dailyWhatsapp.status === "FAILED";
         history.push({
-          date: dateLabel,
-          daysOffset,
-          status: isFailed ? "FAILED" : "DELIVERED",
+          evalDate: dateObj.toISOString(),
+          offsetDays: daysOffset,
+          outcome: isFailed ? "FAILED" : "DELIVERED",
           reason: isFailed ? "Failed to Send" : "Delivered",
-          message: isFailed
+          logMessage: isFailed
             ? `Failed to send WhatsApp: ${dailyWhatsapp.error_message || "API Error"}`
             : `Reminder delivered via WhatsApp at ${dailyWhatsapp.created_at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.`,
           channels: ["WhatsApp"],
@@ -193,11 +193,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
       if (dailyReminder) {
         history.push({
-          date: dateLabel,
-          daysOffset,
-          status: "DELIVERED",
+          evalDate: dateObj.toISOString(),
+          offsetDays: daysOffset,
+          outcome: "DELIVERED",
           reason: "Delivered",
-          message: `Reminder sent via ${dailyReminder.channel} at ${dailyReminder.sent_at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.`,
+          logMessage: `Reminder sent via ${dailyReminder.channel} at ${dailyReminder.sent_at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.`,
           channels: [dailyReminder.channel],
         });
         return;
@@ -207,11 +207,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       const resolvedReminder = selectReminderForDay(daysOffset, policy.reminders);
       if (!resolvedReminder) {
         history.push({
-          date: dateLabel,
-          daysOffset,
-          status: "SKIPPED",
+          evalDate: dateObj.toISOString(),
+          offsetDays: daysOffset,
+          outcome: "SKIPPED",
           reason: "Not Scheduled",
-          message: `No reminder scheduled for day ${daysOffset}.`,
+          logMessage: `No reminder scheduled for day ${daysOffset}.`,
           channels: [],
         });
         return;
@@ -220,29 +220,29 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       // Scheduled but not sent
       if (dateStr > todayStr) {
         history.push({
-          date: dateLabel,
-          daysOffset,
-          status: "QUEUED",
+          evalDate: dateObj.toISOString(),
+          offsetDays: daysOffset,
+          outcome: "QUEUED",
           reason: "Pending",
-          message: `Scheduled to trigger on ${dateLabel}.`,
+          logMessage: `Scheduled to trigger on ${dateLabel}.`,
           channels: [],
         });
       } else if (dateStr === todayStr) {
         history.push({
-          date: dateLabel,
-          daysOffset,
-          status: "QUEUED",
+          evalDate: dateObj.toISOString(),
+          offsetDays: daysOffset,
+          outcome: "QUEUED",
           reason: "Pending",
-          message: "Waiting for the daily execution engine.",
+          logMessage: "Waiting for the daily execution engine.",
           channels: [],
         });
       } else {
         history.push({
-          date: dateLabel,
-          daysOffset,
-          status: "SKIPPED",
+          evalDate: dateObj.toISOString(),
+          offsetDays: daysOffset,
+          outcome: "SKIPPED",
           reason: "Not Processed",
-          message: `Scheduled but not processed (e.g. engine skipped or cron schedule mismatch).`,
+          logMessage: `Scheduled but not processed (e.g. engine skipped or cron schedule mismatch).`,
           channels: [],
         });
       }
@@ -256,6 +256,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         amount: Number(selectedOb.amount),
         dueDate: dueDateStr,
         status: selectedOb.status,
+        paidAt: selectedOb.status === "PAID" ? selectedOb.updated_at.toISOString() : null,
+        lateFeesApplied: Number(selectedOb.late_fee || 0),
       },
       history: history.reverse(), // Show newest first
     });

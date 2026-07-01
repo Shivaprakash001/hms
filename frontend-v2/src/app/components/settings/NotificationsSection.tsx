@@ -190,11 +190,31 @@ export function NotificationsSection({ hostelId, policy }: Props) {
   }, [journeyData]);
 
   // Resolve strategies mapping dynamically from backend
-  const strategies = metadata?.strategies || {
+  const rawStrategies = metadata?.strategies || {
     gentle: { beforeDueDays: [2], afterDueDays: [2], repeatInterval: 0 },
     standard: { beforeDueDays: [3, 1], afterDueDays: [3, 7], repeatInterval: 0 },
     aggressive: { beforeDueDays: [5, 3, 1], afterDueDays: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], repeatInterval: 0 }
   };
+
+  const strategies: Record<string, {
+    name?: string;
+    badge?: string;
+    description?: string;
+    beforeDueDays: number[];
+    afterDueDays: number[];
+    repeatInterval: number;
+    stopCondition?: string;
+  }> = Object.keys(rawStrategies).reduce((acc: any, key) => {
+    const s = (rawStrategies as any)[key];
+    acc[key] = {
+      ...s,
+      beforeDueDays: s.before_due_days || s.beforeDueDays || [],
+      afterDueDays: s.after_due_days || s.afterDueDays || [],
+      repeatInterval: typeof s.repeat_interval !== 'undefined' ? s.repeat_interval : (s.repeatInterval || 0),
+      stopCondition: s.stop_condition || s.stopCondition || 'paid',
+    };
+    return acc;
+  }, {});
 
   // Compute channels for current timeline event and auto-select
   const currentEvent = journeyData?.timeline?.[selectedTimelineIndex];
@@ -766,9 +786,7 @@ export function NotificationsSection({ hostelId, policy }: Props) {
             <div className="space-y-1">
               <span className="text-[10px] text-muted-foreground font-semibold">Next Scheduled Run</span>
               <div className="text-xs font-semibold text-foreground">
-                {metadata?.nextReminderScheduledAt
-                  ? new Date(metadata.nextReminderScheduledAt).toLocaleString('en-US', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
-                  : 'Pending'}
+                {metadata?.nextReminderScheduledAt || 'Pending'}
               </div>
             </div>
           </div>
