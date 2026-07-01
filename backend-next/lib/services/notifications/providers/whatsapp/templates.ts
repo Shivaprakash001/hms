@@ -21,6 +21,7 @@ export type RentReminderTemplateVariables = {
 type TemplateDefinition = {
   metaName: string;
   languageCode: string;
+  templateBody: string;
   buildParameters: (data: RentReminderTemplateVariables) => string[];
 };
 
@@ -38,6 +39,7 @@ const TEMPLATE_REGISTRY: Record<WhatsAppRentReminderTemplate, TemplateDefinition
   [WhatsAppRentReminderTemplate.RENT_DUE_REMINDER]: {
     metaName: "rent_due_reminder_v1",
     languageCode: "en_IN",
+    templateBody: "Hello *{{1}}*, your rent of *₹{{3}}* for *{{4}}* is due in *{{2}}* days (on *{{5}}*). Please pay on time to avoid late fees. - HMS",
     buildParameters: (data) => [
       data.tenantName || "Tenant",
       String(Math.abs(data.daysOverdue)),
@@ -49,6 +51,7 @@ const TEMPLATE_REGISTRY: Record<WhatsAppRentReminderTemplate, TemplateDefinition
   [WhatsAppRentReminderTemplate.RENT_DUE_TODAY]: {
     metaName: "rent_due_today_v1",
     languageCode: "en",
+    templateBody: "Hello *{{1}}*, this is a reminder that your rent of *₹{{2}}* for *{{3}}* is due *TODAY*. Please pay using the app to avoid late fees. - HMS",
     buildParameters: (data) => [
       data.tenantName || "Tenant",
       formatTemplateAmount(data.amount),
@@ -58,6 +61,7 @@ const TEMPLATE_REGISTRY: Record<WhatsAppRentReminderTemplate, TemplateDefinition
   [WhatsAppRentReminderTemplate.RENT_OVERDUE_REMINDER]: {
     metaName: "rent_overdue_warm_v1",
     languageCode: "en_IN",
+    templateBody: "Hello *{{1}}*, your rent of *₹{{2}}* for *{{3}}* was due on *{{4}}* and is now overdue by *{{5}}* days. Please make payment as soon as possible. - HMS",
     buildParameters: (data) => [
       data.tenantName || "Tenant",
       formatTemplateAmount(data.amount),
@@ -67,6 +71,20 @@ const TEMPLATE_REGISTRY: Record<WhatsAppRentReminderTemplate, TemplateDefinition
     ],
   },
 };
+
+export function renderWhatsAppTemplatePreview(
+  template: WhatsAppRentReminderTemplate,
+  data: RentReminderTemplateVariables
+): string {
+  const def = TEMPLATE_REGISTRY[template];
+  if (!def) return "";
+  const params = def.buildParameters(data);
+  let body = def.templateBody;
+  params.forEach((param, index) => {
+    body = body.replace(new RegExp(`\\{\\{${index + 1}\\}\\}`, "g"), param);
+  });
+  return body;
+}
 
 export function selectRentReminderTemplate(daysOverdue: number): WhatsAppRentReminderTemplate {
   if (daysOverdue < 0) return WhatsAppRentReminderTemplate.RENT_DUE_REMINDER;

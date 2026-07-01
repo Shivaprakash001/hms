@@ -82,6 +82,11 @@ export type HostelPolicy = {
     auto_stop_after_payment: boolean;
     late_fee_notifications: boolean;
     owner_daily_summary: boolean;
+    strategy: string;
+    repeat_interval: number;
+    custom_before_due_days: number[];
+    custom_after_due_days: number[];
+    stop_condition: string;
   };
   receipts: {
     prefix: string;
@@ -383,6 +388,11 @@ export function normalizeHostelPolicy(hostel: any): HostelPolicy {
       auto_stop_after_payment: bool(reminders.auto_stop_after_payment ?? config.reminder_auto_stop_after_payment, true),
       late_fee_notifications: bool(reminders.late_fee_notifications ?? config.late_fee_notification, true),
       owner_daily_summary: bool(reminders.owner_daily_summary ?? config.owner_daily_summary, false),
+      strategy: String(reminders.strategy ?? config.reminder_strategy ?? "custom"),
+      repeat_interval: Number(reminders.repeat_interval ?? config.reminder_repeat_interval ?? 0),
+      custom_before_due_days: intArray(reminders.custom_before_due_days ?? config.reminder_custom_before_due_days ?? [], "Custom before-due days"),
+      custom_after_due_days: intArray(reminders.custom_after_due_days ?? config.reminder_custom_after_due_days ?? [], "Custom after-due days"),
+      stop_condition: String(reminders.stop_condition ?? config.reminder_stop_condition ?? (bool(reminders.auto_stop_after_payment ?? config.reminder_auto_stop_after_payment, true) ? "paid" : "never")),
     },
     receipts: {
       prefix: String(receipts.prefix ?? config.receipt_prefix ?? hostel?.receipt_prefix ?? "HMS"),
@@ -747,6 +757,9 @@ export function validateHostelPolicyForWrite(policy: HostelPolicy) {
   boundedNumber(policy.operations.data_retention_months, 0, 0, 120, "Data retention months");
   intArray(policy.reminders.schedule.before_due_days, "Before-due reminder days");
   intArray(policy.reminders.schedule.after_due_days, "After-due reminder days");
+  intArray(policy.reminders.custom_before_due_days, "Custom before-due days");
+  intArray(policy.reminders.custom_after_due_days, "Custom after-due days");
+  boundedNumber(policy.reminders.repeat_interval, 0, 0, 90, "Repeat interval");
   intArray(policy.reminders.escalation.after_days, "Escalation days");
 }
 

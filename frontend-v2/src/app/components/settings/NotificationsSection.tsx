@@ -48,23 +48,29 @@ export function NotificationsSection({ hostelId, policy }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  // Preview Sandbox state
-  const [activePreviewEvent, setActivePreviewEvent] = useState<{
-    id: string;
-    type: 'before' | 'due' | 'after' | 'repeat';
-    days: number;
-    channel: 'whatsapp' | 'email' | 'in_app';
-  }>({ id: 'due', type: 'due', days: 0, channel: 'whatsapp' });
+  // Metadata & Automation Health states
+  const [metadata, setMetadata] = useState<any>(null);
+  const [loadingMetadata, setLoadingMetadata] = useState(true);
 
-  // Simulation Tool state
-  const [simRentAmount, setSimRentAmount] = useState<number>(8500);
-  const [simDueDay, setSimDueDay] = useState<number>(5);
+  // Journey Simulation states
+  const [journeyData, setJourneyData] = useState<any>(null);
+  const [loadingJourney, setLoadingJourney] = useState(false);
+  const [previewTenantId, setPreviewTenantId] = useState<string>('');
+  const [selectedTimelineIndex, setSelectedTimelineIndex] = useState<number>(0);
+  const [activePreviewChannel, setActivePreviewChannel] = useState<'whatsapp' | 'email' | 'in_app'>('whatsapp');
+
+  // Inspector states
+  const [inspectorOptions, setInspectorOptions] = useState<any[]>([]);
+  const [selectedInspectorObId, setSelectedInspectorObId] = useState<string>('');
+  const [inspectorHistory, setInspectorHistory] = useState<any[]>([]);
+  const [selectedObligationDetails, setSelectedObligationDetails] = useState<any>(null);
+  const [loadingInspector, setLoadingInspector] = useState(false);
 
   // Test Modal state
   const [isTestModalOpen, setIsTestModalOpen] = useState(false);
   const [testChannel, setTestChannel] = useState<'whatsapp' | 'email'>('whatsapp');
   const [testDestination, setTestDestination] = useState('');
-  const [testType, setTestType] = useState<'DUE_SOON' | 'DUE_TODAY' | 'OVERDUE'>('DUE_SOON');
+  const [testType, setTestType] = useState<'DUE_SOON' | 'DUE_TODAY' | 'OVERDUE' | 'LATE_FEE_ADDED'>('DUE_SOON');
   const [testLoading, setTestLoading] = useState(false);
   const [testSuccessMessage, setTestSuccessMessage] = useState<string | null>(null);
   const [testErrorMessage, setTestErrorMessage] = useState<string | null>(null);
@@ -77,6 +83,132 @@ export function NotificationsSection({ hostelId, policy }: Props) {
     setLocal(next);
     snap.current = next;
   }, [hostelId, policy]);
+
+  // Fetch Metadata & Strategies Config on mount/hostelId change
+  useEffect(() => {
+    let active = true;
+    setLoadingMetadata(true);
+    api.get(`/hostels/${hostelId}/preferences/metadata`)
+      .then((res) => {
+        if (active) {
+          setMetadata(res.data);
+          setLoadingMetadata(false);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load preferences metadata:', err);
+        if (active) {
+          setLoadingMetadata(false);
+        }
+      });
+    return () => { active = false; };
+  }, [hostelId]);
+
+  // Fetch Inspector Options on mount/hostelId change
+  useEffect(() => {
+    let active = true;
+    api.get(`/hostels/${hostelId}/preferences/inspector`)
+      .then((res) => {
+        if (active) {
+          setInspectorOptions(res.data?.options || []);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to fetch inspector options:', err);
+      });
+    return () => { active = false; };
+  }, [hostelId]);
+
+  // Set default inspector selection once options are loaded
+  useEffect(() => {
+    if (inspectorOptions.length > 0 && !selectedInspectorObId) {
+      setSelectedInspectorObId(inspectorOptions[0].obligationId);
+    }
+  }, [inspectorOptions]);
+
+  // Fetch Inspector History when selected obligation changes
+  const fetchInspectorHistory = async (obId: string) => {
+    if (!obId) return;
+    setLoadingInspector(true);
+    try {
+      const res = await api.get(`/hostels/${hostelId}/preferences/inspector?obligationId=${obId}`);
+      setInspectorHistory(res.data?.history || []);
+      setSelectedObligationDetails(res.data?.selectedObligation || null);
+    } catch (err) {
+      console.error('Failed to fetch inspector history:', err);
+    } finally {
+      setLoadingInspector(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedInspectorObId) {
+      fetchInspectorHistory(selectedInspectorObId);
+    }
+  }, [selectedInspectorObId]);
+
+  // Fetch Journey Simulation
+  const fetchJourney = async () => {
+    setLoadingJourney(true);
+    try {
+      const params = new URLSearchParams();
+      params.append('strategy', local.strategy);
+      params.append('beforeDueDays', local.customBeforeDueDays.join(','));
+      params.append('afterDueDays', local.customAfterDueDays.join(','));
+      params.append('repeatInterval', String(local.repeatInterval));
+      if (previewTenantId) {
+        params.append('tenantId', previewTenantId);
+      }
+
+      const res = await api.get(`/hostels/${hostelId}/preferences/simulate?${params.toString()}`);
+      setJourneyData(res.data);
+    } catch (err) {
+      console.error('Failed to fetch journey simulation:', err);
+    } finally {
+      setLoadingJourney(false);
+    }
+  };
+
+  // Re-fetch journey whenever inputs change
+  useEffect(() => {
+    fetchJourney();
+  }, [
+    hostelId,
+    local.strategy,
+    JSON.stringify(local.customBeforeDueDays),
+    JSON.stringify(local.customAfterDueDays),
+    local.repeatInterval,
+    previewTenantId,
+  ]);
+
+  // Set default active timeline index to due day or index 0
+  useEffect(() => {
+    if (journeyData?.timeline) {
+      const dueIdx = journeyData.timeline.findIndex((t: any) => t.daysOffset === 0);
+      setSelectedTimelineIndex(dueIdx >= 0 ? dueIdx : 0);
+    }
+  }, [journeyData]);
+
+  // Resolve strategies mapping dynamically from backend
+  const strategies = metadata?.strategies || {
+    gentle: { beforeDueDays: [2], afterDueDays: [2], repeatInterval: 0 },
+    standard: { beforeDueDays: [3, 1], afterDueDays: [3, 7], repeatInterval: 0 },
+    aggressive: { beforeDueDays: [5, 3, 1], afterDueDays: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], repeatInterval: 0 }
+  };
+
+  // Compute channels for current timeline event and auto-select
+  const currentEvent = journeyData?.timeline?.[selectedTimelineIndex];
+  const currentEventChannels = (currentEvent?.channels || []).map((ch: string) => {
+    if (ch.startsWith('WhatsApp')) return 'whatsapp';
+    if (ch.toLowerCase() === 'email') return 'email';
+    return 'in_app';
+  });
+
+  useEffect(() => {
+    if (currentEventChannels.length > 0 && !currentEventChannels.includes(activePreviewChannel)) {
+      setActivePreviewChannel(currentEventChannels[0] as any);
+    }
+  }, [selectedTimelineIndex, journeyData]);
 
   const isDirty = JSON.stringify(local) !== JSON.stringify(snap.current);
 
@@ -105,11 +237,18 @@ export function NotificationsSection({ hostelId, policy }: Props) {
     setLocal((prev) => {
       let nextBefore = prev.customBeforeDueDays;
       let nextAfter = prev.customAfterDueDays;
+      let nextRepeat = prev.repeatInterval;
 
-      if (strategy === 'custom' && prev.strategy !== 'custom') {
+      if (strategy !== 'custom') {
+        const stratConfig = strategies[strategy];
+        nextBefore = [...stratConfig.beforeDueDays];
+        nextAfter = [...stratConfig.afterDueDays];
+        nextRepeat = stratConfig.repeatInterval;
+      } else if (prev.strategy !== 'custom') {
         // Hydrate custom with standard settings to avoid starting blank
-        nextBefore = [...STANDARD_BEFORE];
-        nextAfter = [...STANDARD_AFTER];
+        nextBefore = [...strategies.standard.beforeDueDays];
+        nextAfter = [...strategies.standard.afterDueDays];
+        nextRepeat = strategies.standard.repeatInterval;
       }
 
       return {
@@ -117,19 +256,9 @@ export function NotificationsSection({ hostelId, policy }: Props) {
         strategy,
         customBeforeDueDays: nextBefore,
         customAfterDueDays: nextAfter,
+        repeatInterval: nextRepeat,
       };
     });
-
-    // Auto-update active timeline preview event to match new strategy
-    if (strategy === 'gentle') {
-      setActivePreviewEvent({ id: 'before-2', type: 'before', days: 2, channel: 'whatsapp' });
-    } else if (strategy === 'standard') {
-      setActivePreviewEvent({ id: 'before-3', type: 'before', days: 3, channel: 'whatsapp' });
-    } else if (strategy === 'aggressive') {
-      setActivePreviewEvent({ id: 'before-5', type: 'before', days: 5, channel: 'whatsapp' });
-    } else {
-      setActivePreviewEvent({ id: 'due', type: 'due', days: 0, channel: 'whatsapp' });
-    }
   };
 
   const toggleChannel = (channel: keyof FrontendReminderState['channels']) => {
@@ -552,9 +681,13 @@ export function NotificationsSection({ hostelId, policy }: Props) {
           <div className="p-4 rounded-xl border border-border bg-card">
             <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Collection Health</span>
             <div className="text-xl font-bold text-foreground mt-1 flex items-baseline gap-1.5">
-              <span>98.4%</span>
-              <span className="text-[10px] font-semibold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded">
-                Healthy
+              <span>{metadata?.whatsappConnected ? '98.4%' : 'N/A'}</span>
+              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                metadata?.whatsappConnected 
+                  ? 'text-emerald-500 bg-emerald-500/10' 
+                  : 'text-amber-500 bg-amber-500/10'
+              }`}>
+                {metadata?.whatsappConnected ? 'Healthy' : 'No Connection'}
               </span>
             </div>
             <p className="text-[10px] text-muted-foreground mt-1">WhatsApp delivery success rate</p>
@@ -571,6 +704,79 @@ export function NotificationsSection({ hostelId, policy }: Props) {
           </div>
         </div>
 
+        {/* Automation Health Diagnostics */}
+        <div className="p-4 rounded-xl border border-border bg-card space-y-3">
+          <div className="flex items-center justify-between border-b border-border pb-2.5">
+            <h4 className="font-semibold text-xs text-foreground uppercase tracking-wider flex items-center gap-1.5">
+              <Activity className="w-4 h-4 text-emerald-500" /> Automation Health Diagnostics
+            </h4>
+            <span className="text-[10px] font-semibold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+              System Live
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 pt-1">
+            {/* WhatsApp Integration Status */}
+            <div className="space-y-1">
+              <span className="text-[10px] text-muted-foreground font-semibold">WhatsApp Gateway</span>
+              <div className="flex items-center gap-1.5">
+                {metadata?.whatsappConnected ? (
+                  <>
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                    <span className="text-xs font-semibold text-foreground">Connected</span>
+                    {metadata.whatsappPhone && (
+                      <span className="text-[9px] text-muted-foreground font-mono">({metadata.whatsappPhone})</span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
+                    <span className="text-xs font-semibold text-foreground">Disconnected</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Template Verification Status */}
+            <div className="space-y-1">
+              <span className="text-[10px] text-muted-foreground font-semibold">Meta Templates</span>
+              <div className="flex items-center gap-1.5">
+                {metadata?.templatesApproved ? (
+                  <>
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                    <span className="text-xs font-semibold text-foreground">Approved (3 Active)</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                    <span className="text-xs font-semibold text-foreground">Pending Approval</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Last Execution Info */}
+            <div className="space-y-1">
+              <span className="text-[10px] text-muted-foreground font-semibold">Last Reminder Run</span>
+              <div className="text-xs font-semibold text-foreground">
+                {metadata?.lastReminderSentAt
+                  ? new Date(metadata.lastReminderSentAt).toLocaleString('en-US', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+                  : 'Never'}
+              </div>
+            </div>
+
+            {/* Queue & Cron Status */}
+            <div className="space-y-1">
+              <span className="text-[10px] text-muted-foreground font-semibold">Next Scheduled Run</span>
+              <div className="text-xs font-semibold text-foreground">
+                {metadata?.nextReminderScheduledAt
+                  ? new Date(metadata.nextReminderScheduledAt).toLocaleString('en-US', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+                  : 'Pending'}
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Step 1: Collection Strategy Presets */}
         <div className="space-y-3">
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -580,11 +786,8 @@ export function NotificationsSection({ hostelId, policy }: Props) {
             {/* Gentle Card */}
             <button
               type="button"
-              disabled={!local.autoSendReminders}
               onClick={() => handleStrategyChange('gentle')}
               className={`flex flex-col text-left p-4 rounded-xl border-2 transition-all relative ${
-                !local.autoSendReminders ? 'opacity-50 cursor-not-allowed' : ''
-              } ${
                 local.strategy === 'gentle'
                   ? 'border-accent bg-accent/5 ring-1 ring-accent'
                   : 'border-border bg-card hover:border-border-hover hover:bg-secondary/20'
@@ -607,18 +810,15 @@ export function NotificationsSection({ hostelId, policy }: Props) {
                 Friendly reminders with lower frequency. Ideal for high-trust students.
               </p>
               <div className="text-[10px] font-mono text-muted-foreground bg-secondary px-2 py-1 rounded w-full">
-                1 before • Due • 2 overdue
+                {strategies.gentle.beforeDueDays.length} before • Due • {strategies.gentle.afterDueDays.length} overdue
               </div>
             </button>
 
             {/* Standard Card */}
             <button
               type="button"
-              disabled={!local.autoSendReminders}
               onClick={() => handleStrategyChange('standard')}
               className={`flex flex-col text-left p-4 rounded-xl border-2 transition-all relative ${
-                !local.autoSendReminders ? 'opacity-50 cursor-not-allowed' : ''
-              } ${
                 local.strategy === 'standard'
                   ? 'border-accent bg-accent/5 ring-1 ring-accent'
                   : 'border-border bg-card hover:border-border-hover hover:bg-secondary/20'
@@ -644,18 +844,15 @@ export function NotificationsSection({ hostelId, policy }: Props) {
                 Optimized flow balancing urgency and friendliness.
               </p>
               <div className="text-[10px] font-mono text-muted-foreground bg-secondary px-2 py-1 rounded w-full">
-                2 before • Due • 3 overdue
+                {strategies.standard.beforeDueDays.length} before • Due • {strategies.standard.afterDueDays.length} overdue
               </div>
             </button>
 
             {/* Aggressive Card */}
             <button
               type="button"
-              disabled={!local.autoSendReminders}
               onClick={() => handleStrategyChange('aggressive')}
               className={`flex flex-col text-left p-4 rounded-xl border-2 transition-all relative ${
-                !local.autoSendReminders ? 'opacity-50 cursor-not-allowed' : ''
-              } ${
                 local.strategy === 'aggressive'
                   ? 'border-accent bg-accent/5 ring-1 ring-accent'
                   : 'border-border bg-card hover:border-border-hover hover:bg-secondary/20'
@@ -678,18 +875,15 @@ export function NotificationsSection({ hostelId, policy }: Props) {
                 High frequency alerts. Best for students with persistent delays.
               </p>
               <div className="text-[10px] font-mono text-muted-foreground bg-secondary px-2 py-1 rounded w-full">
-                3 before • Due • Daily to 14d overdue
+                {strategies.aggressive.beforeDueDays.length} before • Due • {strategies.aggressive.afterDueDays.length} overdue
               </div>
             </button>
 
             {/* Custom Card */}
             <button
               type="button"
-              disabled={!local.autoSendReminders}
               onClick={() => handleStrategyChange('custom')}
               className={`flex flex-col text-left p-4 rounded-xl border-2 transition-all relative ${
-                !local.autoSendReminders ? 'opacity-50 cursor-not-allowed' : ''
-              } ${
                 local.strategy === 'custom'
                   ? 'border-accent bg-accent/5 ring-1 ring-accent'
                   : 'border-border bg-card hover:border-border-hover hover:bg-secondary/20'
@@ -717,7 +911,7 @@ export function NotificationsSection({ hostelId, policy }: Props) {
         </div>
 
         {/* Custom Configuration Panel */}
-        {local.strategy === 'custom' && local.autoSendReminders && (
+        {local.strategy === 'custom' && (
           <div className="border border-border rounded-xl overflow-hidden bg-card transition-all">
             <button
               type="button"
@@ -902,81 +1096,87 @@ export function NotificationsSection({ hostelId, policy }: Props) {
         </div>
 
         {/* Timeline Centerpiece & Live Mockup Sandbox */}
-        {local.autoSendReminders && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 border-t border-border pt-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 border-t border-border pt-8">
             {/* Visual Timeline (Interactive Hub) */}
             <div className="lg:col-span-7 space-y-4">
               <div>
-                <h3 className="font-semibold text-sm text-foreground">Rent Journey Visual Timeline</h3>
-                <p className="text-xs text-muted-foreground">
-                  Simulated cycle showing messages for rent due on <strong>July 5</strong>. Select a node to preview the message.
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-sm text-foreground">Rent Journey Visual Timeline</h3>
+                  {/* Active preview selector */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-muted-foreground font-semibold">Preview Tenant:</span>
+                    <select
+                      value={previewTenantId}
+                      onChange={(e) => setPreviewTenantId(e.target.value)}
+                      className="px-2 py-1 bg-background border border-border rounded text-[11px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                    >
+                      <option value="">Default Preview Context</option>
+                      {inspectorOptions.map((opt) => (
+                        <option key={opt.obligationId} value={opt.tenantId}>
+                          {opt.tenantName} ({opt.roomNumber})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Simulated sequence showing messages for rent cycle of <strong>{journeyData?.rentMonth || 'July 2026'}</strong>. Select a node to preview the message.
                 </p>
               </div>
 
-              <div className="relative border-l border-border pl-6 space-y-4 ml-3 mt-4">
-                {timelineEvents.map((evt) => {
-                  const isActive = activePreviewEvent.id === evt.id;
-                  const isDue = evt.type === 'due';
-                  const isRepeat = evt.type === 'repeat';
+              {loadingJourney ? (
+                <div className="py-12 flex flex-col items-center justify-center text-muted-foreground text-xs gap-2">
+                  <Activity className="w-5 h-5 animate-spin text-accent" />
+                  <span>Generating live simulation...</span>
+                </div>
+              ) : (
+                <div className="relative border-l border-border pl-6 space-y-4 ml-3 mt-4">
+                  {(journeyData?.timeline || []).map((evt: any, index: number) => {
+                    const isActive = selectedTimelineIndex === index;
+                    const isDue = evt.daysOffset === 0;
+                    const isRepeat = evt.stepName.toLowerCase().includes('repeat') || evt.stepName.toLowerCase().includes('recurring');
 
-                  return (
-                    <div
-                      key={evt.id}
-                      onClick={() => {
-                        let previewType: 'before' | 'due' | 'after' | 'repeat' = 'due';
-                        if (evt.type === 'before') previewType = 'before';
-                        else if (evt.type === 'after') previewType = 'after';
-                        else if (evt.type === 'repeat') previewType = 'repeat';
-
-                        setActivePreviewEvent({
-                          id: evt.id,
-                          type: previewType,
-                          days: evt.days,
-                          channel: activePreviewEvent.channel,
-                        });
-                      }}
-                      className={`relative p-3 rounded-lg border cursor-pointer select-none transition-all ${
-                        isActive
-                          ? 'border-accent bg-accent/5 ring-1 ring-accent shadow-sm'
-                          : 'border-transparent bg-transparent hover:bg-secondary/40'
-                      }`}
-                    >
-                      {/* Node point */}
+                    return (
                       <div
-                        className={`absolute -left-[31px] top-4.5 w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${
-                          isDue
-                            ? 'bg-amber-500 border-amber-500'
-                            : isRepeat
-                            ? 'bg-purple-500 border-purple-500'
-                            : isActive
-                            ? 'bg-accent border-accent'
-                            : 'bg-background border-border'
+                        key={index}
+                        onClick={() => setSelectedTimelineIndex(index)}
+                        className={`relative p-3 rounded-lg border cursor-pointer select-none transition-all ${
+                          isActive
+                            ? 'border-accent bg-accent/5 ring-1 ring-accent shadow-sm'
+                            : 'border-transparent bg-transparent hover:bg-secondary/40'
                         }`}
                       >
-                        <div className="w-1.5 h-1.5 rounded-full bg-white" />
-                      </div>
-
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-xs text-foreground">
-                              {evt.label}
-                            </span>
-                            <span className="text-[9px] text-muted-foreground font-mono bg-secondary px-1.5 py-0.5 rounded">
-                              {evt.dateStr}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">{evt.sub}</p>
+                        {/* Node point */}
+                        <div
+                          className={`absolute -left-[31px] top-4.5 w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${
+                            isDue
+                              ? 'bg-amber-500 border-amber-500'
+                              : isRepeat
+                              ? 'bg-purple-500 border-purple-500'
+                              : isActive
+                              ? 'bg-accent border-accent'
+                              : 'bg-background border-border'
+                          }`}
+                        >
+                          <div className="w-1.5 h-1.5 rounded-full bg-white" />
                         </div>
 
-                        {/* Event Channel Indicators */}
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {isDue ? (
-                            <span className="text-[9px] font-bold text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-950/20 px-2 py-0.5 rounded border border-amber-200/30">
-                              Milestone
-                            </span>
-                          ) : (
-                            activeChannelsList.map((ch) => (
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-xs text-foreground">
+                                {evt.stepName}
+                              </span>
+                              <span className="text-[9px] text-muted-foreground font-mono bg-secondary px-1.5 py-0.5 rounded">
+                                {evt.date}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">{evt.description}</p>
+                          </div>
+
+                          {/* Event Channel Indicators */}
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {evt.channels.map((ch: string) => (
                               <span
                                 key={ch}
                                 className={`p-1 rounded border transition-colors ${
@@ -984,48 +1184,37 @@ export function NotificationsSection({ hostelId, policy }: Props) {
                                 }`}
                                 title={`Sent via ${ch}`}
                               >
-                                {getChannelIcon(ch)}
+                                {getChannelIcon(ch.startsWith('WhatsApp') ? 'whatsapp' : ch.toLowerCase() === 'email' ? 'email' : 'in_app')}
                               </span>
-                            ))
-                          )}
+                            ))}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
 
-              {/* Simulation Tool Widget */}
+              {/* Sim Context Info Widget */}
               <div className="p-4 rounded-xl border border-border bg-secondary/10 mt-6 space-y-3">
                 <div className="flex items-center gap-2 text-foreground font-semibold text-xs">
-                  <Calendar className="w-4 h-4 text-accent" /> Rent Journey Simulation Tool
+                  <Calendar className="w-4 h-4 text-accent" /> Active Preview Context
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  Simulate exact dispatch dates for customized rent amounts and due dates.
+                  This simulation is based on tenant <strong>{journeyData?.previewTenant?.name || 'Rahul Sharma'}</strong>'s active billing configuration.
                 </p>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-muted-foreground font-semibold">Rent Amount (₹)</label>
-                    <input
-                      type="number"
-                      value={simRentAmount}
-                      onChange={(e) => setSimRentAmount(Number(e.target.value) || 0)}
-                      className="w-full px-2.5 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
-                    />
+                <div className="grid grid-cols-3 gap-4 text-xs">
+                  <div className="p-2 bg-background border border-border rounded">
+                    <div className="text-[10px] text-muted-foreground font-semibold">Tenant Name</div>
+                    <div className="font-semibold mt-0.5">{journeyData?.previewTenant?.name || 'Rahul Sharma'}</div>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-muted-foreground font-semibold">Due Day of Month</label>
-                    <select
-                      value={simDueDay}
-                      onChange={(e) => setSimDueDay(Number(e.target.value))}
-                      className="w-full px-2.5 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
-                    >
-                      {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
-                        <option key={d} value={d}>
-                          {d}
-                        </option>
-                      ))}
-                    </select>
+                  <div className="p-2 bg-background border border-border rounded">
+                    <div className="text-[10px] text-muted-foreground font-semibold">Room & Rent Dues</div>
+                    <div className="font-semibold mt-0.5">{journeyData?.previewTenant?.roomNumber || 'Room G4'} • ₹{(journeyData?.previewTenant?.rentAmount || 8500).toLocaleString('en-IN')}</div>
+                  </div>
+                  <div className="p-2 bg-background border border-border rounded">
+                    <div className="text-[10px] text-muted-foreground font-semibold">Rent Due Day</div>
+                    <div className="font-semibold mt-0.5">Day {journeyData?.previewTenant?.dueDay || 5} of month</div>
                   </div>
                 </div>
 
@@ -1034,9 +1223,9 @@ export function NotificationsSection({ hostelId, policy }: Props) {
                     Calculated Dispatch Sequence
                   </span>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px] font-mono text-foreground">
-                    {getSimulatedDates().map((sim, index) => (
+                    {(journeyData?.timeline || []).map((sim: any, index: number) => (
                       <div key={index} className="flex justify-between p-1.5 bg-background border border-border rounded">
-                        <span className="text-muted-foreground">{sim.label}</span>
+                        <span className="text-muted-foreground">{sim.stepName}</span>
                         <span className="font-bold">{sim.date}</span>
                       </div>
                     ))}
@@ -1049,27 +1238,22 @@ export function NotificationsSection({ hostelId, policy }: Props) {
             <div className="lg:col-span-5 flex flex-col space-y-4">
               <div>
                 <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-                  <Eye className="w-4 h-4 text-accent" /> Live WhatsApp Mockup
+                  <Eye className="w-4 h-4 text-accent" /> Live Channel Mockup
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  See the exact verified template format sent to the tenant.
+                  See the exact template format sent to the tenant.
                 </p>
               </div>
 
               {/* Channels Preview Swapper */}
               <div className="flex border-b border-border">
-                {activeChannelsList.map((ch) => (
+                {currentEventChannels.map((ch: any) => (
                   <button
                     key={ch}
                     type="button"
-                    onClick={() =>
-                      setActivePreviewEvent((prev) => ({
-                        ...prev,
-                        channel: ch,
-                      }))
-                    }
+                    onClick={() => setActivePreviewChannel(ch)}
                     className={`flex-1 py-2 text-xs font-semibold border-b-2 transition-all flex items-center justify-center gap-1.5 capitalize ${
-                      activePreviewEvent.channel === ch
+                      activePreviewChannel === ch
                         ? 'border-accent text-accent'
                         : 'border-transparent text-muted-foreground hover:text-foreground'
                     }`}
@@ -1082,18 +1266,18 @@ export function NotificationsSection({ hostelId, policy }: Props) {
 
               {/* Phone Canvas Layout */}
               <div className="flex-1 bg-secondary/50 border border-border rounded-2xl p-4 flex items-center justify-center min-h-[380px]">
-                {activePreviewEvent.channel === 'whatsapp' ? (
+                {activePreviewChannel === 'whatsapp' ? (
                   <div className="w-full max-w-[280px] bg-background border border-border rounded-[2.5rem] shadow-xl overflow-hidden flex flex-col relative aspect-[9/16] ring-8 ring-secondary-hover/20">
                     {/* Phone speaker notch */}
                     <div className="absolute top-2 left-1/2 -translate-x-1/2 w-16 h-3 bg-secondary rounded-full z-10" />
 
-                    {/* WhatsApp Top Header Bar */}
+                    {/* WhatsApp Header */}
                     <div className="bg-[#075e54] text-white px-4 pt-6 pb-2.5 flex items-center gap-2">
                       <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-bold">
                         G
                       </div>
                       <div>
-                        <div className="text-[11px] font-bold">Greenwood Residency</div>
+                        <div className="text-[11px] font-bold">{journeyData?.hostelName || 'Greenwood Residency'}</div>
                         <div className="text-[8px] opacity-75 flex items-center gap-1">
                           Official Accounts <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
                         </div>
@@ -1102,7 +1286,7 @@ export function NotificationsSection({ hostelId, policy }: Props) {
 
                     {/* Meta template status overlay */}
                     <div className="bg-[#e1f5fe] text-[#0288d1] dark:bg-sky-950/40 dark:text-sky-300 px-3 py-1.5 text-[9px] font-semibold border-b border-sky-100 dark:border-sky-900/50 flex items-center justify-between">
-                      <span>Template: {activePreviewEvent.type === 'before' ? 'rent_due_reminder_v1' : activePreviewEvent.type === 'due' ? 'rent_due_today_v1' : 'rent_overdue_warm_v1'}</span>
+                      <span>Template: {currentEvent?.templateName || 'rent_due_reminder'}</span>
                       <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-1 rounded flex items-center gap-0.5">
                         <Check className="w-2.5 h-2.5" /> Approved
                       </span>
@@ -1112,11 +1296,7 @@ export function NotificationsSection({ hostelId, policy }: Props) {
                     <div className="bg-[#efeae2] dark:bg-slate-900 flex-1 p-3 flex flex-col justify-end min-h-[220px]">
                       <div className="bg-white dark:bg-slate-800 rounded-lg p-2.5 shadow-sm text-[11px] text-foreground max-w-[90%] relative self-start">
                         <div className="whitespace-pre-wrap leading-relaxed">
-                          {getPreviewMessageText(
-                            activePreviewEvent.type,
-                            activePreviewEvent.days,
-                            'whatsapp'
-                          )}
+                          {currentEvent?.previews?.whatsapp || ''}
                         </div>
                         <div className="text-[8px] text-muted-foreground text-right mt-1">
                           12:00 AM
@@ -1124,7 +1304,7 @@ export function NotificationsSection({ hostelId, policy }: Props) {
                       </div>
                     </div>
                   </div>
-                ) : activePreviewEvent.channel === 'in_app' ? (
+                ) : activePreviewChannel === 'in_app' ? (
                   <div className="w-full max-w-[280px] bg-background border border-border rounded-[2.5rem] shadow-xl overflow-hidden flex flex-col aspect-[9/16] relative ring-8 ring-secondary-hover/20">
                     <div className="absolute top-2 left-1/2 -translate-x-1/2 w-16 h-3 bg-secondary rounded-full z-10" />
                     <div className="bg-secondary px-4 pt-6 pb-2 flex justify-between items-center text-[10px] text-muted-foreground font-mono">
@@ -1143,12 +1323,8 @@ export function NotificationsSection({ hostelId, policy }: Props) {
                         <Bell className="w-4 h-4 text-accent shrink-0 mt-0.5" />
                         <div className="space-y-1">
                           <div className="text-[10px] font-bold text-foreground">Rent Payment Due</div>
-                          <p className="text-[9px] text-muted-foreground leading-normal">
-                            {getPreviewMessageText(
-                              activePreviewEvent.type,
-                              activePreviewEvent.days,
-                              'in_app'
-                            )}
+                          <p className="text-[9px] text-muted-foreground leading-normal font-medium">
+                            {currentEvent?.previews?.in_app || ''}
                           </p>
                         </div>
                       </div>
@@ -1158,23 +1334,138 @@ export function NotificationsSection({ hostelId, policy }: Props) {
                   <div className="w-full max-w-[300px] bg-background border border-border rounded-xl shadow-lg overflow-hidden flex flex-col">
                     <div className="bg-secondary/40 px-3 py-2 border-b border-border text-[9px] text-muted-foreground space-y-0.5">
                       <div><span className="font-semibold text-foreground">From:</span> auto-billing@greenwood.com</div>
-                      <div><span className="font-semibold text-foreground">To:</span> rahul.sharma@gmail.com</div>
+                      <div><span className="font-semibold text-foreground">To:</span> {journeyData?.previewTenant?.email || 'tenant@example.com'}</div>
+                      <div><span className="font-semibold text-foreground">Subject:</span> {currentEvent?.previews?.email?.subject || 'Rent Due Reminder'}</div>
                     </div>
-                    <div className="p-4 flex-1 text-[11px] text-foreground space-y-3">
-                      <div className="whitespace-pre-wrap leading-relaxed bg-secondary/20 p-2.5 rounded border border-border/50">
-                        {getPreviewMessageText(
-                          activePreviewEvent.type,
-                          activePreviewEvent.days,
-                          'email'
-                        )}
-                      </div>
+                    <div className="p-3 flex-1 text-[11px] text-foreground max-h-[300px] overflow-y-auto">
+                      {currentEvent?.previews?.email?.html ? (
+                        <div 
+                          className="p-2 border border-border rounded bg-card text-[10px] overflow-hidden" 
+                          dangerouslySetInnerHTML={{ __html: currentEvent.previews.email.html }}
+                        />
+                      ) : (
+                        <div className="whitespace-pre-wrap leading-relaxed bg-secondary/20 p-2.5 rounded border border-border/50">
+                          {currentEvent?.previews?.email?.subject}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
               </div>
             </div>
           </div>
-        )}
+
+          {/* Reminder Decision Inspector */}
+          <div className="border-t border-border pt-6 space-y-4">
+            <div className="space-y-1">
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                <Sliders className="w-4 h-4 text-accent" /> Reminder Decision Inspector
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Audit the exact day-by-day evaluation logs and skipped/delivered decisions for any student's billing cycle.
+              </p>
+            </div>
+
+            <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between p-4 rounded-xl border border-border bg-card">
+              <div className="space-y-1">
+                <label className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Select Active Rent Obligation to Audit</label>
+                <select
+                  value={selectedInspectorObId}
+                  onChange={(e) => setSelectedInspectorObId(e.target.value)}
+                  className="w-full md:w-80 px-3 py-2 bg-background border border-border rounded-lg text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-accent mt-1"
+                >
+                  {inspectorOptions.map((opt) => (
+                    <option key={opt.obligationId} value={opt.obligationId}>
+                      {opt.tenantName} ({opt.roomNumber}) - Due: {new Date(opt.dueDate).toLocaleDateString('en-US', { day: '2-digit', month: 'short' })}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {selectedObligationDetails && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-mono">
+                  <div className="p-2 bg-secondary/35 rounded border border-border">
+                    <span className="text-[9px] text-muted-foreground block">Rent Dues</span>
+                    <span className="font-bold text-foreground">₹{selectedObligationDetails.amount.toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="p-2 bg-secondary/35 rounded border border-border">
+                    <span className="text-[9px] text-muted-foreground block">Status</span>
+                    <span className={`font-bold ${
+                      selectedObligationDetails.status === 'PAID' ? 'text-emerald-500' : 'text-amber-500'
+                    }`}>{selectedObligationDetails.status}</span>
+                  </div>
+                  <div className="p-2 bg-secondary/35 rounded border border-border">
+                    <span className="text-[9px] text-muted-foreground block">Paid At</span>
+                    <span className="font-bold text-foreground">
+                      {selectedObligationDetails.paidAt 
+                        ? new Date(selectedObligationDetails.paidAt).toLocaleDateString('en-US', { day: '2-digit', month: 'short' })
+                        : 'Unpaid'}
+                    </span>
+                  </div>
+                  <div className="p-2 bg-secondary/35 rounded border border-border">
+                    <span className="text-[9px] text-muted-foreground block">Late Fees</span>
+                    <span className="font-bold text-foreground">₹{selectedObligationDetails.lateFeesApplied || 0}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {loadingInspector ? (
+              <div className="py-8 flex flex-col items-center justify-center text-muted-foreground text-xs gap-2">
+                <Activity className="w-5 h-5 animate-spin text-accent" />
+                <span>Fetching audit trace logs...</span>
+              </div>
+            ) : inspectorHistory.length === 0 ? (
+              <div className="p-6 text-center border border-dashed border-border rounded-xl text-xs text-muted-foreground">
+                No daily trace history found for this billing cycle.
+              </div>
+            ) : (
+              <div className="border border-border rounded-xl overflow-hidden bg-card">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-secondary/40 border-b border-border text-muted-foreground font-semibold">
+                        <th className="p-3">Evaluation Date</th>
+                        <th className="p-3">Timeline Offset</th>
+                        <th className="p-3">Outcome</th>
+                        <th className="p-3">Detailed Log Message</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {inspectorHistory.map((item, index) => (
+                        <tr key={index} className="hover:bg-secondary/20 transition-colors">
+                          <td className="p-3 font-mono text-[11px] text-foreground font-semibold">
+                            {new Date(item.evalDate).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </td>
+                          <td className="p-3 font-mono text-[10px] text-muted-foreground font-semibold">
+                            {item.offsetDays === 0 
+                              ? 'Due Day' 
+                              : `${Math.abs(item.offsetDays)} Day${Math.abs(item.offsetDays) > 1 ? 's' : ''} ${item.offsetDays > 0 ? 'Overdue' : 'Before'}`}
+                          </td>
+                          <td className="p-3">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${
+                              item.outcome === 'DELIVERED' 
+                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                                : item.outcome === 'SKIPPED'
+                                ? 'bg-secondary text-muted-foreground border-border'
+                                : item.outcome === 'FAILED'
+                                ? 'bg-red-500/10 text-red-600 border-red-500/20'
+                                : 'bg-blue-500/10 text-blue-600 border-blue-500/20'
+                            }`}>
+                              {item.outcome}
+                            </span>
+                          </td>
+                          <td className="p-3 text-[11px] text-muted-foreground leading-normal font-medium">
+                            {item.logMessage}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
 
         {/* Step 3: Stop Conditions & System Behaviour */}
         <div className="border-t border-border pt-6 space-y-6">

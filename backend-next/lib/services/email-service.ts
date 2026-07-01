@@ -181,6 +181,77 @@ export class EmailService {
     
     return this.sendEmail(data.toEmail, subject, html, attachments);
   }
+  static renderReminderPreview(data: {
+    name: string;
+    amount: number;
+    rentMonth: string;
+    dueDate: string;
+    type: "DUE_SOON" | "WARNING" | "FINAL_NOTICE" | "LATE_FEE_ADDED";
+    prefs?: Partial<HostelPreferences>;
+  }) {
+    const formattedAmount = formatCurrency(data.amount, data.prefs);
+    let subject = "";
+    let title = "";
+    let message = "";
+    let color = "#6366f1"; // Indigo default
+
+    switch (data.type) {
+      case "DUE_SOON":
+        subject = `Rent Payment Reminder - ${data.rentMonth}`;
+        title = "Gentle Rent Reminder";
+        message = `This is a friendly reminder that your rent of <strong>${formattedAmount}</strong> for ${data.rentMonth} is due soon. kindly ignore if already paid.`;
+        break;
+      case "WARNING":
+        subject = `Overdue Payment Notice - ${data.rentMonth}`;
+        title = "Payment Overdue";
+        message = `Your rent payment of <strong>${formattedAmount}</strong> for ${data.rentMonth} is now past its due date (${data.dueDate}). Please settle this to avoid late fees.`;
+        color = "#f59e0b"; // Amber
+        break;
+      case "FINAL_NOTICE":
+        subject = `URGENT: Final Rent Notice - ${data.rentMonth}`;
+        title = "Final Payment Notice";
+        message = `URGENT: Your rent of <strong>${formattedAmount}</strong> for ${data.rentMonth} is significantly overdue. Please pay immediately to avoid service deactivation or additional penalties.`;
+        color = "#ef4444"; // Red
+        break;
+      case "LATE_FEE_ADDED":
+        subject = `Late Fee Applied - ${data.rentMonth}`;
+        title = "Late Fee Added";
+        message = `A late fee has been applied to your account for the month of ${data.rentMonth} as the payment is past the grace period.`;
+        color = "#7c3aed"; // Violet
+        break;
+    }
+
+    const html = `
+      <div style="font-family: sans-serif; max-width: 500px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; margin: 0 auto; text-align: left;">
+        <div style="background: ${color}; color: white; padding: 20px; text-align: center;">
+          <h2 style="margin: 0; font-size: 20px;">${title}</h2>
+        </div>
+        <div style="padding: 24px; color: #1e293b; line-height: 1.5;">
+          <p>Hi <strong>${data.name}</strong>,</p>
+          <p>${message}</p>
+          <div style="margin: 20px 0; padding: 16px; background: #f8fafc; border-radius: 8px; border-left: 4px solid ${color};">
+            <p style="margin: 0; font-size: 14px; color: #64748b;">Amount Due</p>
+            <p style="margin: 4px 0 0; font-size: 24px; font-weight: bold; color: #0f172a;">${formattedAmount}</p>
+            <p style="margin: 12px 0 0; font-size: 14px; color: #64748b;">Due Date: ${data.dueDate}</p>
+          </div>
+          <p style="font-size: 14px; color: #64748b; margin-top: 24px; margin-bottom: 24px;">
+            You can pay directly via the tenant dashboard or using the hostel UPI ID.
+          </p>
+          <div style="text-align: center; margin-top: 10px; margin-bottom: 10px;">
+            <a href="#" style="display: inline-block; padding: 12px 24px; background-color: ${color}; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
+              Pay Now
+            </a>
+          </div>
+        </div>
+        <div style="background: #f1f5f9; padding: 12px; text-align: center; font-size: 12px; color: #94a3b8;">
+          This is an automated notification from your Hostel Management System.
+        </div>
+      </div>
+    `;
+
+    return { subject, html };
+  }
+
   static async sendReminderBatch(data: {
     toEmail: string;
     name: string;
