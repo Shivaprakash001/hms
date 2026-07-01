@@ -4,7 +4,7 @@ export const runtime = "nodejs";
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
 import { resolveOwnerScope } from "@/lib/auth/resolve-operational-scope";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/db";
 import { COLLECTION_STRATEGIES } from "@/lib/services/collection-strategy-service";
 import { WhatsAppRentReminderTemplate } from "@/lib/services/notifications/providers/whatsapp/types";
 
