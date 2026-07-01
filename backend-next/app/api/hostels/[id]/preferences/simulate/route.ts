@@ -28,7 +28,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const previewTenantId = url.searchParams.get("tenantId");
 
     // Fetch hostel policy
-    const policy = await hostelPolicyService.getHostelPolicy(hostelId, scope.owner_id);
+    const policyResponse = await hostelPolicyService.getHostelPolicy(hostelId, scope.owner_id);
+    const policy = policyResponse.policy;
 
     // Resolve tenant context
     let tenantName = "Priya Patel";
@@ -43,13 +44,18 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
           profiles: true,
           room_allocations: {
             where: { is_active: true },
+            include: {
+              room: {
+                select: { room_no: true },
+              },
+            },
           },
         },
       });
       if (dbTenant) {
         tenantName = dbTenant.profiles?.name || tenantName;
         rentAmount = dbTenant.monthly_rent ? Number(dbTenant.monthly_rent) : rentAmount;
-        roomNumber = dbTenant.room_allocations[0]?.room_number || roomNumber;
+        roomNumber = dbTenant.room_allocations[0]?.room?.room_no || roomNumber;
         guardianPhone = dbTenant.guardian_phone || guardianPhone;
       }
     } else {
@@ -60,13 +66,18 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
           profiles: true,
           room_allocations: {
             where: { is_active: true },
+            include: {
+              room: {
+                select: { room_no: true },
+              },
+            },
           },
         },
       });
       if (sampleTenant) {
         tenantName = sampleTenant.profiles?.name || tenantName;
         rentAmount = sampleTenant.monthly_rent ? Number(sampleTenant.monthly_rent) : rentAmount;
-        roomNumber = sampleTenant.room_allocations[0]?.room_number || roomNumber;
+        roomNumber = sampleTenant.room_allocations[0]?.room?.room_no || roomNumber;
         guardianPhone = sampleTenant.guardian_phone || guardianPhone;
       }
     }

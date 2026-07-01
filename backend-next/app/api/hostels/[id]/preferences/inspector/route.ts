@@ -48,8 +48,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
             },
             room_allocations: {
               where: { is_active: true },
-              select: {
-                room_number: true,
+              include: {
+                room: {
+                  select: { room_no: true },
+                },
               },
             },
           },
@@ -61,7 +63,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       obligationId: ob.id,
       tenantId: ob.tenant_id,
       tenantName: ob.tenants?.profiles?.name || "Tenant",
-      roomNumber: ob.tenants?.room_allocations[0]?.room_number || "N/A",
+      roomNumber: ob.tenants?.room_allocations[0]?.room?.room_no || "N/A",
       amount: Number(ob.amount),
       dueDate: ob.due_date.toISOString().split("T")[0],
       status: ob.status,
@@ -100,7 +102,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     }
 
     // Fetch hostel policy to check strategy presets
-    const policy = await hostelPolicyService.getHostelPolicy(hostelId, scope.owner_id);
+    const policyResponse = await hostelPolicyService.getHostelPolicy(hostelId, scope.owner_id);
+    const policy = policyResponse.policy;
 
     // Fetch reminder logs
     const whatsappLogs = await prisma.whatsapp_logs.findMany({
