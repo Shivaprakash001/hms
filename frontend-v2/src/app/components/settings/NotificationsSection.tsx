@@ -487,11 +487,8 @@ export function NotificationsSection({ hostelId, policy }: Props) {
   const activeChannelsList = getActiveChannels();
 
   useEffect(() => {
-    if (!activeChannelsList.includes(activePreviewEvent.channel)) {
-      setActivePreviewEvent((prev) => ({
-        ...prev,
-        channel: activeChannelsList[0],
-      }));
+    if (!activeChannelsList.includes(activePreviewChannel)) {
+      setActivePreviewChannel(activeChannelsList[0]);
     }
   }, [local.channels]);
 
