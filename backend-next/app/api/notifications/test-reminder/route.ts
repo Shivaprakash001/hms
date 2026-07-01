@@ -118,6 +118,7 @@ export async function POST(req: NextRequest) {
           templateName,
           language: { code: languageCode },
           bodyParameters,
+          buttonParameters: ["test-token"],
         });
 
         await eventLog.log("TEST_REMINDER_SENT", scope.owner_id, {
