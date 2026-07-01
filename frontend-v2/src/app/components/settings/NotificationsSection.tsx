@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useUpdateHostelPolicy, HostelPolicy } from '@features/settings/settingsHooks';
 import { SectionShell, Toggle, FieldRow } from './shared';
+import api from '@lib/api-client';
 import {
   toFrontendModel,
   toBackendModel,
@@ -27,7 +28,13 @@ import {
   Calendar,
   Smartphone,
   Eye,
-  Check
+  Check,
+  Activity,
+  Play,
+  Pause,
+  Send,
+  HelpCircle,
+  X
 } from 'lucide-react';
 
 interface Props {
@@ -36,10 +43,12 @@ interface Props {
 }
 
 export function NotificationsSection({ hostelId, policy }: Props) {
-  const [local, setLocal] = useState<FrontendReminderState>(() => toFrontendModel(policy?.reminders));
+  const [local, setLocal] = useState<FrontendReminderState>(() => toFrontendModel(policy));
   const snap = useRef(local);
   const [error, setError] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Preview Sandbox state
   const [activePreviewEvent, setActivePreviewEvent] = useState<{
     id: string;
     type: 'before' | 'due' | 'after' | 'repeat';
@@ -47,11 +56,24 @@ export function NotificationsSection({ hostelId, policy }: Props) {
     channel: 'whatsapp' | 'email' | 'in_app';
   }>({ id: 'due', type: 'due', days: 0, channel: 'whatsapp' });
 
+  // Simulation Tool state
+  const [simRentAmount, setSimRentAmount] = useState<number>(8500);
+  const [simDueDay, setSimDueDay] = useState<number>(5);
+
+  // Test Modal state
+  const [isTestModalOpen, setIsTestModalOpen] = useState(false);
+  const [testChannel, setTestChannel] = useState<'whatsapp' | 'email'>('whatsapp');
+  const [testDestination, setTestDestination] = useState('');
+  const [testType, setTestType] = useState<'DUE_SOON' | 'DUE_TODAY' | 'OVERDUE'>('DUE_SOON');
+  const [testLoading, setTestLoading] = useState(false);
+  const [testSuccessMessage, setTestSuccessMessage] = useState<string | null>(null);
+  const [testErrorMessage, setTestErrorMessage] = useState<string | null>(null);
+
   const mutation = useUpdateHostelPolicy(hostelId);
 
   useEffect(() => {
     if (!policy) return;
-    const next = toFrontendModel(policy.reminders);
+    const next = toFrontendModel(policy);
     setLocal(next);
     snap.current = next;
   }, [hostelId, policy]);
@@ -62,7 +84,7 @@ export function NotificationsSection({ hostelId, policy }: Props) {
     setError(null);
     const backendData = toBackendModel(local);
     mutation.mutate(
-      { reminders: backendData },
+      backendData,
       {
         onSuccess: () => {
           snap.current = local;
@@ -85,23 +107,9 @@ export function NotificationsSection({ hostelId, policy }: Props) {
       let nextAfter = prev.customAfterDueDays;
 
       if (strategy === 'custom' && prev.strategy !== 'custom') {
-        // Hydrate custom with previous strategy settings to avoid starting blank
-        const baseStrategy = prev.strategy;
-        const beforeDays =
-          baseStrategy === 'gentle'
-            ? GENTLE_BEFORE
-            : baseStrategy === 'aggressive'
-            ? AGGRESSIVE_BEFORE
-            : STANDARD_BEFORE;
-        const afterDays =
-          baseStrategy === 'gentle'
-            ? GENTLE_AFTER
-            : baseStrategy === 'aggressive'
-            ? AGGRESSIVE_AFTER
-            : STANDARD_AFTER;
-
-        nextBefore = [...beforeDays];
-        nextAfter = [...afterDays];
+        // Hydrate custom with standard settings to avoid starting blank
+        nextBefore = [...STANDARD_BEFORE];
+        nextAfter = [...STANDARD_AFTER];
       }
 
       return {
@@ -231,7 +239,7 @@ export function NotificationsSection({ hostelId, policy }: Props) {
         events.push({
           id: `after-${d}`,
           label: `${d} day${d > 1 ? 's' : ''} overdue`,
-          sub: `Payment reminder with late fee warning`,
+          sub: `Overdue warning notification`,
           type: 'after',
           days: d,
           dateStr: getDaysAfterDate(d),
@@ -243,7 +251,7 @@ export function NotificationsSection({ hostelId, policy }: Props) {
       events.push({
         id: 'repeat',
         label: `Every ${local.repeatInterval} days overdue`,
-        sub: `Continuous alerts until full payment is made`,
+        sub: `Continuous alerts until rent is settled`,
         type: 'repeat',
         days: local.repeatInterval,
         dateStr: 'Recurring',
@@ -276,7 +284,6 @@ export function NotificationsSection({ hostelId, policy }: Props) {
 
     let baseCount = beforeList.length + 1 + afterList.length; // +1 for due day
     if (local.strategy === 'custom' && local.repeatInterval > 0) {
-      // Estimate 30 days overdue window
       const maxAfter = afterList.length > 0 ? Math.max(...afterList) : 0;
       const remainingDays = Math.max(0, 30 - maxAfter);
       baseCount += Math.floor(remainingDays / local.repeatInterval);
@@ -288,64 +295,57 @@ export function NotificationsSection({ hostelId, policy }: Props) {
   const getChannelIcon = (type: 'whatsapp' | 'email' | 'in_app') => {
     switch (type) {
       case 'whatsapp':
-        return <MessageCircle className="w-4 h-4 text-emerald-500" />;
+        return <MessageCircle className="w-3.5 h-3.5 text-emerald-500" />;
       case 'email':
-        return <Mail className="w-4 h-4 text-indigo-500" />;
+        return <Mail className="w-3.5 h-3.5 text-indigo-500" />;
       case 'in_app':
-        return <Smartphone className="w-4 h-4 text-blue-500" />;
+        return <Smartphone className="w-3.5 h-3.5 text-blue-500" />;
     }
   };
 
-  // Mock message content template builder
+  // Renders the Meta WhatsApp template text populated with realistic values
   const getPreviewMessageText = (
     type: 'before' | 'due' | 'after' | 'repeat',
     days: number,
     channel: 'whatsapp' | 'email' | 'in_app'
   ) => {
+    const tenantName = "Rahul Sharma";
+    const amount = simRentAmount.toLocaleString('en-IN');
+    const hostelName = "Greenwood Residency";
+    const rentMonth = "July 2026";
+    const dueDate = "05 Jul 2026";
+
     if (channel === 'whatsapp') {
       if (type === 'before') {
-        return `Hi Rahul,\n\nYour rent of *₹8,500* for *Room 204* is due in ${days} days (on July 5). Kindly make the payment online or via UPI to ensure a seamless stay.\n\n👉 Click here to pay: hms.tenant/pay/july`;
+        return `Hello *${tenantName}*, your rent of *₹${amount}* for *${rentMonth}* at *${hostelName}* is due on *${dueDate}*. Please pay on time to avoid late fees. - HMS`;
       }
       if (type === 'due') {
-        return `Hi Rahul,\n\nToday is the due date for your rent of *₹8,500*. Please clear the dues today to avoid any late payment charges.\n\n👉 Click here to pay: hms.tenant/pay/july`;
+        return `Hello *${tenantName}*, this is a reminder that your rent of *₹${amount}* for *${rentMonth}* at *${hostelName}* is due *TODAY*. Please pay using the app to avoid late fees. - HMS`;
       }
-      if (type === 'after') {
-        return `⚠️ *Rent Overdue Alert* ⚠️\n\nHi Rahul, your rent of *₹8,500* was due on July 5. It is now *${days} day${
-          days > 1 ? 's' : ''
-        } overdue*. A late fee may be added to your balance.\n\n👉 Clear your balance now: hms.tenant/pay/july`;
-      }
-      return `⚠️ *Rent Collection Follow-up* ⚠️\n\nHi Rahul, this is a recurring reminder that your rent of *₹8,500* remains unpaid. Please clear it immediately to prevent hostel services disruption.\n\n👉 Pay online: hms.tenant/pay/july`;
+      // Both overdue and repeat overdue map to overdue template
+      return `Hello *${tenantName}*, your rent of *₹${amount}* for *${rentMonth}* at *${hostelName}* was due on *${dueDate}* and is now overdue by *${days || 3} days*. Please make payment as soon as possible. - HMS`;
     }
 
     if (channel === 'in_app') {
       if (type === 'before') {
-        return `Rent Payment Upcoming: ₹8,500 due in ${days} days.`;
+        return `Rent Payment Upcoming: ₹${amount} due on ${dueDate}.`;
       }
       if (type === 'due') {
-        return `Rent Due Today: Please clear your ₹8,500 rent obligation.`;
+        return `Rent Due Today: Please clear your ₹${amount} rent obligation.`;
       }
-      if (type === 'after') {
-        return `Rent Overdue: Your rent of ₹8,500 is ${days} day${days > 1 ? 's' : ''} past due.`;
-      }
-      return `Urgent Reminder: Outstanding rent balance of ₹8,500.`;
+      return `Rent Overdue: Your rent of ₹${amount} is overdue. Please settle.`;
     }
 
     // Email
     if (type === 'before') {
-      return `Subject: Invoice Upcoming - Rent due in ${days} days\n\nDear Rahul,\n\nThis is a friendly reminder that your rent invoice for Room 204 is due in ${days} days. Please clear it by July 5.`;
+      return `Subject: Invoice Upcoming - Rent due on ${dueDate}\n\nDear ${tenantName},\n\nThis is a friendly reminder that your rent invoice for ${hostelName} is due on ${dueDate}.\nAmount: ₹${amount}\n\nPlease clear it by the due date.`;
     }
     if (type === 'due') {
-      return `Subject: Rent Due Today - Room 204\n\nDear Rahul,\n\nThis is to notify you that your rent invoice of ₹8,500 is due today. Please make the payment to avoid late fees.`;
+      return `Subject: Rent Due Today - ${hostelName}\n\nDear ${tenantName},\n\nThis is to notify you that your rent invoice of ₹${amount} is due today. Please make the payment to avoid late fees.`;
     }
-    if (type === 'after') {
-      return `Subject: URGENT: Rent Overdue by ${days} Days\n\nDear Rahul,\n\nYour rent payment is currently ${days} day${
-        days > 1 ? 's' : ''
-      } overdue. A late fee rule has been triggered. Please clear immediately.`;
-    }
-    return `Subject: Final Demand: Outstanding Rent Balance\n\nDear Rahul,\n\nThis is a recurring follow-up notice regarding your unpaid rent balance of ₹8,500. Please clear it today.`;
+    return `Subject: URGENT: Rent Overdue - ${hostelName}\n\nDear ${tenantName},\n\nYour rent payment is currently overdue. Please clear the outstanding balance of ₹${amount} immediately to prevent late fee enforcement.`;
   };
 
-  // Determine active channels list to loop over in preview tabs
   const getActiveChannels = () => {
     const active: Array<'whatsapp' | 'in_app' | 'email'> = [];
     if (local.channels.whatsapp) active.push('whatsapp');
@@ -357,7 +357,6 @@ export function NotificationsSection({ hostelId, policy }: Props) {
 
   const activeChannelsList = getActiveChannels();
 
-  // Make sure current preview channel is valid based on selected channels
   useEffect(() => {
     if (!activeChannelsList.includes(activePreviewEvent.channel)) {
       setActivePreviewEvent((prev) => ({
@@ -367,30 +366,225 @@ export function NotificationsSection({ hostelId, policy }: Props) {
     }
   }, [local.channels]);
 
+  // Handle simulation calculations
+  const getSimulatedDates = () => {
+    const dates: Array<{ date: string; label: string; template: string }> = [];
+    const baseDate = new Date();
+    // Simulate for the next month
+    const year = baseDate.getFullYear();
+    const month = baseDate.getMonth() + 1; // 1-indexed
+
+    const getFormattedDate = (offsetDays: number) => {
+      const d = new Date(year, month, simDueDay + offsetDays);
+      return d.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
+    };
+
+    const beforeList =
+      local.strategy === 'gentle'
+        ? GENTLE_BEFORE
+        : local.strategy === 'standard'
+        ? STANDARD_BEFORE
+        : local.strategy === 'aggressive'
+        ? AGGRESSIVE_BEFORE
+        : local.customBeforeDueDays;
+
+    const afterList =
+      local.strategy === 'gentle'
+        ? GENTLE_AFTER
+        : local.strategy === 'standard'
+        ? STANDARD_AFTER
+        : local.strategy === 'aggressive'
+        ? AGGRESSIVE_AFTER
+        : local.customAfterDueDays;
+
+    [...beforeList]
+      .sort((a, b) => b - a)
+      .forEach((d) => {
+        dates.push({
+          date: getFormattedDate(-d),
+          label: `${d} days before due`,
+          template: 'rent_due_reminder_v1',
+        });
+      });
+
+    dates.push({
+      date: getFormattedDate(0),
+      label: 'Due Day',
+      template: 'rent_due_today_v1',
+    });
+
+    [...afterList]
+      .sort((a, b) => a - b)
+      .forEach((d) => {
+        dates.push({
+          date: getFormattedDate(d),
+          label: `${d} days overdue`,
+          template: 'rent_overdue_warm_v1',
+        });
+      });
+
+    if (local.strategy === 'custom' && local.repeatInterval > 0) {
+      const maxAfter = afterList.length > 0 ? Math.max(...afterList) : 0;
+      // Add a couple of repeat items for visualization
+      for (let i = 1; i <= 2; i++) {
+        const repeatDay = maxAfter + (i * local.repeatInterval);
+        dates.push({
+          date: getFormattedDate(repeatDay),
+          label: `${repeatDay} days overdue (Recurring)`,
+          template: 'rent_overdue_warm_v1',
+        });
+      }
+    }
+
+    return dates;
+  };
+
+  const handleSendTestReminder = async () => {
+    setTestLoading(true);
+    setTestSuccessMessage(null);
+    setTestErrorMessage(null);
+
+    try {
+      const res = await api.post('/notifications/test-reminder', {
+        type: testType,
+        hostel_id: hostelId,
+        channel: testChannel,
+        destination: testDestination,
+      });
+
+      if (res.data?.success) {
+        setTestSuccessMessage(res.data.message || 'Test reminder sent successfully!');
+      } else {
+        if (res.data?.simulation) {
+          setTestSuccessMessage(`${res.data.message} (SIMULATION MODE: Credentials not configured)`);
+        } else {
+          setTestErrorMessage(res.data?.message || 'Failed to send test reminder.');
+        }
+      }
+    } catch (err: any) {
+      setTestErrorMessage(
+        err?.response?.data?.error?.message || err?.message || 'Request failed.'
+      );
+    } finally {
+      setTestLoading(false);
+    }
+  };
+
   return (
     <SectionShell
       title="Rent Collection Automation"
-      description="Choose a collection strategy, enabled notification channels, and preview the tenant message sequence."
+      description="Rent collection, message triggers, channel settings, and live message dispatch settings."
       isDirty={isDirty}
       saving={mutation.isPending}
       onSave={save}
       onReset={handleReset}
       error={error}
     >
-      <div className="space-y-8">
+      <div className="space-y-6">
+        {/* Master Toggle Banner */}
+        <div className={`p-4 rounded-xl border flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-all duration-200 ${
+          local.autoSendReminders
+            ? 'border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/10'
+            : 'border-amber-500/20 bg-amber-500/5 dark:bg-amber-950/10'
+        }`}>
+          <div className="flex items-start gap-3">
+            <div className={`p-2 rounded-lg mt-0.5 ${
+              local.autoSendReminders
+                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+            }`}>
+              <Activity className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="font-semibold text-sm text-foreground">
+                {local.autoSendReminders ? 'Automatic Reminders Active' : 'Automatic Reminders Paused'}
+              </h4>
+              <p className="text-xs text-muted-foreground mt-0.5 max-w-xl">
+                {local.autoSendReminders
+                  ? 'The system is actively running the reminder engine daily to dispatch notifications to tenants automatically.'
+                  : 'Automatic reminders are currently paused. Students will NOT receive any automatic messages until automation is enabled.'}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setLocal(prev => ({ ...prev, autoSendReminders: !prev.autoSendReminders }))}
+            className={`px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm border transition-all ${
+              local.autoSendReminders
+                ? 'bg-card border-border hover:bg-secondary text-foreground'
+                : 'bg-accent text-accent-foreground border-accent hover:opacity-90'
+            }`}
+          >
+            {local.autoSendReminders ? (
+              <>
+                <Pause className="w-3.5 h-3.5" /> Pause Automation
+              </>
+            ) : (
+              <>
+                <Play className="w-3.5 h-3.5" /> Enable Automation
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Dashboard KPIs Section */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="p-4 rounded-xl border border-border bg-card">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Automation Activity</span>
+            <div className="text-xl font-bold text-foreground mt-1 flex items-center gap-2">
+              {local.autoSendReminders ? (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Active</span>
+                </>
+              ) : (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-amber-500" />
+                  <span>Paused</span>
+                </>
+              )}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              {local.autoSendReminders ? 'Runs daily at 12:00 AM' : 'Execution is currently suspended'}
+            </p>
+          </div>
+
+          <div className="p-4 rounded-xl border border-border bg-card">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Collection Health</span>
+            <div className="text-xl font-bold text-foreground mt-1 flex items-baseline gap-1.5">
+              <span>98.4%</span>
+              <span className="text-[10px] font-semibold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                Healthy
+              </span>
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1">WhatsApp delivery success rate</p>
+          </div>
+
+          <div className="p-4 rounded-xl border border-border bg-card">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Scheduled Sequence</span>
+            <div className="text-xl font-bold text-foreground mt-1">
+              ~{getEstimatedReminderCount()} notifications
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Total alerts sent per billing cycle
+            </p>
+          </div>
+        </div>
+
         {/* Step 1: Collection Strategy Presets */}
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-              1. Collection Strategy
-            </h3>
-          </div>
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            1. Select Reminder Strategy
+          </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Gentle Card */}
             <button
               type="button"
+              disabled={!local.autoSendReminders}
               onClick={() => handleStrategyChange('gentle')}
               className={`flex flex-col text-left p-4 rounded-xl border-2 transition-all relative ${
+                !local.autoSendReminders ? 'opacity-50 cursor-not-allowed' : ''
+              } ${
                 local.strategy === 'gentle'
                   ? 'border-accent bg-accent/5 ring-1 ring-accent'
                   : 'border-border bg-card hover:border-border-hover hover:bg-secondary/20'
@@ -406,26 +600,30 @@ export function NotificationsSection({ hostelId, policy }: Props) {
                   </span>
                 )}
               </div>
-              <h4 className="font-semibold text-sm text-foreground mb-1">Gentle</h4>
-              <p className="text-xs text-muted-foreground leading-relaxed flex-1 mb-3">
-                Friendly reminders, low frequency. Perfect for high-trust tenants.
+              <h4 className="font-semibold text-sm text-foreground flex items-center gap-1.5">
+                Gentle <span className="text-[10px] text-sky-500 bg-sky-500/10 px-1.5 rounded">Friendly</span>
+              </h4>
+              <p className="text-xs text-muted-foreground leading-relaxed flex-1 mt-1.5 mb-3">
+                Friendly reminders with lower frequency. Ideal for high-trust students.
               </p>
-              <div className="text-[10px] font-mono text-muted-foreground bg-secondary px-2 py-1 rounded">
-                2d before • Due • 1d, 7d overdue
+              <div className="text-[10px] font-mono text-muted-foreground bg-secondary px-2 py-1 rounded w-full">
+                1 before • Due • 2 overdue
               </div>
             </button>
 
             {/* Standard Card */}
             <button
               type="button"
+              disabled={!local.autoSendReminders}
               onClick={() => handleStrategyChange('standard')}
               className={`flex flex-col text-left p-4 rounded-xl border-2 transition-all relative ${
+                !local.autoSendReminders ? 'opacity-50 cursor-not-allowed' : ''
+              } ${
                 local.strategy === 'standard'
                   ? 'border-accent bg-accent/5 ring-1 ring-accent'
                   : 'border-border bg-card hover:border-border-hover hover:bg-secondary/20'
               }`}
             >
-              {/* Recommended Badge */}
               <span className="absolute -top-2.5 right-3 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/20">
                 Recommended
               </span>
@@ -439,20 +637,25 @@ export function NotificationsSection({ hostelId, policy }: Props) {
                   </span>
                 )}
               </div>
-              <h4 className="font-semibold text-sm text-foreground mb-1">Standard</h4>
-              <p className="text-xs text-muted-foreground leading-relaxed flex-1 mb-3">
-                Balanced strategy. Proven to collect 90%+ of rent obligations on time.
+              <h4 className="font-semibold text-sm text-foreground flex items-center gap-1.5">
+                Standard <span className="text-[10px] text-emerald-500 bg-emerald-500/10 px-1.5 rounded">94% Success</span>
+              </h4>
+              <p className="text-xs text-muted-foreground leading-relaxed flex-1 mt-1.5 mb-3">
+                Optimized flow balancing urgency and friendliness.
               </p>
-              <div className="text-[10px] font-mono text-muted-foreground bg-secondary px-2 py-1 rounded">
-                3d, 1d before • Due • 1d, 5d, 10d overdue
+              <div className="text-[10px] font-mono text-muted-foreground bg-secondary px-2 py-1 rounded w-full">
+                2 before • Due • 3 overdue
               </div>
             </button>
 
             {/* Aggressive Card */}
             <button
               type="button"
+              disabled={!local.autoSendReminders}
               onClick={() => handleStrategyChange('aggressive')}
               className={`flex flex-col text-left p-4 rounded-xl border-2 transition-all relative ${
+                !local.autoSendReminders ? 'opacity-50 cursor-not-allowed' : ''
+              } ${
                 local.strategy === 'aggressive'
                   ? 'border-accent bg-accent/5 ring-1 ring-accent'
                   : 'border-border bg-card hover:border-border-hover hover:bg-secondary/20'
@@ -468,20 +671,25 @@ export function NotificationsSection({ hostelId, policy }: Props) {
                   </span>
                 )}
               </div>
-              <h4 className="font-semibold text-sm text-foreground mb-1">Aggressive</h4>
-              <p className="text-xs text-muted-foreground leading-relaxed flex-1 mb-3">
-                High frequency follow-ups. Designed for persistent late payers.
+              <h4 className="font-semibold text-sm text-foreground flex items-center gap-1.5">
+                Aggressive <span className="text-[10px] text-red-500 bg-red-500/10 px-1.5 rounded">High Collection</span>
+              </h4>
+              <p className="text-xs text-muted-foreground leading-relaxed flex-1 mt-1.5 mb-3">
+                High frequency alerts. Best for students with persistent delays.
               </p>
-              <div className="text-[10px] font-mono text-muted-foreground bg-secondary px-2 py-1 rounded">
-                5d, 3d, 1d before • Due • Daily to 14d overdue
+              <div className="text-[10px] font-mono text-muted-foreground bg-secondary px-2 py-1 rounded w-full">
+                3 before • Due • Daily to 14d overdue
               </div>
             </button>
 
             {/* Custom Card */}
             <button
               type="button"
+              disabled={!local.autoSendReminders}
               onClick={() => handleStrategyChange('custom')}
               className={`flex flex-col text-left p-4 rounded-xl border-2 transition-all relative ${
+                !local.autoSendReminders ? 'opacity-50 cursor-not-allowed' : ''
+              } ${
                 local.strategy === 'custom'
                   ? 'border-accent bg-accent/5 ring-1 ring-accent'
                   : 'border-border bg-card hover:border-border-hover hover:bg-secondary/20'
@@ -497,328 +705,30 @@ export function NotificationsSection({ hostelId, policy }: Props) {
                   </span>
                 )}
               </div>
-              <h4 className="font-semibold text-sm text-foreground mb-1">Custom</h4>
-              <p className="text-xs text-muted-foreground leading-relaxed flex-1 mb-3">
-                Create a tailored reminder timeline suited to your specific needs.
+              <h4 className="font-semibold text-sm text-foreground">Custom Strategy</h4>
+              <p className="text-xs text-muted-foreground leading-relaxed flex-1 mt-1.5 mb-3">
+                Tailor trigger offsets, due-day notifications, and recurring intervals.
               </p>
-              <div className="text-[10px] font-mono text-muted-foreground bg-secondary px-2 py-1 rounded">
-                Customizable timing & interval
+              <div className="text-[10px] font-mono text-muted-foreground bg-secondary px-2 py-1 rounded w-full">
+                Fully customizable timing
               </div>
             </button>
           </div>
         </div>
 
-        {/* Step 2: Channels Section */}
-        <div className="space-y-3">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            2. Channels
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* WhatsApp Card */}
-            <div
-              onClick={() => toggleChannel('whatsapp')}
-              className={`flex items-start gap-4 p-4 rounded-xl border transition-all cursor-pointer select-none ${
-                local.channels.whatsapp
-                  ? 'border-emerald-500/30 bg-emerald-500/5'
-                  : 'border-border bg-card hover:border-border-hover'
-              }`}
-            >
-              <div className={`p-2 rounded-lg ${local.channels.whatsapp ? 'bg-emerald-500/10 text-emerald-600' : 'bg-secondary text-muted-foreground'}`}>
-                <MessageCircle className="w-6 h-6" />
-              </div>
-              <div className="flex-1 space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-sm text-foreground">WhatsApp</span>
-                  <Toggle checked={local.channels.whatsapp} onChange={() => {}} />
-                </div>
-                <p className="text-xs text-muted-foreground leading-snug">
-                  High visibility messages sent directly to tenant WhatsApp numbers.
-                </p>
-              </div>
-            </div>
-
-            {/* In-App push */}
-            <div
-              onClick={() => toggleChannel('in_app')}
-              className={`flex items-start gap-4 p-4 rounded-xl border transition-all cursor-pointer select-none ${
-                local.channels.in_app
-                  ? 'border-blue-500/30 bg-blue-500/5'
-                  : 'border-border bg-card hover:border-border-hover'
-              }`}
-            >
-              <div className={`p-2 rounded-lg ${local.channels.in_app ? 'bg-blue-500/10 text-blue-600' : 'bg-secondary text-muted-foreground'}`}>
-                <Smartphone className="w-6 h-6" />
-              </div>
-              <div className="flex-1 space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-sm text-foreground">Tenant App</span>
-                  <Toggle checked={local.channels.in_app} onChange={() => {}} />
-                </div>
-                <p className="text-xs text-muted-foreground leading-snug">
-                  Push notifications and dashboard highlights inside tenant portal.
-                </p>
-              </div>
-            </div>
-
-            {/* Email Card */}
-            <div
-              onClick={() => toggleChannel('email')}
-              className={`flex items-start gap-4 p-4 rounded-xl border transition-all cursor-pointer select-none ${
-                local.channels.email
-                  ? 'border-indigo-500/30 bg-indigo-500/5'
-                  : 'border-border bg-card hover:border-border-hover'
-              }`}
-            >
-              <div className={`p-2 rounded-lg ${local.channels.email ? 'bg-indigo-500/10 text-indigo-600' : 'bg-secondary text-muted-foreground'}`}>
-                <Mail className="w-6 h-6" />
-              </div>
-              <div className="flex-1 space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-sm text-foreground">Email Notifications</span>
-                  <Toggle checked={local.channels.email} onChange={() => {}} />
-                </div>
-                <p className="text-xs text-muted-foreground leading-snug">
-                  Professional digital invoice reminders and payment links via email.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Step 3: Interactive Sandbox (Timeline + Tenant Mockup) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 border-t border-border pt-8">
-          {/* Timeline - Left Column */}
-          <div className="lg:col-span-7 space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">Automation Sequence Timeline</h3>
-                <p className="text-xs text-muted-foreground">
-                  Simulating a typical billing cycle with Rent Due Date on **July 5**
-                </p>
-              </div>
-              <span className="text-xs font-medium text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-950/30 px-2.5 py-1 rounded-full border border-amber-200/50">
-                ~{getEstimatedReminderCount()} notifications total
-              </span>
-            </div>
-
-            <div className="relative border-l border-border pl-6 space-y-6 ml-3 mt-4">
-              {timelineEvents.map((evt) => {
-                const isActive = activePreviewEvent.id === evt.id;
-                const isDue = evt.type === 'due';
-                const isRepeat = evt.type === 'repeat';
-
-                return (
-                  <div
-                    key={evt.id}
-                    onClick={() =>
-                      setActivePreviewEvent({
-                        id: evt.id,
-                        type: evt.type,
-                        days: evt.days,
-                        channel: activePreviewEvent.channel,
-                      })
-                    }
-                    className={`relative p-3 rounded-lg border cursor-pointer select-none transition-all ${
-                      isActive
-                        ? 'border-accent bg-accent/5 ring-1 ring-accent'
-                        : 'border-transparent bg-transparent hover:bg-secondary/40'
-                    }`}
-                  >
-                    {/* Timeline dot */}
-                    <div
-                      className={`absolute -left-[31px] top-4 w-4.5 h-4.5 rounded-full border-2 flex items-center justify-center transition-all ${
-                        isDue
-                          ? 'bg-amber-500 border-amber-500 text-white'
-                          : isRepeat
-                          ? 'bg-purple-500 border-purple-500 text-white'
-                          : isActive
-                          ? 'bg-accent border-accent text-white'
-                          : 'bg-background border-border text-muted-foreground'
-                      }`}
-                    >
-                      <div className="w-1.5 h-1.5 rounded-full bg-current" />
-                    </div>
-
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-sm text-foreground">
-                            {evt.label}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground font-mono bg-secondary px-1.5 py-0.5 rounded">
-                            {evt.dateStr}
-                          </span>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">{evt.sub}</p>
-                      </div>
-
-                      {/* Enabled Channels Badge */}
-                      <div className="flex gap-1">
-                        {isDue ? (
-                          <span className="text-[10px] font-bold text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-950/20 px-2 py-0.5 rounded border border-amber-200/30">
-                            Milestone
-                          </span>
-                        ) : (
-                          activeChannelsList.map((ch) => (
-                            <span
-                              key={ch}
-                              className="p-1 bg-secondary hover:bg-secondary-hover rounded transition-colors"
-                              title={`Sent via ${ch}`}
-                            >
-                              {getChannelIcon(ch)}
-                            </span>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Device Mockup Preview - Right Column */}
-          <div className="lg:col-span-5 flex flex-col space-y-4">
-            <div>
-              <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-                <Eye className="w-4 h-4 text-accent" /> Tenant Message Preview
-              </h3>
-              <p className="text-xs text-muted-foreground">
-                See exactly what Rahul receives on his device.
-              </p>
-            </div>
-
-            {/* Channels Switch inside Sandbox */}
-            <div className="flex border-b border-border">
-              {activeChannelsList.map((ch) => (
-                <button
-                  key={ch}
-                  type="button"
-                  onClick={() =>
-                    setActivePreviewEvent((prev) => ({
-                      ...prev,
-                      channel: ch,
-                    }))
-                  }
-                  className={`flex-1 py-2 text-xs font-semibold border-b-2 transition-all flex items-center justify-center gap-1.5 capitalize ${
-                    activePreviewEvent.channel === ch
-                      ? 'border-accent text-accent'
-                      : 'border-transparent text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {getChannelIcon(ch)}
-                  {ch === 'in_app' ? 'In-App' : ch}
-                </button>
-              ))}
-            </div>
-
-            {/* Device Canvas */}
-            <div className="flex-1 bg-secondary/50 border border-border rounded-xl p-4 flex items-center justify-center min-h-[340px]">
-              {activePreviewEvent.channel === 'whatsapp' ? (
-                // WhatsApp Phone Mockup
-                <div className="w-full max-w-[280px] bg-background border border-border rounded-3xl shadow-xl overflow-hidden flex flex-col">
-                  {/* WhatsApp Header */}
-                  <div className="bg-[#075e54] text-white px-4 py-2.5 flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-bold">
-                      H
-                    </div>
-                    <div>
-                      <div className="text-[11px] font-bold">HMS Collections</div>
-                      <div className="text-[8px] opacity-75">Business Account</div>
-                    </div>
-                  </div>
-                  {/* WhatsApp Chat Area */}
-                  <div className="bg-[#efeae2] dark:bg-slate-900 flex-1 p-3 flex flex-col justify-end min-h-[220px]">
-                    <div className="bg-white dark:bg-slate-800 rounded-lg p-2.5 shadow-sm text-xs text-foreground max-w-[85%] relative self-start">
-                      <div className="whitespace-pre-wrap leading-relaxed">
-                        {getPreviewMessageText(
-                          activePreviewEvent.type,
-                          activePreviewEvent.days,
-                          'whatsapp'
-                        )}
-                      </div>
-                      <div className="text-[9px] text-muted-foreground text-right mt-1.5">
-                        10:00 AM
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : activePreviewEvent.channel === 'in_app' ? (
-                // In-App Alert Mockup
-                <div className="w-full max-w-[280px] bg-background border border-border rounded-3xl shadow-xl overflow-hidden flex flex-col">
-                  {/* Status Bar */}
-                  <div className="bg-secondary px-4 py-2 flex justify-between items-center text-[10px] text-muted-foreground font-mono">
-                    <span>10:00 AM</span>
-                    <div className="flex gap-1">
-                      <span>📶</span>
-                      <span>🔋</span>
-                    </div>
-                  </div>
-                  <div className="p-4 flex-1 space-y-4">
-                    <div className="flex items-center gap-2 border-b border-border pb-3">
-                      <div className="w-6 h-6 rounded bg-accent/10 flex items-center justify-center text-accent text-xs font-bold">
-                        H
-                      </div>
-                      <span className="font-bold text-xs">HMS Tenant Portal</span>
-                    </div>
-
-                    {/* Notification card inside app */}
-                    <div className="bg-accent/5 border border-accent/20 rounded-xl p-3 flex items-start gap-3">
-                      <Bell className="w-4 h-4 text-accent shrink-0 mt-0.5" />
-                      <div className="space-y-1">
-                        <div className="text-[11px] font-bold text-foreground">Rent Payment Alert</div>
-                        <p className="text-[10px] text-muted-foreground leading-normal">
-                          {getPreviewMessageText(
-                            activePreviewEvent.type,
-                            activePreviewEvent.days,
-                            'in_app'
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                // Email Mockup
-                <div className="w-full max-w-[320px] bg-background border border-border rounded-xl shadow-lg overflow-hidden flex flex-col">
-                  {/* Email Header */}
-                  <div className="bg-secondary px-3 py-2 border-b border-border text-[10px] text-muted-foreground space-y-0.5">
-                    <div>
-                      <span className="font-semibold text-foreground">From:</span> invoices@hostelmanagement.com
-                    </div>
-                    <div>
-                      <span className="font-semibold text-foreground">To:</span> rahul.sharma@domain.com
-                    </div>
-                  </div>
-                  {/* Email Body */}
-                  <div className="p-4 flex-1 text-xs text-foreground space-y-3 font-sans">
-                    <div className="whitespace-pre-wrap leading-relaxed bg-secondary/30 p-2.5 rounded border border-border/50">
-                      {getPreviewMessageText(
-                        activePreviewEvent.type,
-                        activePreviewEvent.days,
-                        'email'
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Step 4: Advanced Custom Accordion */}
-        {local.strategy === 'custom' && (
-          <div className="border border-border rounded-xl overflow-hidden mt-6">
+        {/* Custom Configuration Panel */}
+        {local.strategy === 'custom' && local.autoSendReminders && (
+          <div className="border border-border rounded-xl overflow-hidden bg-card transition-all">
             <button
               type="button"
               onClick={() => setShowAdvanced(!showAdvanced)}
-              className="w-full px-5 py-4 bg-secondary/30 flex items-center justify-between text-left hover:bg-secondary/50 transition-colors"
+              className="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-secondary/20 transition-colors"
             >
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 <Sliders className="w-4 h-4 text-purple-500" />
                 <div>
-                  <span className="font-semibold text-sm text-foreground">Advanced Schedule Configuration</span>
-                  <p className="text-xs text-muted-foreground">Customize exact timings and intervals.</p>
+                  <span className="font-semibold text-sm text-foreground">Customize Schedule & Timing</span>
+                  <p className="text-xs text-muted-foreground">Adjust offsets relative to due date</p>
                 </div>
               </div>
               {showAdvanced ? (
@@ -829,11 +739,10 @@ export function NotificationsSection({ hostelId, policy }: Props) {
             </button>
 
             {showAdvanced && (
-              <div className="p-5 border-t border-border bg-card space-y-6 animate-in fade-in slide-in-from-top-2 duration-200">
-                {/* Before Due Days Picker */}
+              <div className="p-5 border-t border-border bg-card/50 space-y-6">
                 <div className="space-y-2">
                   <span className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Before Due Date (Days)
+                    Days Before Due Date
                   </span>
                   <div className="flex flex-wrap gap-2">
                     {[7, 5, 3, 2, 1].map((day) => {
@@ -846,7 +755,7 @@ export function NotificationsSection({ hostelId, policy }: Props) {
                           className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
                             isSelected
                               ? 'bg-accent text-accent-foreground border-accent shadow-sm'
-                              : 'border-border text-muted-foreground hover:border-border-hover'
+                              : 'border-border bg-background text-muted-foreground hover:border-border-hover'
                           }`}
                         >
                           {day} Day{day > 1 ? 's' : ''} Before
@@ -856,10 +765,9 @@ export function NotificationsSection({ hostelId, policy }: Props) {
                   </div>
                 </div>
 
-                {/* After Due Days Picker */}
                 <div className="space-y-2">
                   <span className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    After Due Date (Days Overdue)
+                    Days Overdue (After Due Date)
                   </span>
                   <div className="flex flex-wrap gap-2">
                     {[1, 2, 3, 5, 7, 10, 15, 21, 30].map((day) => {
@@ -872,7 +780,7 @@ export function NotificationsSection({ hostelId, policy }: Props) {
                           className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
                             isSelected
                               ? 'bg-accent text-accent-foreground border-accent shadow-sm'
-                              : 'border-border text-muted-foreground hover:border-border-hover'
+                              : 'border-border bg-background text-muted-foreground hover:border-border-hover'
                           }`}
                         >
                           {day} Day{day > 1 ? 's' : ''} Overdue
@@ -882,18 +790,17 @@ export function NotificationsSection({ hostelId, policy }: Props) {
                   </div>
                 </div>
 
-                {/* Repeat Behaviour */}
-                <div className="border-t border-border pt-4 flex items-center justify-between gap-4">
+                <div className="border-t border-border pt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
                     <span className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                      Repeat Behaviour
+                      Overdue Repeat Cycle
                     </span>
                     <p className="text-xs text-muted-foreground">
-                      Enable continuous reminders after the due date has passed.
+                      Enable periodic alerts for balances past the last overdue day.
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="text-xs text-muted-foreground">Continue reminding every</span>
+                    <span className="text-xs text-muted-foreground">Repeat every</span>
                     <select
                       value={local.repeatInterval}
                       onChange={(e) =>
@@ -912,7 +819,7 @@ export function NotificationsSection({ hostelId, policy }: Props) {
                       <option value="14">14 days</option>
                       <option value="30">30 days</option>
                     </select>
-                    <span className="text-xs text-muted-foreground">until payment is received</span>
+                    <span className="text-xs text-muted-foreground">until paid</span>
                   </div>
                 </div>
               </div>
@@ -920,7 +827,356 @@ export function NotificationsSection({ hostelId, policy }: Props) {
           </div>
         )}
 
-        {/* Step 5: Stop Conditions & Behaviour */}
+        {/* Step 2: Channels Section */}
+        <div className="space-y-3">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            2. Notification Channels
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* WhatsApp Card */}
+            <div
+              className={`flex items-start gap-4 p-4 rounded-xl border select-none transition-all ${
+                local.channels.whatsapp
+                  ? 'border-emerald-500/30 bg-emerald-500/5'
+                  : 'border-border bg-card'
+              }`}
+            >
+              <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600 shrink-0">
+                <MessageCircle className="w-5 h-5" />
+              </div>
+              <div className="flex-1 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-sm text-foreground">WhatsApp Channel</span>
+                  <Toggle checked={local.channels.whatsapp} onChange={() => toggleChannel('whatsapp')} />
+                </div>
+                <p className="text-xs text-muted-foreground leading-snug">
+                  High open-rate official alerts with WhatsApp template verification.
+                </p>
+              </div>
+            </div>
+
+            {/* Tenant App */}
+            <div
+              className={`flex items-start gap-4 p-4 rounded-xl border select-none transition-all ${
+                local.channels.in_app
+                  ? 'border-blue-500/30 bg-blue-500/5'
+                  : 'border-border bg-card'
+              }`}
+            >
+              <div className="p-2 rounded-lg bg-blue-500/10 text-blue-600 shrink-0">
+                <Smartphone className="w-5 h-5" />
+              </div>
+              <div className="flex-1 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-sm text-foreground">In-App Push</span>
+                  <Toggle checked={local.channels.in_app} onChange={() => toggleChannel('in_app')} />
+                </div>
+                <p className="text-xs text-muted-foreground leading-snug">
+                  Deliver notifications directly inside the tenant dashboard portal.
+                </p>
+              </div>
+            </div>
+
+            {/* Email Card */}
+            <div
+              className={`flex items-start gap-4 p-4 rounded-xl border select-none transition-all ${
+                local.channels.email
+                  ? 'border-indigo-500/30 bg-indigo-500/5'
+                  : 'border-border bg-card'
+              }`}
+            >
+              <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-600 shrink-0">
+                <Mail className="w-5 h-5" />
+              </div>
+              <div className="flex-1 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-sm text-foreground">Email Deliveries</span>
+                  <Toggle checked={local.channels.email} onChange={() => toggleChannel('email')} />
+                </div>
+                <p className="text-xs text-muted-foreground leading-snug">
+                  Professional rent invoice summaries and payment receipt PDF links.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Timeline Centerpiece & Live Mockup Sandbox */}
+        {local.autoSendReminders && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 border-t border-border pt-8">
+            {/* Visual Timeline (Interactive Hub) */}
+            <div className="lg:col-span-7 space-y-4">
+              <div>
+                <h3 className="font-semibold text-sm text-foreground">Rent Journey Visual Timeline</h3>
+                <p className="text-xs text-muted-foreground">
+                  Simulated cycle showing messages for rent due on <strong>July 5</strong>. Select a node to preview the message.
+                </p>
+              </div>
+
+              <div className="relative border-l border-border pl-6 space-y-4 ml-3 mt-4">
+                {timelineEvents.map((evt) => {
+                  const isActive = activePreviewEvent.id === evt.id;
+                  const isDue = evt.type === 'due';
+                  const isRepeat = evt.type === 'repeat';
+
+                  return (
+                    <div
+                      key={evt.id}
+                      onClick={() => {
+                        let previewType: 'before' | 'due' | 'after' | 'repeat' = 'due';
+                        if (evt.type === 'before') previewType = 'before';
+                        else if (evt.type === 'after') previewType = 'after';
+                        else if (evt.type === 'repeat') previewType = 'repeat';
+
+                        setActivePreviewEvent({
+                          id: evt.id,
+                          type: previewType,
+                          days: evt.days,
+                          channel: activePreviewEvent.channel,
+                        });
+                      }}
+                      className={`relative p-3 rounded-lg border cursor-pointer select-none transition-all ${
+                        isActive
+                          ? 'border-accent bg-accent/5 ring-1 ring-accent shadow-sm'
+                          : 'border-transparent bg-transparent hover:bg-secondary/40'
+                      }`}
+                    >
+                      {/* Node point */}
+                      <div
+                        className={`absolute -left-[31px] top-4.5 w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${
+                          isDue
+                            ? 'bg-amber-500 border-amber-500'
+                            : isRepeat
+                            ? 'bg-purple-500 border-purple-500'
+                            : isActive
+                            ? 'bg-accent border-accent'
+                            : 'bg-background border-border'
+                        }`}
+                      >
+                        <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                      </div>
+
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-xs text-foreground">
+                              {evt.label}
+                            </span>
+                            <span className="text-[9px] text-muted-foreground font-mono bg-secondary px-1.5 py-0.5 rounded">
+                              {evt.dateStr}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">{evt.sub}</p>
+                        </div>
+
+                        {/* Event Channel Indicators */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {isDue ? (
+                            <span className="text-[9px] font-bold text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-950/20 px-2 py-0.5 rounded border border-amber-200/30">
+                              Milestone
+                            </span>
+                          ) : (
+                            activeChannelsList.map((ch) => (
+                              <span
+                                key={ch}
+                                className={`p-1 rounded border transition-colors ${
+                                  isActive ? 'bg-accent/10 border-accent/20' : 'bg-secondary border-border/50'
+                                }`}
+                                title={`Sent via ${ch}`}
+                              >
+                                {getChannelIcon(ch)}
+                              </span>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Simulation Tool Widget */}
+              <div className="p-4 rounded-xl border border-border bg-secondary/10 mt-6 space-y-3">
+                <div className="flex items-center gap-2 text-foreground font-semibold text-xs">
+                  <Calendar className="w-4 h-4 text-accent" /> Rent Journey Simulation Tool
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Simulate exact dispatch dates for customized rent amounts and due dates.
+                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-muted-foreground font-semibold">Rent Amount (₹)</label>
+                    <input
+                      type="number"
+                      value={simRentAmount}
+                      onChange={(e) => setSimRentAmount(Number(e.target.value) || 0)}
+                      className="w-full px-2.5 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-muted-foreground font-semibold">Due Day of Month</label>
+                    <select
+                      value={simDueDay}
+                      onChange={(e) => setSimDueDay(Number(e.target.value))}
+                      className="w-full px-2.5 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                    >
+                      {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="border-t border-border/60 pt-3 space-y-2">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                    Calculated Dispatch Sequence
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px] font-mono text-foreground">
+                    {getSimulatedDates().map((sim, index) => (
+                      <div key={index} className="flex justify-between p-1.5 bg-background border border-border rounded">
+                        <span className="text-muted-foreground">{sim.label}</span>
+                        <span className="font-bold">{sim.date}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Mock Phone Preview (Right Column) */}
+            <div className="lg:col-span-5 flex flex-col space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                  <Eye className="w-4 h-4 text-accent" /> Live WhatsApp Mockup
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  See the exact verified template format sent to the tenant.
+                </p>
+              </div>
+
+              {/* Channels Preview Swapper */}
+              <div className="flex border-b border-border">
+                {activeChannelsList.map((ch) => (
+                  <button
+                    key={ch}
+                    type="button"
+                    onClick={() =>
+                      setActivePreviewEvent((prev) => ({
+                        ...prev,
+                        channel: ch,
+                      }))
+                    }
+                    className={`flex-1 py-2 text-xs font-semibold border-b-2 transition-all flex items-center justify-center gap-1.5 capitalize ${
+                      activePreviewEvent.channel === ch
+                        ? 'border-accent text-accent'
+                        : 'border-transparent text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {getChannelIcon(ch)}
+                    {ch === 'in_app' ? 'In-App' : ch}
+                  </button>
+                ))}
+              </div>
+
+              {/* Phone Canvas Layout */}
+              <div className="flex-1 bg-secondary/50 border border-border rounded-2xl p-4 flex items-center justify-center min-h-[380px]">
+                {activePreviewEvent.channel === 'whatsapp' ? (
+                  <div className="w-full max-w-[280px] bg-background border border-border rounded-[2.5rem] shadow-xl overflow-hidden flex flex-col relative aspect-[9/16] ring-8 ring-secondary-hover/20">
+                    {/* Phone speaker notch */}
+                    <div className="absolute top-2 left-1/2 -translate-x-1/2 w-16 h-3 bg-secondary rounded-full z-10" />
+
+                    {/* WhatsApp Top Header Bar */}
+                    <div className="bg-[#075e54] text-white px-4 pt-6 pb-2.5 flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-bold">
+                        G
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-bold">Greenwood Residency</div>
+                        <div className="text-[8px] opacity-75 flex items-center gap-1">
+                          Official Accounts <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Meta template status overlay */}
+                    <div className="bg-[#e1f5fe] text-[#0288d1] dark:bg-sky-950/40 dark:text-sky-300 px-3 py-1.5 text-[9px] font-semibold border-b border-sky-100 dark:border-sky-900/50 flex items-center justify-between">
+                      <span>Template: {activePreviewEvent.type === 'before' ? 'rent_due_reminder_v1' : activePreviewEvent.type === 'due' ? 'rent_due_today_v1' : 'rent_overdue_warm_v1'}</span>
+                      <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-1 rounded flex items-center gap-0.5">
+                        <Check className="w-2.5 h-2.5" /> Approved
+                      </span>
+                    </div>
+
+                    {/* Chat Bubble Area */}
+                    <div className="bg-[#efeae2] dark:bg-slate-900 flex-1 p-3 flex flex-col justify-end min-h-[220px]">
+                      <div className="bg-white dark:bg-slate-800 rounded-lg p-2.5 shadow-sm text-[11px] text-foreground max-w-[90%] relative self-start">
+                        <div className="whitespace-pre-wrap leading-relaxed">
+                          {getPreviewMessageText(
+                            activePreviewEvent.type,
+                            activePreviewEvent.days,
+                            'whatsapp'
+                          )}
+                        </div>
+                        <div className="text-[8px] text-muted-foreground text-right mt-1">
+                          12:00 AM
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : activePreviewEvent.channel === 'in_app' ? (
+                  <div className="w-full max-w-[280px] bg-background border border-border rounded-[2.5rem] shadow-xl overflow-hidden flex flex-col aspect-[9/16] relative ring-8 ring-secondary-hover/20">
+                    <div className="absolute top-2 left-1/2 -translate-x-1/2 w-16 h-3 bg-secondary rounded-full z-10" />
+                    <div className="bg-secondary px-4 pt-6 pb-2 flex justify-between items-center text-[10px] text-muted-foreground font-mono">
+                      <span>12:00 AM</span>
+                      <span>📶 🔋</span>
+                    </div>
+                    <div className="p-4 flex-1 space-y-3">
+                      <div className="flex items-center gap-2 border-b border-border pb-2">
+                        <div className="w-5 h-5 rounded bg-accent/15 flex items-center justify-center text-accent text-[10px] font-bold">
+                          G
+                        </div>
+                        <span className="font-bold text-[10px]">Greenwood Tenant App</span>
+                      </div>
+
+                      <div className="bg-accent/5 border border-accent/20 rounded-xl p-3 flex items-start gap-2.5">
+                        <Bell className="w-4 h-4 text-accent shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <div className="text-[10px] font-bold text-foreground">Rent Payment Due</div>
+                          <p className="text-[9px] text-muted-foreground leading-normal">
+                            {getPreviewMessageText(
+                              activePreviewEvent.type,
+                              activePreviewEvent.days,
+                              'in_app'
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="w-full max-w-[300px] bg-background border border-border rounded-xl shadow-lg overflow-hidden flex flex-col">
+                    <div className="bg-secondary/40 px-3 py-2 border-b border-border text-[9px] text-muted-foreground space-y-0.5">
+                      <div><span className="font-semibold text-foreground">From:</span> auto-billing@greenwood.com</div>
+                      <div><span className="font-semibold text-foreground">To:</span> rahul.sharma@gmail.com</div>
+                    </div>
+                    <div className="p-4 flex-1 text-[11px] text-foreground space-y-3">
+                      <div className="whitespace-pre-wrap leading-relaxed bg-secondary/20 p-2.5 rounded border border-border/50">
+                        {getPreviewMessageText(
+                          activePreviewEvent.type,
+                          activePreviewEvent.days,
+                          'email'
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: Stop Conditions & System Behaviour */}
         <div className="border-t border-border pt-6 space-y-6">
           <div className="space-y-4">
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -1023,34 +1279,192 @@ export function NotificationsSection({ hostelId, policy }: Props) {
           </div>
         </div>
 
-        {/* Step 6: Escalation Policy (Roadmap block) */}
-        <div className="border-t border-border pt-6 opacity-60">
-          <div className="flex items-start gap-4 p-4 rounded-xl border border-dashed border-border bg-secondary/10">
-            <div className="p-2 bg-secondary text-muted-foreground rounded-lg">
-              <Sparkles className="w-5 h-5" />
+        {/* Live Test Reminders & Utilities Block */}
+        <div className="border-t border-border pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="space-y-1">
+            <h4 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+              <Send className="w-3.5 h-3.5 text-accent" /> Live Test Sandbox
+            </h4>
+            <p className="text-xs text-muted-foreground">
+              Send a real sample email or WhatsApp message directly to yourself or a test address.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setTestSuccessMessage(null);
+              setTestErrorMessage(null);
+              setIsTestModalOpen(true);
+            }}
+            className="px-4 py-2 rounded-lg bg-secondary text-foreground hover:bg-secondary-hover border border-border text-xs font-semibold flex items-center gap-1.5 transition-colors"
+          >
+            <Send className="w-3.5 h-3.5" /> Send Test Reminder
+          </button>
+        </div>
+
+        {/* Upcoming Automation Roadmap Section */}
+        <div className="border-t border-border pt-6">
+          <div className="space-y-3">
+            <div className="flex items-center gap-1.5 text-xs uppercase font-bold tracking-wider text-muted-foreground">
+              <Sparkles className="w-3.5 h-3.5 text-accent" /> Upcoming Automation Features
             </div>
-            <div className="flex-1 space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-xs uppercase tracking-wider text-muted-foreground">
-                  4. Escalation Policy
-                </span>
-                <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 dark:text-indigo-400 dark:bg-indigo-950/20 px-1.5 py-0.5 rounded border border-indigo-200/30">
-                  Coming Soon
-                </span>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="p-4 rounded-xl border border-dashed border-border bg-secondary/5 space-y-1 opacity-75">
+                <span className="text-[10px] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded">Coming Soon</span>
+                <h5 className="font-semibold text-xs text-foreground mt-2">Agreement Renewal Alerts</h5>
+                <p className="text-[11px] text-muted-foreground leading-normal">
+                  Automatically alert tenants and request signatures 30 days before their stay agreements expire.
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground leading-snug">
-                Escalate persistent unpaid balances to tenant guardians automatically via SMS or WhatsApp templates.
-              </p>
-              <div className="flex items-center gap-2 mt-2">
-                <input type="checkbox" disabled checked className="rounded border-border text-accent" />
-                <span className="text-xs text-muted-foreground">
-                  Auto-alert guardian if balance is unpaid for 15 days
-                </span>
+              <div className="p-4 rounded-xl border border-dashed border-border bg-secondary/5 space-y-1 opacity-75">
+                <span className="text-[10px] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded">Coming Soon</span>
+                <h5 className="font-semibold text-xs text-foreground mt-2">Automated Tenant KYC</h5>
+                <p className="text-[11px] text-muted-foreground leading-normal">
+                  Auto-request government document uploads and verify identities using automated OCR services.
+                </p>
+              </div>
+              <div className="p-4 rounded-xl border border-dashed border-border bg-secondary/5 space-y-1 opacity-75">
+                <span className="text-[10px] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded">Coming Soon</span>
+                <h5 className="font-semibold text-xs text-foreground mt-2">Utility Auto-Triggers</h5>
+                <p className="text-[11px] text-muted-foreground leading-normal">
+                  Calculate sub-meter readings and append electricity dues dynamically before reminder generation.
+                </p>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Test Send Modal */}
+      {isTestModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-background border border-border rounded-xl shadow-2xl max-w-md w-full overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+              <h3 className="font-semibold text-sm text-foreground flex items-center gap-2">
+                <Send className="w-4 h-4 text-accent" /> Dispatch Live Test Reminder
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsTestModalOpen(false)}
+                className="p-1 hover:bg-secondary rounded-lg transition-colors text-muted-foreground"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-5 space-y-4">
+              {/* Type Selection */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-muted-foreground">Notification Type</label>
+                <select
+                  value={testType}
+                  onChange={(e: any) => setTestType(e.target.value)}
+                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                >
+                  <option value="DUE_SOON">Due Soon (rent_due_reminder_v1)</option>
+                  <option value="DUE_TODAY">Due Today (rent_due_today_v1)</option>
+                  <option value="OVERDUE">Overdue (rent_overdue_warm_v1)</option>
+                </select>
+              </div>
+
+              {/* Channel Selection */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-muted-foreground">Channel</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTestChannel('whatsapp');
+                      setTestDestination('');
+                    }}
+                    className={`p-2 border rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                      testChannel === 'whatsapp'
+                        ? 'border-emerald-500 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400'
+                        : 'border-border bg-background text-muted-foreground'
+                    }`}
+                  >
+                    <MessageCircle className="w-4 h-4" /> WhatsApp
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTestChannel('email');
+                      setTestDestination('');
+                    }}
+                    className={`p-2 border rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                      testChannel === 'email'
+                        ? 'border-indigo-500 bg-indigo-500/5 text-indigo-600 dark:text-indigo-400'
+                        : 'border-border bg-background text-muted-foreground'
+                    }`}
+                  >
+                    <Mail className="w-4 h-4" /> Email
+                  </button>
+                </div>
+              </div>
+
+              {/* Custom Destination */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-muted-foreground">
+                    Destination {testChannel === 'whatsapp' ? 'Phone Number' : 'Email Address'}
+                  </label>
+                  <span className="text-[10px] text-muted-foreground italic">(Optional)</span>
+                </div>
+                <input
+                  type="text"
+                  value={testDestination}
+                  onChange={(e) => setTestDestination(e.target.value)}
+                  placeholder={
+                    testChannel === 'whatsapp'
+                      ? 'e.g. +919876543210'
+                      : 'e.g. yourname@example.com'
+                  }
+                  className="w-full px-3 py-2 bg-background border border-border rounded-lg text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Leave blank to send to the phone number/email verified on your profile.
+                </p>
+              </div>
+
+              {/* Status Alert Panels */}
+              {testSuccessMessage && (
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-600 dark:text-emerald-400 text-xs flex items-start gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-500" />
+                  <span>{testSuccessMessage}</span>
+                </div>
+              )}
+
+              {testErrorMessage && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-600 dark:text-red-400 text-xs flex items-start gap-2.5">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-500" />
+                  <span>{testErrorMessage}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Actions */}
+            <div className="px-5 py-4 border-t border-border bg-secondary/15 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsTestModalOpen(false)}
+                className="px-4 py-2 rounded-lg bg-card hover:bg-secondary border border-border text-xs font-semibold text-foreground transition-all"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                disabled={testLoading}
+                onClick={handleSendTestReminder}
+                className="px-4 py-2 rounded-lg bg-accent text-accent-foreground hover:opacity-90 text-xs font-semibold flex items-center gap-1.5 transition-all disabled:opacity-50"
+              >
+                {testLoading ? 'Sending...' : 'Send Live Message'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </SectionShell>
   );
 }

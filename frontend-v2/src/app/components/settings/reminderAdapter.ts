@@ -1,4 +1,5 @@
 export interface FrontendReminderState {
+  autoSendReminders: boolean;
   strategy: 'gentle' | 'standard' | 'aggressive' | 'custom';
   channels: {
     email: boolean;
@@ -30,7 +31,12 @@ const eq = (a: number[], b: number[]) => {
   return sA.every((val, i) => val === sB[i]);
 };
 
-export function toFrontendModel(reminders: any): FrontendReminderState {
+export function toFrontendModel(policy: any): FrontendReminderState {
+  const reminders = policy?.reminders;
+  const automation = policy?.automation;
+  
+  const autoSendReminders = automation?.auto_send_reminders ?? reminders?.enabled ?? true;
+
   const channels = {
     email: reminders?.channels?.email ?? true,
     in_app: reminders?.channels?.in_app ?? true,
@@ -47,6 +53,7 @@ export function toFrontendModel(reminders: any): FrontendReminderState {
   // 1. If high-fidelity fields are already present, use them
   if (reminders?.strategy) {
     return {
+      autoSendReminders,
       strategy: reminders.strategy,
       channels,
       customBeforeDueDays: reminders.custom_before_due_days ?? [],
@@ -65,6 +72,7 @@ export function toFrontendModel(reminders: any): FrontendReminderState {
   // Check presets
   if (eq(beforeDays, GENTLE_BEFORE) && eq(afterDays, GENTLE_AFTER)) {
     return {
+      autoSendReminders,
       strategy: 'gentle',
       channels,
       customBeforeDueDays: [],
@@ -78,6 +86,7 @@ export function toFrontendModel(reminders: any): FrontendReminderState {
 
   if (eq(beforeDays, STANDARD_BEFORE) && eq(afterDays, STANDARD_AFTER)) {
     return {
+      autoSendReminders,
       strategy: 'standard',
       channels,
       customBeforeDueDays: [],
@@ -91,6 +100,7 @@ export function toFrontendModel(reminders: any): FrontendReminderState {
 
   if (eq(beforeDays, AGGRESSIVE_BEFORE) && eq(afterDays, AGGRESSIVE_AFTER)) {
     return {
+      autoSendReminders,
       strategy: 'aggressive',
       channels,
       customBeforeDueDays: [],
@@ -118,6 +128,7 @@ export function toFrontendModel(reminders: any): FrontendReminderState {
   }
 
   return {
+    autoSendReminders,
     strategy: 'custom',
     channels,
     customBeforeDueDays: beforeDays,
@@ -159,19 +170,25 @@ export function toBackendModel(state: FrontendReminderState): any {
   }
 
   return {
-    channels: state.channels,
-    schedule: {
-      before_due_days,
-      after_due_days,
+    reminders: {
+      enabled: state.autoSendReminders,
+      channels: state.channels,
+      schedule: {
+        before_due_days,
+        after_due_days,
+      },
+      auto_stop_after_payment: state.stopCondition === 'paid',
+      late_fee_notifications: state.lateFeeNotifications,
+      owner_daily_summary: state.ownerDailySummary,
+      // Store metadata for roundtrip precision and future use
+      strategy: state.strategy,
+      repeat_interval: state.repeatInterval,
+      custom_before_due_days: state.customBeforeDueDays,
+      custom_after_due_days: state.customAfterDueDays,
+      stop_condition: state.stopCondition,
     },
-    auto_stop_after_payment: state.stopCondition === 'paid',
-    late_fee_notifications: state.lateFeeNotifications,
-    owner_daily_summary: state.ownerDailySummary,
-    // Store metadata for roundtrip precision and future use
-    strategy: state.strategy,
-    repeat_interval: state.repeatInterval,
-    custom_before_due_days: state.customBeforeDueDays,
-    custom_after_due_days: state.customAfterDueDays,
-    stop_condition: state.stopCondition,
+    automation: {
+      auto_send_reminders: state.autoSendReminders,
+    }
   };
 }
