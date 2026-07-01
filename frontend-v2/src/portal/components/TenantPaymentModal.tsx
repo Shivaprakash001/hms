@@ -68,6 +68,7 @@ interface Props {
   onSuccess?: () => void;
   tenantId?: string;
   hostelId?: string;
+  onRazorpayIntentCreated?: (intent: any) => void;
 }
 
 export function TenantPaymentModal({
@@ -77,6 +78,7 @@ export function TenantPaymentModal({
   onSuccess,
   tenantId,
   hostelId,
+  onRazorpayIntentCreated,
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [attempt, setAttempt] = useState<PaymentAttempt | null>(null);
@@ -169,6 +171,10 @@ export function TenantPaymentModal({
       });
 
       if (intent.provider === 'RAZORPAY') {
+        if (onRazorpayIntentCreated) {
+          onRazorpayIntentCreated(intent);
+          return;
+        }
         const loaded = await loadRazorpayScript();
         if (!loaded) {
           setError('Failed to load payment checkout SDK. Please try again.');

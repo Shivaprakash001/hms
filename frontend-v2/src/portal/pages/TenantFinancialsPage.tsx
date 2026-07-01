@@ -162,7 +162,90 @@ export function TenantFinancialsPage() {
   const [isTestingPayment, setIsTestingPayment] = useState(false);
   const [generatingPaymentId, setGeneratingPaymentId] = useState<string | null>(null);
   const [showReceiptGenModal, setShowReceiptGenModal] = useState(false);
+  const [activeRazorpayIntent, setActiveRazorpayIntent] = useState<any | null>(null);
   const isDevelopment = import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname.includes('127.0.0.1');
+
+  // Trigger Razorpay payment after the modal has been fully unmounted/closed
+  useEffect(() => {
+    if (!activeRazorpayIntent) return;
+    // We wait until the modal is closed so that all Radix overlay, focus trap, and body scroll-lock / pointer-events side-effects are completely cleaned up.
+    if (state.showPayModal) return;
+
+    let active = true;
+
+    const launch = async () => {
+      // Give the browser 50ms to yield control and complete rendering and DOM cleanup of the modal
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      if (!active) return;
+
+      try {
+        const loaded = await loadRazorpayScript();
+        if (!loaded) {
+          toast.error('Failed to load Razorpay SDK');
+          setActiveRazorpayIntent(null);
+          return;
+        }
+
+        const options = {
+          key: activeRazorpayIntent.raw_response?.key_id,
+          amount: activeRazorpayIntent.raw_response?.amount,
+          currency: activeRazorpayIntent.raw_response?.currency || 'INR',
+          name: 'Sri Adithya Boys Hostel',
+          description: 'Secure Checkout',
+          order_id: activeRazorpayIntent.gateway_txn_id,
+          handler: async (response: any) => {
+            const toastId = toast.loading('Verifying payment...');
+            try {
+              const verifyResult = await tenantPortalApi.verifyPayment({
+                attempt_id: activeRazorpayIntent.id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_signature: response.razorpay_signature,
+              });
+
+              toast.success('Payment recorded successfully', { id: toastId });
+              queryClient.invalidateQueries({ queryKey: ['tenant'] });
+            } catch (err: any) {
+              const errMsg = err?.response?.data?.error?.message || err?.message || 'Verification failed';
+              toast.error(errMsg, { id: toastId });
+            } finally {
+              setActiveRazorpayIntent(null);
+            }
+          },
+          prefill: {
+            name: activeRazorpayIntent.raw_response?.notes?.tenant_name || '',
+            email: activeRazorpayIntent.raw_response?.notes?.tenant_email || '',
+            contact: activeRazorpayIntent.raw_response?.notes?.tenant_phone || '',
+          },
+          theme: {
+            color: '#F07B1D',
+          },
+          modal: {
+            ondismiss: () => {
+              setActiveRazorpayIntent(null);
+            },
+          },
+        };
+
+        const rzp = new (window as any).Razorpay(options);
+        rzp.open();
+      } catch (err: any) {
+        toast.error('Failed to initiate checkout: ' + err.message);
+        setActiveRazorpayIntent(null);
+      }
+    };
+
+    launch();
+
+    return () => {
+      active = false;
+    };
+  }, [activeRazorpayIntent, state.showPayModal, queryClient]);
+
+  const handleRazorpayIntentCreated = (intent: any) => {
+    dispatch({ type: 'SET_SHOW_PAY_MODAL', payload: false });
+    setActiveRazorpayIntent(intent);
+  };
 
   const handleTestPayment = async () => {
     setIsTestingPayment(true);
@@ -1334,6 +1417,7 @@ export function TenantFinancialsPage() {
         onSuccess={handlePaymentSuccess}
         tenantId={profile?.tenant?.id}
         hostelId={profile?.hostel?.id}
+        onRazorpayIntentCreated={handleRazorpayIntentCreated}
       />
 
       <TenantPaymentDetailModal
