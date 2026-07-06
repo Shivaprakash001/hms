@@ -200,6 +200,13 @@ export class ReminderService {
                       lateFeesAdded++;
                       await this.triggerNotification(reminderTarget, "LATE_FEE_ADDED", config);
                       remindersSent++;
+                      // Trigger auto-settlement of any existing credits
+                      eventSystem.trigger("obligation_created", {
+                        tenant_id: ob.tenant_id,
+                        owner_id: ob.owner_id,
+                        hostel_id: hostelId,
+                        source: "late_fee_per_day",
+                      }).catch(() => {});
                     } catch (feeErr: any) {
                       if (feeErr?.code === "P2002") {
                         // Idempotent skip — duplicate caught by unique index
@@ -254,6 +261,13 @@ export class ReminderService {
                       lateFeesAdded++;
                       await this.triggerNotification(reminderTarget, "LATE_FEE_ADDED", config);
                       remindersSent++;
+                      // Trigger auto-settlement of any existing credits
+                      eventSystem.trigger("obligation_created", {
+                        tenant_id: ob.tenant_id,
+                        owner_id: ob.owner_id,
+                        hostel_id: hostelId,
+                        source: "late_fee_one_time",
+                      }).catch(() => {});
                     } catch (feeErr: any) {
                       if (feeErr?.code === "P2002") {
                         // Idempotent skip — duplicate caught by unique index

@@ -864,6 +864,16 @@ export class ActivationWorkflowService {
       return agreement;
     });
 
+    // Post-commit: trigger auto-settlement for obligations created by rent schedule
+    if (tenant.id && tenant.hostel_id) {
+      eventSystem.trigger("obligation_created", {
+        tenant_id: tenant.id,
+        owner_id: tenant.owner_id,
+        hostel_id: tenant.hostel_id,
+        source: "agreement_signing",
+      }).catch(() => {});
+    }
+
     try {
       const pdfUrl = await AgreementGenerationService.generateAndUploadPdf(signedAgreement.id);
       console.log(`Generated agreement PDF: ${pdfUrl}`);

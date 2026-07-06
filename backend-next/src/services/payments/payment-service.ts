@@ -71,7 +71,7 @@ export class PaymentService {
       where: {
         tenant_id: tenantId,
         hostel_id: hostelId,
-        status: { in: ["OVERDUE", "PENDING", "PARTIAL"] },
+        status: { in: ["OVERDUE", "PENDING", "PARTIAL", "UPCOMING"] },
       },
       include: {
         payments: {
@@ -403,19 +403,27 @@ export class PaymentService {
 
     const amountPaisa = Math.round(data.amountPaid * 100);
     // V2: Settle ALL obligation types, not just RENT.
-    // Priority: Security Deposit → Maintenance → Rent → Extra Charges
+    // Priority: Rent → Maintenance → Extra Charges → Late Fees → Security Deposit
+    // Within each type: overdue first → partial first → oldest due_date.
     const lockedRows: { id: string }[] = await tx.$queryRaw`
       SELECT id FROM rent_obligations
       WHERE tenant_id = ${data.tenantId}::uuid
         AND hostel_id = ${hostelId}::uuid
-        AND status IN ('OVERDUE', 'PENDING', 'PARTIAL')
+        AND status IN ('OVERDUE', 'PENDING', 'PARTIAL', 'UPCOMING')
       ORDER BY
         CASE obligation_type
-          WHEN 'SECURITY_DEPOSIT' THEN 1
+          WHEN 'RENT' THEN 1
           WHEN 'MAINTENANCE' THEN 2
-          WHEN 'RENT' THEN 3
-          WHEN 'EXTRA_CHARGE' THEN 4
-          ELSE 5
+          WHEN 'EXTRA_CHARGE' THEN 3
+          WHEN 'LATE_FEE' THEN 4
+          WHEN 'SECURITY_DEPOSIT' THEN 5
+          ELSE 6
+        END,
+        CASE status
+          WHEN 'PARTIAL' THEN 1
+          WHEN 'PENDING' THEN 2
+          WHEN 'UPCOMING' THEN 3
+          ELSE 4
         END,
         due_date ASC,
         rent_month ASC
@@ -1187,7 +1195,7 @@ export class PaymentService {
       const allUnpaid = await prisma.rent_obligations.findMany({
         where: {
           tenant_id: singleTenantId,
-          status: { in: ["PENDING", "PARTIAL"] },
+          status: { in: ["PENDING", "PARTIAL", "UPCOMING"] },
           is_superseded: false,
         },
         orderBy: [
@@ -1197,20 +1205,25 @@ export class PaymentService {
       });
 
       if (allUnpaid.length > 0) {
-        let minRequestedDueDate = obligations[0].due_date;
-        for (const ob of obligations) {
-          if (ob.due_date < minRequestedDueDate) {
-            minRequestedDueDate = ob.due_date;
-          }
-        }
-
+        const now = new Date();
+        const currentMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
         const requestedIdSet = new Set(obligationIds);
-        const hasOlderUnpaid = allUnpaid.some((o) =>
+
+        // Check if there are any older OVERDUE obligations that are not requested
+        const hasOlderOverdue = allUnpaid.some((o) =>
           !requestedIdSet.has(o.id) &&
-          new Date(o.due_date).getTime() < new Date(minRequestedDueDate).getTime()
+          new Date(o.due_date).getTime() < now.getTime() &&
+          o.status !== "PAID" &&
+          o.status !== "WAIVED"
         );
 
-        if (hasOlderUnpaid) {
+        // Check if any of the requested obligations is a FUTURE obligation (rent_month > currentMonthStart)
+        const hasRequestedFuture = obligations.some((ob) =>
+          ob.rent_month && new Date(ob.rent_month).getTime() > currentMonthStart.getTime()
+        );
+
+        // We only enforce FIFO block for FUTURE obligations if there are older OVERDUE obligations
+        if (hasRequestedFuture && hasOlderOverdue) {
           throw new Error("BAD_REQUEST: Previous installments must be cleared before paying future installments.");
         }
       }
@@ -1254,7 +1267,7 @@ export class PaymentService {
       const tenantTotalOutstanding = await prisma.rent_obligations.count({
         where: {
           tenant_id: singleTenantId,
-          status: { in: ["PENDING", "PARTIAL"] },
+          status: { in: ["PENDING", "PARTIAL", "UPCOMING"] },
           hostel_id: hostelId,
         }
       });
@@ -2691,7 +2704,7 @@ export class PaymentService {
       }
 
       return finalized;
-    });
+    }, { maxWait: 15000, timeout: 30000 });
     }
     logger.info("payments.finalize.marked_success", { ...requestMeta, attempt_id: attemptId, gateway_txn_id: gatewayTxnId ?? null, source: context?.source ?? "auto" });
 
@@ -3417,7 +3430,7 @@ export class PaymentService {
         ) latest_attempt ON true
         WHERE o.owner_id = ${ownerId}::uuid
           AND o.hostel_id = ${hostelId}::uuid
-          AND o.status::text != 'UPCOMING'
+          AND o.status::text != 'WAIVED'
           ${tenantFilter}
           ${monthFilter}
       ),
@@ -3462,7 +3475,7 @@ export class PaymentService {
         ) pay_agg ON pay_agg.obligation_id = o.id
         WHERE o.owner_id = ${ownerId}::uuid
           AND o.hostel_id = ${hostelId}::uuid
-          AND o.status IN ('PENDING', 'PARTIAL')
+          AND o.status IN ('PENDING', 'PARTIAL', 'UPCOMING')
           AND t.status = 'ACTIVE'
           AND o.total_amount - COALESCE(pay_agg.total_paid, 0) > 0
       ),

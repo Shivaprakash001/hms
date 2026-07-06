@@ -43,14 +43,14 @@ describe('createMultiObligationPaymentIntent FIFO Enforcement', () => {
     });
   });
 
-  it('should reject payment intent if attempting to pay July dues while June is unpaid', async () => {
-    await expect(
-      paymentService.createMultiObligationPaymentIntent(
-        [obligationJuly.id],
-        tenant.id,
-        tenant.id
-      )
-    ).rejects.toThrow('BAD_REQUEST: Previous installments must be cleared before paying future installments.');
+  it('should allow payment intent for July dues even if June is unpaid (relaxed FIFO)', async () => {
+    const attempt = await paymentService.createMultiObligationPaymentIntent(
+      [obligationJuly.id],
+      tenant.id,
+      tenant.id
+    );
+    expect(attempt).toBeDefined();
+    expect(attempt.status).toBe('PENDING');
   });
 
   it('should allow payment intent for only June dues', async () => {

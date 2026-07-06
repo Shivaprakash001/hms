@@ -42,7 +42,7 @@ export class FinancialService {
         LEFT JOIN pay_agg p ON p.obligation_id = o.id
         WHERE o.owner_id = ${ownerId}::uuid
           AND o.hostel_id = ${hostelId}::uuid
-          AND o.status IN ('PENDING', 'PARTIAL')
+          AND o.status IN ('PENDING', 'PARTIAL', 'UPCOMING')
           AND o.total_amount - COALESCE(p.total_paid, 0) <= 0
       )
       UPDATE rent_obligations o

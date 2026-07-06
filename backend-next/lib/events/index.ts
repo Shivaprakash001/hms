@@ -338,3 +338,44 @@ eventSystem.on("renewal_offer_discussion_requested", async (data) => {
   }
 });
 
+/**
+ * obligation_created — Auto-settle future rent credits against newly created obligations.
+ *
+ * Triggered post-commit by all 7 obligation creation paths. Runs inside its own
+ * transaction with FOR UPDATE locking on the tenant row to serialize concurrent
+ * settlements. Fire-and-forget: failures are logged but never propagate back to
+ * the creation flow.
+ *
+ * Payload: { tenant_id, owner_id, hostel_id, source: string }
+ */
+eventSystem.on("obligation_created", async (data) => {
+  const { tenant_id, owner_id, source } = data;
+  if (!tenant_id || !owner_id) {
+    console.warn("[Event] obligation_created: missing tenant_id or owner_id, skipping auto-settlement", data);
+    return;
+  }
+  try {
+    const { prisma } = await import("../db");
+    const { tenantFinancialLedgerService } = await import(
+      "../../src/services/payments/tenant-financial-ledger-service"
+    );
+    await prisma.$transaction(async (tx: any) => {
+      await tenantFinancialLedgerService.autoApplyFutureRentCreditToDuesInTx(
+        tx,
+        tenant_id,
+        owner_id,
+        owner_id
+      );
+    });
+    console.log(`[Event] obligation_created: auto-settlement complete for tenant ${tenant_id} (source: ${source})`);
+  } catch (error: any) {
+    // Fire-and-forget: log but never break the creation flow
+    console.error("[Event] obligation_created auto-settlement failed:", {
+      tenant_id,
+      owner_id,
+      source,
+      error: error?.message || String(error),
+    });
+  }
+});
+

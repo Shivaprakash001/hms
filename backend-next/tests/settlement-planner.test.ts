@@ -8,7 +8,7 @@ import {
 } from "@/src/services/payments/settlement-planner";
 
 describe("SettlementPlanner - sortObligationsByPriority", () => {
-  it("sorts obligations in the correct priority order: SECURITY_DEPOSIT -> MAINTENANCE -> RENT -> EXTRA_CHARGE", () => {
+  it("sorts obligations in the correct priority order: RENT -> MAINTENANCE -> EXTRA_CHARGE -> SECURITY_DEPOSIT", () => {
     const raw = [
       { id: "1", obligation_type: "RENT", due_date: new Date("2026-06-01"), rent_month: new Date("2026-06-01") },
       { id: "2", obligation_type: "EXTRA_CHARGE", due_date: new Date("2026-06-01"), rent_month: null },
@@ -17,7 +17,7 @@ describe("SettlementPlanner - sortObligationsByPriority", () => {
     ];
 
     const sorted = sortObligationsByPriority(raw);
-    expect(sorted.map(s => s.id)).toEqual(["3", "4", "1", "2"]);
+    expect(sorted.map(s => s.id)).toEqual(["1", "4", "2", "3"]);
   });
 
   it("breaks ties using due_date", () => {

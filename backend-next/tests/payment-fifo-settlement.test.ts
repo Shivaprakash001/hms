@@ -42,7 +42,7 @@ function createTx(rows: any[]) {
   const updatedStatuses: Record<string, string> = {};
   return {
     updatedStatuses,
-    $queryRaw: vi.fn(async () => rows.filter((row) => ["OVERDUE", "PENDING", "PARTIAL"].includes(row.status)).map((row) => ({ id: row.id }))),
+    $queryRaw: vi.fn(async () => rows.filter((row) => ["OVERDUE", "PENDING", "PARTIAL", "UPCOMING"].includes(row.status)).map((row) => ({ id: row.id }))),
     tenants: {
       findUnique: vi.fn(async () => tenant),
     },
@@ -89,6 +89,23 @@ describe("PaymentService FIFO rent settlement", () => {
     expect(result.allocations).toHaveLength(1);
     expect(result.allocations[0].obligation_id).toBe("due");
     expect(tx.updatedStatuses).toEqual({ due: "PAID" });
+    expect(mocks.creditIdempotentInTx).not.toHaveBeenCalled();
+  });
+
+  it("settles upcoming obligation when no other overdue/pending obligations exist", async () => {
+    const upcoming = obligation("upcoming", "2026-07-05", 8500, [], "UPCOMING");
+    const tx = createTx([upcoming]);
+
+    const result = await service._settleTenantRentPaymentInTx(tx, {
+      hostelId: "hostel-1",
+      tenantId: "tenant-1",
+      amountPaid: 8500,
+      paymentMethod: "UPI",
+    }, "group-3");
+
+    expect(result.allocations).toHaveLength(1);
+    expect(result.allocations[0].obligation_id).toBe("upcoming");
+    expect(tx.updatedStatuses).toEqual({ upcoming: "PAID" });
     expect(mocks.creditIdempotentInTx).not.toHaveBeenCalled();
   });
 

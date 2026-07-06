@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { eventSystem } from "@/lib/events";
 import { resolvePreferences } from "@/lib/preferences";
 
 type Tx = typeof prisma | any;
@@ -9,6 +10,9 @@ export type AgreementRentScheduleResult = {
   updated: number;
   skipped: number;
   months: Array<{ rent_month: Date; status: "UPCOMING" | "PENDING" | "OVERDUE" }>;
+  tenant_id: string;
+  owner_id: string | null;
+  hostel_id: string | null;
 };
 
 function money(value: unknown) {
@@ -54,7 +58,17 @@ function shouldUpdateStatus(existingStatus: string | null | undefined) {
 
 export class AgreementRentScheduleService {
   async generateForAgreement(agreementId: string, options: { now?: Date } = {}) {
-    return prisma.$transaction((tx: any) => this.generateForAgreementInTx(tx, agreementId, options));
+    const result = await prisma.$transaction((tx: any) => this.generateForAgreementInTx(tx, agreementId, options));
+    // Post-commit: trigger auto-settlement if new obligations were created
+    if (result.created > 0 && result.tenant_id && result.owner_id) {
+      eventSystem.trigger("obligation_created", {
+        tenant_id: result.tenant_id,
+        owner_id: result.owner_id,
+        hostel_id: result.hostel_id,
+        source: "agreement_rent_schedule",
+      }).catch(() => {});
+    }
+    return result;
   }
 
   async generateForAgreementInTx(
@@ -86,7 +100,16 @@ export class AgreementRentScheduleService {
 
     if (!agreement) throw new Error("NOT_FOUND: Agreement not found");
     if (!["SIGNED", "EXPIRING_SOON", "AGREEMENT_EXPIRED"].includes(String(agreement.status))) {
-      return { agreementId: id, created: 0, updated: 0, skipped: 0, months: [] };
+      return {
+        agreementId: id,
+        created: 0,
+        updated: 0,
+        skipped: 0,
+        months: [],
+        tenant_id: agreement.tenant_id,
+        owner_id: agreement.tenant?.owner_id || null,
+        hostel_id: agreement.hostel_id,
+      };
     }
 
     const durationMonths = Math.trunc(Number(agreement.agreement_duration_months || 0));
@@ -193,7 +216,12 @@ export class AgreementRentScheduleService {
       }
     }
 
-    return { agreementId: id, created, updated, skipped, months };
+    return {
+      agreementId: id, created, updated, skipped, months,
+      tenant_id: agreement.tenant_id,
+      owner_id: agreement.tenant?.owner_id || null,
+      hostel_id: agreement.hostel_id,
+    };
   }
 
   async syncDueStatuses(params: { hostelId?: string; now?: Date } = {}) {

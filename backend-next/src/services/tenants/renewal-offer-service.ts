@@ -399,7 +399,7 @@ export class RenewalOfferService {
       throw new Error("BAD_REQUEST: This offer has expired. Contact your hostel for a new one.");
     }
 
-    return this.db.$transaction(async (tx) => {
+    const result = await this.db.$transaction(async (tx) => {
       const roomAllocation = offer.tenant?.room_allocations?.[0];
       const roomCategory = roomAllocation?.room?.room_type || null;
 
@@ -543,6 +543,19 @@ export class RenewalOfferService {
 
       return { offer: { ...offer, status: "ACCEPTED" as const }, newAgreement, additionalDepositRequired: additionalDeposit, depositObligationId };
     });
+
+    // Post-commit: trigger auto-settlement if a deposit obligation was created
+    if (result.depositObligationId) {
+      const { eventSystem } = await import("@/lib/events");
+      eventSystem.trigger("obligation_created", {
+        tenant_id: offer.tenant_id,
+        owner_id: offer.owner_id,
+        hostel_id: offer.hostel_id,
+        source: "renewal_offer_accepted",
+      }).catch(() => {});
+    }
+
+    return result;
   }
 
   /** Tenant declines an offer. */

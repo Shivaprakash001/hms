@@ -497,6 +497,29 @@ export class RentGenerationService {
           return { rentCount, maintCount };
         });
         created += txResults.rentCount + txResults.maintCount;
+
+        // Post-commit: emit obligation_created per unique tenant for auto-settlement.
+        // Batched at the tenant level to avoid N events for N obligations.
+        if (txResults.rentCount + txResults.maintCount > 0) {
+          const allCreatedRows = [...rentRows, ...maintRows];
+          const tenantOwnerMap = new Map<string, { owner_id: string; hostel_id: string }>();
+          for (const row of allCreatedRows) {
+            if (!tenantOwnerMap.has(row.tenant_id)) {
+              tenantOwnerMap.set(row.tenant_id, {
+                owner_id: row.owner_id,
+                hostel_id: row.hostel_id,
+              });
+            }
+          }
+          for (const [tid, ctx] of Array.from(tenantOwnerMap)) {
+            eventSystem.trigger("obligation_created", {
+              tenant_id: tid,
+              owner_id: ctx.owner_id,
+              hostel_id: ctx.hostel_id,
+              source: "rent_generation",
+            }).catch(() => {});
+          }
+        }
       } catch (insertErr: any) {
         txRolledBack = true;
         failed += ledgerStats.size || 1;

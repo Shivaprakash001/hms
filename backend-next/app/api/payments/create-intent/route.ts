@@ -112,7 +112,7 @@ export async function POST(req: Request) {
 
       // Load obligations and validate amount against policy
       const obligations = await prisma.rent_obligations.findMany({
-        where: { tenant_id: tenantId, hostel_id: tenant.hostel_id, status: { in: ["OVERDUE", "PENDING", "PARTIAL"] } },
+        where: { tenant_id: tenantId, hostel_id: tenant.hostel_id, status: { in: ["OVERDUE", "PENDING", "PARTIAL", "UPCOMING"] } },
         include: { payments: { select: { amount_paid: true } } },
       });
       const snapshots = obligations.map(ob => toObligationSnapshot(ob as any));

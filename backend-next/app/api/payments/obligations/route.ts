@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { NextRequest } from "next/server";
 import { randomUUID } from "crypto";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
+import { eventSystem } from "@/lib/events";
 import { prisma } from "@/lib/db";
 import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
 
@@ -111,6 +112,14 @@ export async function POST(req: NextRequest) {
         status: "PENDING",
       },
     });
+
+    // Post-creation: trigger auto-settlement of any existing credits
+    eventSystem.trigger("obligation_created", {
+      tenant_id,
+      owner_id: ownerId,
+      hostel_id: tenant.hostel_id,
+      source: "manual_obligation_api",
+    }).catch(() => {}); // fire-and-forget
 
     return apiResponse(obligation, 201);
   } catch (error: any) {

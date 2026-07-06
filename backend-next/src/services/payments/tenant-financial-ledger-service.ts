@@ -482,7 +482,7 @@ export class TenantFinancialLedgerService {
     const obligations = await tx.rent_obligations.findMany({
       where: {
         tenant_id: tenantId,
-        status: { in: ["PENDING", "PARTIAL"] },
+        status: { in: ["PENDING", "PARTIAL", "UPCOMING"] },
       },
       include: { payments: { select: { amount_paid: true } } },
       orderBy: { rent_month: "asc" },
@@ -508,7 +508,15 @@ export class TenantFinancialLedgerService {
           createdBy,
           obligationId: obligation.id,
           amount: adjustAmount,
-          notes: `Auto-adjusted from tenant future rent credit balance`,
+          notes: JSON.stringify({
+            trigger: "auto_settlement",
+            actor: createdBy,
+            obligation_id: obligation.id,
+            obligation_type: obligation.obligation_type,
+            obligation_status: obligation.status,
+            rent_month: obligation.rent_month?.toISOString?.() || null,
+            description: `Auto-adjusted ₹${adjustAmount} from future rent credit against ${obligation.obligation_type} obligation`,
+          }),
         });
         currentBalance = Math.round((currentBalance - adjustAmount) * 100) / 100;
       }

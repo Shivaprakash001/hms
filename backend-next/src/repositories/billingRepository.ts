@@ -254,7 +254,7 @@ export class BillingRepository {
         tenant_id: tenantId,
         ...(ownerId ? { owner_id: ownerId } : {}),
         hostel_id: hostelId,
-        status: { in: ["PENDING", "PARTIAL"] },
+        status: { in: ["PENDING", "PARTIAL", "UPCOMING"] },
         is_superseded: false,
       },
       include: {

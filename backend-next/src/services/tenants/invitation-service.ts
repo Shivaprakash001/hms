@@ -193,6 +193,17 @@ export class InvitationService {
     const { profile: newProfile, tenant: newTenant, obligations, allocationId } = createdBundle;
 
     logger.info(`Created profile ${newProfile.id}, tenant ${newTenant.id} [INVITED], obligations: [${obligations.join(", ") || "none"}]`);
+
+    // Post-commit: trigger auto-settlement for initial obligations
+    if (obligations.length > 0) {
+      eventSystem.trigger("obligation_created", {
+        tenant_id: newTenant.id,
+        owner_id: ownerId,
+        hostel_id: room.hostels.id,
+        source: "invitation_legacy_onboarding",
+      }).catch(() => {});
+    }
+
     await allocationReconciliationService.reconcileAllocation(allocationId).catch((err: any) => {
       logger.error("reconcile_after_invite_failed", {
         allocation_id: allocationId,

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { eventSystem } from "@/lib/events";
 import { eventLog } from "@/lib/services/event-log-service";
 import { AgreementGenerationService, DEFAULT_RULE_CONTENT } from "./agreement-generation-service";
 import { AGREEMENT_ACTIVITY_EVENTS, isCurrentAgreementStatus } from "./agreement-status";
@@ -300,6 +301,16 @@ export class AgreementRenewalSigningService {
         tenantId: renewalAgreement.tenant_id,
       };
     });
+
+    // Post-commit: trigger auto-settlement for newly created rent schedule obligations
+    if (signed.tenantId) {
+      eventSystem.trigger("obligation_created", {
+        tenant_id: signed.tenantId,
+        owner_id: signed.tenantOwnerId,
+        hostel_id: signed.renewalAgreement?.hostel_id,
+        source: "renewal_agreement_signing",
+      }).catch(() => {});
+    }
 
     let pdfUrl: string | null = null;
     let pdfGenerated = false;

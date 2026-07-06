@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
       where: {
         tenant_id: tenantId,
         hostel_id: effectiveHostelId,
-        status: { in: ["OVERDUE", "PENDING", "PARTIAL"] },
+        status: { in: ["OVERDUE", "PENDING", "PARTIAL", "UPCOMING"] },
       },
       include: {
         payments: { select: { amount_paid: true } },

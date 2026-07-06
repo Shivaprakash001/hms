@@ -374,6 +374,17 @@ export class TenantInvitationLifecycleService {
       return { tenant, invitation, reservation, room: capacity.room, financials };
     }, { timeout: 30000 });
 
+    // Post-commit: trigger auto-settlement for newly created onboarding obligations
+    if (created.financials?.createdObligations?.length > 0) {
+      const { eventSystem } = await import("../../../lib/events");
+      eventSystem.trigger("obligation_created", {
+        tenant_id: created.tenant.id,
+        owner_id: ownerId,
+        hostel_id: created.room.hostel_id,
+        source: "invitation_onboarding",
+      }).catch(() => {});
+    }
+
     const activationLink = frontendUrl(`/activate/${created.invitation.token}`);
     const delivery = await this.dispatchInvitationNotification(
       created.invitation,
@@ -706,6 +717,17 @@ export class TenantInvitationLifecycleService {
         versionCount,
       };
     }, { timeout: 30000 });
+
+    // Post-commit: trigger auto-settlement for regenerated onboarding obligations
+    {
+      const { eventSystem } = await import("../../../lib/events");
+      eventSystem.trigger("obligation_created", {
+        tenant_id: invitation.tenant_id,
+        owner_id: invitation.owner_id,
+        hostel_id: updated.targetRoom?.hostel_id || invitation.hostel_id,
+        source: "invitation_resend_onboarding",
+      }).catch(() => {});
+    }
 
     const owner = await prisma.profile.findUnique({ where: { id: invitation.owner_id }, select: { name: true } });
     const activationLink = frontendUrl(`/activate/${token}`);

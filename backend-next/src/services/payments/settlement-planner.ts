@@ -2,7 +2,7 @@
  * 🏗️ Settlement Planner — Pure Domain Module
  *
  * The SINGLE source of truth for settlement priority, obligation tiers,
- * allocation logic, and minimum payment computation.
+ * allocation logic, payability predicates, and minimum payment computation.
  *
  * Properties:
  * - Pure function — no Prisma, no I/O, no side effects
@@ -13,16 +13,77 @@
  * in _settleTenantRentPaymentInTx() FOR UPDATE query to match.
  */
 
+// ── Payability Predicates ─────────────────────────────────────────────────────
+// These are the SINGLE SOURCE OF TRUTH for whether an obligation can accept
+// money, receive reminders, or incur late fees.
+//
+// Payment eligibility, due dates, reminders, late fees, and obligation lifecycle
+// are INDEPENDENT business concepts. Never use status directly to gate payments.
+//
+// Status     | Payable | Remindable | LateFeeEligible
+// UPCOMING   |   ✅    |     ❌     |       ❌
+// PENDING    |   ✅    |     ✅     |    after grace
+// PARTIAL    |   ✅    |     ✅     |    after grace
+// OVERDUE    |   ✅    |     ✅     |       ✅
+// PAID       |   ❌    |     ❌     |       ❌
+// WAIVED     |   ❌    |     ❌     |       ❌
+
+const NON_PAYABLE_STATUSES = new Set(["PAID", "WAIVED"]);
+const NON_REMINDABLE_STATUSES = new Set(["PAID", "WAIVED", "UPCOMING"]);
+
+/** Can this obligation accept payment? Status is NEVER a payment gate except for terminal states. */
+export function isPayable(obligation: { status: string }): boolean {
+  return !NON_PAYABLE_STATUSES.has(obligation.status);
+}
+
+/** Should this obligation trigger reminders? Only for current/overdue obligations past due date. */
+export function isRemindable(obligation: { status: string; due_date: Date }, today: Date = new Date()): boolean {
+  if (NON_REMINDABLE_STATUSES.has(obligation.status)) return false;
+  const todayMid = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+  const dueMid = new Date(Date.UTC(
+    obligation.due_date.getFullYear(), obligation.due_date.getMonth(), obligation.due_date.getDate()
+  ));
+  return dueMid.getTime() < todayMid.getTime();
+}
+
+/** Should this obligation incur late fees? Only if remindable AND past grace period. */
+export function isLateFeeEligible(
+  obligation: { status: string; due_date: Date },
+  today: Date = new Date(),
+  graceDays: number = 0
+): boolean {
+  if (!isRemindable(obligation, today)) return false;
+  const todayMid = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+  const dueMid = new Date(Date.UTC(
+    obligation.due_date.getFullYear(), obligation.due_date.getMonth(), obligation.due_date.getDate()
+  ));
+  const daysOverdue = Math.ceil((todayMid.getTime() - dueMid.getTime()) / 86_400_000);
+  return daysOverdue > graceDays;
+}
+
+/** All statuses that can accept payment allocation. Used by settlement queries. */
+export const PAYABLE_STATUSES = ["PENDING", "PARTIAL", "UPCOMING"] as const;
+
 // ── The canonical priority order ──────────────────────────────────────────────
-// Security Deposit → Maintenance → Rent → Extra Charges
+// Rent → Maintenance → Extra Charges → Late Fees → Security Deposit
+//
+// Rationale:
+//   1. RENT first — highest collection risk, reduces overdue accumulation
+//   2. MAINTENANCE — recurring operational charge, due regularly
+//   3. EXTRA_CHARGE — ad-hoc charges, moderate urgency
+//   4. LATE_FEE — penalty charges, generated organically
+//   5. SECURITY_DEPOSIT — held asset, lowest urgency (one-time onboarding)
+//
+// Within each type: overdue first → partial first → oldest due_date first.
 // This order is also encoded in the SQL FOR UPDATE query inside
 // _settleTenantRentPaymentInTx. Keep them in sync.
 
 export const SETTLEMENT_PRIORITY: Record<string, number> = {
-  SECURITY_DEPOSIT: 1,
+  RENT: 1,
   MAINTENANCE: 2,
-  RENT: 3,
-  EXTRA_CHARGE: 4,
+  EXTRA_CHARGE: 3,
+  LATE_FEE: 4,
+  SECURITY_DEPOSIT: 5,
 };
 
 // ── Obligation tiers for minimum payment grouping ─────────────────────────────
