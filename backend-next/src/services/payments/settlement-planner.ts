@@ -61,58 +61,93 @@ export function isLateFeeEligible(
   return daysOverdue > graceDays;
 }
 
-/** All statuses that can accept payment allocation. Used by settlement queries. */
-export const PAYABLE_STATUSES = ["PENDING", "PARTIAL", "UPCOMING"] as const;
+/** All statuses that can accept payment allocation. Used by settlement queries. Must match isPayable(). */
+export const PAYABLE_STATUSES = ["OVERDUE", "PENDING", "PARTIAL", "UPCOMING"] as const;
 
 // ── The canonical priority order ──────────────────────────────────────────────
-// Rent → Maintenance → Extra Charges → Late Fees → Security Deposit
+// Security Deposit → Admission/Maintenance → Rent → Late Fees → Extra Charges
 //
-// Rationale:
-//   1. RENT first — highest collection risk, reduces overdue accumulation
-//   2. MAINTENANCE — recurring operational charge, due regularly
-//   3. EXTRA_CHARGE — ad-hoc charges, moderate urgency
-//   4. LATE_FEE — penalty charges, generated organically
-//   5. SECURITY_DEPOSIT — held asset, lowest urgency (one-time onboarding)
+// Rationale (from business rules):
+//   1. SECURITY_DEPOSIT first — guarantees onboarding compliance, held asset
+//   2. ADMISSION — one-time admission fee, part of move-in costs
+//   3. MAINTENANCE — recurring operational charge, same tier as admission
+//   4. RENT — primary recurring obligation
+//   5. LATE_FEE — penalty charges, generated organically from overdue rent
+//   6. EXTRA_CHARGE — ad-hoc charges, lowest urgency
 //
-// Within each type: overdue first → partial first → oldest due_date first.
-// This order is also encoded in the SQL FOR UPDATE query inside
-// _settleTenantRentPaymentInTx. Keep them in sync.
+// Within each type: partial first → overdue first → oldest due_date first.
+//
+// ⚠️  THIS IS THE SINGLE SOURCE OF TRUTH.
+//     Do NOT hardcode priority in SQL CASE statements.
+//     Use buildSqlPriorityCaseClause() to generate SQL from this constant.
 
 export const SETTLEMENT_PRIORITY: Record<string, number> = {
-  RENT: 1,
-  MAINTENANCE: 2,
-  EXTRA_CHARGE: 3,
-  LATE_FEE: 4,
-  SECURITY_DEPOSIT: 5,
+  SECURITY_DEPOSIT: 1,
+  ADMISSION: 2,
+  MAINTENANCE: 3,
+  RENT: 4,
+  LATE_FEE: 5,
+  EXTRA_CHARGE: 6,
 };
+
+/** Ordered list of obligation types by settlement priority (highest first). */
+export const SETTLEMENT_PRIORITY_ORDER: string[] = Object.entries(SETTLEMENT_PRIORITY)
+  .sort(([, a], [, b]) => a - b)
+  .map(([type]) => type);
+
+/** Get the numeric priority index for an obligation type. Unknown types get 99 (settled last). */
+export function priorityIndex(obligationType: string): number {
+  return SETTLEMENT_PRIORITY[obligationType] ?? 99;
+}
+
+/**
+ * Generate a SQL CASE WHEN clause for obligation_type priority ordering.
+ * Use this in FOR UPDATE queries to ensure lock acquisition order matches
+ * the canonical settlement priority.
+ *
+ * @param columnName - SQL column name (default: "obligation_type")
+ * @returns SQL fragment like: CASE obligation_type WHEN 'SECURITY_DEPOSIT' THEN 1 ... ELSE 99 END
+ */
+export function buildSqlPriorityCaseClause(columnName = "obligation_type"): string {
+  const cases = SETTLEMENT_PRIORITY_ORDER
+    .map((type, idx) => `WHEN '${type}' THEN ${idx + 1}`)
+    .join(" ");
+  return `CASE ${columnName} ${cases} ELSE 99 END`;
+}
 
 // ── Obligation tiers for minimum payment grouping ─────────────────────────────
 // When partial payments are disabled, the minimum = sum of all outstanding
 // obligations in the first INCOMPLETE tier.
 //
-// Tier 1 (Onboarding): Security Deposit + Maintenance → move-in costs, one unit
+// Tier 1 (Onboarding): Security Deposit + Admission + Maintenance → move-in costs
 // Tier 2 (Recurring):  Rent → monthly obligations
-// Tier 3 (Other):      Extra Charges → ad-hoc charges
+// Tier 3 (Penalties):  Late Fees → automatically generated penalties
+// Tier 4 (Other):      Extra Charges → ad-hoc charges
 
 export const SETTLEMENT_TIERS: Record<string, string> = {
   SECURITY_DEPOSIT: "ONBOARDING",
+  ADMISSION: "ONBOARDING",
   MAINTENANCE: "ONBOARDING",
   RENT: "RECURRING",
+  LATE_FEE: "PENALTIES",
   EXTRA_CHARGE: "OTHER",
 };
 
-const TIER_ORDER = ["ONBOARDING", "RECURRING", "OTHER"];
+const TIER_ORDER = ["ONBOARDING", "RECURRING", "PENALTIES", "OTHER"];
 
 const TIER_LABELS: Record<string, string> = {
   ONBOARDING: "Onboarding Dues",
   RECURRING: "Rent",
+  PENALTIES: "Late Fees",
   OTHER: "Extra Charges",
 };
 
 export const TYPE_LABELS: Record<string, string> = {
-  RENT: "Rent",
-  MAINTENANCE: "Maintenance",
   SECURITY_DEPOSIT: "Security Deposit",
+  ADMISSION: "Admission Fee",
+  MAINTENANCE: "Maintenance",
+  RENT: "Rent",
+  LATE_FEE: "Late Fee",
   EXTRA_CHARGE: "Extra Charge",
 };
 
@@ -168,8 +203,8 @@ export function sortObligationsByPriority<T extends { obligation_type: string; d
   obligations: T[]
 ): T[] {
   return [...obligations].sort((a, b) => {
-    const pa = SETTLEMENT_PRIORITY[a.obligation_type] ?? 5;
-    const pb = SETTLEMENT_PRIORITY[b.obligation_type] ?? 5;
+    const pa = SETTLEMENT_PRIORITY[a.obligation_type] ?? 99;
+    const pb = SETTLEMENT_PRIORITY[b.obligation_type] ?? 99;
     if (pa !== pb) return pa - pb;
     const dateDiff = new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
     if (dateDiff !== 0) return dateDiff;

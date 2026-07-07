@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { sortObligationsByPriority, SETTLEMENT_PRIORITY, SETTLEMENT_TIERS, TYPE_LABELS, toObligationSnapshot } from "./settlement-planner";
+import { sortObligationsByPriority, SETTLEMENT_PRIORITY, SETTLEMENT_TIERS, TYPE_LABELS, toObligationSnapshot, buildSqlPriorityCaseClause, isPayable } from "./settlement-planner";
 import { Prisma } from "@prisma/client";
 import { eventSystem } from "@/lib/events";
 import { PaymentProviderFactory } from "./provider-factory";
@@ -296,8 +296,10 @@ export class PaymentService {
     if (data.ownerId && obligation.owner_id && obligation.owner_id !== data.ownerId) {
       throw new Error("FORBIDDEN: Obligation does not belong to this owner");
     }
-    if (obligation.status === "WAIVED") throw new Error("BAD_REQUEST: Cannot pay for waived obligation");
-    if (obligation.status === "PAID") throw new Error("BAD_REQUEST: Obligation already fully paid");
+    // V2: Use canonical isPayable() from settlement-planner (single source of truth for payability)
+    if (!isPayable(obligation)) {
+      throw new Error(`BAD_REQUEST: Obligation cannot accept payments (status: ${obligation.status})`);
+    }
 
     const totalAlreadyPaidPaisa = obligation.payments.reduce(
       (acc: number, p: any) => acc + Math.round(Number(p.amount_paid) * 100), 0
@@ -403,22 +405,17 @@ export class PaymentService {
 
     const amountPaisa = Math.round(data.amountPaid * 100);
     // V2: Settle ALL obligation types, not just RENT.
-    // Priority: Rent → Maintenance → Extra Charges → Late Fees → Security Deposit
-    // Within each type: overdue first → partial first → oldest due_date.
-    const lockedRows: { id: string }[] = await tx.$queryRaw`
+    // Priority: Security Deposit → Admission → Maintenance → Rent → Late Fees → Extra Charges
+    // Generated from SETTLEMENT_PRIORITY (single source of truth in settlement-planner.ts).
+    // Within each type: partial first → oldest due_date first.
+    const priorityClause = buildSqlPriorityCaseClause();
+    const lockedRows: { id: string }[] = await tx.$queryRawUnsafe(`
       SELECT id FROM rent_obligations
-      WHERE tenant_id = ${data.tenantId}::uuid
-        AND hostel_id = ${hostelId}::uuid
+      WHERE tenant_id = $1::uuid
+        AND hostel_id = $2::uuid
         AND status IN ('OVERDUE', 'PENDING', 'PARTIAL', 'UPCOMING')
       ORDER BY
-        CASE obligation_type
-          WHEN 'RENT' THEN 1
-          WHEN 'MAINTENANCE' THEN 2
-          WHEN 'EXTRA_CHARGE' THEN 3
-          WHEN 'LATE_FEE' THEN 4
-          WHEN 'SECURITY_DEPOSIT' THEN 5
-          ELSE 6
-        END,
+        ${priorityClause},
         CASE status
           WHEN 'PARTIAL' THEN 1
           WHEN 'PENDING' THEN 2
@@ -428,7 +425,7 @@ export class PaymentService {
         due_date ASC,
         rent_month ASC
       FOR UPDATE
-    `;
+    `, data.tenantId, hostelId);
 
     const obligations = lockedRows.length > 0
       ? await tx.rent_obligations.findMany({
@@ -992,6 +989,10 @@ export class PaymentService {
     const allowPartial = prefs.allow_partial_payments;
     const minAmount = prefs.min_payment_amount;
 
+    // V2: Use canonical isPayable() from settlement-planner (single source of truth for payability)
+    if (!isPayable(obligation)) {
+      throw new Error(`BAD_REQUEST: Obligation cannot accept payments (status: ${obligation.status})`);
+    }
     if (obligation.status === "WAIVED") throw new Error("BAD_REQUEST: Cannot pay for waived obligation");
     if (validationAmountPaisa <= 0) throw new Error("BAD_REQUEST: Obligation is already paid");
 
@@ -1229,11 +1230,11 @@ export class PaymentService {
       }
     }
 
-    if (obligations.some(o => o.status === "WAIVED")) {
-      throw new Error("BAD_REQUEST: Cannot pay for waived obligations");
-    }
-    if (obligations.every(o => o.status === "PAID")) {
-      throw new Error("BAD_REQUEST: All obligations are already paid");
+    // V2: Use canonical isPayable() from settlement-planner (single source of truth for payability)
+    const nonPayable = obligations.filter(o => !isPayable(o));
+    if (nonPayable.length > 0) {
+      const details = nonPayable.map(o => `${o.id} (${o.status})`).join(", ");
+      throw new Error(`BAD_REQUEST: Some obligations cannot accept payments: ${details}`);
     }
 
     const hostelIds = Array.from(new Set(obligations.map(o => o.hostel_id).filter(Boolean)));
@@ -2603,20 +2604,71 @@ export class PaymentService {
         : 0;
 
       if (obligationLinks.length > 0) {
-        // Multi-obligation payment: use junction table
-        for (const link of obligationLinks) {
-          if (Number(link.amount) > 0) {
-            const res = await this._applyPaymentInTx(tx, {
-              hostelId: attemptHostelId,
-              obligationId: link.obligation_id,
-              amountPaid: Number(link.amount),
-              paymentMethod: "UPI",
-              referenceNumber: gatewayTxnId || attempt.merchant_txn_id,
-              paymentDate: new Date(),
-              paymentAttemptId: attempt.id,
-            });
-            appliedPayments.push(res);
-          }
+        // Multi-obligation payment: re-read obligations under lock with canonical priority ordering.
+        // The junction table pre-locks amounts at intent creation time, but the tenant's financial
+        // state may have changed (e.g., late fees added, partial payments received). We re-read
+        // the current state and settle according to SETTLEMENT_PRIORITY order.
+        const linkedObligationIds = obligationLinks.map(l => l.obligation_id);
+        const totalIntentAmount = obligationLinks.reduce((s, l) => s + Number(l.amount), 0);
+        const totalAmountPaisa = Math.round(totalIntentAmount * 100);
+
+        // Lock all linked obligations in priority order to prevent deadlocks
+        const priorityClause = buildSqlPriorityCaseClause();
+        const lockedObs: { id: string }[] = await tx.$queryRawUnsafe(`
+          SELECT id FROM rent_obligations
+          WHERE id = ANY($1::uuid[])
+            AND status IN ('OVERDUE', 'PENDING', 'PARTIAL', 'UPCOMING')
+          ORDER BY ${priorityClause}, due_date ASC, rent_month ASC
+          FOR UPDATE
+        `, linkedObligationIds);
+
+        const obligations = lockedObs.length > 0
+          ? await tx.rent_obligations.findMany({
+              where: { id: { in: lockedObs.map(r => r.id) } },
+              include: { payments: { select: { amount_paid: true } } },
+            })
+          : [];
+
+        // Sort by canonical settlement priority
+        const sorted = sortObligationsByPriority(obligations as any[]);
+
+        let remainingPaisa = totalAmountPaisa;
+        for (const ob of sorted) {
+          if (remainingPaisa <= 0) break;
+          const paidPaisa = (ob as any).payments.reduce(
+            (s: number, p: any) => s + Math.round(Number(p.amount_paid) * 100), 0
+          );
+          const duePaisa = Math.round(Number(ob.amount) * 100);
+          const outstandingPaisa = Math.max(duePaisa - paidPaisa, 0);
+          if (outstandingPaisa <= 0) continue;
+
+          const allocPaisa = Math.min(remainingPaisa, outstandingPaisa);
+          const res = await this._applyPaymentInTx(tx, {
+            hostelId: attemptHostelId,
+            obligationId: ob.id,
+            amountPaid: allocPaisa / 100,
+            paymentMethod: "UPI",
+            referenceNumber: gatewayTxnId || attempt.merchant_txn_id,
+            paymentDate: new Date(),
+            paymentAttemptId: attempt.id,
+          });
+          appliedPayments.push(res);
+          remainingPaisa -= allocPaisa;
+        }
+
+        // Any overflow becomes future rent credit
+        if (remainingPaisa > 0 && attempt.tenant_id) {
+          const overflowRupees = remainingPaisa / 100;
+          await tenantFinancialLedgerService.creditIdempotentInTx(tx, {
+            tenantId: attempt.tenant_id,
+            ownerId: attempt.owner_id,
+            createdBy: attempt.owner_id,
+            amount: overflowRupees,
+            referenceId: attempt.id,
+            referenceType: "PAYMENT_ATTEMPT_REMAINDER",
+            reason: "FUTURE_RENT_CREDIT_TOPUP",
+            notes: "Multi-obligation payment excess credited as future rent credit",
+          });
         }
       } else if (attempt.obligation_id) {
         // Single obligation payment (legacy)

@@ -385,9 +385,31 @@ export class FinancialService {
     };
   }
 
+  /**
+   * Compute the financial status of a tenant.
+   *
+   * IMPORTANT — Field semantics:
+   *
+   *   `payable_now`
+   *     Sum of outstanding balances on PENDING/PARTIAL obligations.
+   *     This IS the actionable amount the tenant currently owes.
+   *
+   *   `projected_remaining_contract_value`
+   *     For fixed-term tenants:  (monthly_rent × remaining_months) + deposit − total_paid − payable_now
+   *     For open-ended tenants:  total_billed − total_paid − payable_now
+   *
+   *     ⚠️  This is a PROJECTION of future liability, NOT a payable amount.
+   *     Do NOT display this as "amount due" on any UI surface.
+   *     Use `payable_now` + ledger credit balance for the canonical "what tenant owes right now".
+   *
+   *   `fully_settled`
+   *     True when payable_now === 0 AND projected_remaining_contract_value <= 0.
+   */
   async getTenantFinancialStatus(tenantId: string): Promise<{
     payable_now: number;
+    /** @deprecated Use a descriptive field name in new code. This is the projected remaining contract value, NOT current dues. */
     future_outstanding: number;
+    projected_remaining_contract_value: number;
     next_generation_date: Date | null;
     next_due_date: Date | null;
     expected_amount: number | null;
@@ -495,7 +517,7 @@ export class FinancialService {
       }
     }
 
-    const future_outstanding = Math.max(0, total_contract_value - total_paid - payable_now);
+    const projected_remaining_contract_value = Math.max(0, total_contract_value - total_paid - payable_now);
 
     let next_generation_date: Date | null = null;
     let next_due_date: Date | null = null;
@@ -572,11 +594,12 @@ export class FinancialService {
       }
     }
 
-    const fully_settled = payable_now === 0 && future_outstanding <= 0;
+    const fully_settled = payable_now === 0 && projected_remaining_contract_value <= 0;
 
     return {
       payable_now,
-      future_outstanding,
+      future_outstanding: projected_remaining_contract_value, // backward compat alias
+      projected_remaining_contract_value,
       next_generation_date,
       next_due_date,
       expected_amount,
