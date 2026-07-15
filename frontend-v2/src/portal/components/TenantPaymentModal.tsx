@@ -11,6 +11,7 @@ import {
   Lock,
   Sparkles,
   Info,
+  ArrowRight,
 } from 'lucide-react';
 import {
   Dialog,
@@ -92,6 +93,44 @@ export function TenantPaymentModal({
   // Custom amount state (used for the unified payment amount)
   const [customAmount, setCustomAmount] = useState<string>('');
 
+  const [customMode, setCustomMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // Fetch tenant dues
+  const { data: duesData, isLoading: duesLoading } = useQuery({
+    queryKey: ['tenant-portal-dues', tenantId],
+    queryFn: () => tenantPortalApi.getDuesBreakdown(),
+    enabled: open && Boolean(tenantId),
+  });
+
+  // Auto-initialize selectedIds when duesData items load
+  useEffect(() => {
+    if (duesData?.items) {
+      setSelectedIds(duesData.items.map((x: any) => x.obligation_id || x.id));
+    }
+  }, [duesData]);
+
+  const handleToggleObligation = (id: string) => {
+    const ob = duesData?.items?.find((x: any) => x.obligation_id === id || x.id === id);
+    if (!ob) return;
+    const sameTypeObs = (duesData?.items || []).filter((x: any) => (x.type || x.obligation_type) === (ob.type || ob.obligation_type));
+
+    const isCurrentlyChecked = selectedIds.includes(id);
+    if (!isCurrentlyChecked) {
+      // Checking: select this one and all older ones of the same type
+      const olderIds = sameTypeObs
+        .filter((x: any) => new Date(x.due_date).getTime() < new Date(ob.due_date).getTime())
+        .map((x: any) => x.obligation_id || x.id);
+      setSelectedIds((prev) => Array.from(new Set([...prev, id, ...olderIds])));
+    } else {
+      // Unchecking: deselect this one and all newer ones of the same type
+      const newerIds = sameTypeObs
+        .filter((x: any) => new Date(x.due_date).getTime() > new Date(ob.due_date).getTime())
+        .map((x: any) => x.obligation_id || x.id);
+      setSelectedIds((prev) => prev.filter((x) => x !== id && !newerIds.includes(x)));
+    }
+  };
+
   useEffect(() => {
     if (!open) {
       setLoading(false);
@@ -103,6 +142,8 @@ export function TenantPaymentModal({
       setSubmittingRef(false);
       setStep('init');
       setCustomAmount('');
+      setCustomMode(false);
+      setSelectedIds([]);
     }
   }, [open]);
 
@@ -115,11 +156,12 @@ export function TenantPaymentModal({
 
   // Mode B: Settlement Preview Query (React Query)
   const parsedCustomAmount = Number(customAmount) || 0;
+  const activeAllowedIds = customMode ? selectedIds : undefined;
   const previewEnabled = open && Boolean(tenantId) && parsedCustomAmount > 0 && Boolean(hostelId);
 
   const { data: previewData, isLoading: previewLoading } = useQuery({
-    queryKey: ['tenant-settlement-preview', tenantId, parsedCustomAmount, hostelId],
-    queryFn: () => tenantPortalApi.settlementPreview(tenantId!, parsedCustomAmount, hostelId!),
+    queryKey: ['tenant-settlement-preview', tenantId, parsedCustomAmount, hostelId, activeAllowedIds],
+    queryFn: () => tenantPortalApi.settlementPreview(tenantId!, parsedCustomAmount, hostelId!, activeAllowedIds),
     enabled: previewEnabled,
     staleTime: 5000,
     retry: false,
@@ -168,6 +210,7 @@ export function TenantPaymentModal({
         payment_type: 'RENT',
         amount: parsedCustomAmount,
         tenant_id: tenantId,
+        allowed_obligation_ids: customMode ? selectedIds : undefined,
       });
 
       if (intent.provider === 'RAZORPAY') {
@@ -328,6 +371,107 @@ export function TenantPaymentModal({
                     />
                   </div>
                 </div>
+
+                {/* Suggested vs Customize Toggle */}
+                {duesData?.items && duesData.items.length > 0 && (
+                  <div className="flex border border-border rounded-xl p-1 bg-secondary/30">
+                    <button
+                      type="button"
+                      onClick={() => setCustomMode(false)}
+                      className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                        !customMode ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Suggested Settlement
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCustomMode(true)}
+                      className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                        customMode ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Customize
+                    </button>
+                  </div>
+                )}
+
+                {/* Custom Mode: List of obligations with checkboxes & warning */}
+                {customMode && (
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Select Obligations to Settle</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (selectedIds.length === duesData?.items?.length) {
+                            setSelectedIds([]);
+                          } else {
+                            setSelectedIds((duesData?.items || []).map((x: any) => x.obligation_id || x.id));
+                          }
+                        }}
+                        className="text-xs text-accent font-semibold hover:underline"
+                      >
+                        {selectedIds.length === duesData?.items?.length ? 'Deselect All' : 'Select All'}
+                      </button>
+                    </div>
+                    
+                    {duesData?.items && duesData.items.length > 0 ? (
+                      <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                        {duesData.items.map((ob: any) => {
+                          const isSelected = selectedIds.includes(ob.obligation_id || ob.id);
+                          return (
+                            <div
+                              key={ob.obligation_id || ob.id}
+                              className={`p-3 rounded-xl border transition-colors flex items-start gap-3 cursor-pointer ${
+                                isSelected
+                                  ? 'bg-accent/5 border-accent/30'
+                                  : 'bg-card border-border hover:bg-secondary/40'
+                              }`}
+                              onClick={() => handleToggleObligation(ob.obligation_id || ob.id)}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => {}} // handled by click on parent div
+                                className="mt-0.5 rounded border-gray-300 text-accent focus:ring-accent cursor-pointer"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-bold text-foreground capitalize">
+                                    {ob.type?.replace('_', ' ') || 'Obligation'}
+                                  </span>
+                                  <span className="text-xs font-bold text-foreground">
+                                    {fmt(ob.outstanding)}
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between mt-1 text-[11px] text-muted-foreground">
+                                  <span>
+                                    {ob.rent_month
+                                      ? new Date(ob.rent_month).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
+                                      : ob.installment_label || 'Billing Period'}
+                                  </span>
+                                  <span>Due: {new Date(ob.due_date).toLocaleDateString()}</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground text-center py-4 bg-secondary/20 rounded-xl">
+                        No outstanding obligations.
+                      </p>
+                    )}
+
+                    <div className="p-2.5 bg-amber-500/5 rounded-xl border border-amber-500/15 flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <p className="text-[10px] text-amber-800 dark:text-amber-400 font-medium leading-relaxed">
+                        Rent dues of the same type must be paid in chronological order. Selecting a newer rent due will automatically select older ones.
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Settlement Preview Section */}
                 {parsedCustomAmount > 0 && (

@@ -3,7 +3,8 @@ export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
-import { tenantFinancialLedgerService } from "@/src/services/payments/tenant-financial-ledger-service";
+import { prisma } from "@/lib/db";
+import { financialPaymentFacade } from "@/src/services/payments/financial-payment-facade";
 
 /**
  * POST /api/tenants/[id]/financial-ledger/adjust
@@ -34,13 +35,24 @@ export async function POST(
 
     const ownerId = session.role === "OWNER" ? session.sub : session.sub;
 
-    const result = await tenantFinancialLedgerService.adjustAgainstObligation({
-      tenantId: params.id,
-      ownerId,
-      createdBy: session.sub,
-      obligationId: obligation_id,
-      amount,
-      notes,
+    const tenant = await prisma.tenants.findUnique({
+      where: { id: params.id },
+      select: { hostel_id: true, owner_id: true },
+    });
+    if (!tenant) return apiError("Tenant not found", "NOT_FOUND", 404);
+    if (tenant.owner_id !== ownerId) return apiError("Forbidden", "FORBIDDEN", 403);
+    if (!tenant.hostel_id) return apiError("Tenant has no hostel context", "VALIDATION_ERROR", 400);
+
+    const result = await prisma.$transaction(async (tx: any) => {
+      return financialPaymentFacade.applyFutureCredit(tx, {
+        tenantId: params.id,
+        hostelId: tenant.hostel_id!,
+        ownerId,
+        actorId: session.sub,
+        obligationIdFilter: [obligation_id],
+        amountRupees: amount,
+        notes,
+      });
     });
 
     return apiResponse(result, 200);

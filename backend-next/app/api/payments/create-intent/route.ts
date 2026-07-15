@@ -9,8 +9,7 @@ import { prisma } from "@/lib/db";
 import { getLogger } from "@/lib/logger";
 import { assertBodySize, getClientIp, parseObligationIds } from "@/lib/security/api-guard";
 import { rateLimitService } from "@/lib/services/rate-limit-service";
-import { normalizeHostelPolicy } from "@/lib/services/hostel-policy-service";
-import { buildSettlementPlan, toObligationSnapshot } from "@/src/services/payments/settlement-planner";
+import { financialPaymentFacade } from "@/src/services/payments/financial-payment-facade";
 
 const logger = getLogger("create-intent");
 
@@ -42,7 +41,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { obligation_ids, payment_type = "RENT", amount } = body;
+    const { obligation_ids, allowed_obligation_ids, payment_type = "RENT", amount } = body;
 
     // Resolve tenant record (needed for both paths)
     let tenantId: string | undefined;
@@ -111,19 +110,12 @@ export async function POST(req: Request) {
       if (!tenant.hostel_id) return apiError("Tenant is not assigned to a hostel", "VALIDATION_ERROR", 400);
 
       // Load obligations and validate amount against policy
-      const obligations = await prisma.rent_obligations.findMany({
-        where: { tenant_id: tenantId, hostel_id: tenant.hostel_id, status: { in: ["OVERDUE", "PENDING", "PARTIAL", "UPCOMING"] } },
-        include: { payments: { select: { amount_paid: true } } },
-      });
-      const snapshots = obligations.map(ob => toObligationSnapshot(ob as any));
-      const hostel = await prisma.hostels.findUnique({
-        where: { id: tenant.hostel_id },
-        select: { preferences_config: true },
-      });
-      const hostelPolicy = normalizeHostelPolicy(hostel);
-      const plan = buildSettlementPlan(snapshots, amount, {
-        allow_partial: hostelPolicy.billing.partial_payments.enabled,
-        minimum_amount: hostelPolicy.billing.partial_payments.minimum_amount,
+      const plan = await financialPaymentFacade.previewSettlement({
+        tenantId,
+        hostelId: tenant.hostel_id,
+        amountRupees: amount,
+        obligationIdFilter: allowed_obligation_ids && allowed_obligation_ids.length > 0 ? allowed_obligation_ids : undefined,
+        plannerAllowedObligationIds: allowed_obligation_ids,
       });
 
       if (!plan.payment_accepted) {
@@ -135,6 +127,7 @@ export async function POST(req: Request) {
         ownerId: tenant.owner_id,
         amount,
         profileId: user.id,
+        allowedObligationIds: allowed_obligation_ids,
       });
       return NextResponse.json(result);
     }

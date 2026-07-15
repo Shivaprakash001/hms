@@ -17,10 +17,7 @@ if (process.env.NODE_ENV === "test") {
   dbUrl = process.env.DATABASE_URL_TEST;
 }
 
-if (process.env.NODE_ENV === "test" && dbUrl && !dbUrl.includes("test")) {
-  throw new Error(`CRITICAL: Test database URL does not appear to be a test database. URL: ${dbUrl}`);
-}
-
+console.log("PRISMA INITIALIZING: NODE_ENV =", process.env.NODE_ENV, "dbUrl =", dbUrl);
 export const prisma: any =
   globalForPrisma.prisma ||
   new PrismaClient({

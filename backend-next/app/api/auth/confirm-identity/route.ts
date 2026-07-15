@@ -11,9 +11,17 @@ import { getLogger } from "@/lib/logger";
 
 const logger = getLogger("auth.confirm-identity");
 
-const IDENTITY_ACTION  = "record_offline_payment";
-const IDENTITY_PURPOSE = "OFFLINE_PAYMENT";
-const TOKEN_TTL_MS     = 2 * 60 * 1000; // 2 minutes
+// Every (purpose, action) pair a verifier in the codebase actually checks for.
+// Adding a new financially-sensitive confirmation flow means adding its pair
+// here — the route only ever issues tokens for a purpose/action combination a
+// verifier is known to expect.
+const ALLOWED_PURPOSES: Record<string, { action: string }> = {
+  OFFLINE_PAYMENT: { action: "record_offline_payment" },
+  WAIVE_OBLIGATION: { action: "waive_obligation" },
+  CANCEL_OBLIGATION: { action: "cancel_obligation" },
+};
+const DEFAULT_PURPOSE = "OFFLINE_PAYMENT";
+const TOKEN_TTL_MS    = 2 * 60 * 1000; // 2 minutes
 
 // DB-based rate limit — survives deploys and works across all instances.
 // Tracks failed attempts only; success clears the concern naturally.
@@ -62,10 +70,18 @@ export async function POST(req: Request) {
 
     const body = await req.json().catch(() => ({}));
     const { password } = body;
+    const requestedPurpose = typeof body.purpose === "string" ? body.purpose : DEFAULT_PURPOSE;
 
     if (!password || typeof password !== "string" || password.length < 1) {
       return apiError("Password is required", "VALIDATION_ERROR", 400);
     }
+
+    const purposeEntry = ALLOWED_PURPOSES[requestedPurpose];
+    if (!purposeEntry) {
+      return apiError(`Unsupported purpose: ${requestedPurpose}`, "VALIDATION_ERROR", 400);
+    }
+    const identityPurpose = requestedPurpose;
+    const identityAction = purposeEntry.action;
 
     const isValid = await authService.verifyUserPassword(user.id, password);
 
@@ -87,24 +103,24 @@ export async function POST(req: Request) {
       data: {
         jti,
         user_id: user.id,
-        purpose: IDENTITY_PURPOSE,
-        action: IDENTITY_ACTION,
+        purpose: identityPurpose,
+        action: identityAction,
         expires_at: expiresAt,
         used: false,
       },
     });
 
     const identityToken = await generateIdentityToken(
-      user.id, IDENTITY_PURPOSE, jti, IDENTITY_ACTION
+      user.id, identityPurpose, jti, identityAction
     );
 
-    logger.info("auth.confirm_identity.issued", { user_id: user.id, jti });
+    logger.info("auth.confirm_identity.issued", { user_id: user.id, jti, purpose: identityPurpose });
 
     return NextResponse.json({
       success: true,
       identity_token: identityToken,
       expires_in: 120,
-      purpose: IDENTITY_PURPOSE,
+      purpose: identityPurpose,
     });
   } catch (error: any) {
     console.error("Detailed API Error [confirm-identity]:", error);

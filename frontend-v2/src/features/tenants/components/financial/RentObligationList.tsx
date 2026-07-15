@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Download, Share2, Info, History, CircleDollarSign, ChevronDown, ChevronUp } from 'lucide-react';
+import { Download, Share2, Info, History, CircleDollarSign, ChevronDown, ChevronUp, Ban } from 'lucide-react';
 import { toast } from 'sonner';
 import { paymentService } from '@features/payments/api';
 import { hmsToast } from '@lib/toast';
@@ -18,6 +18,10 @@ const STATUS_COLORS: Record<string, string> = {
   PARTIAL: 'bg-amber-500/10 text-amber-600 border-amber-500/25',
   PAID: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/25',
   WAIVED: 'bg-secondary text-muted-foreground border-border',
+  OVERDUE: 'bg-rose-500/15 text-rose-700 border-rose-500/30',
+  UPCOMING: 'bg-blue-500/10 text-blue-600 border-blue-500/25',
+  CANCELLED: 'bg-neutral-500/10 text-neutral-400 border-neutral-500/20',
+  DRAFT: 'bg-violet-500/10 text-violet-600 border-violet-500/25',
 };
 
 interface Obligation {
@@ -28,6 +32,7 @@ interface Obligation {
   billing_period_end?: string;
   installment_label?: string;
   type?: string;
+  obligation_type?: string;
   amount?: number;
   late_fee?: number;
   total_payable?: number;
@@ -36,6 +41,7 @@ interface Obligation {
   outstanding?: number;
   status?: string;
   due_date?: string;
+  description?: string;
   payments?: { id: string; amount_paid: number; payment_date: string; method: string; transaction_id: string }[];
 }
 
@@ -45,6 +51,7 @@ interface Props {
   onSetupBilling?: () => void;
   onDownloadReceipt?: (paymentId: string) => void;
   onSelectObligation?: (obligation: Obligation) => void;
+  onWaiveObligation?: (obligation: Obligation) => void;
   hasActivePlan?: boolean;
 }
 
@@ -54,6 +61,7 @@ export function RentObligationList({
   onSetupBilling,
   onDownloadReceipt,
   onSelectObligation,
+  onWaiveObligation,
   hasActivePlan,
 }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -144,9 +152,11 @@ export function RentObligationList({
                 <div
                   key={id}
                   className={`rounded-2xl border transition-all duration-200 ${
-                    isExpanded 
-                      ? 'border-accent bg-accent/5 dark:bg-accent/10 shadow-sm'
-                      : 'border-border bg-card hover:bg-muted/10'
+                    status === 'CANCELLED'
+                      ? 'border-border/50 bg-muted/30 opacity-60'
+                      : isExpanded 
+                        ? 'border-accent bg-accent/5 dark:bg-accent/10 shadow-sm'
+                        : 'border-border bg-card hover:bg-muted/10'
                   }`}
                 >
                   {/* Primary Row */}
@@ -167,7 +177,8 @@ export function RentObligationList({
                         )}
                       </p>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
-                        Due: {o.due_date ? new Date(o.due_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '—'} · Type: {o.type ? String(o.type).replaceAll('_', ' ') : 'Rent'}
+                        Due: {o.due_date ? new Date(o.due_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '—'} · Type: {(o.obligation_type || o.type) ? String(o.obligation_type || o.type).replaceAll('_', ' ') : 'Rent'}
+                        {o.description && <span className="ml-1">· {o.description}</span>}
                       </p>
                     </div>
 
@@ -188,7 +199,7 @@ export function RentObligationList({
                     <div className="px-3.5 pb-3.5 pt-1.5 border-t border-border/60 space-y-3.5 animate-in slide-in-from-top-1 duration-150">
                       {/* Action buttons */}
                       <div className="flex items-center gap-2 flex-wrap">
-                        {onRecordPayment && ['PENDING', 'PARTIAL'].includes(status) && (
+                        {onRecordPayment && ['PENDING', 'PARTIAL', 'OVERDUE'].includes(status) && (
                           <button
                             type="button"
                             onClick={() => onRecordPayment(id)}
@@ -198,7 +209,7 @@ export function RentObligationList({
                             <span>Collect Payment</span>
                           </button>
                         )}
-                        {['PENDING', 'PARTIAL'].includes(status) && (
+                        {['PENDING', 'PARTIAL', 'OVERDUE'].includes(status) && (
                           <button
                             type="button"
                             onClick={() => handleSharePaymentLink(o)}
@@ -206,6 +217,16 @@ export function RentObligationList({
                           >
                             <Share2 className="w-3.5 h-3.5" />
                             <span>Share Payment Link</span>
+                          </button>
+                        )}
+                        {onWaiveObligation && ['PENDING', 'PARTIAL', 'OVERDUE'].includes(status) && (
+                          <button
+                            type="button"
+                            onClick={() => onWaiveObligation(o)}
+                            className="flex-1 py-1.5 rounded-xl bg-rose-50 text-rose-700 dark:bg-rose-950/20 dark:text-rose-400 text-xs font-semibold hover:bg-rose-100 dark:hover:bg-rose-950/30 active:scale-95 transition-transform flex items-center justify-center gap-1"
+                          >
+                            <Ban className="w-3.5 h-3.5" />
+                            <span>Waive Dues</span>
                           </button>
                         )}
                         {status === 'PAID' && o.payments && o.payments.length > 0 && onDownloadReceipt && (

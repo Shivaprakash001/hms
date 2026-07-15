@@ -341,31 +341,32 @@ eventSystem.on("renewal_offer_discussion_requested", async (data) => {
 /**
  * obligation_created — Auto-settle future rent credits against newly created obligations.
  *
- * Triggered post-commit by all 7 obligation creation paths. Runs inside its own
- * transaction with FOR UPDATE locking on the tenant row to serialize concurrent
- * settlements. Fire-and-forget: failures are logged but never propagate back to
- * the creation flow.
+ * Triggered post-commit by all obligation creation paths. Runs inside its own
+ * transaction; FinancialPaymentFacade.applyFutureCredit locks the tenant row
+ * (via the Settlement Engine) to serialize concurrent settlements.
+ * Fire-and-forget: failures are logged but never propagate back to the
+ * creation flow.
  *
  * Payload: { tenant_id, owner_id, hostel_id, source: string }
  */
 eventSystem.on("obligation_created", async (data) => {
-  const { tenant_id, owner_id, source } = data;
-  if (!tenant_id || !owner_id) {
-    console.warn("[Event] obligation_created: missing tenant_id or owner_id, skipping auto-settlement", data);
+  const { tenant_id, owner_id, hostel_id, source } = data;
+  if (!tenant_id || !owner_id || !hostel_id) {
+    console.warn("[Event] obligation_created: missing tenant_id, owner_id, or hostel_id, skipping auto-settlement", data);
     return;
   }
   try {
     const { prisma } = await import("../db");
-    const { tenantFinancialLedgerService } = await import(
-      "../../src/services/payments/tenant-financial-ledger-service"
+    const { financialPaymentFacade } = await import(
+      "../../src/services/payments/financial-payment-facade"
     );
     await prisma.$transaction(async (tx: any) => {
-      await tenantFinancialLedgerService.autoApplyFutureRentCreditToDuesInTx(
-        tx,
-        tenant_id,
-        owner_id,
-        owner_id
-      );
+      await financialPaymentFacade.applyFutureCredit(tx, {
+        tenantId: tenant_id,
+        hostelId: hostel_id,
+        ownerId: owner_id,
+        actorId: owner_id,
+      });
     });
     console.log(`[Event] obligation_created: auto-settlement complete for tenant ${tenant_id} (source: ${source})`);
   } catch (error: any) {
@@ -378,4 +379,32 @@ eventSystem.on("obligation_created", async (data) => {
     });
   }
 });
+
+// --- Change Management Domain Events Integration ---
+domainEventsBus.subscribe("ChangeRequestApplied", async (event) => {
+  const cr = event.payload;
+  if (cr.entity_type === "tenant_profile") {
+    const tenantId = cr.tenant_id || cr.entity_id;
+    try {
+      const { allocationReconciliationService } = await import("../services/allocation-reconciliation-service");
+      await allocationReconciliationService.reconcileTenant(tenantId);
+    } catch (err: any) {
+      console.error("[Event] ChangeRequestApplied: reconcile_after_change_applied_failed", {
+        tenant_id: tenantId,
+        error: String(err?.message || err),
+      });
+    }
+
+    const diff = cr.diff as Record<string, any>;
+    if (diff && typeof diff.status !== "undefined") {
+      await eventSystem.trigger("tenant_status_changed", {
+        owner_id: cr.owner_id,
+        tenant_id: tenantId,
+        status: diff.status,
+      });
+    }
+  }
+});
+import { domainEventsBus } from "../../src/services/change-management/domain-events";
+
 

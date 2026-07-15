@@ -6,7 +6,7 @@ import { getSession } from "@/lib/auth";
 import { ApiResponse } from "@/src/lib/api-response";
 import { ApiError } from "@/src/lib/api-error";
 import { paymentService } from "@/src/services/payments/payment-service";
-import { prisma } from "@/lib/db";
+import { resolveTenantSettlementAccess } from "@/src/services/payments/tenant-access-guard";
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession(req);
@@ -15,14 +15,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   try {
     const tenantId = params.id;
 
-    if (session.role === "TENANT") {
-      const me = await prisma.tenants.findUnique({ where: { profile_id: session.sub }, select: { id: true } });
-      if (!me || me.id !== tenantId) return ApiResponse.error(ApiError.forbidden("Forbidden"));
-    }
-
-    if (session.role === "OWNER") {
-      const target = await prisma.tenants.findUnique({ where: { id: tenantId }, select: { owner_id: true } });
-      if (!target || target.owner_id !== session.sub) return ApiResponse.error(ApiError.forbidden("Forbidden"));
+    if (session.role === "TENANT" || session.role === "OWNER") {
+      await resolveTenantSettlementAccess(
+        { id: session.sub, role: session.role, owner_id: (session as any).owner_id },
+        { tenantId, enforceHostelMatch: false }
+      );
     }
 
     const history = await paymentService.getTenantPaymentHistory(tenantId);
@@ -30,6 +27,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   } catch (error: any) {
     const msg = typeof error?.message === "string" ? error.message : String(error);
     if (msg.startsWith("NOT_FOUND")) return ApiResponse.error(ApiError.notFound(msg.split(": ")[1] ?? msg));
+    if (msg.startsWith("FORBIDDEN")) return ApiResponse.error(ApiError.forbidden(msg.split(": ")[1] ?? msg));
     return ApiResponse.error(ApiError.internal(msg || "Failed to fetch payment history"));
   }
 }

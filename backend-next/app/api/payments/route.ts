@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
     }
 
     const scope = resolveOwnerScope(session);
-    ownerId = scope.owner_id;
+    const ownerId: string = scope.owner_id;
     await requireHostelBelongsToOwner(ownerId, hostelId);
 
     // ── Zod validation ─────────────────────────────────────────────────────

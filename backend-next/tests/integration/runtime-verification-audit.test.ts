@@ -572,13 +572,14 @@ describe("Billing Engine Runtime Verification Suite", () => {
     });
 
     // Ensure the database auto-settlement is fully applied synchronously for the test
+    const { financialPaymentFacade } = await import("@/src/services/payments/financial-payment-facade");
     await prisma.$transaction(async (tx) => {
-      await tenantFinancialLedgerService.autoApplyFutureRentCreditToDuesInTx(
-        tx,
-        tenant.id,
-        owner.id,
-        owner.id
-      );
+      await financialPaymentFacade.applyFutureCredit(tx, {
+        tenantId: tenant.id,
+        hostelId: hostel.id,
+        ownerId: owner.id,
+        actorId: owner.id,
+      });
     });
 
     const obSept = await prisma.rent_obligations.findUniqueOrThrow({ where: { id: dueSept.id } });
@@ -824,11 +825,20 @@ describe("Billing Engine Runtime Verification Suite", () => {
   it("Scenario 12: Excess offline payment handling", async () => {
     const { owner, hostel, tenant, tenantProfile } = await createFixture();
 
-    const due = await createTestObligation(tenant.id, owner.id, hostel.id, {
+    // Two obligations so Case A's and Case B's overflow-to-credit effects
+    // don't compound onto the same row — each case is asserted independently.
+    const dueA = await createTestObligation(tenant.id, owner.id, hostel.id, {
       amount: 8500,
       total_amount: 8500,
       due_date: new Date("2026-07-05"),
       rent_month: new Date("2026-07-01"),
+      status: "UPCOMING",
+    });
+    const dueB = await createTestObligation(tenant.id, owner.id, hostel.id, {
+      amount: 8500,
+      total_amount: 8500,
+      due_date: new Date("2026-08-05"),
+      rent_month: new Date("2026-08-01"),
       status: "UPCOMING",
     });
 
@@ -841,7 +851,10 @@ describe("Billing Engine Runtime Verification Suite", () => {
       role: "OWNER",
     } as any);
 
-    // Case A: Specific obligation_id and excess amount -> Should fail
+    // Case A: Specific obligation_id with an excess amount now succeeds and
+    // credits the excess as future rent credit — the single-obligation path
+    // routes through the same Planner->Engine flow as every other settlement
+    // path (previously rejected outright by the retired _applyPaymentInTx).
     const reqOfflineA = new NextRequest("http://localhost/api/payments/record-offline", {
       method: "POST",
       headers: {
@@ -851,13 +864,19 @@ describe("Billing Engine Runtime Verification Suite", () => {
       },
       body: JSON.stringify({
         identity_token: jtiA,
-        obligation_id: due.id,
+        obligation_id: dueA.id,
         amount_paid: 9000,
         payment_method: "CASH",
       }),
     });
     const resOfflineA = await recordOffline(reqOfflineA);
-    expect(resOfflineA.status).toBe(400);
+    expect(resOfflineA.status).toBe(200);
+
+    const obA = await prisma.rent_obligations.findUniqueOrThrow({ where: { id: dueA.id } });
+    expect(obA.status).toBe("PAID");
+
+    const ledgerAfterA = await tenantFinancialLedgerService.getBalance(tenant.id, owner.id);
+    expect(ledgerAfterA.future_rent_credit).toBe(500);
 
     // Case B: Only tenant_id and excess amount -> Should succeed and go to credit
     const reqOfflineB = new NextRequest("http://localhost/api/payments/record-offline", {
@@ -877,11 +896,11 @@ describe("Billing Engine Runtime Verification Suite", () => {
     const resOfflineB = await recordOffline(reqOfflineB);
     expect(resOfflineB.status).toBe(200);
 
-    const ob = await prisma.rent_obligations.findUniqueOrThrow({ where: { id: due.id } });
-    expect(ob.status).toBe("PAID");
+    const obB = await prisma.rent_obligations.findUniqueOrThrow({ where: { id: dueB.id } });
+    expect(obB.status).toBe("PAID");
 
     const ledger = await tenantFinancialLedgerService.getBalance(tenant.id, owner.id);
-    expect(ledger.future_rent_credit).toBe(500);
+    expect(ledger.future_rent_credit).toBe(1000);
 
     await verifyGlobalInvariants(tenant.id, owner.id, tenant.profile_id, hostel.id);
   });

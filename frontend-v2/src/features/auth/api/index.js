@@ -36,8 +36,8 @@ export const authService = {
 };
 
 export const identityService = {
-    confirmIdentity: async (password) => {
-        const response = await api.post('/auth/confirm-identity', { password });
+    confirmIdentity: async (password, purpose = 'OFFLINE_PAYMENT') => {
+        const response = await api.post('/auth/confirm-identity', { password, purpose });
         return response.data; // { identity_token, expires_in, purpose }
     },
 };

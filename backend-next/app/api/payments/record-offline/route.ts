@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { paymentService } from "@/src/services/payments/payment-service";
 import { authService } from "@/lib/services/auth-service";
-import { verifyIdentityToken } from "@/lib/auth-edge";
+import { verifyIdentityConfirmation } from "@/src/services/payments/identity-confirmation-guard";
 import { apiError, apiResponse } from "@/lib/utils/api-utils";
 import { prisma } from "@/lib/db";
 import { getLogger } from "@/lib/logger";
@@ -50,7 +50,19 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { identity_token, obligation_id, tenant_id, amount_paid, payment_method, reference_number, payment_date, note } = body;
+    const {
+      identity_token,
+      obligation_id,
+      tenant_id,
+      amount_paid,
+      payment_method,
+      reference_number,
+      payment_date,
+      note,
+      allowedObligationIds,
+      allowed_obligation_ids,
+    } = body;
+    const targetObligationIds = allowedObligationIds || allowed_obligation_ids;
     const hostelId = body.hostelId || body.hostel_id;
     
     console.log(`[payments.record-offline] Recording payment for owner ${user.id}, hostel ${hostelId}`, body);
@@ -58,33 +70,7 @@ export async function POST(req: Request) {
     let effectiveHostelId = hostelId;
 
     // ── 2 + 3. Identity token verification ────────────────────────────────────
-    if (!identity_token || typeof identity_token !== "string") {
-      console.warn(`[payments.record-offline] Identity token missing for owner ${user.id}`);
-      return apiError(
-        "Identity verification required. Please confirm your password first.",
-        "IDENTITY_REQUIRED",
-        403
-      );
-    }
-
-    const identity = await verifyIdentityToken(identity_token, IDENTITY_PURPOSE, IDENTITY_ACTION);
-    if (!identity) {
-      console.warn(`[payments.record-offline] Identity token invalid/expired for owner ${user.id}`);
-      return apiError(
-        "Identity token is invalid or expired. Please re-confirm your password.",
-        "IDENTITY_EXPIRED",
-        403
-      );
-    }
-
-    // Token userId MUST match the authenticated session — prevent token hand-off between owners
-    if (identity.userId !== user.id) {
-      logger.warn("payments.record_offline.token_mismatch", {
-        token_user: identity.userId,
-        session_user: user.id,
-      });
-      return apiError("Forbidden: identity mismatch", "FORBIDDEN", 403);
-    }
+    const identity = await verifyIdentityConfirmation(identity_token, IDENTITY_PURPOSE, IDENTITY_ACTION, user.id);
 
     // ── 4. Rate limit ─────────────────────────────────────────────────────────
     const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MS);
@@ -199,10 +185,21 @@ export async function POST(req: Request) {
     // ── 7 + 8. Atomic: consume identity token + write payment in ONE transaction ─
     const parsedDate = payment_date ? new Date(payment_date) : undefined;
 
-    const result = tenant_id && !obligation_id
+    let resolvedTenantId = tenant_id;
+    if (!resolvedTenantId && targetObligationIds && targetObligationIds.length > 0) {
+      const firstOb = await prisma.rent_obligations.findUnique({
+        where: { id: targetObligationIds[0] },
+        select: { tenant_id: true },
+      });
+      resolvedTenantId = firstOb?.tenant_id || "";
+    }
+
+    const useTenantFlow = (resolvedTenantId && !obligation_id) || (targetObligationIds && targetObligationIds.length > 0);
+
+    const result = useTenantFlow
       ? await paymentService.recordTenantRentPaymentWithToken(identity.jti, {
           hostelId: effectiveHostelId,
-          tenantId: tenant_id,
+          tenantId: resolvedTenantId || "",
           amountPaid: parsedAmount,
           paymentMethod: method,
           referenceNumber: reference_number || undefined,
@@ -214,6 +211,7 @@ export async function POST(req: Request) {
           offlineRecordedIp: clientIp ?? undefined,
           offlineNote: note || undefined,
           idempotencyKey: body.idempotency_key || undefined,
+          allowedObligationIds: targetObligationIds,
         })
       : await paymentService.recordOfflinePaymentWithToken(identity.jti, {
           hostelId: effectiveHostelId,
@@ -256,6 +254,8 @@ export async function POST(req: Request) {
     
     if (msg.includes("NOT_FOUND"))      return apiError(msg, "NOT_FOUND", 404);
     if (msg.includes("BAD_REQUEST"))    return apiError(msg, "BAD_REQUEST", 400);
+    if (msg.includes("IDENTITY_REQUIRED")) return apiError(msg.replace("IDENTITY_REQUIRED: ", ""), "IDENTITY_REQUIRED", 403);
+    if (msg.includes("IDENTITY_EXPIRED"))  return apiError(msg.replace("IDENTITY_EXPIRED: ", ""), "IDENTITY_EXPIRED", 403);
     if (msg.includes("FORBIDDEN"))      return apiError(msg, "FORBIDDEN", 403);
     if (msg.includes("UNAUTHORIZED"))   return apiError(msg, "UNAUTHORIZED", 401);
     

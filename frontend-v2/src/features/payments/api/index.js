@@ -230,9 +230,14 @@ export const paymentService = {
      * V2: Settlement Preview — dry-run showing where money would be allocated.
      * Used by both Owner (RecordPaymentModal) and Tenant (custom payment) UIs.
      */
-    settlementPreview: async (tenantId, amount, hostelId) => {
+    settlementPreview: async (tenantId, amount, hostelId, allowedObligationIds) => {
         const response = await api.get('/payments/settlement-preview', {
-            params: { tenant_id: tenantId, amount, ...(hostelId ? { hostelId } : {}) }
+            params: {
+                tenant_id: tenantId,
+                amount,
+                ...(hostelId ? { hostelId } : {}),
+                ...(allowedObligationIds ? { allowed_obligation_ids: allowedObligationIds.join(',') } : {})
+            }
         });
         return unwrap(response);
     },
@@ -240,7 +245,7 @@ export const paymentService = {
      * V2: Unified tenant-level payment recording (no obligation_id required).
      * Settlement engine auto-allocates across all outstanding obligations.
      */
-    recordTenantPayment: async ({ identityToken, tenantId, amountPaid, paymentMethod, referenceNumber, paymentDate, note, hostelId, idempotencyKey }) => {
+    recordTenantPayment: async ({ identityToken, tenantId, amountPaid, paymentMethod, referenceNumber, paymentDate, note, hostelId, idempotencyKey, allowedObligationIds }) => {
         const response = await api.post('/payments/record-offline', {
             identity_token: identityToken,
             tenant_id: tenantId,
@@ -251,6 +256,7 @@ export const paymentService = {
             note,
             hostelId,
             idempotency_key: idempotencyKey,
+            allowed_obligation_ids: allowedObligationIds,
         });
         return unwrap(response);
     },

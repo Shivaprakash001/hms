@@ -3,6 +3,7 @@ import { eventLog } from "./event-log-service";
 import { getLogger } from "../logger";
 import { invalidateHostelDashboardCache } from "../cache/dashboard-cache";
 import { roomCapacityService } from "./room-capacity-service";
+import { obligationEngine } from "../../src/services/payments/obligation-engine";
 
 const logger = getLogger("allocation-reconcile");
 
@@ -108,13 +109,23 @@ export class AllocationReconciliationService {
         },
       });
 
-      for (const ob of dangling) {
-        if ((ob.payments || []).length > 0) continue;
-        await prisma.rent_obligations.update({
-          where: { id: ob.id },
-          data: { status: "WAIVED" },
+      const zeroPaymentDangling = dangling.filter((ob: any) => (ob.payments || []).length === 0);
+      if (zeroPaymentDangling.length > 0) {
+        // Routed through ObligationEngine.cancelObligationInTx (no ledger
+        // correction — these obligations were never actually owed, since the
+        // allocation ended before their rent_month). Wrapped in a real
+        // transaction, closing a pre-existing atomicity gap (the previous
+        // per-row updates ran outside any transaction).
+        await prisma.$transaction(async (tx: any) => {
+          for (const ob of zeroPaymentDangling) {
+            await obligationEngine.cancelObligationInTx(tx, {
+              obligationId: ob.id,
+              reason: "Allocation ended before this obligation's rent month",
+              actorId: allocation.tenant.owner_id || "",
+            });
+            repairs.push(`cancelled_future_obligation:${ob.id}`);
+          }
         });
-        repairs.push(`waived_future_obligation:${ob.id}`);
       }
     }
     checks.push("obligation_state_checked");
@@ -232,14 +243,23 @@ export class AllocationReconciliationService {
           data: { is_active: false, end_date: now },
         });
         // Waive any future unpaid obligations — never activated tenants
-        // should not accumulate financial obligations.
-        await tx.rent_obligations.updateMany({
+        // should not accumulate financial obligations. Routed through
+        // ObligationEngine so any PARTIAL obligation gets a proper ledger
+        // correction instead of a silent status flip.
+        const toWaive = await tx.rent_obligations.findMany({
           where: {
             tenant_id: invitation.tenant_id,
             status: { in: ["PENDING", "PARTIAL"] },
           },
-          data: { status: "WAIVED" },
+          select: { id: true },
         });
+        if (toWaive.length > 0) {
+          await obligationEngine.bulkWaiveInTx(tx, {
+            obligationIds: toWaive.map((o: any) => o.id),
+            reason: "Invitation expired — tenant never moved in",
+            actorId: invitation.owner_id,
+          });
+        }
       });
 
       expired++;

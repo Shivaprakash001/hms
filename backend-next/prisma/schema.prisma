@@ -254,6 +254,7 @@ model hostels {
   rule_versions       RuleVersion[]
   profiles            profile                  @relation(fields: [owner_id], references: [id])
   payments            payments[]
+  payment_groups      payment_groups[]
   receipts            receipts[]
   reminder_logs       reminder_logs[]
   rent_obligations    rent_obligations[]
@@ -271,6 +272,7 @@ model hostels {
   payment_link_tokens payment_link_tokens[]
   renewal_offers      RenewalOffer[]
   bulk_renewal_batches BulkRenewalBatch[]
+  change_requests      change_requests[]
 }
 
 model identity_tokens {
@@ -729,6 +731,7 @@ model payments {
   hostels             hostels          @relation(fields: [hostel_id], references: [id])
   obligation          rent_obligations @relation(fields: [obligation_id], references: [id])
   payment_attempts    paymentAttempt?  @relation(fields: [payment_attempt_id], references: [id])
+  payment_group       payment_groups?  @relation(fields: [payment_group_id], references: [id])
   tenants             tenants          @relation(fields: [tenant_id], references: [id])
   receipts            receipts?
 
@@ -737,6 +740,7 @@ model payments {
   @@index([hostel_id, payment_date])
   @@index([owner_id, created_at])
   @@index([owner_id])
+  @@index([payment_group_id])
   @@index([tenant_id, amount_paid])
   @@index([tenant_id])
   @@index([tenant_id, payment_date])
@@ -757,6 +761,7 @@ model profile {
   pincode                                                           String?
   created_at                                                        DateTime              @default(now())
   updated_at                                                        DateTime?
+  version                                                           Int                   @default(1)
   invitation_token                                                  String?               @unique
   invitation_expires_at                                             DateTime?
   id                                                                String                @id @db.Uuid
@@ -967,6 +972,20 @@ model rent_obligations {
   is_superseded               Boolean                       @default(false)
   superseded_at               DateTime?                     @db.Timestamptz(6)
   superseded_by_request_id    String?                       @db.Uuid
+  // Financial Obligation Engine columns (migration 060)
+  description                 String?
+  notes                       String?
+  created_by                  String?                       @db.Uuid
+  cancelled_at                DateTime?                     @db.Timestamptz(6)
+  cancelled_reason            String?
+  cancelled_by                String?                       @db.Uuid
+  waived_at                   DateTime?                     @db.Timestamptz(6)
+  waived_reason               String?
+  waived_by                   String?                       @db.Uuid
+  waived_amount               Decimal?                      @db.Decimal(10, 2)
+  // Financial Architecture v2 columns (migration 061)
+  lifecycle_status            obligation_lifecycle          @default(ACTIVE)
+  settlement_status           settlement_state              @default(UNPAID)
   payment_attempt_obligations payment_attempt_obligations[]
   payment_attempts            paymentAttempt[]
   payments                    payments[]
@@ -987,11 +1006,44 @@ model rent_obligations {
   @@index([hostel_id, rent_month])
   @@index([hostel_id, status])
   @@index([is_superseded])
+  @@index([lifecycle_status])
+  @@index([lifecycle_status, settlement_status])
   @@index([owner_id])
   @@index([tenant_id, status, due_date])
+  @@index([tenant_id, lifecycle_status, settlement_status, due_date])
   @@index([tenant_id, billing_period_end])
   @@index([tenant_id, billing_period_start])
   @@index([tenant_id, rent_month])
+}
+
+/// Payment Groups — every payment recording creates a group.
+/// Groups contain one or more individual payments (allocations).
+/// Future: Group → Allocations → Payments (three-level).
+model payment_groups {
+  id                    String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenant_id             String     @db.Uuid
+  owner_id              String?    @db.Uuid
+  hostel_id             String     @db.Uuid
+  total_amount          Decimal    @db.Decimal(10, 2)
+  method                String
+  reference_number      String?
+  status                String     @default("COMPLETED")
+  source                String     @default("MANUAL")
+  settlement_breakdown  Json?
+  future_credit_amount  Decimal?   @default(0) @db.Decimal(10, 2)
+  recorded_by           String?    @db.Uuid
+  recorded_at           DateTime?  @default(now()) @db.Timestamptz(6)
+  notes                 String?
+  created_at            DateTime   @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime?  @db.Timestamptz(6)
+  payments              payments[]
+  hostels               hostels    @relation(fields: [hostel_id], references: [id])
+  tenants               tenants    @relation(fields: [tenant_id], references: [id])
+
+  @@index([tenant_id])
+  @@index([hostel_id])
+  @@index([created_at])
+  @@index([status])
 }
 
 model room_activity_logs {
@@ -1240,6 +1292,7 @@ model tenants {
   id                       String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   profile_id               String?                  @unique @db.Uuid
   profile_type             String                   @default("STUDENT")
+  version                  Int                      @default(1)
   monthly_rent             Decimal?                 @db.Decimal(10, 2)
   joined_on                DateTime?                @db.Date
   status                   TenantStatus             @default(INVITED)
@@ -1290,6 +1343,7 @@ model tenants {
   rule_acceptances         TenantPolicyAcceptance[]
   payment_attempts         paymentAttempt[]
   payments                 payments[]
+  payment_groups           payment_groups[]
   reactivation_requests    reactivation_requests[]
   receipts                 receipts[]
   reminder_logs            reminder_logs[]
@@ -1312,6 +1366,7 @@ model tenants {
   renewal_offers           RenewalOffer[]
   renewal_decisions        RenewalDecision[]
   tenant_notes             tenant_notes[]
+  change_requests          change_requests[]
 
   @@index([hostel_id])
   @@index([owner_id])
@@ -1531,6 +1586,8 @@ enum FinancialLedgerReason {
   SECURITY_DEPOSIT_DEDUCTION
   SECURITY_DEPOSIT_REFUNDED
   LEDGER_CORRECTION
+  OBLIGATION_WAIVER
+  OBLIGATION_CANCELLATION
 }
 
 enum FinancialLedgerType {
@@ -1557,6 +1614,22 @@ enum PaymentStatus {
   PAID
   OVERDUE
   WAIVED
+  DRAFT
+  CANCELLED
+}
+
+/// Obligation lifecycle — business state (ACTIVE → terminal)
+enum obligation_lifecycle {
+  ACTIVE
+  WAIVED
+  CANCELLED
+}
+
+/// Obligation settlement — payment progress
+enum settlement_state {
+  UNPAID
+  PARTIAL
+  PAID
 }
 
 enum PaymentFrequency {
@@ -1992,6 +2065,7 @@ model AgreementTemplate {
 
 model Agreement {
   id                      String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  version                 Int             @default(1)
   tenant_id               String          @db.Uuid
   hostel_id               String          @db.Uuid
   template_id             String          @db.Uuid
@@ -2059,6 +2133,10 @@ model Agreement {
   @@index([hostel_id, status, agreement_end_date])
   @@index([status, agreement_end_date])
   @@index([status])
+  // Amendment traceability (Change Management System)
+  amendment_reason         String?
+  change_request_id        String?          @db.Uuid
+
   @@index([renewed_from_agreement_id])
   @@index([renewed_to_agreement_id])
 }
@@ -2232,3 +2310,116 @@ model payment_recovery_operations {
   @@map("payment_recovery_operations")
 }
 
+// ════════════════════════════════════════════════════════════
+// Change Management System
+// Centralized lifecycle for all governed data modifications.
+// ════════════════════════════════════════════════════════════
+
+enum ChangeRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+  APPLIED
+  CANCELLED
+  SUPERSEDED
+}
+
+enum ChangeCategory {
+  A  // Owner Controlled
+  B  // Shared Profile (tenant approval)
+  C  // Contractual (agreement amendment)
+  D  // Financial (reversal only)
+}
+
+enum ChangeApprovalLevel {
+  L0  // System only
+  L1  // Owner only
+  L2  // Owner + Tenant
+  L3  // Owner + Tenant + Financial Engine
+}
+
+model change_requests {
+  id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  // Scoping
+  owner_id            String              @db.Uuid
+  hostel_id           String?             @db.Uuid
+  tenant_id           String?             @db.Uuid
+
+  // Target Entity & Concurrency Control
+  entity_type         String              // 'tenant', 'profile', 'agreement', 'obligation', 'room_allocation'
+  entity_id           String              @db.Uuid
+  entity_version      Int                 @default(1)
+  correlation_id      String?             @db.Uuid
+
+  // Classification
+  change_category     ChangeCategory
+  change_type         String              // 'profile_update', 'contract_amendment', 'financial_correction', 'administrative_correction'
+  approval_level      ChangeApprovalLevel
+
+  // Lifecycle
+  status              ChangeRequestStatus @default(PENDING)
+
+  // Actors
+  requested_by        String              @db.Uuid
+  requested_at        DateTime            @default(now()) @db.Timestamptz(6)
+  approved_by         String?             @db.Uuid
+  approved_at         DateTime?           @db.Timestamptz(6)
+  rejected_by         String?             @db.Uuid
+  rejected_at         DateTime?           @db.Timestamptz(6)
+  applied_at          DateTime?           @db.Timestamptz(6)
+  cancelled_at        DateTime?           @db.Timestamptz(6)
+
+  // Content (Derived after state is computed as before + diff)
+  before              Json                // Complete before-state
+  diff                Json                // Only changed fields (diff)
+  reason              String              // Mandatory reason for change
+  effective_date      DateTime?           @db.Date
+
+  // Expiration
+  expires_at          DateTime?           @db.Timestamptz(6)
+  reminder_count      Int                 @default(0)
+  last_reminded_at    DateTime?           @db.Timestamptz(6)
+
+  // Agreement Versioning (Cat C)
+  creates_version     Int?
+  supersedes_version  Int?
+
+  // Metadata
+  metadata            Json?
+  created_at          DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime?           @db.Timestamptz(6)
+
+  // Relations
+  tenant              tenants?            @relation(fields: [tenant_id], references: [id])
+  hostel              hostels?            @relation(fields: [hostel_id], references: [id])
+  events              change_request_events[]
+
+  @@index([tenant_id, status])
+  @@index([owner_id, status])
+  @@index([entity_type, entity_id])
+  @@index([expires_at], map: "idx_cr_pending_expiry")
+  @@index([hostel_id, status])
+  @@index([correlation_id])
+}
+
+model change_request_events {
+  id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  change_request_id   String              @db.Uuid
+
+  action              String              // 'created', 'reminded', 'approved', 'rejected', 'expired', 'applied', 'cancelled'
+  actor_id            String?             @db.Uuid
+  actor_role          String              // 'owner', 'tenant', 'system'
+
+  snapshot            Json?               // State at time of action
+  notes               String?
+  ip_address          String?
+  user_agent          String?
+
+  created_at          DateTime            @default(now()) @db.Timestamptz(6)
+
+  change_request      change_requests     @relation(fields: [change_request_id], references: [id], onDelete: Cascade)
+
+  @@index([change_request_id])
+}

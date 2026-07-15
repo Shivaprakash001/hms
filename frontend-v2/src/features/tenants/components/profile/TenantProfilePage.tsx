@@ -1,10 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Phone, Mail, Loader2, Bell, Download, FileCheck2, Send, CalendarDays,
   CheckCircle2, XCircle, ShieldAlert, Smartphone, MessageSquare, BedDouble, User,
   Building2, Settings, IndianRupee, LogOut, CheckCircle, AlertTriangle, AlertCircle,
-  History, ChevronDown, ChevronUp, Shield, HelpCircle
+  History, ChevronDown, ChevronUp, Shield, HelpCircle, PlusCircle
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -14,13 +14,22 @@ import { useTenantProfile } from '@features/tenants/hooks/useTenantProfile';
 import { useTenantActions } from '@features/tenants/hooks/useTenantActions';
 import { TenantStatusBadge } from '@features/tenants/components/badges/TenantStatusBadge';
 import { RentObligationList } from '@features/tenants/components/financial/RentObligationList';
+import { WaiveObligationModal } from '@features/tenants/components/financial/WaiveObligationModal';
+import { CreateObligationModal } from '@features/tenants/components/financial/CreateObligationModal';
 import { AllocationHistoryTimeline } from '@features/tenants/components/allocation/AllocationHistoryTimeline';
 import { VerificationPanel } from '@features/tenants/components/documents/VerificationPanel';
 import { ActivityTimeline } from '@features/tenants/components/profile/ActivityTimeline';
 import { ExitWorkflowSection } from '@features/tenants/components/profile/ExitWorkflowSection';
 import { getInitials } from '@features/tenants/utils/normalize';
 import { RecordPaymentModal } from '@/app/components/modals/RecordPaymentModal';
+import api from '@lib/api-client';
 import { EditInviteModal } from '@/app/components/modals/EditInviteModal';
+import {
+  ChangeRequestDrawer,
+  PendingBanner,
+  ChangeTimeline,
+  useTenantChangeRequests,
+} from '@/features/change-management';
 
 import { CompactFinancialStrip } from '@features/tenants/components/financial/CompactFinancialStrip';
 import { TenantHealthCard } from '@features/tenants/components/score/TenantHealthCard';
@@ -84,13 +93,28 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [payObligationId, setPayObligationId] = useState<string | null>(null);
   const [showEditInvite, setShowEditInvite] = useState(false);
+  const [showChangeDrawer, setShowChangeDrawer] = useState(false);
   const [isKycExpanded, setIsKycExpanded] = useState(false);
   const [isStayExpanded, setIsStayExpanded] = useState(false);
   const [rightColumnTab, setRightColumnTab] = useState<'activity' | 'ledger'>('activity');
+  const [showCreateObligationModal, setShowCreateObligationModal] = useState(false);
+  const [waiveObligation, setWaiveObligation] = useState<any>(null);
 
   const { overview, allocations, dues, advance, full, isLoading, isError, refetch } =
     useTenantProfile(hostelId, tenantId);
   const actions = useTenantActions(hostelId);
+
+  // Change Management: fetch pending requests for this tenant
+  const {
+    pendingCount: crPendingCount,
+    recentChanges,
+    refetch: refetchChangeRequests,
+  } = useTenantChangeRequests(tenantId);
+
+  const handleChangeSuccess = useCallback(() => {
+    refetch();
+    refetchChangeRequests();
+  }, [refetch, refetchChangeRequests]);
 
   const billingTimeline = useQuery({
     queryKey: ['tenant', tenantId, 'billing-timeline'],
@@ -393,6 +417,16 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
         </div>
       </div>
 
+      {/* Change Management: Pending Banner */}
+      {status.toUpperCase() === 'ACTIVE' && (
+        <PendingBanner
+          pendingCount={crPendingCount}
+          onViewAll={() => {
+            document.getElementById('change-timeline-section')?.scrollIntoView({ behavior: 'smooth' });
+          }}
+        />
+      )}
+
       {/* Row 1: Sticky Operations & Communication Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <div className="lg:col-span-2">
@@ -416,14 +450,26 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
                 <span>Record Payment</span>
               </button>
               
-              <button
-                type="button"
-                onClick={() => setShowEditInvite(true)}
-                className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 px-4.5 py-3 rounded-xl bg-secondary text-foreground text-xs font-semibold hover:bg-secondary/80 active:scale-95 transition-all border border-border"
-              >
-                <Send className="w-4 h-4 text-muted-foreground" />
-                <span>Share Invite</span>
-              </button>
+              {/* ACTIVE tenants: Request Change flow. INVITED tenants: Edit Details (correction window). */}
+              {status.toUpperCase() === 'ACTIVE' ? (
+                <button
+                  type="button"
+                  onClick={() => setShowChangeDrawer(true)}
+                  className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 px-4.5 py-3 rounded-xl bg-secondary text-foreground text-xs font-semibold hover:bg-secondary/80 active:scale-95 transition-all border border-border"
+                >
+                  <FileCheck2 className="w-4 h-4 text-accent" />
+                  <span>Request Change</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowEditInvite(true)}
+                  className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 px-4.5 py-3 rounded-xl bg-secondary text-foreground text-xs font-semibold hover:bg-secondary/80 active:scale-95 transition-all border border-border"
+                >
+                  <Send className="w-4 h-4 text-muted-foreground" />
+                  <span>Edit Details</span>
+                </button>
+              )}
 
               <button
                 type="button"
@@ -589,12 +635,23 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
                 <IndianRupee className="w-4 h-4 text-accent" />
                 Rent Dues &amp; Ledger List
               </h3>
+              <button
+                type="button"
+                onClick={() => setShowCreateObligationModal(true)}
+                className="py-1.5 px-3 rounded-xl bg-accent/15 hover:bg-accent/20 text-accent text-xs font-semibold active:scale-95 transition-transform flex items-center gap-1 border border-accent/20"
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                <span>Add Charge</span>
+              </button>
             </div>
             <RentObligationList
               obligations={obligations as never[]}
               onRecordPayment={(id) => {
                 setPayObligationId(id);
                 setShowPaymentModal(true);
+              }}
+              onWaiveObligation={(ob) => {
+                setWaiveObligation(ob);
               }}
               hasActivePlan={Number(tenant?.monthly_rent ?? overview?.rent ?? 0) > 0}
             />
@@ -866,6 +923,26 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
         </div>
       </div>
 
+      {/* Change Timeline Section */}
+      {status.toUpperCase() === 'ACTIVE' && (
+        <div id="change-timeline-section">
+          <ChangeTimeline
+            changes={recentChanges}
+            onViewAll={() => navigate(`/changes?tenantId=${tenantId}`)}
+          />
+        </div>
+      )}
+
+      {/* Change Request Drawer */}
+      <ChangeRequestDrawer
+        open={showChangeDrawer}
+        onClose={() => setShowChangeDrawer(false)}
+        tenantId={tenantId}
+        hostelId={hostelId}
+        tenantData={{ ...tenant, ...profile }}
+        onSuccess={handleChangeSuccess}
+      />
+
       {/* Record Payment Modal */}
       {showPaymentModal && (
         <RecordPaymentModal
@@ -893,6 +970,32 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
             setShowEditInvite(false);
             refetch();
           }}
+        />
+      )}
+      {/* Waive Obligation Modal */}
+      {waiveObligation && (
+        <WaiveObligationModal
+          isOpen={true}
+          obligation={waiveObligation}
+          onClose={() => setWaiveObligation(null)}
+          onConfirm={async (reason, identityToken) => {
+            await api.post(`/payments/obligations/${waiveObligation.id || waiveObligation.obligation_id}/waive`, {
+              reason,
+              identityToken,
+            });
+            refetch();
+          }}
+        />
+      )}
+
+      {/* Create Obligation Modal */}
+      {showCreateObligationModal && (
+        <CreateObligationModal
+          isOpen={true}
+          tenantId={tenantId}
+          hostelId={hostelId}
+          onClose={() => setShowCreateObligationModal(false)}
+          onSuccess={() => refetch()}
         />
       )}
     </div>

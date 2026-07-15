@@ -4,6 +4,7 @@ type Tx = Prisma.TransactionClient;
 import { getLogger } from "../logger";
 import { financialService } from "../../src/services/payments/financial-service";
 import { tenantFinancialLedgerService } from "../../src/services/payments/tenant-financial-ledger-service";
+import { obligationEngine } from "../../src/services/payments/obligation-engine";
 import { reservationStatusService } from "../../src/services/tenants/reservation-status-service";
 import { assertTransition, assertCapability, checkCapability, getTenantSteps } from "./move-out-state-machine";
 import {
@@ -515,7 +516,10 @@ export class MoveOutService {
       action: "complete this move-out request",
       allowOwner: true,
     });
-    const req = await prisma.move_out_requests.findUnique({ where: { id: params.requestId }, include: { settlement: true } });
+    const req = await prisma.move_out_requests.findUnique({
+      where: { id: params.requestId },
+      include: { settlement: true, tenant: { select: { owner_id: true } } },
+    });
     if (!req) throw new Error("NOT_FOUND: Move-out request not found");
     assertTransition(req.status as MoveOutStatus, "COMPLETED");
     await this.assertNoActiveDisputes(params.requestId);
@@ -531,11 +535,20 @@ export class MoveOutService {
         await applyAdvanceSettlementInTx(tx, req.settlement.id, params.actor.id, now);
       }
 
-      // Waive outstanding rent obligations
-      await tx.rent_obligations.updateMany({
+      // Waive outstanding rent obligations — routed through ObligationEngine
+      // so any PARTIAL obligation (real payments on record) gets a proper
+      // ledger correction instead of a silent status flip.
+      const toWaive = await tx.rent_obligations.findMany({
         where: { tenant_id: req.tenant_id, status: { in: ["PENDING", "PARTIAL"] } },
-        data: { status: "WAIVED", updated_at: now }
+        select: { id: true },
       });
+      if (toWaive.length > 0 && req.tenant?.owner_id) {
+        await obligationEngine.bulkWaiveInTx(tx, {
+          obligationIds: toWaive.map((o: any) => o.id),
+          reason: "Move-out settlement confirmed — outstanding rent waived",
+          actorId: req.tenant.owner_id,
+        });
+      }
 
       await tx.move_out_requests.update({
         where: { id: params.requestId },

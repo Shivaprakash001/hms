@@ -1,5 +1,6 @@
 import { prisma } from "../../lib/db";
 import { Prisma } from "@prisma/client";
+import { PAYABLE_STATUSES } from "../services/payments/settlement-planner";
 
 export class BillingRepository {
   async getOperationalCashflowMetrics(ownerId: string, start: Date, end: Date, hostelId: string) {
@@ -254,7 +255,7 @@ export class BillingRepository {
         tenant_id: tenantId,
         ...(ownerId ? { owner_id: ownerId } : {}),
         hostel_id: hostelId,
-        status: { in: ["PENDING", "PARTIAL", "UPCOMING"] },
+        status: { in: PAYABLE_STATUSES },
         is_superseded: false,
       },
       include: {

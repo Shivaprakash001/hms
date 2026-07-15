@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
+import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { ApiResponse } from "@/src/lib/api-response";
 import { ApiError } from "@/src/lib/api-error";
@@ -73,15 +74,23 @@ export async function PUT(
     }
 
     // Validate profile fields with schema (prevents mass-assignment of arbitrary fields)
-    const validated = TenantProfileUpdateSchema.safeParse(body);
+    const payloadSchema = TenantProfileUpdateSchema.extend({
+      reason: z.string().optional(),
+    });
+    const validated = payloadSchema.safeParse(body);
     if (!validated.success) {
       return ApiResponse.error(ApiError.validationError("Validation failed", { issues: validated.error.errors }));
     }
 
-    const updated = await tenantService.updateTenant(params.id, validated.data, scope.owner_id);
+    const result = await tenantService.updateTenant(params.id, validated.data, scope.owner_id);
     
-    console.log(`[tenants.id.PUT] Tenant ${params.id} updated successfully`);
-    return ApiResponse.success(updated);
+    if (result.applied) {
+      console.log(`[tenants.id.PUT] Tenant ${params.id} updated successfully (immediate apply)`);
+      return ApiResponse.success(result.tenant);
+    } else {
+      console.log(`[tenants.id.PUT] Tenant ${params.id} update pending tenant approval`);
+      return ApiResponse.success(result.changeRequest, result.changeRequest.message, { status: 202 });
+    }
   } catch (error: any) {
     console.error(`Detailed API Error [tenants.id.PUT] (${params.id}):`, error);
     const msg = typeof error?.message === "string" ? error.message : String(error);

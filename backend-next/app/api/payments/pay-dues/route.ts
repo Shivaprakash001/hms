@@ -6,6 +6,7 @@ import { paymentService } from "@/src/services/payments/payment-service";
 import { authService } from "@/lib/services/auth-service";
 import { apiError } from "@/lib/utils/api-utils";
 import { prisma } from "@/lib/db";
+import { resolveTenantSettlementAccess } from "@/src/services/payments/tenant-access-guard";
 
 /**
  * 💰 PAY DUES — FIFO payment allocation across all unpaid obligations
@@ -60,18 +61,9 @@ export async function POST(req: Request) {
       if (!tenantId) {
         return apiError("tenant_id is required", "VALIDATION_ERROR", 400);
       }
-      const tenant = await prisma.tenants.findUnique({
-        where: { id: tenantId },
-        select: { owner_id: true, hostel_id: true },
-      });
-      if (!tenant) return apiError("Tenant not found", "NOT_FOUND", 404);
-      if (tenant.owner_id !== user.id) {
-        return apiError("Forbidden: not your tenant", "FORBIDDEN", 403);
-      }
       if (!hostelId) return apiError("hostelId is required", "HOSTEL_CONTEXT_REQUIRED", 400);
-      if (tenant.hostel_id !== hostelId) {
-        return apiError("Tenant does not belong to requested hostel", "HOSTEL_ACCESS_DENIED", 403);
-      }
+      const access = await resolveTenantSettlementAccess(user, { tenantId, hostelId, enforceHostelMatch: true });
+      hostelId = access.effectiveHostelId;
     } else if (user.role !== "TENANT") {
       return apiError("Forbidden", "FORBIDDEN", 403);
     }
@@ -127,8 +119,10 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("Error recording tenant payment:", error);
     const message = String(error?.message ?? error);
-    if (message.includes("FORBIDDEN")) return apiError(message, "FORBIDDEN", 403);
-    if (message.includes("NOT_FOUND")) return apiError(message, "NOT_FOUND", 404);
+    if (message.includes("HOSTEL_ACCESS_DENIED")) return apiError(message.replace("HOSTEL_ACCESS_DENIED: ", ""), "HOSTEL_ACCESS_DENIED", 403);
+    if (message.includes("HOSTEL_CONTEXT_REQUIRED")) return apiError(message.replace("HOSTEL_CONTEXT_REQUIRED: ", ""), "HOSTEL_CONTEXT_REQUIRED", 400);
+    if (message.includes("FORBIDDEN")) return apiError(message.replace("FORBIDDEN: ", ""), "FORBIDDEN", 403);
+    if (message.includes("NOT_FOUND")) return apiError(message.replace("NOT_FOUND: ", ""), "NOT_FOUND", 404);
     if (message.includes("BAD_REQUEST")) return apiError(message, "VALIDATION_ERROR", 400);
     return apiError(message, "INTERNAL_ERROR", 500);
   }

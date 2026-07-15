@@ -8,11 +8,21 @@ import { assertGuardianPhoneNotTenant } from "../../../lib/utils/phone-utils";
 
 import { allocationReconciliationService } from "../../../lib/services/allocation-reconciliation-service";
 import { financialService } from "../../../src/services/payments/financial-service";
+import { obligationEngine } from "../../../src/services/payments/obligation-engine";
 import { getLogger } from "../../../lib/logger";
 import { eventLog } from "../../../lib/services/event-log-service";
 import { imagekit } from "../../../lib/imagekit";
 import { tenantRepository } from "../../repositories/tenantRepository";
 import { assertCapability } from "../../../lib/services/move-out-service";
+import {
+  partitionFieldsByCategory,
+  createTenantSnapshot,
+  changeRequestService,
+  isInCorrectionWindow,
+  classifyTenantField,
+  changeManagementFacade,
+} from "../change-management";
+import { ChangeCategory, ChangeApprovalLevel } from "@prisma/client";
 
 const logger = getLogger("tenant-service");
 
@@ -1192,10 +1202,20 @@ export class TenantService {
       }
       // Waive all pending obligations — a cancelled invitation means
       // the tenant never moved in; no financial claims should remain.
-      await tx.rent_obligations.updateMany({
+      // Routed through ObligationEngine so any PARTIAL obligation (real
+      // payments on record) gets a proper ledger correction, not just a
+      // silent status flip.
+      const toWaive = await tx.rent_obligations.findMany({
         where: { tenant_id: tenantId, status: { in: ["PENDING", "PARTIAL"] } },
-        data: { status: "WAIVED" },
+        select: { id: true },
       });
+      if (toWaive.length > 0) {
+        await obligationEngine.bulkWaiveInTx(tx, {
+          obligationIds: toWaive.map((o: any) => o.id),
+          reason: "Invitation cancelled — tenant never moved in",
+          actorId: ownerId,
+        });
+      }
     });
 
     await allocationReconciliationService.reconcileTenant(tenantId).catch((err: any) => {
@@ -1220,13 +1240,71 @@ export class TenantService {
     return { success: true, tenant_id: tenantId, new_status: "CANCELLED" };
   }
 
+  private async applyTenantUpdatesInTx(
+    tx: any,
+    tenantId: string,
+    profileId: string | null | undefined,
+    data: Record<string, any>
+  ) {
+    const profileUpdate: Record<string, any> = {};
+    const tenantUpdate: Record<string, any> = {};
+
+    for (const [key, value] of Object.entries(data)) {
+      const classification = classifyTenantField(key);
+      if (classification?.table === "profile") {
+        profileUpdate[key] = value;
+      } else if (classification?.table === "tenants") {
+        if (key === "date_of_birth" || key === "joined_on" || key === "billing_start_date") {
+          tenantUpdate[key] = value ? new Date(value as string) : null;
+        } else {
+          tenantUpdate[key] = value;
+        }
+      }
+    }
+
+    // Synchronize duplicate fields across profiles and tenants
+    const syncedPhone = data.phone_1 || data.phone;
+    if (syncedPhone) {
+      profileUpdate.phone = syncedPhone;
+      tenantUpdate.phone_1 = syncedPhone;
+    }
+    const syncedEmergency = data.phone_3 || data.emergency_contact;
+    if (syncedEmergency) {
+      profileUpdate.emergency_contact = syncedEmergency;
+      tenantUpdate.phone_3 = syncedEmergency;
+    }
+    const syncedGuardian = data.phone_2 || data.guardian_phone;
+    if (syncedGuardian) {
+      tenantUpdate.phone_2 = syncedGuardian;
+      tenantUpdate.guardian_phone = syncedGuardian;
+    }
+
+    // Apply profile updates if we have any fields and a profile_id
+    if (Object.keys(profileUpdate).length > 0 && profileId) {
+      await tx.profile.update({
+        where: { id: profileId },
+        data: profileUpdate,
+      });
+    }
+
+    // Apply tenant updates
+    if (Object.keys(tenantUpdate).length > 0) {
+      await tx.tenants.update({
+        where: { id: tenantId },
+        data: tenantUpdate,
+      });
+    }
+  }
+
   async updateTenant(id: string, data: any, ownerId: string) {
-    const tenant = await tenantRepository.findUnique({
-      where: { id },
-      select: { id: true, owner_id: true, status: true },
+    const tenant = await prisma.tenants.findFirst({
+      where: { id, owner_id: ownerId },
+      include: {
+        profiles: true,
+        payments: { select: { id: true }, take: 1 },
+      },
     });
     if (!tenant) throw new Error("NOT_FOUND: Tenant not found");
-    if (tenant.owner_id !== ownerId) throw new Error("FORBIDDEN: You can only update your own tenants");
 
     if (data.status === "CANCELLED") {
       // Use dedicated cancelInvitation — it enforces INVITED-only guard
@@ -1250,26 +1328,103 @@ export class TenantService {
       await assertGuardianPhoneNotTenant(proposedGuardian, id);
     }
 
-    const updated = await tenantRepository.update({
-      where: { id },
-      data,
-      include: { profiles: true },
-    });
-    if (typeof data.status !== "undefined") {
-      await allocationReconciliationService.reconcileTenant(id).catch((err: any) => {
-        logger.error("reconcile_after_tenant_update_failed", {
-          tenant_id: id,
-          new_status: data.status,
-          error: String(err?.message || err),
-        });
-      });
-      await eventSystem.trigger("tenant_status_changed", {
-        owner_id: ownerId,
-        tenant_id: id,
-        status: data.status,
-      });
+    // Extract reason and metadata if provided (e.g. from PUT request or parsed data)
+    const { reason, metadata, ...dataFields } = data;
+
+    // Partition input fields by category
+    const partitioned = partitionFieldsByCategory(dataFields);
+    
+    // Throw validation error for any unclassified fields
+    const unclassifiedKeys = Object.keys(partitioned.unclassified);
+    if (unclassifiedKeys.length > 0) {
+      throw new Error(`VALIDATION: Unclassified fields are not allowed: ${unclassifiedKeys.join(", ")}`);
     }
-    return this.withLegacyTenantRelations(updated);
+
+    // Check for correction window
+    const hasPayments = tenant.payments.length > 0;
+    const correctionWindow = isInCorrectionWindow({ status: tenant.status, hasPayments });
+
+    // Separate immediate changes vs pending changes
+    let immediateChanges: Record<string, any> = {};
+    let pendingChanges: Record<string, any> = {};
+
+    if (correctionWindow) {
+      // Pre-activation tenants with no payments: all fields apply immediately
+      immediateChanges = {
+        ...partitioned.A,
+        ...partitioned.B,
+        ...partitioned.C,
+        ...partitioned.D,
+      };
+    } else {
+      immediateChanges = { ...partitioned.A };
+      pendingChanges = {
+        ...partitioned.B,
+        ...partitioned.C,
+        ...partitioned.D,
+      };
+    }
+
+    const hasImmediate = Object.keys(immediateChanges).length > 0;
+    const hasPending = Object.keys(pendingChanges).length > 0;
+
+    let currentTenantState = tenant;
+    let applied = true;
+    let crResult: any = null;
+
+    // 1. Process immediate updates (Cat A or correction window) via facade
+    if (hasImmediate) {
+      const immediateResult = await changeManagementFacade.propose({
+        ownerId,
+        hostelId: tenant.hostel_id,
+        tenantId: id,
+        entityType: "tenant_profile",
+        entityId: id,
+        proposedChanges: immediateChanges,
+        reason: reason || (correctionWindow ? "Administrative correction (pre-activation window)" : "Operational update"),
+        requestedBy: ownerId,
+        metadata,
+      });
+
+      // Re-fetch tenant state to get updated values
+      const updated = await prisma.tenants.findUnique({
+        where: { id },
+        include: { profiles: true },
+      });
+      if (updated) {
+        currentTenantState = updated as any;
+      }
+    }
+
+    // 2. Process pending updates (Cat B/C/D changes outside correction window) via facade
+    if (hasPending) {
+      const pendingResult = await changeManagementFacade.propose({
+        ownerId,
+        hostelId: tenant.hostel_id,
+        tenantId: id,
+        entityType: "tenant_profile",
+        entityId: id,
+        proposedChanges: pendingChanges,
+        reason: reason || "Update requires tenant verification",
+        requestedBy: ownerId,
+        metadata,
+      });
+
+      crResult = {
+        id: pendingResult.id,
+        status: pendingResult.status,
+        changeCategory: pendingResult.changeCategory,
+        approvalLevel: pendingResult.approvalLevel,
+        message: pendingResult.message,
+      };
+      applied = false;
+    }
+
+    return {
+      applied,
+      tenant: this.withLegacyTenantRelations(currentTenantState),
+      changeRequest: crResult || undefined,
+    };
   }
 
   async deleteTenant(id: string, ownerId: string) {

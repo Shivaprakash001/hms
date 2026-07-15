@@ -1,19 +1,18 @@
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { authService } from "@/lib/services/auth-service";
 import { apiError, apiResponse } from "@/lib/utils/api-utils";
-import { prisma } from "@/lib/db";
-import { normalizeHostelPolicy } from "@/lib/services/hostel-policy-service";
-import { buildSettlementPlan, toObligationSnapshot } from "@/src/services/payments/settlement-planner";
+import { financialPaymentFacade } from "@/src/services/payments/financial-payment-facade";
+import { resolveTenantSettlementAccess } from "@/src/services/payments/tenant-access-guard";
 
 /**
  * GET /api/payments/settlement-preview?tenant_id=...&amount=...&hostelId=...
  *
  * V2 Settlement Preview — read-only dry run.
  * Shows where a given amount WOULD be allocated without creating any records.
- * Consumes the central buildSettlementPlan domain service.
+ * Consumes the central buildSettlementPlan domain service via FinancialPaymentFacade.
  *
  * No locks, no writes. Pure computation against current obligation state.
  */
@@ -34,60 +33,21 @@ export async function GET(req: NextRequest) {
       return apiError("amount must be a positive number", "VALIDATION_ERROR", 400);
     }
 
-    // Authorization: owner must own the tenant, or tenant must be self
-    const isTenant = user.role === "TENANT";
-    const isOwnerOrAdmin = ["OWNER", "ADMIN"].includes(user.role);
-
-    const tenant = await prisma.tenants.findUnique({
-      where: { id: tenantId },
-      select: { id: true, owner_id: true, hostel_id: true, profile_id: true },
-    });
-    if (!tenant) return apiError("Tenant not found", "NOT_FOUND", 404);
-
-    if (isTenant && tenant.profile_id !== user.id) {
-      return apiError("You can only preview your own settlements", "FORBIDDEN", 403);
-    }
-    if (isOwnerOrAdmin) {
-      const effectiveOwnerId = user.owner_id || user.id;
-      if (tenant.owner_id !== effectiveOwnerId) {
-        return apiError("Tenant does not belong to you", "FORBIDDEN", 403);
-      }
-      if (hostelId && tenant.hostel_id !== hostelId) {
-        return apiError("Tenant does not belong to this hostel", "HOSTEL_ACCESS_DENIED", 403);
-      }
-    }
-
-    const effectiveHostelId = hostelId || tenant.hostel_id;
-    if (!effectiveHostelId) {
-      return apiError("Cannot determine hostel context", "HOSTEL_CONTEXT_REQUIRED", 400);
-    }
-
-    // Fetch all outstanding obligations
-    const obligations = await prisma.rent_obligations.findMany({
-      where: {
-        tenant_id: tenantId,
-        hostel_id: effectiveHostelId,
-        status: { in: ["OVERDUE", "PENDING", "PARTIAL", "UPCOMING"] },
-      },
-      include: {
-        payments: { select: { amount_paid: true } },
-      },
+    const { effectiveHostelId } = await resolveTenantSettlementAccess(user, {
+      tenantId,
+      hostelId: hostelId || undefined,
     });
 
-    // Convert to ObligationSnapshots
-    const snapshots = obligations.map(ob => toObligationSnapshot(ob as any));
+    const allowedObligationIdsStr = url.searchParams.get("allowed_obligation_ids") || url.searchParams.get("allowedObligationIds") || "";
+    const allowedObligationIds = allowedObligationIdsStr ? allowedObligationIdsStr.split(",") : null;
 
-    // Load hostel payment policy
-    const hostel = await prisma.hostels.findUnique({
-      where: { id: effectiveHostelId },
-      select: { preferences_config: true },
-    });
-    const policy = normalizeHostelPolicy(hostel);
-
-    // Build plan using unified planner
-    const plan = buildSettlementPlan(snapshots, amount, {
-      allow_partial: policy.billing.partial_payments.enabled,
-      minimum_amount: policy.billing.partial_payments.minimum_amount,
+    // Same semantics as before: allowedObligationIds only pre-filters the obligation
+    // fetch — it is NOT passed to the planner, so chronology validation never applies here.
+    const plan = await financialPaymentFacade.previewSettlement({
+      tenantId,
+      hostelId: effectiveHostelId,
+      amountRupees: amount,
+      obligationIdFilter: allowedObligationIds,
     });
 
     return apiResponse({
@@ -97,9 +57,10 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: any) {
     const msg = String(error?.message ?? error);
-    if (msg.includes("NOT_FOUND")) return apiError(msg, "NOT_FOUND", 404);
-    if (msg.includes("FORBIDDEN")) return apiError(msg, "FORBIDDEN", 403);
+    if (msg.includes("NOT_FOUND")) return apiError(msg.replace("NOT_FOUND: ", ""), "NOT_FOUND", 404);
+    if (msg.includes("HOSTEL_ACCESS_DENIED")) return apiError(msg.replace("HOSTEL_ACCESS_DENIED: ", ""), "HOSTEL_ACCESS_DENIED", 403);
+    if (msg.includes("HOSTEL_CONTEXT_REQUIRED")) return apiError(msg.replace("HOSTEL_CONTEXT_REQUIRED: ", ""), "HOSTEL_CONTEXT_REQUIRED", 400);
+    if (msg.includes("FORBIDDEN")) return apiError(msg.replace("FORBIDDEN: ", ""), "FORBIDDEN", 403);
     return apiError("Internal error previewing settlement", "INTERNAL_ERROR", 500);
   }
 }
-

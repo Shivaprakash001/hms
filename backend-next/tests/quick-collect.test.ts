@@ -37,7 +37,15 @@ describe("Quick Collect API Endpoints", () => {
     await prisma.$executeRaw`TRUNCATE TABLE "test"."profiles" CASCADE`;
 
     owner = await createTestOwner();
-    hostelA = await createTestHostel(owner.id);
+    hostelA = await createTestHostel(owner.id, {
+      preferences_config: {
+        billing: {
+          partial_payments: {
+            enabled: true,
+          },
+        },
+      },
+    });
     hostelB = await createTestHostel(owner.id);
 
     roomA = await createTestRoom(hostelA.id, { room_no: "A-101" });

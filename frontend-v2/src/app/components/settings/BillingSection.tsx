@@ -438,10 +438,10 @@ export function BillingSection({ hostelId, policy }: Props) {
             onChange={() => upd('partial_payments_enabled', false)}
             className="mt-0.5 h-4 w-4 accent-accent" />
           <span>
-            <span className="block text-sm font-medium">Mandatory obligations first</span>
+            <span className="block text-sm font-medium">Mandatory full payment</span>
             <span className="block text-xs text-muted-foreground">
-              Tenants must pay at least their first group of outstanding obligations in full
-              (e.g., Security Deposit + Maintenance before Rent).
+              Tenant must clear entire overdue amount before making another payment.
+              Obligations are grouped by tier — onboarding dues must be paid before rent.
             </span>
           </span>
         </label>
@@ -453,18 +453,37 @@ export function BillingSection({ hostelId, policy }: Props) {
             onChange={() => upd('partial_payments_enabled', true)}
             className="mt-0.5 h-4 w-4 accent-accent" />
           <span>
-            <span className="block text-sm font-medium">Partial payments allowed</span>
+            <span className="block text-sm font-medium">Allow partial payments</span>
             <span className="block text-xs text-muted-foreground">
-              Tenants can pay any amount above the minimum threshold.
+              Tenant may pay any amount above the configured minimum.
+              Useful when tenants need to pay in installments.
             </span>
           </span>
         </label>
 
         {local.partial_payments_enabled && (
-          <Field label="Minimum payment amount (₹)" hint="0 = no minimum">
-            <input type="number" min={0} className={inp} value={local.partial_min_amount}
-              onChange={e => upd('partial_min_amount', +e.target.value)} />
-          </Field>
+          <div className="space-y-2">
+            <Field label="Minimum payment amount (₹)" hint="0 = no minimum">
+              <input type="number" min={0} className={inp} value={local.partial_min_amount}
+                onChange={e => upd('partial_min_amount', +e.target.value)} />
+            </Field>
+            <div className="flex gap-2">
+              {[500, 1000, 2000].map(preset => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => upd('partial_min_amount', preset)}
+                  className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                    local.partial_min_amount === preset
+                      ? 'border-accent bg-accent/10 text-accent font-bold'
+                      : 'border-border bg-card text-muted-foreground hover:border-accent/40'
+                  }`}
+                >
+                  ₹{preset.toLocaleString('en-IN')}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </SectionShell>

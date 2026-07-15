@@ -244,7 +244,7 @@ export class TenantFinancialLedgerService {
     tenantId: string;
     ownerId: string;
     createdBy: string;
-    reason: "DEDUCTION" | "REFUND" | "CORRECTION" | "SECURITY_DEPOSIT_DEDUCTION" | "SECURITY_DEPOSIT_REFUNDED" | "LEDGER_CORRECTION";
+    reason: "DEDUCTION" | "REFUND" | "CORRECTION" | "SECURITY_DEPOSIT_DEDUCTION" | "SECURITY_DEPOSIT_REFUNDED" | "LEDGER_CORRECTION" | "OBLIGATION_WAIVER" | "OBLIGATION_CANCELLATION";
     amount: number;
     notes?: string;
     referenceId?: string;
@@ -273,7 +273,7 @@ export class TenantFinancialLedgerService {
       await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId}::uuid FOR UPDATE`;
       const currentBalance = await this._computeBalance(tx, tenantId);
 
-      if (reason !== "LEDGER_CORRECTION" && currentBalance < amount) {
+      if (reason !== "LEDGER_CORRECTION" && reason !== "OBLIGATION_WAIVER" && reason !== "OBLIGATION_CANCELLATION" && currentBalance < amount) {
         throw new Error(
           `BAD_REQUEST: Insufficient financial ledger balance. Available: ₹${currentBalance.toFixed(2)}, Requested: ₹${amount.toFixed(2)}`
         );
@@ -305,6 +305,71 @@ export class TenantFinancialLedgerService {
   }
 
   /**
+   * Record a debit entry on the financial ledger within an existing transaction.
+   * Validates balance is sufficient for DEDUCTION/REFUND.
+   * Concurrency: SELECT FOR UPDATE on tenant row.
+   */
+  async debitInTx(
+    tx: Prisma.TransactionClient,
+    params: {
+      tenantId: string;
+      ownerId: string;
+      createdBy: string;
+      reason: "DEDUCTION" | "REFUND" | "CORRECTION" | "ADJUSTMENT" | "SECURITY_DEPOSIT_DEDUCTION" | "SECURITY_DEPOSIT_REFUNDED" | "LEDGER_CORRECTION" | "OBLIGATION_WAIVER" | "OBLIGATION_CANCELLATION";
+      amount: number;
+      notes?: string;
+      referenceId?: string;
+      referenceType?: string;
+      refundStatus?: RefundStatus;
+    }
+  ) {
+    const { tenantId, ownerId, createdBy, reason: inputReason, amount, notes, referenceId, referenceType, refundStatus } = params;
+    const reason = mapLegacyReason(inputReason);
+
+    if (amount <= 0) throw new Error("BAD_REQUEST: Amount must be positive");
+    await this._assertOwnership(tenantId, ownerId);
+
+    const effectiveRefundStatus =
+      reason === "SECURITY_DEPOSIT_REFUNDED" ? (refundStatus ?? "PENDING") : null;
+
+    const tenant = await tx.tenants.findUniqueOrThrow({
+      where: { id: tenantId },
+      select: { id: true, hostel_id: true },
+    });
+    await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId}::uuid FOR UPDATE`;
+    const currentBalance = await this._computeBalance(tx, tenantId);
+
+    if (reason !== "LEDGER_CORRECTION" && reason !== "OBLIGATION_WAIVER" && reason !== "OBLIGATION_CANCELLATION" && currentBalance < amount) {
+      throw new Error(
+        `BAD_REQUEST: Insufficient financial ledger balance. Available: ₹${currentBalance.toFixed(2)}, Requested: ₹${amount.toFixed(2)}`
+      );
+    }
+
+    const newBalance = Math.max(0, Math.round((currentBalance - amount) * 100) / 100);
+
+    const entry = await tx.tenant_financial_ledger.create({
+      data: {
+        id: randomUUID(),
+        tenant_id: tenantId,
+        owner_id: ownerId,
+        hostel_id: tenant.hostel_id,
+        type: "DEBIT",
+        reason,
+        amount,
+        balance_after: newBalance,
+        notes: notes || null,
+        reference_id: referenceId || null,
+        reference_type: referenceType || null,
+        refund_status: effectiveRefundStatus,
+        created_by: createdBy,
+      },
+    });
+
+    logger.info("financial-ledger.debit-in-tx", { tenant_id: tenantId, reason, amount, new_balance: newBalance, entry_id: entry.id, refund_status: effectiveRefundStatus });
+    return { entry, balance: newBalance };
+  }
+
+  /**
    * Update the physical refund status on an existing REFUND ledger entry.
    * This must be called when the bank transfer actually completes or fails.
    */
@@ -323,215 +388,12 @@ export class TenantFinancialLedgerService {
     });
   }
 
-  /**
-   * Apply future rent credit balance against an outstanding obligation.
-   * Atomically:
-   *   1. Validates future rent credit balance >= requested amount
-   *   2. Validates obligation belongs to tenant and is not PAID/WAIVED
-   *   3. Creates a Payment record (method: ADVANCE_ADJUSTMENT)
-   *   4. Updates obligation status
-   *   5. Creates a ledger DEBIT entry
-   *
-   * Concurrency: locks tenant row + obligation row.
-   */
-  async adjustAgainstObligation(params: {
-    tenantId: string;
-    ownerId: string;
-    createdBy: string;
-    obligationId: string;
-    amount: number;
-    notes?: string;
-  }) {
-    const { tenantId, ownerId, createdBy, obligationId, amount, notes } = params;
-
-    if (amount <= 0) throw new Error("BAD_REQUEST: Amount must be positive");
-    await this._assertOwnership(tenantId, ownerId);
-
-
-    return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      return this.adjustAgainstObligationInTx(tx, params);
-    });
-  }
-
-  /**
-   * Inner logic to adjust future rent credit balance against an obligation, running inside an existing transaction.
-   */
-  async adjustAgainstObligationInTx(
-    tx: Prisma.TransactionClient,
-    params: {
-      tenantId: string;
-      ownerId: string;
-      createdBy: string;
-      obligationId: string;
-      amount: number;
-      notes?: string;
-    }
-  ) {
-    const { tenantId, ownerId, createdBy, obligationId, amount, notes } = params;
-
-    // Lock tenant row first (always first to avoid deadlock ordering)
-    await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId}::uuid FOR UPDATE`;
-    // Lock obligation row
-    await tx.$queryRaw`SELECT id FROM rent_obligations WHERE id = ${obligationId}::uuid FOR UPDATE`;
-
-    const obligation = await tx.rent_obligations.findUnique({
-      where: { id: obligationId },
-      include: { payments: { select: { amount_paid: true } } },
-    });
-
-    if (!obligation) throw new Error("NOT_FOUND: Obligation not found");
-    if (obligation.tenant_id !== tenantId) throw new Error("FORBIDDEN: Obligation does not belong to this tenant");
-    if (obligation.status === "PAID") throw new Error("BAD_REQUEST: Obligation already fully paid");
-    if (obligation.status === "WAIVED") throw new Error("BAD_REQUEST: Cannot adjust a waived obligation");
-
-    const paidPaisa = obligation.payments.reduce(
-      (acc: number, p: any) => acc + Math.round(Number(p.amount_paid) * 100), 0
-    );
-    const obligationPaisa = Math.round(Number(obligation.amount) * 100);
-    const remainingPaisa = obligationPaisa - paidPaisa;
-    const adjustPaisa = Math.round(amount * 100);
-
-    if (adjustPaisa > remainingPaisa) {
-      throw new Error(
-        `BAD_REQUEST: Adjustment exceeds outstanding balance. Outstanding: ₹${(remainingPaisa / 100).toFixed(2)}, Requested: ₹${amount.toFixed(2)}`
-      );
-    }
-
-    // Check future rent credit availability. Security deposit credits are held
-    // separately and must not be consumed by rent adjustments.
-    const availability = await this._computeFinancialLedgerAvailabilityInTx(tx, tenantId);
-    const currentBalance = availability.ledgerBalance;
-    if (availability.futureRentCredit < amount) {
-      throw new Error(
-        `BAD_REQUEST: Insufficient future rent credit balance. Available: ₹${availability.futureRentCredit.toFixed(2)}, Requested: ₹${amount.toFixed(2)}`
-      );
-    }
-
-    // Create payment record
-    const payment = await tx.payments.create({
-      data: {
-        obligation_id: obligationId,
-        tenant_id: tenantId,
-        owner_id: ownerId,
-        hostel_id: obligation.hostel_id,
-        amount_paid: adjustPaisa / 100,
-        payment_method: "ADVANCE_ADJUSTMENT",
-        reference_number: `ADV-${Date.now()}`,
-        payment_date: new Date(),
-      },
-    });
-
-    // Update obligation status
-    const newPaidPaisa = paidPaisa + adjustPaisa;
-    const newStatus = newPaidPaisa >= obligationPaisa ? "PAID" : "PARTIAL";
-    await tx.rent_obligations.update({
-      where: { id: obligationId },
-      data: { status: newStatus },
-    });
-
-    // Ledger DEBIT
-    const newBalance = Math.round((currentBalance - amount) * 100) / 100;
-    const entry = await tx.tenant_financial_ledger.create({
-      data: {
-        id: randomUUID(),
-        tenant_id: tenantId,
-        owner_id: ownerId,
-        hostel_id: obligation.hostel_id,
-        type: "DEBIT",
-        reason: "FUTURE_RENT_CREDIT_ADJUSTMENT",
-        amount,
-        balance_after: newBalance,
-        notes: notes || `Adjusted against obligation ${obligationId}`,
-        reference_id: obligationId,
-        reference_type: "OBLIGATION",
-        created_by: createdBy,
-      },
-    });
-
-    logger.info("financial-ledger.adjust", {
-      tenant_id: tenantId,
-      obligation_id: obligationId,
-      amount,
-      new_balance: newBalance,
-      payment_id: payment.id,
-      entry_id: entry.id,
-      obligation_new_status: newStatus,
-    });
-
-    return { entry, payment, balance: newBalance, obligation_status: newStatus };
-  }
-
-  /**
-   * Automatically apply any positive future rent credit balance to unpaid obligations
-   * (PENDING / PARTIAL) for the tenant, oldest first. Runs inside an existing transaction.
-   */
-  async autoApplyFutureRentCreditToDuesInTx(
-    tx: Prisma.TransactionClient,
-    tenantId: string,
-    ownerId: string,
-    createdBy: string
-  ) {
-    // 1. Lock tenant row and compute future rent credit availability.
-    // Security deposit credits are not available for automatic rent settlement.
-    await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId}::uuid FOR UPDATE`;
-    const availability = await this._computeFinancialLedgerAvailabilityInTx(tx, tenantId);
-    let currentBalance = this._roundCurrency(availability.futureRentCredit);
-    if (currentBalance <= 0) return;
-
-    // 3. Fetch all outstanding obligations for this tenant (oldest first)
-    const obligations = await tx.rent_obligations.findMany({
-      where: {
-        tenant_id: tenantId,
-        status: { in: ["PENDING", "PARTIAL", "UPCOMING"] },
-      },
-      include: { payments: { select: { amount_paid: true } } },
-      orderBy: { rent_month: "asc" },
-    });
-
-    if (obligations.length === 0) return;
-
-    for (const obligation of obligations) {
-      if (currentBalance <= 0) break;
-
-      const paidAmount = obligation.payments.reduce(
-        (sum, p) => sum + Number(p.amount_paid), 0
-      );
-      const remainingAmount = Math.round((Number(obligation.amount) - paidAmount) * 100) / 100;
-
-      if (remainingAmount <= 0) continue;
-
-      const adjustAmount = Math.min(currentBalance, remainingAmount);
-      if (adjustAmount > 0) {
-        await this.adjustAgainstObligationInTx(tx, {
-          tenantId,
-          ownerId,
-          createdBy,
-          obligationId: obligation.id,
-          amount: adjustAmount,
-          notes: JSON.stringify({
-            trigger: "auto_settlement",
-            actor: createdBy,
-            obligation_id: obligation.id,
-            obligation_type: obligation.obligation_type,
-            obligation_status: obligation.status,
-            rent_month: obligation.rent_month?.toISOString?.() || null,
-            description: `Auto-adjusted ₹${adjustAmount} from future rent credit against ${obligation.obligation_type} obligation`,
-          }),
-        });
-        currentBalance = Math.round((currentBalance - adjustAmount) * 100) / 100;
-      }
-    }
-  }
-
-  // Backward compatibility alias for autoApplyAdvanceToDuesInTx
-  async autoApplyAdvanceToDuesInTx(
-    tx: Prisma.TransactionClient,
-    tenantId: string,
-    ownerId: string,
-    createdBy: string
-  ) {
-    return this.autoApplyFutureRentCreditToDuesInTx(tx, tenantId, ownerId, createdBy);
-  }
+  // adjustAgainstObligation / adjustAgainstObligationInTx and
+  // autoApplyFutureRentCreditToDuesInTx / autoApplyAdvanceToDuesInTx retired —
+  // superseded by FinancialPaymentFacade.applyFutureCredit, which runs the
+  // same Planner → Plan → Engine flow as every other settlement path
+  // (SETTLEMENT_PRIORITY tiering, OVERDUE inclusion, lifecycle/settlement
+  // dual-write) instead of this file's own independent allocation loop.
 
   // ── Private helpers ───────────────────────────────────────────────────────
 
@@ -591,6 +453,17 @@ export class TenantFinancialLedgerService {
         Math.max(0, params.ledgerDepositCredits)
       )
     );
+  }
+
+  /**
+   * Public wrapper exposing the future-rent-credit balance computed by
+   * _computeFinancialLedgerAvailabilityInTx, for callers (e.g.
+   * FinancialPaymentFacade.applyFutureCredit) that only need the balance,
+   * not the full private availability breakdown.
+   */
+  async getFutureRentCreditBalanceInTx(tx: Prisma.TransactionClient, tenantId: string): Promise<number> {
+    const availability = await this._computeFinancialLedgerAvailabilityInTx(tx, tenantId);
+    return availability.futureRentCredit;
   }
 
   private async _computeFinancialLedgerAvailabilityInTx(tx: Prisma.TransactionClient, tenantId: string) {
@@ -671,6 +544,10 @@ function mapLegacyReason(reason: string): any {
       return "SECURITY_DEPOSIT_REFUNDED";
     case "CORRECTION":
       return "LEDGER_CORRECTION";
+    case "OBLIGATION_WAIVER":
+      return "OBLIGATION_WAIVER";
+    case "OBLIGATION_CANCELLATION":
+      return "OBLIGATION_CANCELLATION";
     default:
       return reason;
   }

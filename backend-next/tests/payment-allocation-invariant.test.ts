@@ -11,9 +11,18 @@ const mocks = vi.hoisted(() => {
     $queryRaw: vi.fn(async () => {
       return rentObligations.map(ob => ({ id: ob.id }));
     }),
+    $queryRawUnsafe: vi.fn(async () => {
+      return rentObligations.map(ob => ({ id: ob.id }));
+    }),
     paymentAttempt: {
       update: vi.fn(),
       findUnique: vi.fn(),
+    },
+    hostels: {
+      findUnique: vi.fn(async () => ({
+        id: "hostel-abc",
+        preferences_config: { enforceOverdueRentPayment: true },
+      })),
     },
     rent_obligations: {
       findMany: vi.fn(async (params?: any) => {
@@ -73,6 +82,10 @@ const mocks = vi.hoisted(() => {
         payments.push(p);
         return p;
       }),
+    },
+    payment_groups: {
+      create: vi.fn(async ({ data }: any) => ({ id: data.id, ...data })),
+      update: vi.fn(async ({ where, data }: any) => ({ id: where.id, ...data })),
     },
   };
 

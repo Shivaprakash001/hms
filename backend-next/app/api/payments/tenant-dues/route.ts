@@ -7,6 +7,7 @@ import { ApiError } from "@/src/lib/api-error";
 import { paymentService } from "@/src/services/payments/payment-service";
 import { authService } from "@/lib/services/auth-service";
 import { prisma } from "@/lib/db";
+import { resolveTenantSettlementAccess } from "@/src/services/payments/tenant-access-guard";
 
 /**
  * 📊 TENANT DUES — Full breakdown of all unpaid obligations (RENT + LATE_FEE)
@@ -52,19 +53,16 @@ export async function GET(req: NextRequest) {
 
     // Owners can only view their own tenants
     if (user.role === "OWNER") {
-      const tenant = await prisma.tenants.findUnique({
-        where: { id: tenantId },
-        select: { owner_id: true },
-      });
-      if (!tenant || tenant.owner_id !== user.id) {
-        return ApiResponse.error(ApiError.forbidden("Forbidden"));
-      }
+      await resolveTenantSettlementAccess(user, { tenantId, enforceHostelMatch: false });
     }
 
     const result = await paymentService.getTenantTotalDues(tenantId);
     return ApiResponse.success(result);
   } catch (error: any) {
     console.error("Error fetching tenant dues:", error);
-    return ApiResponse.error(ApiError.internal(String(error?.message ?? error)));
+    const message = String(error?.message ?? error);
+    if (message.includes("NOT_FOUND")) return ApiResponse.error(ApiError.notFound(message.replace("NOT_FOUND: ", "")));
+    if (message.includes("FORBIDDEN")) return ApiResponse.error(ApiError.forbidden(message.replace("FORBIDDEN: ", "")));
+    return ApiResponse.error(ApiError.internal(message));
   }
 }

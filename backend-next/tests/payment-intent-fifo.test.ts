@@ -43,14 +43,19 @@ describe('createMultiObligationPaymentIntent FIFO Enforcement', () => {
     });
   });
 
-  it('should allow payment intent for July dues even if June is unpaid (relaxed FIFO)', async () => {
-    const attempt = await paymentService.createMultiObligationPaymentIntent(
-      [obligationJuly.id],
-      tenant.id,
-      tenant.id
-    );
-    expect(attempt).toBeDefined();
-    expect(attempt.status).toBe('PENDING');
+  it('should reject payment intent for July dues while June remains unselected (canonical chronology rule)', async () => {
+    // Chronology enforcement now runs through the same validateChronology
+    // rule every other settlement path uses — no gaps allowed in selected
+    // RENT obligations sorted by due_date. Previously a second, looser rule
+    // only blocked this when June was OVERDUE (not merely unpaid); the two
+    // rules have been unified onto the stricter one.
+    await expect(
+      paymentService.createMultiObligationPaymentIntent(
+        [obligationJuly.id],
+        tenant.id,
+        tenant.id
+      )
+    ).rejects.toThrow(/Prior rent obligation.*must be selected before selecting later rent obligation/);
   });
 
   it('should allow payment intent for only June dues', async () => {

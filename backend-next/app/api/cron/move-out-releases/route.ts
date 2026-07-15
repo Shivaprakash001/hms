@@ -7,6 +7,7 @@ import { Prisma } from "@prisma/client";
 import { notifyMoveOutTransition } from "@/lib/services/move-out-notifications";
 import { moveOutService } from "@/lib/services/move-out-service";
 import { notificationService } from "@/lib/services/notification-service";
+import { obligationEngine } from "@/src/services/payments/obligation-engine";
 
 /**
  * 🕐 CRON — Daily Move-Out Room Releases
@@ -62,6 +63,7 @@ export async function GET(req: NextRequest) {
         tenant: {
           select: {
             profile_id: true,
+            owner_id: true,
           },
         },
       },
@@ -98,10 +100,19 @@ export async function GET(req: NextRequest) {
               updated_at: now,
             },
           });
-          await tx.rent_obligations.updateMany({
+          // Routed through ObligationEngine so any PARTIAL obligation (real
+          // payments on record) gets a proper ledger correction.
+          const toWaive = await tx.rent_obligations.findMany({
             where: { tenant_id: req.tenant_id, status: { in: ["PENDING", "PARTIAL"] } },
-            data: { status: "WAIVED", updated_at: now },
+            select: { id: true },
           });
+          if (toWaive.length > 0 && req.tenant?.owner_id) {
+            await obligationEngine.bulkWaiveInTx(tx, {
+              obligationIds: toWaive.map((o: any) => o.id),
+              reason: "Move-out completed — outstanding rent waived on room release",
+              actorId: req.tenant.owner_id,
+            });
+          }
         });
 
         // Send final farewell notification

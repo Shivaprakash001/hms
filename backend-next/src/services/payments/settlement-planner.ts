@@ -28,8 +28,8 @@
 // PAID       |   ❌    |     ❌     |       ❌
 // WAIVED     |   ❌    |     ❌     |       ❌
 
-const NON_PAYABLE_STATUSES = new Set(["PAID", "WAIVED"]);
-const NON_REMINDABLE_STATUSES = new Set(["PAID", "WAIVED", "UPCOMING"]);
+const NON_PAYABLE_STATUSES = new Set(["PAID", "WAIVED", "CANCELLED", "DRAFT"]);
+const NON_REMINDABLE_STATUSES = new Set(["PAID", "WAIVED", "CANCELLED", "DRAFT", "UPCOMING"]);
 
 /** Can this obligation accept payment? Status is NEVER a payment gate except for terminal states. */
 export function isPayable(obligation: { status: string }): boolean {
@@ -87,7 +87,12 @@ export const SETTLEMENT_PRIORITY: Record<string, number> = {
   MAINTENANCE: 3,
   RENT: 4,
   LATE_FEE: 5,
+  FINE: 5,               // Same tier as LATE_FEE — penalties
   EXTRA_CHARGE: 6,
+  DAMAGE: 6,             // Same tier as EXTRA_CHARGE — ad-hoc
+  UTILITY: 6,            // Same tier as EXTRA_CHARGE — ad-hoc
+  ADDITIONAL_CHARGE: 6,  // Same tier as EXTRA_CHARGE — ad-hoc
+  OTHER: 7,              // Lowest priority — catch-all
 };
 
 /** Ordered list of obligation types by settlement priority (highest first). */
@@ -130,16 +135,21 @@ export const SETTLEMENT_TIERS: Record<string, string> = {
   MAINTENANCE: "ONBOARDING",
   RENT: "RECURRING",
   LATE_FEE: "PENALTIES",
-  EXTRA_CHARGE: "OTHER",
+  FINE: "PENALTIES",
+  EXTRA_CHARGE: "ADHOC",
+  DAMAGE: "ADHOC",
+  UTILITY: "ADHOC",
+  ADDITIONAL_CHARGE: "ADHOC",
+  OTHER: "ADHOC",
 };
 
-const TIER_ORDER = ["ONBOARDING", "RECURRING", "PENALTIES", "OTHER"];
+const TIER_ORDER = ["ONBOARDING", "RECURRING", "PENALTIES", "ADHOC"];
 
 const TIER_LABELS: Record<string, string> = {
   ONBOARDING: "Onboarding Dues",
   RECURRING: "Rent",
-  PENALTIES: "Late Fees",
-  OTHER: "Extra Charges",
+  PENALTIES: "Late Fees & Fines",
+  ADHOC: "Additional Charges",
 };
 
 export const TYPE_LABELS: Record<string, string> = {
@@ -148,7 +158,12 @@ export const TYPE_LABELS: Record<string, string> = {
   MAINTENANCE: "Maintenance",
   RENT: "Rent",
   LATE_FEE: "Late Fee",
+  FINE: "Fine",
   EXTRA_CHARGE: "Extra Charge",
+  DAMAGE: "Damage Charge",
+  UTILITY: "Utility Charge",
+  ADDITIONAL_CHARGE: "Additional Charge",
+  OTHER: "Other Charge",
 };
 
 // ── Input types ───────────────────────────────────────────────────────────────
@@ -161,6 +176,7 @@ export interface ObligationSnapshot {
   due_date: Date;
   rent_month: Date | null;
   owner_id: string;
+  status: string;
 }
 
 export interface PaymentPolicy {
@@ -182,6 +198,23 @@ export interface SettlementAllocation {
   result: "PAID" | "PARTIAL" | "UNCHANGED";
 }
 
+export interface SettlementExplanation {
+  /** Human-readable description of this allocation decision */
+  text: string;
+  /** Which obligation this explanation relates to (null for general) */
+  obligation_id: string | null;
+  /** Category: why this allocation was made or skipped */
+  reason: "PRIORITY" | "CHRONOLOGICAL" | "POLICY" | "CUSTOM_SELECTION" | "INSUFFICIENT_FUNDS" | "SKIPPED" | "FUTURE_CREDIT";
+}
+
+export interface SkippedObligation {
+  obligation_id: string;
+  type: string;
+  label: string;
+  outstanding: number;
+  reason: string;
+}
+
 export interface SettlementPlan {
   allocations: SettlementAllocation[];
   future_credit: number;
@@ -195,6 +228,13 @@ export interface SettlementPlan {
   payment_policy: "FULL_PAYMENT" | "PARTIAL_ALLOWED";
   warnings: string[];
   summary: string;
+
+  /** Human-readable reasoning for each allocation decision (for AI, WhatsApp, audit) */
+  explanation: SettlementExplanation[];
+  /** Obligations that exist but weren't allocated to, with reasons */
+  skipped_obligations: SkippedObligation[];
+  /** 0-100 confidence score for the suggested allocation */
+  recommendation_score: number;
 }
 
 // ── Sort ──────────────────────────────────────────────────────────────────────
@@ -225,14 +265,88 @@ function buildAllocationLabel(obligationType: string, rentMonth: Date | null): s
   return monthLabel ? `${monthLabel} ${typeLabel}` : typeLabel;
 }
 
+/**
+ * Verifies that for any checked RENT obligation, all prior outstanding RENT obligations
+ * are also checked. If there is a "gap" in the selection, it is invalid.
+ */
+export function validateChronology(
+  allObligations: ObligationSnapshot[],
+  allowedObligationIds?: string[]
+): { valid: boolean; reason?: string } {
+  if (!allowedObligationIds) return { valid: true };
+
+  // Filter and sort all RENT obligations chronologically by due_date or rent_month
+  const rentObligations = allObligations
+    .filter(ob => ob.obligation_type === "RENT")
+    .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
+
+  // Find the highest index of selected rent obligation
+  let latestCheckedIndex = -1;
+  for (let i = 0; i < rentObligations.length; i++) {
+    if (allowedObligationIds.includes(rentObligations[i].id)) {
+      latestCheckedIndex = i;
+    }
+  }
+
+  // Ensure all rent obligations up to latestCheckedIndex are also checked
+  for (let i = 0; i < latestCheckedIndex; i++) {
+    if (!allowedObligationIds.includes(rentObligations[i].id)) {
+      const monthLabel = rentObligations[i].rent_month
+        ? new Date(rentObligations[i].rent_month).toLocaleDateString("en-IN", { month: "short", year: "numeric" })
+        : "Prior Rent";
+      const targetLabel = rentObligations[latestCheckedIndex].rent_month
+        ? new Date(rentObligations[latestCheckedIndex].rent_month).toLocaleDateString("en-IN", { month: "short", year: "numeric" })
+        : "Later Rent";
+      return {
+        valid: false,
+        reason: `Prior rent obligation (${monthLabel}) must be selected before selecting later rent obligation (${targetLabel}).`,
+      };
+    }
+  }
+
+  return { valid: true };
+}
+
 // ── The planner ───────────────────────────────────────────────────────────────
 
 export function buildSettlementPlan(
   rawObligations: ObligationSnapshot[],
   amountRupees: number,
-  policy: PaymentPolicy
+  policy: PaymentPolicy,
+  allowedObligationIds?: string[]
 ): SettlementPlan {
-  const obligations = sortObligationsByPriority(rawObligations);
+  if (allowedObligationIds) {
+    const chronoCheck = validateChronology(rawObligations, allowedObligationIds);
+    if (!chronoCheck.valid) {
+      return {
+        allocations: [],
+        future_credit: amountRupees,
+        total_outstanding: rawObligations.reduce((sum, ob) => sum + Math.max(ob.amount - ob.paid, 0), 0),
+        total_to_settle: 0,
+        remaining_outstanding: rawObligations.reduce((sum, ob) => sum + Math.max(ob.amount - ob.paid, 0), 0),
+        minimum_allowed: 0,
+        first_tier_label: "",
+        payment_accepted: false,
+        rejection_reason: chronoCheck.reason || "Chronological rent rule violation",
+        payment_policy: "PARTIAL_ALLOWED",
+        warnings: [],
+        summary: "",
+        explanation: [{
+          text: chronoCheck.reason || "Chronological rent rule violation",
+          obligation_id: null,
+          reason: "CHRONOLOGICAL",
+        }],
+        skipped_obligations: [],
+        recommendation_score: 0,
+      };
+    }
+  }
+
+  const obligationsToAllocate = allowedObligationIds
+    ? rawObligations.filter(ob => allowedObligationIds.includes(ob.id))
+    : rawObligations;
+
+  const obligations = sortObligationsByPriority(obligationsToAllocate);
   const amountPaisa = Math.round(amountRupees * 100);
   let remainingPaisa = amountPaisa;
 
@@ -297,6 +411,10 @@ export function buildSettlementPlan(
     const tierTotals: Record<string, { total: number; label: string }> = {};
     for (const alloc of allocations) {
       if (alloc.outstanding <= 0) continue;
+      // Look up raw obligation to skip UPCOMING
+      const rawOb = rawObligations.find(o => o.id === alloc.obligation_id);
+      if (rawOb && rawOb.status === "UPCOMING") continue;
+
       if (!tierTotals[alloc.tier]) {
         tierTotals[alloc.tier] = {
           total: 0,
@@ -330,7 +448,71 @@ export function buildSettlementPlan(
     warnings.push(`₹${futureCredit.toLocaleString("en-IN")} will be credited as future rent`);
   }
 
-  // ── 5. Summary ──────────────────────────────────────────────────────────────
+  // ── 5. Explanation (human-readable reasoning) ──────────────────────────────
+  const explanation: SettlementExplanation[] = [];
+  const skippedObligations: SkippedObligation[] = [];
+
+  for (const alloc of allocations) {
+    if (alloc.allocated > 0) {
+      const reasonCategory = allowedObligationIds ? "CUSTOM_SELECTION" : "PRIORITY";
+      explanation.push({
+        text: `₹${alloc.allocated.toLocaleString("en-IN")} allocated to ${alloc.label} (${alloc.result === "PAID" ? "fully settled" : "partially settled"})`,
+        obligation_id: alloc.obligation_id,
+        reason: reasonCategory,
+      });
+    } else if (alloc.outstanding > 0) {
+      skippedObligations.push({
+        obligation_id: alloc.obligation_id,
+        type: alloc.type,
+        label: alloc.label,
+        outstanding: alloc.outstanding,
+        reason: "Insufficient funds after higher-priority obligations",
+      });
+      explanation.push({
+        text: `${alloc.label} (₹${alloc.outstanding.toLocaleString("en-IN")} outstanding) — skipped, insufficient funds`,
+        obligation_id: alloc.obligation_id,
+        reason: "INSUFFICIENT_FUNDS",
+      });
+    }
+  }
+
+  // Obligations that were excluded by custom selection
+  if (allowedObligationIds) {
+    for (const ob of rawObligations) {
+      if (!allowedObligationIds.includes(ob.id) && Math.max(ob.amount - ob.paid, 0) > 0) {
+        const label = buildAllocationLabel(ob.obligation_type, ob.rent_month);
+        skippedObligations.push({
+          obligation_id: ob.id,
+          type: ob.obligation_type,
+          label,
+          outstanding: Math.max(ob.amount - ob.paid, 0),
+          reason: "Not selected by owner",
+        });
+      }
+    }
+  }
+
+  if (futureCredit > 0) {
+    explanation.push({
+      text: `₹${futureCredit.toLocaleString("en-IN")} credited as future rent (excess after all allocations)`,
+      obligation_id: null,
+      reason: "FUTURE_CREDIT",
+    });
+  }
+
+  // ── 6. Recommendation score ────────────────────────────────────────────────
+  // 0-100: how confident are we in this suggested allocation?
+  // 100 = covers all outstanding, 50 = partial coverage, 0 = rejected
+  let recommendationScore: number;
+  if (!paymentAccepted) {
+    recommendationScore = 0;
+  } else if (remainingOutstanding <= 0) {
+    recommendationScore = 100;
+  } else {
+    recommendationScore = Math.round((totalToSettle / totalOutstanding) * 100);
+  }
+
+  // ── 7. Summary ──────────────────────────────────────────────────────────────
   const activeAllocations = allocations.filter(a => a.allocated > 0);
   let summary: string;
   if (activeAllocations.length === 0 && futureCredit > 0) {
@@ -354,6 +536,9 @@ export function buildSettlementPlan(
     payment_policy: policy.allow_partial ? "PARTIAL_ALLOWED" : "FULL_PAYMENT",
     warnings,
     summary,
+    explanation,
+    skipped_obligations: skippedObligations,
+    recommendation_score: recommendationScore,
   };
 }
 
@@ -371,6 +556,7 @@ export function toObligationSnapshot(ob: {
   rent_month: Date | null;
   owner_id: string;
   payments: Array<{ amount_paid: any }>;
+  status?: string;
 }): ObligationSnapshot {
   return {
     id: ob.id,
@@ -380,5 +566,6 @@ export function toObligationSnapshot(ob: {
     due_date: new Date(ob.due_date),
     rent_month: ob.rent_month ? new Date(ob.rent_month) : null,
     owner_id: ob.owner_id,
+    status: ob.status || "PENDING",
   };
 }

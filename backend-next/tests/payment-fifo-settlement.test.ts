@@ -43,11 +43,28 @@ function createTx(rows: any[]) {
   return {
     updatedStatuses,
     $queryRaw: vi.fn(async () => rows.filter((row) => ["OVERDUE", "PENDING", "PARTIAL", "UPCOMING"].includes(row.status)).map((row) => ({ id: row.id }))),
+    $queryRawUnsafe: vi.fn(async () => rows.filter((row) => ["OVERDUE", "PENDING", "PARTIAL", "UPCOMING"].includes(row.status)).map((row) => ({ id: row.id }))),
+    hostels: {
+      findUnique: vi.fn(async () => ({
+        id: "hostel-1",
+        preferences_config: { enforceOverdueRentPayment: true },
+      })),
+    },
     tenants: {
       findUnique: vi.fn(async () => tenant),
     },
     rent_obligations: {
-      findMany: vi.fn(async ({ where }: any) => rows.filter((row) => where.id.in.includes(row.id))),
+      // Two shapes are queried by the plan-first flow: an unfiltered snapshot
+      // fetch by tenant/hostel/status (Settlement Planner input), and a
+      // locked re-fetch by id (Settlement Engine execution).
+      findMany: vi.fn(async ({ where }: any) => {
+        if (where.id?.in) return rows.filter((row) => where.id.in.includes(row.id));
+        return rows.filter((row) =>
+          row.tenant_id === where.tenant_id &&
+          (!where.hostel_id || row.hostel_id === where.hostel_id) &&
+          (!where.status?.in || where.status.in.includes(row.status))
+        );
+      }),
       update: vi.fn(async ({ where, data }: any) => {
         updatedStatuses[where.id] = data.status;
         const row = rows.find((item) => item.id === where.id);
@@ -61,6 +78,10 @@ function createTx(rows: any[]) {
         payments.push(payment);
         return payment;
       }),
+    },
+    payment_groups: {
+      create: vi.fn(async ({ data }: any) => ({ id: data.id, ...data })),
+      update: vi.fn(async ({ where, data }: any) => ({ id: where.id, ...data })),
     },
   };
 }

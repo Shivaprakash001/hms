@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { hmsToast } from '@lib/toast';
 import { ErrorCard } from '@/shared/ui/error/ErrorCard';
 import { getHmsError } from '@lib/errors';
-import { X, IndianRupee, Calendar, Loader2, CheckCircle2, ArrowRight, Wallet, TrendingUp } from 'lucide-react';
+import { X, IndianRupee, Calendar, Loader2, CheckCircle2, ArrowRight, Wallet, TrendingUp, AlertCircle } from 'lucide-react';
 import { paymentService } from '@features/payments/api';
 import { tenantService } from '@features/tenants/api';
 import { identityService } from '@features/auth/api';
@@ -48,6 +48,7 @@ export function usePaymentController(hostelId: string, currentTenant: any) {
         paymentDate: string;
         note?: string;
         password?: string;
+        allowedObligationIds?: string[];
       };
     }) => {
       if (!form.password?.trim()) {
@@ -80,6 +81,7 @@ export function usePaymentController(hostelId: string, currentTenant: any) {
           paymentDate: form.paymentDate,
           note: form.note,
           hostelId: currentTenant?.hostel_id || hostelId,
+          allowedObligationIds: form.allowedObligationIds,
         });
       }
     },
@@ -131,6 +133,24 @@ export function RecordPaymentModal({
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [successResult, setSuccessResult] = useState<any>(null);
   const [hasPrefilled, setHasPrefilled] = useState(false);
+  const [customMode, setCustomMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // Dues lookup to find specific obligation metadata and defaults
+  const resolvedTenantId = context.tenantId || selectedTenant?.id;
+
+  const { data: duesData, isLoading: duesLoading } = useQuery({
+    queryKey: ['payments', 'tenant-dues', resolvedTenantId, hostelId],
+    queryFn: () => paymentService.getTenantDues(resolvedTenantId!, hostelId),
+    enabled: Boolean(resolvedTenantId),
+  });
+
+  // Auto-initialize selectedIds when duesData items load
+  useEffect(() => {
+    if (duesData?.items) {
+      setSelectedIds(duesData.items.map((x: any) => x.obligation_id || x.id));
+    }
+  }, [duesData]);
 
   // Debounce search input for generic search path
   useEffect(() => {
@@ -177,15 +197,7 @@ export function RecordPaymentModal({
     return selectedTenant;
   }, [context.tenantId, tenantContextData, selectedTenant, hostelId]);
 
-  const resolvedTenantId = context.tenantId || selectedTenant?.id;
   const resolvedObligationId = context.obligationId;
-
-  // Dues lookup to find specific obligation metadata and defaults
-  const { data: duesData, isLoading: duesLoading } = useQuery({
-    queryKey: ['payments', 'tenant-dues', resolvedTenantId, hostelId],
-    queryFn: () => paymentService.getTenantDues(resolvedTenantId!, hostelId),
-    enabled: Boolean(resolvedTenantId),
-  });
 
   // Find specific obligation if obligation ID is present
   const targetObligation = useMemo(() => {
@@ -212,10 +224,11 @@ export function RecordPaymentModal({
   const parsedAmount = Number(amount) || 0;
   // Disable preview if paying a specific obligation (direct routing)
   const previewEnabled = Boolean(currentTenant?.id) && parsedAmount > 0 && !resolvedObligationId;
+  const activeAllowedIds = customMode ? selectedIds : undefined;
   
   const { data: previewData, isLoading: previewLoading, isFetching: previewFetching } = useQuery({
-    queryKey: ['settlement-preview', currentTenant?.id, parsedAmount, currentTenant?.hostel_id],
-    queryFn: () => paymentService.settlementPreview(currentTenant!.id, parsedAmount, currentTenant!.hostel_id),
+    queryKey: ['settlement-preview', currentTenant?.id, parsedAmount, currentTenant?.hostel_id, activeAllowedIds],
+    queryFn: () => paymentService.settlementPreview(currentTenant!.id, parsedAmount, currentTenant!.hostel_id, activeAllowedIds),
     enabled: previewEnabled,
     staleTime: 5_000,
     retry: false,
@@ -227,6 +240,27 @@ export function RecordPaymentModal({
     setFieldError(null);
     setApiError(null);
     setHasPrefilled(false);
+  };
+
+  const handleToggleObligation = (id: string) => {
+    const ob = duesData?.items?.find((x: any) => x.obligation_id === id || x.id === id);
+    if (!ob) return;
+    const sameTypeObs = (duesData?.items || []).filter((x: any) => (x.type || x.obligation_type) === (ob.type || ob.obligation_type));
+
+    const isCurrentlyChecked = selectedIds.includes(id);
+    if (!isCurrentlyChecked) {
+      // Checking: select this one and all older ones of the same type
+      const olderIds = sameTypeObs
+        .filter((x: any) => new Date(x.due_date).getTime() < new Date(ob.due_date).getTime())
+        .map((x: any) => x.obligation_id || x.id);
+      setSelectedIds((prev) => Array.from(new Set([...prev, id, ...olderIds])));
+    } else {
+      // Unchecking: deselect this one and all newer ones of the same type
+      const newerIds = sameTypeObs
+        .filter((x: any) => new Date(x.due_date).getTime() > new Date(ob.due_date).getTime())
+        .map((x: any) => x.obligation_id || x.id);
+      setSelectedIds((prev) => prev.filter((x) => x !== id && !newerIds.includes(x)));
+    }
   };
 
   // Instantiate payment controller hook
@@ -259,6 +293,7 @@ export function RecordPaymentModal({
         paymentDate,
         note: note || undefined,
         password,
+        allowedObligationIds: customMode ? selectedIds : undefined,
       }
     }, {
       onSuccess: (result) => {
@@ -562,12 +597,113 @@ export function RecordPaymentModal({
               </div>
             )}
 
+            {/* V2: Suggested Settlement vs Customize Toggle */}
+            {currentTenant && !targetObligation && (
+              <div className="flex border border-border rounded-xl p-1 bg-secondary/30">
+                <button
+                  type="button"
+                  onClick={() => setCustomMode(false)}
+                  className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                    !customMode ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Suggested Settlement
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCustomMode(true)}
+                  className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                    customMode ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Customize
+                </button>
+              </div>
+            )}
+
+            {/* Custom Mode: List of obligations with checkboxes & warning */}
+            {currentTenant && !targetObligation && customMode && (
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Select Obligations to Settle</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (selectedIds.length === duesData?.items?.length) {
+                        setSelectedIds([]);
+                      } else {
+                        setSelectedIds((duesData?.items || []).map((x: any) => x.obligation_id || x.id));
+                      }
+                    }}
+                    className="text-xs text-accent font-semibold hover:underline"
+                  >
+                    {selectedIds.length === duesData?.items?.length ? 'Deselect All' : 'Select All'}
+                  </button>
+                </div>
+                
+                {duesData?.items && duesData.items.length > 0 ? (
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    {duesData.items.map((ob: any) => {
+                      const isSelected = selectedIds.includes(ob.obligation_id || ob.id);
+                      return (
+                        <div
+                          key={ob.obligation_id || ob.id}
+                          className={`p-3 rounded-xl border transition-colors flex items-start gap-3 cursor-pointer ${
+                            isSelected
+                              ? 'bg-accent/5 border-accent/30'
+                              : 'bg-card border-border hover:bg-secondary/40'
+                          }`}
+                          onClick={() => handleToggleObligation(ob.obligation_id || ob.id)}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {}} // handled by click on parent div
+                            className="mt-0.5 rounded border-gray-300 text-accent focus:ring-accent cursor-pointer"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-foreground capitalize">
+                                {ob.type?.replace('_', ' ') || 'Obligation'}
+                              </span>
+                              <span className="text-xs font-bold text-foreground">
+                                {fmt(ob.outstanding)}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between mt-1 text-[11px] text-muted-foreground">
+                              <span>
+                                {ob.rent_month
+                                  ? new Date(ob.rent_month).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
+                                  : ob.installment_label || 'Billing Period'}
+                              </span>
+                              <span>Due: {new Date(ob.due_date).toLocaleDateString()}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground text-center py-4 bg-secondary/20 rounded-xl">
+                    No outstanding obligations.
+                  </p>
+                )}
+
+                <div className="p-2.5 bg-amber-500/5 rounded-xl border border-amber-500/15 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <p className="text-[10px] text-amber-800 dark:text-amber-400 font-medium leading-relaxed">
+                    Rent dues of the same type must be paid in chronological order. Selecting a newer rent due will automatically select older ones.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* V2: Live Settlement Preview */}
             {previewEnabled && (
               <div className="rounded-xl border border-border bg-card overflow-hidden">
                 <div className="px-4 py-2.5 bg-secondary/50 border-b border-border flex items-center justify-between">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Settlement Preview
+                    {!customMode ? 'Suggested Settlement Plan' : 'Custom Settlement Preview'}
                   </p>
                   {(previewLoading || previewFetching) && (
                     <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
@@ -593,14 +729,14 @@ export function RecordPaymentModal({
                       <div className="flex items-center justify-between px-4 py-2.5 bg-blue-50/50 dark:bg-blue-500/5">
                         <div className="flex items-center gap-2">
                           <Wallet className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                          <span className="text-sm text-blue-800 dark:text-blue-200 font-medium">Future Rent Credit</span>
+                          <span className="text-sm text-blue-800 dark:text-blue-200 font-medium">Future Rent Credit (Read-Only)</span>
                         </div>
                         <span className="text-sm font-bold text-blue-700 dark:text-blue-400">{fmt(previewData.future_credit)}</span>
                       </div>
                     )}
                     {previewData.allocations?.length === 0 && previewData.future_credit > 0 && (
                       <div className="px-4 py-3 text-xs text-blue-700 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-500/5">
-                        No outstanding dues. Full amount will be credited as future rent.
+                        No outstanding dues selected. Full amount will be credited as future rent.
                       </div>
                     )}
                     {previewData.remaining_outstanding > 0 && (
