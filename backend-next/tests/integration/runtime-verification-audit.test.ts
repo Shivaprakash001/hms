@@ -574,7 +574,7 @@ describe("Billing Engine Runtime Verification Suite", () => {
     // Ensure the database auto-settlement is fully applied synchronously for the test
     const { financialPaymentFacade } = await import("@/src/services/payments/financial-payment-facade");
     await prisma.$transaction(async (tx) => {
-      await financialPaymentFacade.applyFutureCredit(tx, {
+      await financialPaymentFacade.applyAvailableCredits(tx, {
         tenantId: tenant.id,
         hostelId: hostel.id,
         ownerId: owner.id,

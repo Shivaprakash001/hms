@@ -26,6 +26,7 @@ describe("OnboardingMaintenanceRepairService", () => {
     financials = {
       initializeOnboardingFinancials: vi.fn(async () => ({
         createdObligations: ["MAINTENANCE"],
+        createdObligationIds: [],
         skipped: false,
       })),
     };

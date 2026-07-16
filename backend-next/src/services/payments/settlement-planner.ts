@@ -31,6 +31,26 @@
 const NON_PAYABLE_STATUSES = new Set(["PAID", "WAIVED", "CANCELLED", "DRAFT"]);
 const NON_REMINDABLE_STATUSES = new Set(["PAID", "WAIVED", "CANCELLED", "DRAFT", "UPCOMING"]);
 
+/**
+ * Shared UTC-midnight due-date comparison. Single source for the date math
+ * duplicated across isRemindable/isLateFeeEligible/isOverdue.
+ *
+ * Uses UTC getters (getUTCFullYear/etc), not local getters, on BOTH sides —
+ * due_date columns are always UTC-midnight-anchored business dates (see
+ * agreement-rent-schedule-service.ts's firstOfUtcMonth/dueDateForMonth), so
+ * "today" must be read the same way to stay consistent. Reading `today` via
+ * local getters on a non-UTC server (e.g. IST, UTC+5:30) shifts the
+ * effective calendar day by up to 5.5 hours relative to `due_date`'s UTC
+ * anchoring, causing an off-by-one-day misclassification for roughly 5.5
+ * hours out of every 24 (matches the timezone-leakage pattern already
+ * fixed once in this codebase for monthly collection metrics).
+ */
+function isPastDueDate(dueDate: Date, today: Date): boolean {
+  const todayMid = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  const dueMid = new Date(Date.UTC(dueDate.getUTCFullYear(), dueDate.getUTCMonth(), dueDate.getUTCDate()));
+  return dueMid.getTime() < todayMid.getTime();
+}
+
 /** Can this obligation accept payment? Status is NEVER a payment gate except for terminal states. */
 export function isPayable(obligation: { status: string }): boolean {
   return !NON_PAYABLE_STATUSES.has(obligation.status);
@@ -39,11 +59,7 @@ export function isPayable(obligation: { status: string }): boolean {
 /** Should this obligation trigger reminders? Only for current/overdue obligations past due date. */
 export function isRemindable(obligation: { status: string; due_date: Date }, today: Date = new Date()): boolean {
   if (NON_REMINDABLE_STATUSES.has(obligation.status)) return false;
-  const todayMid = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
-  const dueMid = new Date(Date.UTC(
-    obligation.due_date.getFullYear(), obligation.due_date.getMonth(), obligation.due_date.getDate()
-  ));
-  return dueMid.getTime() < todayMid.getTime();
+  return isPastDueDate(obligation.due_date, today);
 }
 
 /** Should this obligation incur late fees? Only if remindable AND past grace period. */
@@ -53,12 +69,25 @@ export function isLateFeeEligible(
   graceDays: number = 0
 ): boolean {
   if (!isRemindable(obligation, today)) return false;
-  const todayMid = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+  const todayMid = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
   const dueMid = new Date(Date.UTC(
-    obligation.due_date.getFullYear(), obligation.due_date.getMonth(), obligation.due_date.getDate()
+    obligation.due_date.getUTCFullYear(), obligation.due_date.getUTCMonth(), obligation.due_date.getUTCDate()
   ));
   const daysOverdue = Math.ceil((todayMid.getTime() - dueMid.getTime()) / 86_400_000);
   return daysOverdue > graceDays;
+}
+
+/**
+ * Is money genuinely overdue by calendar date, independent of whether the
+ * status label has been synced yet? Unlike isRemindable, this does NOT
+ * exclude UPCOMING — a stale UPCOMING row whose due_date has already passed
+ * (a transient pre-sync state) still counts as overdue here. Dashboard
+ * aggregates that need to keep an UPCOMING bucket mutually exclusive from an
+ * overdue bucket should additionally guard on `status !== "UPCOMING"`
+ * themselves — see financial-service.ts:getTenantDues().
+ */
+export function isOverdue(obligation: { status: string; due_date: Date }, today: Date = new Date()): boolean {
+  return isPayable(obligation) && isPastDueDate(obligation.due_date, today);
 }
 
 /** All statuses that can accept payment allocation. Used by settlement queries. Must match isPayable(). */

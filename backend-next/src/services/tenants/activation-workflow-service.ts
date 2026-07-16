@@ -19,6 +19,7 @@ import { tenantInvitationLifecycleService } from "./tenant-invitation-lifecycle-
 import { AgreementGenerationService } from "./agreement-generation-service";
 import { currentAgreementWhere, isCurrentAgreementStatus, isSignedAgreementStatus } from "./agreement-status";
 import { agreementRentScheduleService } from "../payments/agreement-rent-schedule-service";
+import { financialLifecycleService } from "../payments/financial-lifecycle-service";
 import { authOtpService } from "../../../lib/services/auth/auth-otp-service";
 import { getActivationFinancialStatus } from "./activation-financial-status-service";
 import {
@@ -864,14 +865,16 @@ export class ActivationWorkflowService {
       return agreement;
     });
 
-    // Post-commit: trigger auto-settlement for obligations created by rent schedule
-    if (tenant.id && tenant.hostel_id) {
-      eventSystem.trigger("obligation_created", {
-        tenant_id: tenant.id,
-        owner_id: tenant.owner_id,
-        hostel_id: tenant.hostel_id,
+    // Post-commit: notify (cache invalidation + SSE). Activation itself
+    // (credit sweep for obligations created by rent schedule) already
+    // happened synchronously inside generateForAgreementInTx above.
+    if (tenant.id && tenant.hostel_id && tenant.owner_id) {
+      financialLifecycleService.notifyActivated({
+        tenantId: tenant.id,
+        ownerId: tenant.owner_id,
+        hostelId: tenant.hostel_id,
         source: "agreement_signing",
-      }).catch(() => {});
+      });
     }
 
     try {

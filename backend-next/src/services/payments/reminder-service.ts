@@ -8,6 +8,7 @@ import { resolvePreferences } from "@/lib/preferences";
 import { batchGetHostelContexts, getTenantOperationalContext } from "@/lib/hostel-context";
 import { formatMonthYear, formatDate } from "@/lib/format";
 import { financialService } from "./financial-service";
+import { financialLifecycleService } from "./financial-lifecycle-service";
 import { selectReminderForOverdueDay } from "@/lib/services/collection-strategy-service";
 import { whatsappReminderDeliveryService } from "@/lib/services/notifications/whatsapp-reminder-delivery";
 import { getLogger } from "@/lib/logger";
@@ -177,36 +178,43 @@ export class ReminderService {
 
                   if (feeAmount > 0) {
                     try {
-                      await prisma.rent_obligations.create({
-                        data: {
-                          tenant_id: ob.tenant_id,
-                          allocation_id: ob.allocation_id,
-                          owner_id: ob.owner_id,
-                          rent_month: ob.rent_month,
-                          amount: feeAmount,
-                          total_amount: feeAmount,
-                          due_date: todayMid,
-                          status: "PENDING",
-                          obligation_type: "LATE_FEE",
-                          hostel_id: hostelId,
-                          billing_period_start: (ob as any).billing_period_start || ob.rent_month,
-                          billing_period_end: (ob as any).billing_period_end || ob.rent_month,
-                          installment_label: (ob as any).installment_label || null,
-                          installment_sequence: (ob as any).installment_sequence || null,
-                          billing_plan_id: (ob as any).billing_plan_id || null,
-                        },
+                      await prisma.$transaction(async (tx: any) => {
+                        const created = await tx.rent_obligations.create({
+                          data: {
+                            tenant_id: ob.tenant_id,
+                            allocation_id: ob.allocation_id,
+                            owner_id: ob.owner_id,
+                            rent_month: ob.rent_month,
+                            amount: feeAmount,
+                            total_amount: feeAmount,
+                            due_date: todayMid,
+                            status: "PENDING",
+                            obligation_type: "LATE_FEE",
+                            hostel_id: hostelId,
+                            billing_period_start: (ob as any).billing_period_start || ob.rent_month,
+                            billing_period_end: (ob as any).billing_period_end || ob.rent_month,
+                            installment_label: (ob as any).installment_label || null,
+                            installment_sequence: (ob as any).installment_sequence || null,
+                            billing_plan_id: (ob as any).billing_plan_id || null,
+                          },
+                        });
+                        await financialLifecycleService.activatePayableObligations(tx, {
+                          tenantId: ob.tenant_id, ownerId: ob.owner_id, hostelId,
+                          obligationIds: [created.id],
+                        });
                       });
                       accumulatedFees += feeAmount;
                       lateFeesAdded++;
                       await this.triggerNotification(reminderTarget, "LATE_FEE_ADDED", config);
                       remindersSent++;
-                      // Trigger auto-settlement of any existing credits
-                      eventSystem.trigger("obligation_created", {
-                        tenant_id: ob.tenant_id,
-                        owner_id: ob.owner_id,
-                        hostel_id: hostelId,
+                      // Post-commit: notify (cache invalidation + SSE).
+                      // Activation itself already happened synchronously above.
+                      financialLifecycleService.notifyActivated({
+                        tenantId: ob.tenant_id,
+                        ownerId: ob.owner_id,
+                        hostelId,
                         source: "late_fee_per_day",
-                      }).catch(() => {});
+                      });
                     } catch (feeErr: any) {
                       if (feeErr?.code === "P2002") {
                         // Idempotent skip — duplicate caught by unique index
@@ -238,36 +246,43 @@ export class ReminderService {
 
                   if (feeAmount > 0) {
                     try {
-                      await prisma.rent_obligations.create({
-                        data: {
-                          tenant_id: ob.tenant_id,
-                          allocation_id: ob.allocation_id,
-                          owner_id: ob.owner_id,
-                          rent_month: ob.rent_month,
-                          amount: feeAmount,
-                          total_amount: feeAmount,
-                          due_date: todayMid,
-                          status: "PENDING",
-                          obligation_type: "LATE_FEE",
-                          hostel_id: hostelId,
-                          billing_period_start: (ob as any).billing_period_start || ob.rent_month,
-                          billing_period_end: (ob as any).billing_period_end || ob.rent_month,
-                          installment_label: (ob as any).installment_label || null,
-                          installment_sequence: (ob as any).installment_sequence || null,
-                          billing_plan_id: (ob as any).billing_plan_id || null,
-                        },
+                      await prisma.$transaction(async (tx: any) => {
+                        const created = await tx.rent_obligations.create({
+                          data: {
+                            tenant_id: ob.tenant_id,
+                            allocation_id: ob.allocation_id,
+                            owner_id: ob.owner_id,
+                            rent_month: ob.rent_month,
+                            amount: feeAmount,
+                            total_amount: feeAmount,
+                            due_date: todayMid,
+                            status: "PENDING",
+                            obligation_type: "LATE_FEE",
+                            hostel_id: hostelId,
+                            billing_period_start: (ob as any).billing_period_start || ob.rent_month,
+                            billing_period_end: (ob as any).billing_period_end || ob.rent_month,
+                            installment_label: (ob as any).installment_label || null,
+                            installment_sequence: (ob as any).installment_sequence || null,
+                            billing_plan_id: (ob as any).billing_plan_id || null,
+                          },
+                        });
+                        await financialLifecycleService.activatePayableObligations(tx, {
+                          tenantId: ob.tenant_id, ownerId: ob.owner_id, hostelId,
+                          obligationIds: [created.id],
+                        });
                       });
                       accumulatedFees += feeAmount;
                       lateFeesAdded++;
                       await this.triggerNotification(reminderTarget, "LATE_FEE_ADDED", config);
                       remindersSent++;
-                      // Trigger auto-settlement of any existing credits
-                      eventSystem.trigger("obligation_created", {
-                        tenant_id: ob.tenant_id,
-                        owner_id: ob.owner_id,
-                        hostel_id: hostelId,
+                      // Post-commit: notify (cache invalidation + SSE).
+                      // Activation itself already happened synchronously above.
+                      financialLifecycleService.notifyActivated({
+                        tenantId: ob.tenant_id,
+                        ownerId: ob.owner_id,
+                        hostelId,
                         source: "late_fee_one_time",
-                      }).catch(() => {});
+                      });
                     } catch (feeErr: any) {
                       if (feeErr?.code === "P2002") {
                         // Idempotent skip — duplicate caught by unique index

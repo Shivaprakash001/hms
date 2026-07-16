@@ -1588,6 +1588,7 @@ enum FinancialLedgerReason {
   LEDGER_CORRECTION
   OBLIGATION_WAIVER
   OBLIGATION_CANCELLATION
+  FUTURE_CREDIT_APPLIED
 }
 
 enum FinancialLedgerType {

@@ -44,7 +44,7 @@ export async function POST(
     if (!tenant.hostel_id) return apiError("Tenant has no hostel context", "VALIDATION_ERROR", 400);
 
     const result = await prisma.$transaction(async (tx: any) => {
-      return financialPaymentFacade.applyFutureCredit(tx, {
+      return financialPaymentFacade.applyAvailableCredits(tx, {
         tenantId: params.id,
         hostelId: tenant.hostel_id!,
         ownerId,

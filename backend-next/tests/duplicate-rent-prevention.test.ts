@@ -10,6 +10,17 @@ vi.mock("@/lib/db", () => ({ prisma: {} }));
 vi.mock("@/lib/preferences", () => ({
   resolvePreferences: vi.fn(() => ({ due_day: 5 })),
 }));
+// This suite exercises generateForAgreementInTx's own duplicate-detection
+// logic against a hand-rolled tx mock — activation/credit-sweep is a
+// separate concern (see obligation-activation.test.ts for integration
+// coverage) and would require mocking the full settlement-engine query
+// chain to exercise for real here, so it's mocked out as a no-op.
+vi.mock("@/src/services/payments/financial-lifecycle-service", () => ({
+  financialLifecycleService: {
+    activatePayableObligations: vi.fn().mockResolvedValue([]),
+    notifyActivated: vi.fn(),
+  },
+}));
 
 import { AgreementRentScheduleService } from "@/src/services/payments/agreement-rent-schedule-service";
 
@@ -62,7 +73,13 @@ function createTx(initialRows: any[] = []) {
   const rows: any[] = [...initialRows];
   return {
     rows,
-    $queryRaw: vi.fn(),
+    // Backs ObligationEngine.markObligationsPayableInTx's
+    // `SELECT id, status FROM rent_obligations WHERE id = ANY(${ids}::uuid[])`
+    // lock query — the tagged-template call passes the interpolated
+    // obligationIds array as the mock's second argument.
+    $queryRaw: vi.fn((_strings: TemplateStringsArray, ids: string[]) =>
+      rows.filter((row) => ids?.includes(row.id)).map((row) => ({ id: row.id, status: row.status }))
+    ),
     agreement: {
       findUnique: vi.fn(async () => agreement),
     },

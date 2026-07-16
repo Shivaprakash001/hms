@@ -373,7 +373,7 @@ export async function executePlanInTx(
         tenantId: input.tenantId,
         ownerId: tenant.owner_id || input.ownerId || "",
         createdBy: input.userId || input.offlineRecordedBy || tenant.owner_id || "SYSTEM",
-        reason: "ADJUSTMENT",
+        reason: "FUTURE_CREDIT_APPLIED",
         amount: appliedAmount,
         referenceId: paymentGroupId,
         referenceType: "PAYMENT_GROUP",

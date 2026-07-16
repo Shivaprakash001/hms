@@ -174,14 +174,20 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   );
 
   const overdueDays = useMemo(() => {
-    const pending = obligations.filter((o: any) => 
-      ['PENDING', 'PARTIAL'].includes(String(o.status).toUpperCase()) && o.due_date
-    );
-    if (pending.length === 0) return 0;
-    const dueDates = pending.map((o: any) => new Date(o.due_date).getTime());
-    const oldestDueDate = Math.min(...dueDates);
-    const diffTime = Date.now() - oldestDueDate;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const todayMid = new Date();
+    todayMid.setUTCHours(0, 0, 0, 0);
+    // Filter to obligations actually past due_date (UTC-day-normalized)
+    // before taking the minimum — a PENDING obligation due in the future
+    // is not overdue and must not be counted here.
+    const overduePending = obligations.filter((o: any) => {
+      if (!['PENDING', 'PARTIAL'].includes(String(o.status).toUpperCase()) || !o.due_date) return false;
+      const due = new Date(o.due_date);
+      due.setUTCHours(0, 0, 0, 0);
+      return due.getTime() < todayMid.getTime();
+    });
+    if (overduePending.length === 0) return 0;
+    const oldestDueDate = Math.min(...overduePending.map((o: any) => new Date(o.due_date).getTime()));
+    const diffDays = Math.floor((todayMid.getTime() - oldestDueDate) / (1000 * 60 * 60 * 24));
     return diffDays > 0 ? diffDays : 0;
   }, [obligations]);
 

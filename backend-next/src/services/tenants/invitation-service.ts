@@ -185,6 +185,27 @@ export class InvitationService {
         maintenanceType: maintenance_type,
       });
 
+      if (created.length > 0) {
+        // createInitialObligations returns obligation TYPE names, not IDs —
+        // re-query the rows it just wrote (same rent_month anchor it uses
+        // internally: first-of-joining-month, UTC) within this same
+        // transaction before activating them.
+        const rentMonth = new Date(Date.UTC(joiningDate.getFullYear(), joiningDate.getMonth(), 1));
+        const createdRows = await tx.rent_obligations.findMany({
+          where: { allocation_id: allocation.id, rent_month: rentMonth },
+          select: { id: true },
+        });
+        if (createdRows.length > 0) {
+          const { financialLifecycleService } = await import("../payments/financial-lifecycle-service");
+          await financialLifecycleService.activatePayableObligations(tx, {
+            tenantId: tenant.id,
+            ownerId,
+            hostelId: room.hostels.id,
+            obligationIds: createdRows.map((r: any) => r.id),
+          });
+        }
+      }
+
         return { profile, tenant, obligations: created, allocationId: allocation.id };
       });
     } catch (err: any) {
@@ -194,14 +215,16 @@ export class InvitationService {
 
     logger.info(`Created profile ${newProfile.id}, tenant ${newTenant.id} [INVITED], obligations: [${obligations.join(", ") || "none"}]`);
 
-    // Post-commit: trigger auto-settlement for initial obligations
+    // Post-commit: notify (cache invalidation + SSE). Activation itself
+    // already happened synchronously inside the transaction above.
     if (obligations.length > 0) {
-      eventSystem.trigger("obligation_created", {
-        tenant_id: newTenant.id,
-        owner_id: ownerId,
-        hostel_id: room.hostels.id,
+      const { financialLifecycleService } = await import("../payments/financial-lifecycle-service");
+      financialLifecycleService.notifyActivated({
+        tenantId: newTenant.id,
+        ownerId,
+        hostelId: room.hostels.id,
         source: "invitation_legacy_onboarding",
-      }).catch(() => {});
+      });
     }
 
     await allocationReconciliationService.reconcileAllocation(allocationId).catch((err: any) => {

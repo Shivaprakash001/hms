@@ -1,11 +1,11 @@
 import { prisma } from "@/lib/db";
-import { eventSystem } from "@/lib/events";
 import { eventLog } from "@/lib/services/event-log-service";
 import { AgreementGenerationService, DEFAULT_RULE_CONTENT } from "./agreement-generation-service";
 import { AGREEMENT_ACTIVITY_EVENTS, isCurrentAgreementStatus } from "./agreement-status";
 import { assertAgreementLifecycleComplete } from "./agreement-lifecycle-completeness";
 import { getActiveTemplateAndSyncRuleVersion, DEFAULT_AGREEMENT_TEMPLATE, DEFAULT_TERMS_AND_CONDITIONS, interpolateRulesContent } from "../../utils/default-rules";
 import { agreementRentScheduleService } from "../payments/agreement-rent-schedule-service";
+import { financialLifecycleService } from "../payments/financial-lifecycle-service";
 
 type AgreementRenewalSigningErrorCode =
   | "RENEWAL_AGREEMENT_NOT_FOUND"
@@ -302,14 +302,16 @@ export class AgreementRenewalSigningService {
       };
     });
 
-    // Post-commit: trigger auto-settlement for newly created rent schedule obligations
-    if (signed.tenantId) {
-      eventSystem.trigger("obligation_created", {
-        tenant_id: signed.tenantId,
-        owner_id: signed.tenantOwnerId,
-        hostel_id: signed.renewalAgreement?.hostel_id,
+    // Post-commit: notify (cache invalidation + SSE). Activation itself
+    // (credit sweep for the newly created rent schedule obligations)
+    // already happened synchronously inside generateForAgreementInTx above.
+    if (signed.tenantId && signed.tenantOwnerId) {
+      financialLifecycleService.notifyActivated({
+        tenantId: signed.tenantId,
+        ownerId: signed.tenantOwnerId,
+        hostelId: signed.renewalAgreement?.hostel_id || "",
         source: "renewal_agreement_signing",
-      }).catch(() => {});
+      });
     }
 
     let pdfUrl: string | null = null;

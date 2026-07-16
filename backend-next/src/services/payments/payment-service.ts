@@ -3376,7 +3376,12 @@ export class PaymentService {
       payment_status: paymentStatus,
       total_due: totalDue,
       total_paid: totalPaid,
-      outstanding_balance: outstandingBalance
+      outstanding_balance: outstandingBalance,
+      // Due-date-gated figure — do NOT confuse with outstanding_balance
+      // (all outstanding, any due date, unchanged above).
+      overdue_balance: dues.overdue_amount,
+      current_payable_amount: dues.current_payable_amount,
+      upcoming_amount: dues.upcoming_amount,
     };
   }
 

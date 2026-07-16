@@ -69,14 +69,14 @@ export interface ReceivePaymentResult {
   plan: SettlementResult["plan"];
 }
 
-export interface ApplyFutureCreditInput {
+export interface ApplyAvailableCreditsInput {
   tenantId: string;
   hostelId: string;
   ownerId?: string;
   actorId?: string;
   /** Constrain to specific obligation(s) — used by the manual "apply credit to
    *  this obligation" admin action. Omit to sweep all outstanding obligations
-   *  (the automatic obligation_created trigger). */
+   *  (the automatic activation sweep — see FinancialLifecycleService). */
   obligationIdFilter?: string[];
   /** Explicit amount to apply (manual case — must not exceed the available
    *  balance, validated below). Omit to auto-apply min(balance, outstanding)
@@ -86,8 +86,8 @@ export interface ApplyFutureCreditInput {
   notes?: string;
 }
 
-export interface ApplyFutureCreditResult extends ReceivePaymentResult {
-  /** Future-rent-credit balance remaining after this application. */
+export interface ApplyAvailableCreditsResult extends ReceivePaymentResult {
+  /** Available-credit balance remaining after this application. */
   remainingCreditBalance: number;
 }
 
@@ -184,9 +184,10 @@ export class FinancialPaymentFacade {
    * (debit the applied amount instead of crediting overflow).
    *
    * Two calling shapes:
-   *   - Automatic sweep (obligation_created event): no amountRupees given —
-   *     applies min(available balance, total outstanding) across ALL
-   *     outstanding obligations, oldest-and-highest-priority first.
+   *   - Automatic sweep (FinancialLifecycleService.activatePayableObligations):
+   *     no amountRupees given — applies min(available balance, total
+   *     outstanding) across ALL outstanding obligations, oldest-and-highest-
+   *     priority first.
    *   - Manual (owner-initiated, one obligation): amountRupees + a single-ID
    *     obligationIdFilter — applies exactly that amount, validated against
    *     both the available balance and that obligation's outstanding amount.
@@ -194,18 +195,18 @@ export class FinancialPaymentFacade {
    * No-ops (returns null) when there is nothing to apply — matches the
    * original auto-sweep's silent no-op on a zero/negative balance.
    */
-  async applyFutureCredit(
+  async applyAvailableCredits(
     tx: any,
-    input: ApplyFutureCreditInput
-  ): Promise<ApplyFutureCreditResult | null> {
+    input: ApplyAvailableCreditsInput
+  ): Promise<ApplyAvailableCreditsResult | null> {
     // Lock the tenant row BEFORE reading the balance — otherwise a concurrent
-    // application against the same tenant (e.g. two obligation_created events
-    // firing close together) can read a stale balance here, build a plan
-    // against it, and only discover the balance changed once it reaches
+    // application against the same tenant (e.g. two activation flows firing
+    // close together) can read a stale balance here, build a plan against
+    // it, and only discover the balance changed once it reaches
     // executePlanInTx's own (later) lock, surfacing as a spurious
     // "insufficient balance" error instead of a clean serialize-and-retry.
     await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${input.tenantId}::uuid FOR UPDATE`;
-    const balance = await tenantFinancialLedgerService.getFutureRentCreditBalanceInTx(tx, input.tenantId);
+    const balance = await this.resolveAvailableCredits(tx, input.tenantId);
 
     if (input.amountRupees !== undefined) {
       if (input.amountRupees > balance) {
@@ -279,6 +280,16 @@ export class FinancialPaymentFacade {
       plan: result.plan,
       remainingCreditBalance: Math.round((balance - effectiveAmount) * 100) / 100,
     };
+  }
+
+  /**
+   * Sole extension point for future credit sources. Today this does exactly
+   * one thing: delegate to the future-rent-credit ledger balance. Not a
+   * plugin/registry/strategy pattern — just a named seam for a second credit
+   * source later, if one is ever needed.
+   */
+  private async resolveAvailableCredits(tx: any, tenantId: string): Promise<number> {
+    return tenantFinancialLedgerService.getFutureRentCreditBalanceInTx(tx, tenantId);
   }
 
   /**

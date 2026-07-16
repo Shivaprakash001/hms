@@ -90,6 +90,15 @@ export function derivePresentationStatus(
 // Used during the dual-write migration (Phase B).
 // Maps new two-column state back to old single `status` column.
 
+/**
+ * Never returns OVERDUE or UPCOMING — those are presentation-only states
+ * (see the module doc-comment above) and must never be persisted to
+ * rent_obligations.status. ACTIVE + UNPAID always collapses to PENDING here,
+ * regardless of due date. Callers that need the presentation-level
+ * OVERDUE/UPCOMING distinction should use derivePresentationStatus / the
+ * settlement-planner predicates (isOverdue/isRemindable) instead of this
+ * function's dueDate parameter.
+ */
 export function toLegacyStatus(
   lifecycle: LifecycleStatus,
   settlement: SettlementStatus,
@@ -100,15 +109,7 @@ export function toLegacyStatus(
   if (settlement === "PAID") return "PAID";
   if (settlement === "PARTIAL") return "PARTIAL";
 
-  // ACTIVE + UNPAID → derive from due_date
-  const now = new Date();
-  const dueDateStart = new Date(dueDate);
-  dueDateStart.setHours(0, 0, 0, 0);
-  const nowStart = new Date(now);
-  nowStart.setHours(0, 0, 0, 0);
-
-  if (nowStart > dueDateStart) return "OVERDUE";
-  if (nowStart < dueDateStart) return "UPCOMING";
+  // ACTIVE + UNPAID → PENDING (never OVERDUE/UPCOMING — see doc-comment above).
   return "PENDING";
 }
 

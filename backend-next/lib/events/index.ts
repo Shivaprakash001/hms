@@ -338,47 +338,14 @@ eventSystem.on("renewal_offer_discussion_requested", async (data) => {
   }
 });
 
-/**
- * obligation_created — Auto-settle future rent credits against newly created obligations.
- *
- * Triggered post-commit by all obligation creation paths. Runs inside its own
- * transaction; FinancialPaymentFacade.applyFutureCredit locks the tenant row
- * (via the Settlement Engine) to serialize concurrent settlements.
- * Fire-and-forget: failures are logged but never propagate back to the
- * creation flow.
- *
- * Payload: { tenant_id, owner_id, hostel_id, source: string }
- */
-eventSystem.on("obligation_created", async (data) => {
-  const { tenant_id, owner_id, hostel_id, source } = data;
-  if (!tenant_id || !owner_id || !hostel_id) {
-    console.warn("[Event] obligation_created: missing tenant_id, owner_id, or hostel_id, skipping auto-settlement", data);
-    return;
-  }
-  try {
-    const { prisma } = await import("../db");
-    const { financialPaymentFacade } = await import(
-      "../../src/services/payments/financial-payment-facade"
-    );
-    await prisma.$transaction(async (tx: any) => {
-      await financialPaymentFacade.applyFutureCredit(tx, {
-        tenantId: tenant_id,
-        hostelId: hostel_id,
-        ownerId: owner_id,
-        actorId: owner_id,
-      });
-    });
-    console.log(`[Event] obligation_created: auto-settlement complete for tenant ${tenant_id} (source: ${source})`);
-  } catch (error: any) {
-    // Fire-and-forget: log but never break the creation flow
-    console.error("[Event] obligation_created auto-settlement failed:", {
-      tenant_id,
-      owner_id,
-      source,
-      error: error?.message || String(error),
-    });
-  }
-});
+// obligation_created is now notification-only (cache invalidation + SSE
+// broadcast, handled unconditionally by HMSEventEmitter.trigger() above,
+// independent of any listener being registered for this event name).
+// The credit-sweep business logic that used to live here has been retired:
+// every obligation-activation path now calls
+// FinancialLifecycleService.activatePayableObligations synchronously, in
+// the same transaction as the obligation's status transition, instead of
+// depending on this fire-and-forget listener. See financial-lifecycle-service.ts.
 
 // --- Change Management Domain Events Integration ---
 domainEventsBus.subscribe("ChangeRequestApplied", async (event) => {

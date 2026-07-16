@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { billingRepository } from "@/src/repositories/billingRepository";
 import { resolvePreferences } from "@/lib/preferences";
+import { isOverdue } from "./settlement-planner";
 
 /**
  * FinancialService — Canonical dues calculation layer
@@ -257,7 +258,18 @@ export class FinancialService {
   async getTenantDues(tenantId: string, ownerId: string | undefined, hostelId: string): Promise<{
     tenant_id: string;
     items: TenantDueItem[];
+    /** Everything unpaid, any due date — includes UPCOMING obligations. Kept
+     *  as-is (not renamed) since receipt-service.ts depends on this meaning
+     *  "all outstanding" for outstanding_balance_after on printed receipts. */
     total_due: number;
+    /** Obligations already activated (status PENDING/PARTIAL, or legacy
+     *  OVERDUE) — everything except UPCOMING — regardless of due date.
+     *  current_payable_amount + upcoming_amount === total_due. */
+    current_payable_amount: number;
+    /** Subset of current_payable_amount that is also past due_date. */
+    overdue_amount: number;
+    /** Obligations still UPCOMING (not yet activated). */
+    upcoming_amount: number;
     rent_due: number;
     security_deposit_due: number;
     maintenance_due: number;
@@ -307,11 +319,24 @@ export class FinancialService {
     }).filter((i) => i.outstanding > 0);
 
     const totalDue = items.reduce((s, i) => s + i.outstanding, 0);
+    const today = new Date();
+    const currentPayableAmount = items
+      .filter((i) => i.status !== "UPCOMING")
+      .reduce((s, i) => s + i.outstanding, 0);
+    const upcomingAmount = items
+      .filter((i) => i.status === "UPCOMING")
+      .reduce((s, i) => s + i.outstanding, 0);
+    const overdueAmount = items
+      .filter((i) => i.status !== "UPCOMING" && isOverdue({ status: i.status, due_date: i.due_date }, today))
+      .reduce((s, i) => s + i.outstanding, 0);
 
     return {
       tenant_id:        tenantId,
       items,
       total_due:        totalDue,
+      current_payable_amount: currentPayableAmount,
+      overdue_amount:   overdueAmount,
+      upcoming_amount:  upcomingAmount,
       rent_due:         rentDue,
       security_deposit_due: securityDepositDue,
       maintenance_due:  maintenanceDue,
@@ -508,11 +533,18 @@ export class FinancialService {
       },
     });
 
+    // Same definition as getTenantDues().current_payable_amount: every
+    // already-activated obligation (PENDING/PARTIAL, or legacy OVERDUE),
+    // regardless of due date. Note the fetch above uses `status: { not:
+    // "WAIVED" }` (broader than PAYABLE_STATUSES), so this must stay an
+    // explicit whitelist rather than "!== UPCOMING" — otherwise DRAFT/
+    // CANCELLED/PAID rows with a stray positive total_amount would be
+    // miscounted.
     let payable_now = 0;
     for (const ob of obligations) {
       const obPaid = ob.payments.reduce((sum, p) => sum + Number(p.amount_paid), 0);
       const obOutstanding = Math.max(0, Number(ob.total_amount || ob.amount || 0) - obPaid);
-      if (ob.status === "PENDING" || ob.status === "PARTIAL") {
+      if (ob.status === "PENDING" || ob.status === "PARTIAL" || ob.status === "OVERDUE") {
         payable_now += obOutstanding;
       }
     }

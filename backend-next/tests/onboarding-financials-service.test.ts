@@ -52,7 +52,7 @@ describe("OnboardingFinancialsService", () => {
       maintenanceType: "MONTHLY",
     });
 
-    expect(result).toEqual({ createdObligations: ["MAINTENANCE"], skipped: false });
+    expect(result).toEqual({ createdObligations: ["MAINTENANCE"], createdObligationIds: ["obligation-1"], skipped: false });
     expect(prisma.rent_obligations.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         tenant_id: "tenant-1",
@@ -81,6 +81,7 @@ describe("OnboardingFinancialsService", () => {
 
     expect(result).toEqual({
       createdObligations: [],
+      createdObligationIds: [],
       skipped: true,
       reason: "NO_FINANCIALS_REQUIRED",
     });
@@ -101,6 +102,7 @@ describe("OnboardingFinancialsService", () => {
 
     expect(result).toEqual({
       createdObligations: [],
+      createdObligationIds: [],
       skipped: true,
       reason: "OBLIGATIONS_EXIST",
     });
@@ -125,7 +127,7 @@ describe("OnboardingFinancialsService", () => {
       maintenanceType: "NONE",
     });
 
-    expect(result).toEqual({ createdObligations: ["SECURITY_DEPOSIT"], skipped: false });
+    expect(result).toEqual({ createdObligations: ["SECURITY_DEPOSIT"], createdObligationIds: ["obligation-1"], skipped: false });
     expect(prisma.rent_obligations.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         tenant_id: "tenant-1",
@@ -161,6 +163,7 @@ describe("OnboardingFinancialsService", () => {
 
     expect(result).toEqual({
       createdObligations: [],
+      createdObligationIds: [],
       skipped: true,
       reason: "TENANT_NOT_INVITED",
     });

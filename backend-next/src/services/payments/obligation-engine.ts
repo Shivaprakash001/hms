@@ -158,7 +158,10 @@ export class ObligationEngine {
    *   - Derives creation history via FinancialTimelineService (no obligation_events table)
    *   - Supports description and notes fields
    *   - Tracks the creator (created_by)
-   *   - Emits an obligation_created event for auto-settlement
+   *
+   * Does NOT activate the obligation or sweep credit itself — callers must
+   * follow up with FinancialLifecycleService.activatePayableObligations when
+   * the created obligation's status is immediately payable (not DRAFT).
    *
    * Must be called INSIDE a transaction.
    */
@@ -501,6 +504,67 @@ export class ObligationEngine {
         throw err;
       }
     }
+
+    return results;
+  }
+
+  /**
+   * Transition candidate obligations from UPCOMING → PENDING when their
+   * billing month has started. Domain-only: does NOT know about credit,
+   * ledgers, or settlement — see FinancialLifecycleService for the
+   * orchestration that pairs this with a credit sweep.
+   *
+   * Idempotent: obligations not currently UPCOMING are returned as no-ops
+   * with their current status, so this is safe to call redundantly (e.g. if
+   * a caller passes an obligation ID that was already activated in a prior
+   * run).
+   *
+   * Must be called INSIDE a transaction.
+   */
+  async markObligationsPayableInTx(
+    tx: any,
+    params: { obligationIds: string[] }
+  ): Promise<{ id: string; previousStatus: string; newStatus: string }[]> {
+    const { obligationIds } = params;
+    if (obligationIds.length === 0) return [];
+
+    // Lock candidate rows — same FOR UPDATE pattern as cancelObligationInTx /
+    // waiveObligationInTx, extended to a batch via ANY($1::uuid[]).
+    const rows: { id: string; status: string }[] = await tx.$queryRaw`
+      SELECT id, status FROM rent_obligations WHERE id = ANY(${obligationIds}::uuid[]) FOR UPDATE
+    `;
+
+    const results: { id: string; previousStatus: string; newStatus: string }[] = [];
+    const toActivate: string[] = [];
+
+    for (const row of rows) {
+      if (row.status === "UPCOMING") {
+        toActivate.push(row.id);
+      } else {
+        // Idempotency guard: not UPCOMING — no-op, report current status.
+        results.push({ id: row.id, previousStatus: row.status, newStatus: row.status });
+      }
+    }
+
+    if (toActivate.length > 0) {
+      const now = new Date();
+      await tx.rent_obligations.updateMany({
+        where: { id: { in: toActivate } },
+        // Literal "PENDING" — never toLegacyStatus() here; this method has
+        // no opinion about lifecycle/settlement dual-write columns beyond
+        // the legacy status column (they're already ACTIVE/UNPAID for an
+        // UPCOMING row and don't change here).
+        data: { status: "PENDING", updated_at: now },
+      });
+      for (const id of toActivate) {
+        results.push({ id, previousStatus: "UPCOMING", newStatus: "PENDING" });
+      }
+    }
+
+    logger.info("obligation.marked_payable", {
+      obligation_ids: obligationIds,
+      activated_count: toActivate.length,
+    });
 
     return results;
   }

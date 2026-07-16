@@ -35,6 +35,9 @@ const normalizeDues = (value) => {
         obligations: asArray(payload.obligations),
         payments: asArray(payload.payments),
         outstanding_balance: Number(payload.outstanding_balance || 0),
+        // Due-date-gated figure — distinct from outstanding_balance (all
+        // outstanding, any due date, including not-yet-due UPCOMING months).
+        overdue_balance: Number(payload.overdue_balance || 0),
     };
 };
 
@@ -108,10 +111,22 @@ const TenantDashboard = () => {
         return formatDate(past, preferences);
     };
 
-    // Calculate pending dues from obligations
+    // Overdue-only figure (due_date already passed) — NOT the full
+    // outstanding balance, which would also include not-yet-due future
+    // months. Falls back to a client-side due_date filter (matching the
+    // backend's isOverdue semantics) if the backend field is unavailable.
     const dueObligations = asArray(dues.obligations);
-    const pendingDues = dues.outstanding_balance || dueObligations
-        .filter(o => ['pending', 'partial', 'overdue'].includes(String(o.status || '').toLowerCase()))
+    const pendingDues = dues.overdue_balance || dueObligations
+        .filter(o => {
+            const status = String(o.status || '').toLowerCase();
+            if (!['pending', 'partial', 'overdue'].includes(status)) return false;
+            if (!o.due_date) return false;
+            const dueDate = new Date(o.due_date);
+            dueDate.setHours(0, 0, 0, 0);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            return dueDate < today;
+        })
         .reduce((sum, o) => sum + Number(o.remaining_due ?? o.outstanding ?? o.amount ?? 0), 0);
 
     // Prefer the backend next due date so this card follows auto rent generation settings.

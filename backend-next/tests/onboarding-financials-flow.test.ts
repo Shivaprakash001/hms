@@ -56,6 +56,7 @@ vi.mock("@/src/services/payments/onboarding-financials-service", () => ({
   onboardingFinancialsService: {
     initializeOnboardingFinancials: vi.fn(async () => ({
       createdObligations: ["MAINTENANCE"],
+      createdObligationIds: [],
       skipped: false,
     })),
   },

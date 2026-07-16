@@ -3,10 +3,10 @@ export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
 import { getSession, apiResponse, apiError } from "@/lib/auth";
-import { eventSystem } from "@/lib/events";
 import { prisma } from "@/lib/db";
 import { requireHostelBelongsToOwner } from "@/lib/security/scoped-query";
 import { obligationEngine, OBLIGATION_TYPES } from "@/src/services/payments/obligation-engine";
+import { financialLifecycleService } from "@/src/services/payments/financial-lifecycle-service";
 
 /**
  * POST /api/payments/obligations
@@ -98,9 +98,10 @@ export async function POST(req: NextRequest) {
       return apiError("Active room hostel does not match tenant hostel", "HOSTEL_CONTEXT_MISMATCH", 409);
     }
 
-    // Create the obligation via the engine (with event recording)
+    // Create the obligation via the engine, then activate it (synchronous
+    // credit sweep) inside the same transaction when immediately payable.
     const obligation = await prisma.$transaction(async (tx: any) => {
-      return obligationEngine.createObligationInTx(tx, {
+      const created = await obligationEngine.createObligationInTx(tx, {
         tenantId: tenant_id,
         ownerId,
         hostelId: tenant.hostel_id!,
@@ -113,15 +114,25 @@ export async function POST(req: NextRequest) {
         notes: notes || null,
         createdBy: session.sub,
       });
+      if (created.status !== "DRAFT") {
+        await financialLifecycleService.activatePayableObligations(tx, {
+          tenantId: tenant_id,
+          ownerId,
+          hostelId: tenant.hostel_id!,
+          obligationIds: [created.id],
+        });
+      }
+      return created;
     });
 
-    // Post-creation: trigger auto-settlement of any existing credits
-    eventSystem.trigger("obligation_created", {
-      tenant_id,
-      owner_id: ownerId,
-      hostel_id: tenant.hostel_id,
+    // Post-commit: notify (cache invalidation + SSE). Activation itself
+    // already happened synchronously inside the transaction above.
+    financialLifecycleService.notifyActivated({
+      tenantId: tenant_id,
+      ownerId,
+      hostelId: tenant.hostel_id!,
       source: "manual_obligation_api",
-    }).catch(() => {}); // fire-and-forget
+    });
 
     return apiResponse(obligation, 201);
   } catch (error: any) {

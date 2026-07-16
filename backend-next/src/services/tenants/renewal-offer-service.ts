@@ -472,6 +472,14 @@ export class RenewalOfferService {
           },
         });
         depositObligationId = obligation.id;
+
+        const { financialLifecycleService } = await import("../payments/financial-lifecycle-service");
+        await financialLifecycleService.activatePayableObligations(tx, {
+          tenantId: offer.tenant_id,
+          ownerId: offer.owner_id,
+          hostelId: offer.hostel_id,
+          obligationIds: [obligation.id],
+        });
       }
 
       // Excess deposit handling
@@ -544,15 +552,16 @@ export class RenewalOfferService {
       return { offer: { ...offer, status: "ACCEPTED" as const }, newAgreement, additionalDepositRequired: additionalDeposit, depositObligationId };
     });
 
-    // Post-commit: trigger auto-settlement if a deposit obligation was created
+    // Post-commit: notify (cache invalidation + SSE). Activation itself
+    // already happened synchronously inside the transaction above.
     if (result.depositObligationId) {
-      const { eventSystem } = await import("@/lib/events");
-      eventSystem.trigger("obligation_created", {
-        tenant_id: offer.tenant_id,
-        owner_id: offer.owner_id,
-        hostel_id: offer.hostel_id,
+      const { financialLifecycleService } = await import("../payments/financial-lifecycle-service");
+      financialLifecycleService.notifyActivated({
+        tenantId: offer.tenant_id,
+        ownerId: offer.owner_id,
+        hostelId: offer.hostel_id,
         source: "renewal_offer_accepted",
-      }).catch(() => {});
+      });
     }
 
     return result;

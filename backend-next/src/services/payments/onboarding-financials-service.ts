@@ -5,6 +5,7 @@ const logger = getLogger("onboarding-financials");
 
 export type OnboardingFinancialInitResult = {
   createdObligations: string[];
+  createdObligationIds: string[];
   skipped: boolean;
   reason?: string;
 };
@@ -55,7 +56,7 @@ export class OnboardingFinancialsService {
       throw new Error("FORBIDDEN: Tenant does not match onboarding financial scope");
     }
     if (tenant.status !== "INVITED") {
-      return { createdObligations: [], skipped: true, reason: "TENANT_NOT_INVITED" };
+      return { createdObligations: [], createdObligationIds: [], skipped: true, reason: "TENANT_NOT_INVITED" };
     }
 
     const advanceDeposit = money(tenant.security_deposit);
@@ -68,13 +69,14 @@ export class OnboardingFinancialsService {
     const shouldCreateRent = rentAmount > 0 && joiningDate <= today;
 
     if (!hasMaintenance && !hasAdvance && !shouldCreateRent) {
-      return { createdObligations: [], skipped: true, reason: "NO_FINANCIALS_REQUIRED" };
+      return { createdObligations: [], createdObligationIds: [], skipped: true, reason: "NO_FINANCIALS_REQUIRED" };
     }
 
     await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId}::uuid FOR UPDATE`;
 
     const rentMonth = rentMonthFor(joiningDate);
     const createdObligations: string[] = [];
+    const createdObligationIds: string[] = [];
 
     // Check & Create Maintenance Obligation
     if (hasMaintenance) {
@@ -88,7 +90,7 @@ export class OnboardingFinancialsService {
         select: { id: true },
       });
       if (!existingMaintenance) {
-        await tx.rent_obligations.create({
+        const createdRow = await tx.rent_obligations.create({
           data: {
             tenant_id: tenantId,
             allocation_id: null,
@@ -106,6 +108,7 @@ export class OnboardingFinancialsService {
           },
         });
         createdObligations.push("MAINTENANCE");
+        createdObligationIds.push(createdRow.id);
         logger.info("onboarding.maintenance_obligation_created", {
           tenant_id: tenantId,
           hostel_id: hostelId,
@@ -126,7 +129,7 @@ export class OnboardingFinancialsService {
         select: { id: true },
       });
       if (!existingAdvance) {
-        await tx.rent_obligations.create({
+        const createdRow = await tx.rent_obligations.create({
           data: {
             tenant_id: tenantId,
             allocation_id: null,
@@ -144,6 +147,7 @@ export class OnboardingFinancialsService {
           },
         });
         createdObligations.push("SECURITY_DEPOSIT");
+        createdObligationIds.push(createdRow.id);
         logger.info("onboarding.security_deposit_obligation_created", {
           tenant_id: tenantId,
           hostel_id: hostelId,
@@ -167,7 +171,7 @@ export class OnboardingFinancialsService {
         select: { id: true },
       });
       if (!existingRent) {
-        await tx.rent_obligations.create({
+        const createdRow = await tx.rent_obligations.create({
           data: {
             tenant_id: tenantId,
             allocation_id: null,
@@ -185,6 +189,7 @@ export class OnboardingFinancialsService {
           },
         });
         createdObligations.push("RENT");
+        createdObligationIds.push(createdRow.id);
         logger.info("onboarding.current_month_rent_created", {
           tenant_id: tenantId,
           hostel_id: hostelId,
@@ -197,6 +202,7 @@ export class OnboardingFinancialsService {
     const skipped = createdObligations.length === 0;
     return {
       createdObligations,
+      createdObligationIds,
       skipped,
       ...(skipped ? { reason: "OBLIGATIONS_EXIST" } : {}),
     };

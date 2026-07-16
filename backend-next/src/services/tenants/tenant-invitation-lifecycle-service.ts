@@ -371,18 +371,29 @@ export class TenantInvitationLifecycleService {
         maintenanceType,
       });
 
+      if (financials.createdObligationIds.length > 0) {
+        const { financialLifecycleService } = await import("../payments/financial-lifecycle-service");
+        await financialLifecycleService.activatePayableObligations(tx, {
+          tenantId: tenant.id,
+          ownerId,
+          hostelId: capacity.room.hostel_id,
+          obligationIds: financials.createdObligationIds,
+        });
+      }
+
       return { tenant, invitation, reservation, room: capacity.room, financials };
     }, { timeout: 30000 });
 
-    // Post-commit: trigger auto-settlement for newly created onboarding obligations
+    // Post-commit: notify (cache invalidation + SSE). Activation itself
+    // already happened synchronously inside the transaction above.
     if (created.financials?.createdObligations?.length > 0) {
-      const { eventSystem } = await import("../../../lib/events");
-      eventSystem.trigger("obligation_created", {
-        tenant_id: created.tenant.id,
-        owner_id: ownerId,
-        hostel_id: created.room.hostel_id,
+      const { financialLifecycleService } = await import("../payments/financial-lifecycle-service");
+      financialLifecycleService.notifyActivated({
+        tenantId: created.tenant.id,
+        ownerId,
+        hostelId: created.room.hostel_id,
         source: "invitation_onboarding",
-      }).catch(() => {});
+      });
     }
 
     const activationLink = frontendUrl(`/activate/${created.invitation.token}`);
@@ -644,7 +655,7 @@ export class TenantInvitationLifecycleService {
         },
       });
 
-      await onboardingFinancialsService.initializeOnboardingFinancials(tx, {
+      const financials = await onboardingFinancialsService.initializeOnboardingFinancials(tx, {
         tenantId: invitation.tenant_id,
         ownerId: invitation.owner_id,
         hostelId: targetHostelId,
@@ -652,6 +663,16 @@ export class TenantInvitationLifecycleService {
         maintenanceCharge: updatedTenant.maintenance_charge || 0,
         maintenanceType: updatedTenant.maintenance_type || "NONE",
       });
+
+      if (financials.createdObligationIds.length > 0) {
+        const { financialLifecycleService } = await import("../payments/financial-lifecycle-service");
+        await financialLifecycleService.activatePayableObligations(tx, {
+          tenantId: invitation.tenant_id,
+          ownerId: invitation.owner_id,
+          hostelId: targetHostelId,
+          obligationIds: financials.createdObligationIds,
+        });
+      }
 
       // 7. Update parent invitation to SUPERSEDED and record change log in notes
       await tx.tenant_invitations.update({
@@ -718,15 +739,16 @@ export class TenantInvitationLifecycleService {
       };
     }, { timeout: 30000 });
 
-    // Post-commit: trigger auto-settlement for regenerated onboarding obligations
+    // Post-commit: notify (cache invalidation + SSE). Activation itself
+    // already happened synchronously inside the transaction above.
     {
-      const { eventSystem } = await import("../../../lib/events");
-      eventSystem.trigger("obligation_created", {
-        tenant_id: invitation.tenant_id,
-        owner_id: invitation.owner_id,
-        hostel_id: updated.targetRoom?.hostel_id || invitation.hostel_id,
+      const { financialLifecycleService } = await import("../payments/financial-lifecycle-service");
+      financialLifecycleService.notifyActivated({
+        tenantId: invitation.tenant_id,
+        ownerId: invitation.owner_id,
+        hostelId: updated.targetRoom?.hostel_id || invitation.hostel_id,
         source: "invitation_resend_onboarding",
-      }).catch(() => {});
+      });
     }
 
     const owner = await prisma.profile.findUnique({ where: { id: invitation.owner_id }, select: { name: true } });

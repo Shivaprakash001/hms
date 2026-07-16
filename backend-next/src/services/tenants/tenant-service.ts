@@ -918,11 +918,11 @@ export class TenantService {
     const totalPaid = Number(paymentAgg._sum.amount_paid || 0);
     const totalDue = dues.total_due;
     const outstanding = dues.total_due;
-    const overdueAmount = (dues.items || []).reduce((sum: number, item: any) => {
-      const dueDate = item.due_date ? new Date(item.due_date) : null;
-      if (!dueDate || dueDate.getTime() >= Date.now()) return sum;
-      return sum + Number(item.outstanding || 0);
-    }, 0);
+    // UTC-midnight-normalized (via settlement-planner.ts's isOverdue), not
+    // the previous inline Date.now() comparison — fixes a day-boundary
+    // inconsistency vs. the rest of the overdue-computation call sites.
+    const overdueAmount = dues.overdue_amount;
+    const currentPayableAmount = dues.current_payable_amount;
     const advanceBalance = advanceEntries.reduce((acc: number, entry: any) => {
       const amount = Number(entry.amount || 0);
       return entry.type === "CREDIT" ? acc + amount : acc - amount;
@@ -1021,6 +1021,7 @@ export class TenantService {
       total_due: totalDue,
       outstanding: outstanding,
       overdue_amount: overdueAmount,
+      current_payable_amount: currentPayableAmount,
       advance_balance: advanceBalance,
       recent_payments: recentPayments,
       recent_activity: recentActivity,
@@ -1039,6 +1040,7 @@ export class TenantService {
         pending_amount: outstanding,
         outstanding,
         overdue_amount: overdueAmount,
+        current_payable_amount: currentPayableAmount,
         payment_status: outstanding <= 0 ? "PAID" : totalPaid > 0 ? "PARTIAL" : "PENDING",
       },
       financial_summary: {
@@ -1046,6 +1048,7 @@ export class TenantService {
         pending_amount: outstanding,
         outstanding,
         overdue_amount: overdueAmount,
+        current_payable_amount: currentPayableAmount,
         deposit_balance: advanceBalance,
       },
       profile: legacyTenant.profile

@@ -22,7 +22,7 @@ describe("Financial Engine Stabilization — targeted regression coverage", () =
     return { owner, hostel, tenant };
   }
 
-  describe("FinancialPaymentFacade.applyFutureCredit", () => {
+  describe("FinancialPaymentFacade.applyAvailableCredits", () => {
     it("respects SETTLEMENT_PRIORITY tiering — a later-due SECURITY_DEPOSIT is credited before an earlier-due RENT obligation", async () => {
       const { owner, hostel, tenant } = await createFixture();
 
@@ -60,7 +60,7 @@ describe("Financial Engine Stabilization — targeted regression coverage", () =
       });
 
       const result = await prisma.$transaction(async (tx: any) => {
-        return financialPaymentFacade.applyFutureCredit(tx, {
+        return financialPaymentFacade.applyAvailableCredits(tx, {
           tenantId: tenant.id,
           hostelId: hostel.id,
           ownerId: owner.id,
@@ -103,7 +103,7 @@ describe("Financial Engine Stabilization — targeted regression coverage", () =
       });
 
       const result = await prisma.$transaction(async (tx: any) => {
-        return financialPaymentFacade.applyFutureCredit(tx, {
+        return financialPaymentFacade.applyAvailableCredits(tx, {
           tenantId: tenant.id,
           hostelId: hostel.id,
           ownerId: owner.id,
@@ -144,7 +144,7 @@ describe("Financial Engine Stabilization — targeted regression coverage", () =
       });
 
       await prisma.$transaction(async (tx: any) => {
-        return financialPaymentFacade.applyFutureCredit(tx, {
+        return financialPaymentFacade.applyAvailableCredits(tx, {
           tenantId: tenant.id,
           hostelId: hostel.id,
           ownerId: owner.id,
@@ -158,7 +158,7 @@ describe("Financial Engine Stabilization — targeted regression coverage", () =
       expect(row.settlement_status).toBe("PARTIAL");
 
       const ledgerEntry = await prisma.tenant_financial_ledger.findFirst({
-        where: { tenant_id: tenant.id, type: "DEBIT", reason: "FUTURE_RENT_CREDIT_ADJUSTMENT" },
+        where: { tenant_id: tenant.id, type: "DEBIT", reason: "FUTURE_CREDIT_APPLIED" },
       });
       expect(ledgerEntry).not.toBeNull();
       expect(Number(ledgerEntry!.amount)).toBe(3000);

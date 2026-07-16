@@ -315,7 +315,7 @@ export class TenantFinancialLedgerService {
       tenantId: string;
       ownerId: string;
       createdBy: string;
-      reason: "DEDUCTION" | "REFUND" | "CORRECTION" | "ADJUSTMENT" | "SECURITY_DEPOSIT_DEDUCTION" | "SECURITY_DEPOSIT_REFUNDED" | "LEDGER_CORRECTION" | "OBLIGATION_WAIVER" | "OBLIGATION_CANCELLATION";
+      reason: "DEDUCTION" | "REFUND" | "CORRECTION" | "ADJUSTMENT" | "FUTURE_CREDIT_APPLIED" | "SECURITY_DEPOSIT_DEDUCTION" | "SECURITY_DEPOSIT_REFUNDED" | "LEDGER_CORRECTION" | "OBLIGATION_WAIVER" | "OBLIGATION_CANCELLATION";
       amount: number;
       notes?: string;
       referenceId?: string;
@@ -390,7 +390,7 @@ export class TenantFinancialLedgerService {
 
   // adjustAgainstObligation / adjustAgainstObligationInTx and
   // autoApplyFutureRentCreditToDuesInTx / autoApplyAdvanceToDuesInTx retired —
-  // superseded by FinancialPaymentFacade.applyFutureCredit, which runs the
+  // superseded by FinancialPaymentFacade.applyAvailableCredits, which runs the
   // same Planner → Plan → Engine flow as every other settlement path
   // (SETTLEMENT_PRIORITY tiering, OVERDUE inclusion, lifecycle/settlement
   // dual-write) instead of this file's own independent allocation loop.
@@ -458,7 +458,7 @@ export class TenantFinancialLedgerService {
   /**
    * Public wrapper exposing the future-rent-credit balance computed by
    * _computeFinancialLedgerAvailabilityInTx, for callers (e.g.
-   * FinancialPaymentFacade.applyFutureCredit) that only need the balance,
+   * FinancialPaymentFacade.applyAvailableCredits) that only need the balance,
    * not the full private availability breakdown.
    */
   async getFutureRentCreditBalanceInTx(tx: Prisma.TransactionClient, tenantId: string): Promise<number> {
@@ -538,6 +538,8 @@ function mapLegacyReason(reason: string): any {
       return "FUTURE_RENT_CREDIT_TOPUP";
     case "ADJUSTMENT":
       return "FUTURE_RENT_CREDIT_ADJUSTMENT";
+    case "FUTURE_CREDIT_APPLIED":
+      return "FUTURE_CREDIT_APPLIED";
     case "DEDUCTION":
       return "SECURITY_DEPOSIT_DEDUCTION";
     case "REFUND":

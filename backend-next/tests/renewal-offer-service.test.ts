@@ -8,6 +8,18 @@ vi.mock("@/lib/services/notifications/whatsapp-renewal-handler", () => ({
   sendRenewalOfferDiscussionNotification: vi.fn().mockResolvedValue(undefined),
 }));
 
+// This suite exercises renewal-offer-service.ts's own DB writes (obligation
+// creation, ledger entries, decision logging) via a hand-rolled tx mock that
+// doesn't model the full settlement-engine query chain. Activation/credit
+// sweeping is a separate concern (see obligation-activation.test.ts for
+// integration coverage of that) — mocked out here as a no-op.
+vi.mock("@/src/services/payments/financial-lifecycle-service", () => ({
+  financialLifecycleService: {
+    activatePayableObligations: vi.fn().mockResolvedValue([]),
+    notifyActivated: vi.fn(),
+  },
+}));
+
 
 const mockAgreement = {
   id: "agreement-1",

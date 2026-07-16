@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
-import { eventSystem } from "@/lib/events";
 import { resolvePreferences } from "@/lib/preferences";
+import { financialLifecycleService } from "./financial-lifecycle-service";
 
 type Tx = typeof prisma | any;
 
@@ -59,14 +59,15 @@ function shouldUpdateStatus(existingStatus: string | null | undefined) {
 export class AgreementRentScheduleService {
   async generateForAgreement(agreementId: string, options: { now?: Date } = {}) {
     const result = await prisma.$transaction((tx: any) => this.generateForAgreementInTx(tx, agreementId, options));
-    // Post-commit: trigger auto-settlement if new obligations were created
+    // Post-commit: notify (cache invalidation + SSE) if new obligations were created.
+    // Activation itself already happened synchronously inside generateForAgreementInTx.
     if (result.created > 0 && result.tenant_id && result.owner_id) {
-      eventSystem.trigger("obligation_created", {
-        tenant_id: result.tenant_id,
-        owner_id: result.owner_id,
-        hostel_id: result.hostel_id,
+      financialLifecycleService.notifyActivated({
+        tenantId: result.tenant_id,
+        ownerId: result.owner_id,
+        hostelId: result.hostel_id || "",
         source: "agreement_rent_schedule",
-      }).catch(() => {});
+      });
     }
     return result;
   }
@@ -133,6 +134,7 @@ export class AgreementRentScheduleService {
     let updated = 0;
     let skipped = 0;
     const months: AgreementRentScheduleResult["months"] = [];
+    const payableIds: string[] = [];
 
     for (let i = 0; i < durationMonths; i++) {
       const rentMonth = addUtcMonths(startMonth, i);
@@ -174,8 +176,11 @@ export class AgreementRentScheduleService {
           patch.amount = rentAmount;
           patch.total_amount = rentAmount;
         }
+        const writtenStatus = shouldUpdateStatus(existing.status)
+          ? (status === "OVERDUE" ? "PENDING" : status)
+          : existing.status;
         if (shouldUpdateStatus(existing.status)) {
-          patch.status = status === "OVERDUE" ? "PENDING" : status;
+          patch.status = writtenStatus;
         }
         if (allocation?.id && !existing.allocation_id) {
           patch.allocation_id = allocation.id;
@@ -183,11 +188,13 @@ export class AgreementRentScheduleService {
 
         await tx.rent_obligations.update({ where: { id: existing.id }, data: patch });
         updated++;
+        if (writtenStatus === "PENDING") payableIds.push(existing.id);
         continue;
       }
 
       try {
-        await tx.rent_obligations.create({
+        const writtenStatus = status === "OVERDUE" ? "PENDING" : status;
+        const createdRow = await tx.rent_obligations.create({
           data: {
             tenant_id: agreement.tenant_id,
             allocation_id: allocation?.id || null,
@@ -198,7 +205,7 @@ export class AgreementRentScheduleService {
             amount: rentAmount,
             total_amount: rentAmount,
             due_date: dueDate,
-            status: status === "OVERDUE" ? "PENDING" : status,
+            status: writtenStatus,
             obligation_type: "RENT",
             billing_period_start: rentMonth,
             billing_period_end: periodEnd,
@@ -207,6 +214,7 @@ export class AgreementRentScheduleService {
           },
         });
         created++;
+        if (writtenStatus === "PENDING") payableIds.push(createdRow.id);
       } catch (error: any) {
         if (error?.code === "P2002") {
           skipped++;
@@ -214,6 +222,18 @@ export class AgreementRentScheduleService {
         }
         throw error;
       }
+    }
+
+    // Synchronous activation, inside this same transaction, for whichever
+    // rows this pass wrote as immediately payable (PENDING) — UPCOMING rows
+    // are untouched here and get activated later by syncDueStatuses.
+    if (payableIds.length > 0 && agreement.tenant_id && agreement.tenant?.owner_id) {
+      await financialLifecycleService.activatePayableObligations(tx, {
+        tenantId: agreement.tenant_id,
+        ownerId: agreement.tenant.owner_id,
+        hostelId: agreement.hostel_id,
+        obligationIds: payableIds,
+      });
     }
 
     return {
@@ -247,8 +267,14 @@ export class AgreementRentScheduleService {
       });
     }
 
-    // 2. Transition 'UPCOMING' rent obligations to 'PENDING' when the billing month starts
-    const pendingResult = await prisma.rent_obligations.updateMany({
+    // 2. Activate 'UPCOMING' rent obligations to 'PENDING' when the billing
+    //    month starts — per tenant, synchronously sweeping any available
+    //    future rent credit against the newly-payable obligation(s) in the
+    //    same transaction as the status transition. This replaces the old
+    //    bulk updateMany, which never triggered a credit sweep at all (the
+    //    root cause of future credit silently going unconsumed for
+    //    agreement-based tenants).
+    const candidates = await prisma.rent_obligations.findMany({
       where: {
         ...whereHostel,
         obligation_type: "RENT",
@@ -256,8 +282,30 @@ export class AgreementRentScheduleService {
         status: "UPCOMING",
         rent_month: { lte: currentMonth },
       },
-      data: { status: "PENDING", updated_at: new Date() },
+      select: { id: true, tenant_id: true, owner_id: true, hostel_id: true },
     });
+
+    type TenantActivationEntry = { ownerId: string; hostelId: string; obligationIds: string[] };
+    const byTenant = new Map<string, TenantActivationEntry>();
+    for (const c of candidates) {
+      if (!c.owner_id || !c.hostel_id) continue; // defensive — activatePayableObligations requires both
+      const entry: TenantActivationEntry = byTenant.get(c.tenant_id) || { ownerId: c.owner_id, hostelId: c.hostel_id, obligationIds: [] };
+      entry.obligationIds.push(c.id);
+      byTenant.set(c.tenant_id, entry);
+    }
+
+    let pendingCount = 0;
+    for (const [tenantId, entry] of Array.from(byTenant)) {
+      const results: { id: string; previousStatus: string; newStatus: string }[] = await prisma.$transaction((tx: any) =>
+        financialLifecycleService.activatePayableObligations(tx, {
+          tenantId, ownerId: entry.ownerId, hostelId: entry.hostelId, obligationIds: entry.obligationIds,
+        })
+      );
+      pendingCount += results.filter((r) => r.previousStatus === "UPCOMING").length;
+      financialLifecycleService.notifyActivated({
+        tenantId, ownerId: entry.ownerId, hostelId: entry.hostelId, source: "agreement_rent_schedule_sync",
+      });
+    }
 
     // 3. Count overdue obligations dynamically instead of setting database status
     const overdueCount = await prisma.rent_obligations.count({
@@ -271,7 +319,7 @@ export class AgreementRentScheduleService {
     });
 
     return {
-      pending: pendingResult.count,
+      pending: pendingCount,
       overdue: overdueCount,
     };
   }

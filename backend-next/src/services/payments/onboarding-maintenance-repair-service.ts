@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { onboardingFinancialsService } from "./onboarding-financials-service";
+import { financialLifecycleService } from "./financial-lifecycle-service";
 
 type Db = typeof prisma;
 
@@ -100,7 +101,7 @@ export class OnboardingMaintenanceRepairService {
       }
 
       const result = await this.db.$transaction(async (tx: any) => {
-        return this.financials.initializeOnboardingFinancials(tx, {
+        const financials = await this.financials.initializeOnboardingFinancials(tx, {
           tenantId: candidate.tenantId,
           ownerId: candidate.ownerId,
           hostelId: candidate.hostelId,
@@ -108,6 +109,15 @@ export class OnboardingMaintenanceRepairService {
           maintenanceCharge: candidate.maintenanceCharge,
           maintenanceType: candidate.maintenanceType,
         });
+        if (financials.createdObligationIds.length > 0) {
+          await financialLifecycleService.activatePayableObligations(tx, {
+            tenantId: candidate.tenantId,
+            ownerId: candidate.ownerId,
+            hostelId: candidate.hostelId,
+            obligationIds: financials.createdObligationIds,
+          });
+        }
+        return financials;
       });
 
       if (result.createdObligations.includes("MAINTENANCE")) {
