@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/db";
 import { resolvePreferences } from "@/lib/preferences";
 import { financialLifecycleService } from "./financial-lifecycle-service";
+import { fromLegacyStatus } from "./financial-obligation.types";
+import type { LifecycleStatus, SettlementStatus } from "./financial-obligation.types";
 
 type Tx = typeof prisma | any;
 
@@ -181,6 +183,11 @@ export class AgreementRentScheduleService {
           : existing.status;
         if (shouldUpdateStatus(existing.status)) {
           patch.status = writtenStatus;
+          // Dual-write: keep lifecycle_status and settlement_status
+          // synchronized with the legacy status column.
+          const { lifecycle_status, settlement_status } = fromLegacyStatus(writtenStatus);
+          patch.lifecycle_status = lifecycle_status;
+          patch.settlement_status = settlement_status;
         }
         if (allocation?.id && !existing.allocation_id) {
           patch.allocation_id = allocation.id;
@@ -194,6 +201,9 @@ export class AgreementRentScheduleService {
 
       try {
         const writtenStatus = status === "OVERDUE" ? "PENDING" : status;
+        // Dual-write: derive lifecycle_status and settlement_status from the
+        // canonical status to ensure all three columns are consistent from birth.
+        const { lifecycle_status, settlement_status } = fromLegacyStatus(writtenStatus);
         const createdRow = await tx.rent_obligations.create({
           data: {
             tenant_id: agreement.tenant_id,
@@ -206,6 +216,8 @@ export class AgreementRentScheduleService {
             total_amount: rentAmount,
             due_date: dueDate,
             status: writtenStatus,
+            lifecycle_status,
+            settlement_status,
             obligation_type: "RENT",
             billing_period_start: rentMonth,
             billing_period_end: periodEnd,
@@ -261,9 +273,17 @@ export class AgreementRentScheduleService {
     for (const ob of overdueObs) {
       const totalPaid = ob.payments.reduce((sum, p) => sum + Number(p.amount_paid), 0);
       const targetStatus = totalPaid > 0 ? "PARTIAL" : "PENDING";
+      // Dual-write: derive lifecycle_status and settlement_status from the
+      // corrected legacy status to keep all three columns synchronized.
+      const { lifecycle_status, settlement_status } = fromLegacyStatus(targetStatus);
       await prisma.rent_obligations.update({
         where: { id: ob.id },
-        data: { status: targetStatus, updated_at: new Date() }
+        data: {
+          status: targetStatus,
+          lifecycle_status,
+          settlement_status,
+          updated_at: new Date(),
+        },
       });
     }
 
