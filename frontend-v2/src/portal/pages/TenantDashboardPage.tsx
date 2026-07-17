@@ -30,8 +30,7 @@ export function TenantDashboardPage() {
   const queryClient = useQueryClient();
   const {
     profile,
-    dues,
-    payments,
+    readModel,
     score,
     advance,
     moveOut,
@@ -237,8 +236,8 @@ export function TenantDashboardPage() {
         <TenantReservationCard reservationStatus={profile.reservation_status} />
       )}
 
-      {dues ? (
-        <TenantPriorityStrip dues={dues} payments={payments} moveOut={moveOut} />
+      {readModel ? (
+        <TenantPriorityStrip readModel={readModel} moveOut={moveOut} />
       ) : (
         <TenantPrioritySkeleton />
       )}

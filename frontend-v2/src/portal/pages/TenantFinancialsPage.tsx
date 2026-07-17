@@ -155,7 +155,7 @@ function financialReducer(state: FinancialState, action: FinancialAction): Finan
 export function TenantFinancialsPage() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { profile, dues, payments, advance, isLoading } = useTenantDashboard();
+  const { profile, dues, readModel, payments, advance, isLoading } = useTenantDashboard();
   const resStatus = profile?.reservation_status?.status ?? 'PAYMENT_PENDING';
   
   const [state, dispatch] = useReducer(financialReducer, initialFinancialState);
@@ -462,11 +462,13 @@ export function TenantFinancialsPage() {
       inst.covered_by_advance += Number(item.covered_by_advance ?? 0);
     });
 
-    // Merge actual dues (unpaid obligations) data from dues.items for accuracy, especially late fees
+    // Merge actual dues (unpaid obligations) data from the canonical FinancialReadModel
+    // for accuracy, especially late fees and the overdue signal — is_overdue/overdue_days
+    // are the server's own classification (settlement-planner.isOverdue), not recomputed here.
     Object.values(installmentsMap).forEach((inst: any) => {
       inst.obligations.forEach((timelineOb: any) => {
         if (timelineOb.obligation_id) {
-          const dueItem = dues?.items?.find((d: any) => d.obligation_id === timelineOb.obligation_id);
+          const dueItem = readModel?.items?.find((d: any) => d.obligation_id === timelineOb.obligation_id);
           if (dueItem) {
             timelineOb.amount = dueItem.amount;
             timelineOb.paid = dueItem.paid;
@@ -474,7 +476,9 @@ export function TenantFinancialsPage() {
             timelineOb.original_amount = dueItem.amount;
             timelineOb.paid_amount = dueItem.paid;
             timelineOb.remaining_amount = dueItem.outstanding;
-            timelineOb.status = dueItem.status;
+            timelineOb.status = dueItem.legacy_status;
+            timelineOb.is_overdue = dueItem.is_overdue;
+            timelineOb.overdue_days = dueItem.overdue_days;
           }
         }
       });
@@ -510,6 +514,15 @@ export function TenantFinancialsPage() {
 
       inst.total_amount = inst.rent_amount + inst.maintenance_amount + inst.late_fee_amount + inst.security_deposit_amount;
 
+      // Overdue classification is sourced from the merged is_overdue/overdue_days
+      // (settlement-planner.isOverdue, via FinancialReadModelService) — not
+      // recomputed from due_date here.
+      const overdueObligations = inst.obligations.filter((o: any) => o.is_overdue);
+      inst.is_overdue = overdueObligations.length > 0;
+      inst.overdue_days = overdueObligations.length
+        ? Math.max(...overdueObligations.map((o: any) => Number(o.overdue_days ?? 0)))
+        : 0;
+
       // Determine aggregated status & state
       const allWaived = inst.obligations.every((o: any) => o.status === 'WAIVED');
       const allProjected = inst.obligations.every((o: any) => o.status === 'PROJECTED');
@@ -525,22 +538,7 @@ export function TenantFinancialsPage() {
         inst.state = 'paid';
       } else {
         inst.status = inst.paid > 0 ? 'PARTIAL' : 'PENDING';
-        
-        // Calculate state based on due date
-        const dueDate = new Date(inst.due_date);
-        const today = new Date();
-        today.setHours(0,0,0,0);
-        dueDate.setHours(0,0,0,0);
-        const diffTime = dueDate.getTime() - today.getTime();
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-        if (diffDays < 0) {
-          inst.state = 'overdue';
-        } else if (diffDays <= 5) {
-          inst.state = 'due_soon';
-        } else {
-          inst.state = 'pending';
-        }
+        inst.state = inst.is_overdue ? 'overdue' : 'pending';
       }
     });
 
@@ -577,66 +575,55 @@ export function TenantFinancialsPage() {
 
   const currentInstallment = useMemo(() => installments.find((inst) => inst.isCurrent), [installments]);
 
-  // Financial Health Card State Resolution
+  // Financial Health Card State Resolution — sourced from the canonical
+  // FinancialReadModel's payment_status/overdue_amount/overdue_days/
+  // current_payable_amount, not recomputed from local due-date math. Only
+  // the GREEN state's "next installment" text still reads from `installments`
+  // (a schedule countdown to a known future date, not an overdue classification).
   const financialHealth = useMemo(() => {
-    const today = new Date();
-    today.setHours(0,0,0,0);
+    const paymentStatus = readModel?.payment_status;
+    const overdueAmount = Number(readModel?.overdue_amount ?? 0);
+    const overdueDays = Number(readModel?.overdue_days ?? 0);
+    const currentPayable = Number(readModel?.current_payable_amount ?? 0);
 
-    // 1. Red State: Overdue installment exists
-    const overdueList = installments.filter(inst => inst.state === 'overdue');
-    if (overdueList.length > 0) {
-      const totalOverdueAmount = overdueList.reduce((s, inst) => s + inst.remaining, 0);
-      
-      // Calculate max days overdue
-      const earliestDueDate = overdueList.reduce((earliest, inst) => {
-        const d = new Date(inst.due_date);
-        return d < earliest ? d : earliest;
-      }, new Date());
-      
-      const diffTime = today.getTime() - earliestDueDate.getTime();
-      const daysOverdue = Math.max(1, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
-
+    // 1. Red State: overdue per the canonical read model
+    if (paymentStatus === 'OVERDUE') {
       return {
         state: 'RED',
         title: 'Payment Overdue',
         amountLabel: 'Amount Overdue',
-        amount: totalOverdueAmount,
-        subtext: `Overdue by ${daysOverdue} day${daysOverdue === 1 ? '' : 's'}. Immediate action required.`,
+        amount: overdueAmount,
+        subtext: `Overdue by ${overdueDays} day${overdueDays === 1 ? '' : 's'}. Immediate action required.`,
         bgClass: 'bg-gradient-to-br from-red-600 via-red-500 to-rose-700 text-white shadow-lg shadow-red-500/20',
         icon: ShieldAlert,
       };
     }
 
-    // 2. Orange State: Payment due soon (within 5 days)
-    const dueSoonList = installments.filter(inst => inst.state === 'due_soon');
-    if (dueSoonList.length > 0) {
-      const totalDueSoonAmount = dueSoonList.reduce((s, inst) => s + inst.remaining, 0);
-      const earliestDueSoonDate = dueSoonList.reduce((earliest, inst) => {
-        const d = new Date(inst.due_date);
-        return d < earliest ? d : earliest;
-      }, new Date(today.getTime() + 10 * 24 * 60 * 60 * 1000));
-
-      const diffTime = earliestDueSoonDate.getTime() - today.getTime();
-      const daysDue = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
-
+    // 2. Orange State: something is due (PARTIAL/PENDING), not yet overdue
+    if (currentPayable > 0) {
       return {
         state: 'ORANGE',
         title: 'Payment Due Soon',
         amountLabel: 'Amount Due',
-        amount: totalDueSoonAmount,
-        subtext: daysDue === 0 ? 'Due today. Please complete your payment.' : `Due in ${daysDue} day${daysDue === 1 ? '' : 's'}.`,
+        amount: currentPayable,
+        subtext: currentInstallment?.due_date
+          ? `Due ${fmtDate(currentInstallment.due_date)}. Please complete your payment.`
+          : 'Please complete your payment.',
         bgClass: 'bg-gradient-to-br from-amber-500 via-orange-500 to-amber-600 text-white shadow-lg shadow-amber-500/20',
         icon: Clock,
       };
     }
 
-    // 3. Green State: All Clear
-    // Next upcoming installment
+    // 3. Green State: All Clear — next upcoming installment is schedule
+    // display (a known future date), not an overdue/current-payable
+    // classification, so it's fine to keep computing locally.
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     const upcomingList = installments.filter(inst => inst.status === 'PROJECTED' || inst.status === 'PENDING');
     const nextInstallment = upcomingList[0];
     let nextInstallmentText = 'No upcoming installments';
     let nextInstallmentDays = -1;
-    
+
     if (nextInstallment) {
       const rentGenDate = new Date(nextInstallment.period_start || nextInstallment.rent_month);
       rentGenDate.setHours(0, 0, 0, 0);
@@ -664,7 +651,7 @@ export function TenantFinancialsPage() {
       icon: ShieldCheck,
       nextDays: nextInstallmentDays,
     };
-  }, [installments]);
+  }, [readModel, installments, currentInstallment]);
 
   // Financial Forecast Section
   const forecastInstallments = useMemo(() => {
@@ -713,7 +700,6 @@ export function TenantFinancialsPage() {
     return state.historyExpanded ? allPayments : allPayments.slice(0, 2);
   }, [allPayments, state.historyExpanded]);
 
-  const totalDue = Number(dues?.total_due ?? payments?.outstanding_balance ?? 0);
   const allowedFrequencies = (billingContext.data?.allowed_frequencies ?? ['MONTHLY', 'QUARTERLY'])
     .filter((f: string) => f !== billingContext.data?.active_frequency && f !== 'CUSTOM_INSTALLMENTS');
   

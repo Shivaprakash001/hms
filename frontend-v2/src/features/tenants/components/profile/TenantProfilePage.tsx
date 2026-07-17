@@ -1,47 +1,53 @@
 import { useState, useMemo, useCallback } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Phone, Mail, Loader2, Bell, Download, FileCheck2, Send, CalendarDays,
-  CheckCircle2, XCircle, ShieldAlert, Smartphone, MessageSquare, BedDouble, User,
-  Building2, Settings, IndianRupee, LogOut, CheckCircle, AlertTriangle, AlertCircle,
-  History, ChevronDown, ChevronUp, Shield, HelpCircle, PlusCircle
+  ArrowLeft, FileCheck2, Send,
+  BedDouble, Settings, LogOut, AlertTriangle, AlertCircle,
+  History, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { tenantService } from '@features/tenants/api';
+import { paymentService } from '@features/payments/api';
 import { ownerService } from '@features/owners/api';
 import { useTenantProfile } from '@features/tenants/hooks/useTenantProfile';
-import { useTenantActions } from '@features/tenants/hooks/useTenantActions';
 import { TenantStatusBadge } from '@features/tenants/components/badges/TenantStatusBadge';
 import { RentObligationList } from '@features/tenants/components/financial/RentObligationList';
 import { WaiveObligationModal } from '@features/tenants/components/financial/WaiveObligationModal';
+import { CancelObligationModal } from '@features/tenants/components/financial/CancelObligationModal';
 import { CreateObligationModal } from '@features/tenants/components/financial/CreateObligationModal';
+import { ObligationHistorySheet } from '@features/tenants/components/financial/ObligationHistorySheet';
+import { CompactFinancialStrip, type FinancialSectionId } from '@features/tenants/components/financial/CompactFinancialStrip';
+import { FinancialHealthBanner } from '@features/tenants/components/financial/FinancialHealthBanner';
+import { PrimaryActionsBar } from '@features/tenants/components/financial/PrimaryActionsBar';
+import { FinancialActivity } from '@features/tenants/components/financial/FinancialActivity';
+import { LedgerStatement } from '@features/tenants/components/financial/LedgerStatement';
+import { DocumentsHub } from '@features/tenants/components/financial/DocumentsHub';
+import { FinancialWorkspaceNav } from '@features/tenants/components/profile/FinancialWorkspaceNav';
 import { AllocationHistoryTimeline } from '@features/tenants/components/allocation/AllocationHistoryTimeline';
 import { VerificationPanel } from '@features/tenants/components/documents/VerificationPanel';
 import { ActivityTimeline } from '@features/tenants/components/profile/ActivityTimeline';
 import { ExitWorkflowSection } from '@features/tenants/components/profile/ExitWorkflowSection';
 import { getInitials } from '@features/tenants/utils/normalize';
 import { RecordPaymentModal } from '@/app/components/modals/RecordPaymentModal';
+import { hmsToast } from '@lib/toast';
+import { useIsMobile } from '@/app/components/ui/use-mobile';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/app/components/ui/tabs';
 import api from '@lib/api-client';
 import { EditInviteModal } from '@/app/components/modals/EditInviteModal';
 import {
   ChangeRequestDrawer,
   PendingBanner,
-  ChangeTimeline,
   useTenantChangeRequests,
 } from '@/features/change-management';
 
-import { CompactFinancialStrip } from '@features/tenants/components/financial/CompactFinancialStrip';
 import { TenantHealthCard } from '@features/tenants/components/score/TenantHealthCard';
 import { OwnerInsights } from '@features/tenants/components/profile/OwnerInsights';
 import { PrivateNotes } from '@features/tenants/components/profile/PrivateNotes';
-import { StickyOpsBar } from '@features/tenants/components/profile/StickyOpsBar';
 import { CommunicationCenter } from '@features/tenants/components/profile/CommunicationCenter';
 
 const money = (value: unknown) => `₹${Number(value ?? 0).toLocaleString('en-IN')}`;
 const date = (value: unknown) => (value ? new Date(String(value)).toLocaleDateString('en-IN') : '—');
-const title = (value: unknown) => String(value ?? '—').replaceAll('_', ' ');
-const ordinal = (n: number) => { const s = ['th','st','nd','rd']; const v = n % 100; return n + (s[(v-20)%10] || s[v] || s[0]); };
 
 const positiveAmount = (value: unknown) => {
   const amount = Number(value ?? 0);
@@ -77,6 +83,14 @@ function listFrom<T = Record<string, unknown>>(value: unknown, keys: string[] = 
   return [];
 }
 
+type MobileTab = 'obligations' | 'activity' | 'ledger' | 'documents';
+
+type ObligationModalState = {
+  mode: 'create' | 'duplicate' | 'edit';
+  initialValues?: { obligationType?: string; amount?: number; description?: string };
+  replaceObligation?: any;
+} | null;
+
 interface TenantProfilePageProps {
   hostelIdProp?: string;
   tenantIdProp?: string;
@@ -89,20 +103,24 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   const hostelId = hostelIdProp ?? params.hostelId ?? '';
   const tenantId = tenantIdProp ?? params.tenantId ?? '';
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [payObligationId, setPayObligationId] = useState<string | null>(null);
+  const [paymentPrefillAmount, setPaymentPrefillAmount] = useState<number | undefined>(undefined);
   const [showEditInvite, setShowEditInvite] = useState(false);
   const [showChangeDrawer, setShowChangeDrawer] = useState(false);
   const [isKycExpanded, setIsKycExpanded] = useState(false);
   const [isStayExpanded, setIsStayExpanded] = useState(false);
-  const [rightColumnTab, setRightColumnTab] = useState<'activity' | 'ledger'>('activity');
   const [showCreateObligationModal, setShowCreateObligationModal] = useState(false);
   const [waiveObligation, setWaiveObligation] = useState<any>(null);
+  const [cancelObligationTarget, setCancelObligationTarget] = useState<any>(null);
+  const [historyObligation, setHistoryObligation] = useState<any>(null);
+  const [obligationModal, setObligationModal] = useState<ObligationModalState>(null);
+  const [mobileTab, setMobileTab] = useState<MobileTab>('obligations');
 
-  const { overview, allocations, dues, advance, full, isLoading, isError, refetch } =
+  const { overview, allocations, dues, advance, full, financialTimeline, isLoading, isError, refetch } =
     useTenantProfile(hostelId, tenantId);
-  const actions = useTenantActions(hostelId);
 
   // Change Management: fetch pending requests for this tenant
   const {
@@ -129,7 +147,6 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   });
 
   const decisionMutation = useMutation({
-    queryKey: ['owner', 'decide-frequency-request', tenantId],
     mutationFn: ({ id, action }: { id: string; action: 'APPROVE' | 'REJECT' }) =>
       ownerService.decideFrequencyChangeRequest(id, action),
     onSuccess: () => {
@@ -157,7 +174,6 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   const status = String(tenant?.status ?? overview?.status ?? 'ACTIVE');
   const photoUrl = String(tenant?.photo_url ?? overview?.photo_url ?? '').trim();
   const primaryPhone = String(profile?.phone ?? tenant?.phone_1 ?? overview?.phone ?? '').trim();
-  const email = String(profile?.email ?? overview?.email ?? '').trim();
   const currentRoom = (tenant.current_room ?? overview?.current_room ?? null) as Record<string, unknown> | null;
   const displayedRoomNo = currentRoom?.room_no ?? tenant.room_number ?? overview?.room_number ?? null;
   const needsRoomAssignment = status.toUpperCase() === 'ACTIVE' && !displayedRoomNo;
@@ -176,9 +192,6 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   const overdueDays = useMemo(() => {
     const todayMid = new Date();
     todayMid.setUTCHours(0, 0, 0, 0);
-    // Filter to obligations actually past due_date (UTC-day-normalized)
-    // before taking the minimum — a PENDING obligation due in the future
-    // is not overdue and must not be counted here.
     const overduePending = obligations.filter((o: any) => {
       if (!['PENDING', 'PARTIAL'].includes(String(o.status).toUpperCase()) || !o.due_date) return false;
       const due = new Date(o.due_date);
@@ -191,10 +204,28 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
     return diffDays > 0 ? diffDays : 0;
   }, [obligations]);
 
+  // Agreement progress — time-based: months elapsed since agreement start / total duration (§ plan decision)
+  const { agreementMonthsElapsed, agreementMonthsTotal } = useMemo(() => {
+    const activeAllocation = (allocations || []).find((a: any) => a.is_active) ?? allocations?.[0];
+    const startRaw = activeAllocation?.start_date;
+    const durationMonths = Number(
+      tenant?.agreement_duration_months ?? overview?.agreement_duration_months ?? 0,
+    );
+    if (!startRaw || !durationMonths) return { agreementMonthsElapsed: null, agreementMonthsTotal: null };
+    const start = new Date(startRaw);
+    if (Number.isNaN(start.getTime())) return { agreementMonthsElapsed: null, agreementMonthsTotal: null };
+    const now = new Date();
+    const elapsed = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
+    return {
+      agreementMonthsElapsed: Math.max(0, Math.min(durationMonths, elapsed)),
+      agreementMonthsTotal: durationMonths,
+    };
+  }, [allocations, tenant, overview]);
+
   if (isLoading) {
     return (
       <div className="flex justify-center py-24">
-        <Loader2 className="w-8 h-8 animate-spin text-accent" />
+        <div className="w-8 h-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
       </div>
     );
   }
@@ -223,9 +254,6 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
     }) as Record<string, unknown> | undefined;
   const compliance = (overview.compliance ?? {}) as Record<string, unknown>;
   const pendingBillingRequests = frequencyRequests.data?.requests ?? [];
-  const timelineItems = billingTimeline.data?.items ?? [];
-  const requiredDocTypes = listFrom<string>(compliance.required_document_types ?? full?.required_document_types);
-  const uploadedDocTypes = listFrom<string>(compliance.document_types);
   const recentPayments = listFrom<Record<string, unknown>>(overview.recent_payments).length
     ? listFrom<Record<string, unknown>>(overview.recent_payments)
     : fullPayments.map((payment) => ({
@@ -273,93 +301,135 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
     }, 250);
   };
 
-  const whatsAppTenant = (phone: string) => {
-    const cleanPhone = phone.replace(/[^\d]/g, '');
-    const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-    window.open(`https://wa.me/${formattedPhone}`, '_blank');
+  const overdueAmount = Number(paymentSummary?.overdue_amount ?? overview?.overdue_amount ?? 0);
+  const outstandingAmount = Number(paymentSummary?.pending_amount ?? overview.outstanding ?? 0);
+  const futureCredit = Number((advance as any)?.balance ?? (advance as any)?.current_balance ?? (advance as any)?.future_rent_credit ?? 0);
+  const isOverdue = overdueAmount > 0;
+  const nextRentGeneration = billingTimeline.data?.next_rent_generation;
+  const nextRentDate = nextRentGeneration?.next_installment_due_date ?? null;
+  const nextRentAmount = nextRentGeneration?.next_installment_amount ?? null;
+  const nextRentLabel = nextRentGeneration?.installment_label ?? (nextRentDate ? date(nextRentDate) : null);
+
+  const financialEvents = (financialTimeline as any)?.events ?? [];
+
+  // ── Financial section navigation (desktop scroll, mobile tab switch) ──────
+  const handleNavigate = (section: FinancialSectionId) => {
+    const tabForSection: Partial<Record<FinancialSectionId, MobileTab>> = {
+      'fin-obligations': 'obligations',
+      'fin-activity': 'activity',
+      'fin-ledger': 'ledger',
+      'fin-documents': 'documents',
+    };
+    const tab = tabForSection[section];
+    if (isMobile && tab) setMobileTab(tab);
+    setTimeout(() => {
+      document.getElementById(section)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, isMobile && tab ? 50 : 0);
   };
 
-  const overdueAmount = Number(paymentSummary?.overdue_amount ?? overview?.overdue_amount ?? 0);
-  const isOverdue = overdueAmount > 0;
+  const handleOpenReceivePayment = (prefillAmount?: number) => {
+    setPayObligationId(null);
+    setPaymentPrefillAmount(prefillAmount);
+    setShowPaymentModal(true);
+  };
 
-  const mergedTimeline = (timelineItems || [])
-    .map((item: any) => {
-      if (item.type === 'CREDIT_APPLIED' || item.type === 'ADVANCE_CREDIT') {
-        return {
-          id: `t-${item.timeline_id ?? item.obligation_id}`,
-          date: new Date(item.event_date || item.due_date),
-          title: item.label || 'Future Rent Credit',
-          subtitle: `Credit added via ${item.payment_method || 'Offline'}${item.reference_number ? ` · Ref: ${item.reference_number}` : ''}${item.notes ? ` · Note: ${item.notes}` : ''}`,
-          dateVerb: 'Added on',
-          amount: Number(item.amount ?? 0),
-          status: 'Paid',
-          statusColor: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
-          tone: 'border-emerald-100 bg-emerald-50/20',
-        };
-      }
+  const handleDownloadReceipt = async (paymentId: string) => {
+    try {
+      const blob = await paymentService.downloadReceipt(paymentId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `receipt-${paymentId}.pdf`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 250);
+    } catch (e: any) {
+      hmsToast.error(e, 'Download receipt');
+    }
+  };
 
-      if (String(item.type).endsWith('_PAID')) {
-        const formattedDueDate = item.due_date ? new Date(item.due_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
-        return {
-          id: `t-${item.timeline_id ?? item.obligation_id}`,
-          date: new Date(item.paid_date || item.event_date || item.due_date),
-          title: item.label || 'Paid Event',
-          subtitle: `Paid via ${item.payment_method || 'Cash'}${item.reference_number ? ` · Ref: ${item.reference_number}` : ''}${formattedDueDate ? ` · Originally due: ${formattedDueDate}` : ''}`,
-          dateVerb: 'Paid on',
-          amount: Number(item.amount ?? 0),
-          status: 'Paid',
-          statusColor: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
-          tone: 'border-emerald-100 bg-emerald-50/20',
-        };
-      }
+  // ── Obligation card actions ────────────────────────────────────────────────
+  const handleEditObligationSuccess = () => {
+    const source = obligationModal?.replaceObligation;
+    setObligationModal(null);
+    refetch();
+    if (source) {
+      // Obligations are immutable — editing creates a corrected replacement, then
+      // the original is cancelled to avoid double-counting. See plan §1 decision.
+      setCancelObligationTarget({ ...source, __editReason: 'Superseded by edit' });
+    }
+  };
 
-      if (item.type === 'PAYMENT_SETTLED' || item.type === 'PAYMENT') {
-        return {
-          id: `t-${item.timeline_id ?? item.obligation_id}`,
-          date: new Date(item.paid_date || item.event_date || item.due_date),
-          title: item.label || 'Payment Received',
-          subtitle: `Paid via ${item.payment_method || 'Cash'}${item.reference_number ? ` · Ref: ${item.reference_number}` : ''}`,
-          dateVerb: 'Paid on',
-          amount: Number(item.amount ?? 0),
-          status: 'Paid',
-          statusColor: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
-          tone: 'border-emerald-100 bg-emerald-50/20',
-        };
-      }
+  const obligationsSection = (
+    <div id="fin-obligations" className="p-4 rounded-2xl border border-border bg-card shadow-sm space-y-4 scroll-mt-20">
+      <div className="flex justify-between items-center border-b border-border pb-3">
+        <h3 className="text-sm font-bold text-foreground">Obligations</h3>
+        <button
+          type="button"
+          onClick={() => setObligationModal({ mode: 'create' })}
+          className="py-1.5 px-3 rounded-xl bg-accent/15 hover:bg-accent/20 text-accent text-xs font-semibold active:scale-95 transition-transform border border-accent/20"
+        >
+          + Add Charge
+        </button>
+      </div>
+      <RentObligationList
+        obligations={obligations as never[]}
+        onRecordPayment={(id) => {
+          setPayObligationId(id);
+          setPaymentPrefillAmount(undefined);
+          setShowPaymentModal(true);
+        }}
+        onWaiveObligation={(ob) => setWaiveObligation(ob)}
+        onCancelObligation={(ob) => setCancelObligationTarget(ob)}
+        onEditObligation={(ob) =>
+          setObligationModal({
+            mode: 'edit',
+            initialValues: {
+              obligationType: ob.obligation_type ?? ob.type,
+              amount: Number(ob.outstanding ?? ob.amount ?? 0),
+              description: ob.description,
+            },
+            replaceObligation: ob,
+          })
+        }
+        onDuplicateObligation={(ob) =>
+          setObligationModal({
+            mode: 'duplicate',
+            initialValues: {
+              obligationType: ob.obligation_type ?? ob.type,
+              amount: Number(ob.amount ?? 0),
+              description: ob.description,
+            },
+          })
+        }
+        onViewHistory={(ob) => setHistoryObligation(ob)}
+        hasActivePlan={Number(tenant?.monthly_rent ?? overview?.rent ?? 0) > 0}
+      />
+    </div>
+  );
 
-      const isCovered = item.state === 'covered' || item.state === 'paid' || item.status === 'PAID';
-      const isUpcoming = item.state === 'upcoming';
-      const amount = Number(item.amount ?? 0);
-      const paid = Number(item.paid ?? 0);
-      const remaining = Number(item.remaining ?? amount);
+  const activitySection = (
+    <FinancialActivity
+      events={financialEvents}
+      isLoading={(financialTimeline as any) === undefined}
+      onDownloadReceipt={handleDownloadReceipt}
+      onViewObligation={() => handleNavigate('fin-obligations')}
+    />
+  );
 
-      const formattedDueDate = item.due_date ? new Date(item.due_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
-      let sub = formattedDueDate ? `Due by ${formattedDueDate}` : '';
-      if (paid > 0 && remaining > 0) {
-        sub += ` · ₹${paid.toLocaleString('en-IN')} paid, ₹${remaining.toLocaleString('en-IN')} remaining`;
-      }
+  const ledgerSection = (
+    <LedgerStatement entries={(advance as any)?.entries ?? []} balance={futureCredit} />
+  );
 
-      return {
-        id: `t-${item.timeline_id ?? item.obligation_id}`,
-        date: new Date(item.event_date || item.due_date),
-        title: item.label || 'Charge Generated',
-        subtitle: sub,
-        dateVerb: 'Due by',
-        amount,
-        status: String(item.state || item.status || 'pending').replaceAll('_', ' '),
-        statusColor: isCovered
-          ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
-          : isUpcoming
-          ? 'bg-amber-500/10 text-amber-600 border-amber-500/20'
-          : 'bg-rose-500/10 text-rose-600 border-rose-500/20',
-        tone: isCovered
-          ? 'border-emerald-100 bg-emerald-50/20'
-          : isUpcoming
-          ? 'border-dashed border-accent/20 bg-accent/5'
-          : 'border-rose-100 bg-rose-50/20',
-      };
-    })
-    .sort((a, b) => b.date.getTime() - a.date.getTime());
+  const documentsSection = (
+    <DocumentsHub
+      tenantId={tenantId}
+      hasAgreement={Boolean(allocations?.length > 0)}
+      agreementUrl={null}
+      recentPayments={recentPayments as any}
+      recentChanges={recentChanges as any}
+      onViewAllChanges={() => navigate(`/changes?tenantId=${tenantId}`)}
+    />
+  );
 
   return (
     <div className="px-4 py-5 max-w-7xl mx-auto pb-24 min-w-0 space-y-6">
@@ -377,11 +447,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
       <div className="p-5 rounded-2xl border border-border bg-card shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex items-start gap-4">
           <div className="w-16 h-16 rounded-2xl bg-accent/15 overflow-hidden flex items-center justify-center text-xl font-bold text-accent shrink-0">
-            {photoUrl ? (
-              <img src={photoUrl} alt="" className="h-full w-full object-cover" />
-            ) : (
-              getInitials(name)
-            )}
+            {photoUrl ? <img src={photoUrl} alt="" className="h-full w-full object-cover" /> : getInitials(name)}
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2.5 flex-wrap">
@@ -407,7 +473,6 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
           </div>
         </div>
 
-        {/* Top Info Pill */}
         <div className="w-full md:w-auto p-3.5 rounded-xl bg-secondary/40 border border-border flex items-center justify-between gap-6 shrink-0 text-xs">
           <div>
             <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider block">Hostel Location</span>
@@ -427,36 +492,19 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
       {status.toUpperCase() === 'ACTIVE' && (
         <PendingBanner
           pendingCount={crPendingCount}
-          onViewAll={() => {
-            document.getElementById('change-timeline-section')?.scrollIntoView({ behavior: 'smooth' });
-          }}
+          onViewAll={() => handleNavigate('fin-documents')}
         />
       )}
 
       {/* Row 1: Sticky Operations & Communication Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <div className="lg:col-span-2">
-          {/* Operations Quick Action Bar */}
           <div className="p-4 rounded-2xl border border-border bg-card shadow-sm space-y-3">
             <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1.5">
               <Settings className="w-4 h-4 text-accent" />
               Core Action Dashboard
             </span>
             <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const pending = obligations.find((o: any) => ['PENDING', 'PARTIAL'].includes(o.status));
-                  setPayObligationId(pending?.id || null);
-                  setShowPaymentModal(true);
-                }}
-                className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 px-4.5 py-3 rounded-xl bg-accent text-accent-foreground text-xs font-bold hover:bg-accent/90 active:scale-95 transition-all shadow-sm"
-              >
-                <IndianRupee className="w-4 h-4" />
-                <span>Record Payment</span>
-              </button>
-              
-              {/* ACTIVE tenants: Request Change flow. INVITED tenants: Edit Details (correction window). */}
               {status.toUpperCase() === 'ACTIVE' ? (
                 <button
                   type="button"
@@ -495,7 +543,6 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
         </div>
 
         <div>
-          {/* Communication Center Quick Buttons */}
           <div className="h-full">
             <CommunicationCenter
               tenantName={name}
@@ -506,22 +553,13 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
               emergencyName={String(tenant.emergency_name || profile.emergency_name || '') || undefined}
               emergencyPhone={String(tenant.emergency_phone || profile.emergency_phone || '') || undefined}
               emergencyRelation={String(tenant.emergency_relation || profile.emergency_relation || '') || undefined}
-              timelineItems={timelineItems}
+              timelineItems={[]}
             />
           </div>
         </div>
       </div>
 
-      {/* Row 2: Financial Strip */}
-      <CompactFinancialStrip
-        outstandingAmount={Number(paymentSummary?.pending_amount ?? overview.outstanding ?? 0)}
-        overdueDays={overdueDays}
-        futureCredit={Number(advance?.balance ?? advance?.current_balance ?? 0)}
-        depositPaid={securityDepositAmount}
-        overdueAmount={overdueAmount}
-      />
-
-      {/* Row 3: Insights Grid & Private Notes */}
+      {/* Row 2: Insights Grid & Private Notes */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         <TenantHealthCard
           score={tenantScore?.score ?? 80}
@@ -534,7 +572,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
         <OwnerInsights
           score={tenantScore?.score ?? null}
           overdueDays={overdueDays}
-          outstandingAmount={Number(paymentSummary?.pending_amount ?? overview.outstanding ?? 0)}
+          outstandingAmount={outstandingAmount}
           depositStatus={securityDepositAmount === 0 ? 'WAIVED' : 'PAID'}
           hasAgreement={Boolean(allocations?.length > 0)}
           documentStatus={String(compliance.document_verification_status ?? 'MISSING').toUpperCase()}
@@ -544,398 +582,300 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
         <PrivateNotes tenantId={tenantId} />
       </div>
 
-      {/* Bottom Layout Workspace (Two-column) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Column (Dues, Stay Accordion, KYC Accordion) */}
-        <div className="lg:col-span-7 space-y-6">
-          {/* Warning Bar */}
-          {needsRoomAssignment && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-              <div className="flex items-start gap-3">
-                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-amber-900">Tenant requires room assignment</p>
-                  <p className="mt-1 text-xs leading-5 text-amber-800">
-                    This tenant is active but not allocated to a room. Assign a room to calculate billing correctly.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setIsStayExpanded(true)}
-                    className="mt-3 rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white hover:bg-amber-700"
-                  >
-                    Assign Room
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Pending billing change request */}
-          {pendingBillingRequests.length > 0 && (
-            <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 space-y-3 shadow-sm">
-              <p className="text-sm font-bold text-amber-950 flex items-center gap-1.5">
-                <AlertCircle className="w-4 h-4" />
-                <span>Pending Frequency Request</span>
+      {/* Warning Bar */}
+      {needsRoomAssignment && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-amber-900">Tenant requires room assignment</p>
+              <p className="mt-1 text-xs leading-5 text-amber-800">
+                This tenant is active but not allocated to a room. Assign a room to calculate billing correctly.
               </p>
-              {pendingBillingRequests.map((request: any) => (
-                <div key={request.id} className="rounded-lg bg-white border border-amber-200 p-3.5 space-y-3 shadow-xs">
-                  <div>
-                    <p className="text-xs font-bold text-foreground">
-                      Change payment terms: {String(request.current_frequency).replaceAll('_', ' ')} → {String(request.requested_frequency).replaceAll('_', ' ')}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">
-                      Effective Date: {request.effective_from ? new Date(request.effective_from).toLocaleDateString('en-IN') : 'next period'}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      disabled={decisionMutation.isPending}
-                      onClick={() => decisionMutation.mutate({ id: request.id, action: 'APPROVE' })}
-                      className="bg-accent text-accent-foreground px-3 py-1.5 rounded-lg text-xs font-bold active:scale-95 transition-transform"
-                    >
-                      Approve Change
-                    </button>
-                    <button
-                      type="button"
-                      disabled={decisionMutation.isPending}
-                      onClick={() => decisionMutation.mutate({ id: request.id, action: 'REJECT' })}
-                      className="border border-border bg-background px-3 py-1.5 rounded-lg text-xs font-bold active:scale-95 transition-transform"
-                    >
-                      Reject
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Next Rent Generation Info */}
-          {billingTimeline.data?.next_rent_generation && (
-            <div className="p-4 rounded-2xl border border-accent/20 bg-accent/5 text-xs shadow-sm flex justify-between items-center gap-4">
-              <div>
-                <p className="font-extrabold text-foreground text-sm flex items-center gap-1.5">
-                  <CalendarDays className="w-4 h-4 text-accent" />
-                  Next Auto Rent Generation
-                </p>
-                <p className="text-muted-foreground mt-1 text-[11px]">
-                  Scheduled: {new Date(billingTimeline.data.next_rent_generation.next_rent_generation_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                  {' · Period: '}{new Date(billingTimeline.data.next_rent_generation.period_start).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="font-black text-foreground text-sm">
-                  ₹{billingTimeline.data.next_rent_generation.next_installment_amount.toLocaleString('en-IN')}
-                </p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">
-                  Due: {new Date(billingTimeline.data.next_rent_generation.next_installment_due_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Rent Obligation List (Monthly Rent Dues) */}
-          <div className="p-4 rounded-2xl border border-border bg-card shadow-sm space-y-4">
-            <div className="flex justify-between items-center border-b border-border pb-3">
-              <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                <IndianRupee className="w-4 h-4 text-accent" />
-                Rent Dues &amp; Ledger List
-              </h3>
               <button
                 type="button"
-                onClick={() => setShowCreateObligationModal(true)}
-                className="py-1.5 px-3 rounded-xl bg-accent/15 hover:bg-accent/20 text-accent text-xs font-semibold active:scale-95 transition-transform flex items-center gap-1 border border-accent/20"
+                onClick={() => setIsStayExpanded(true)}
+                className="mt-3 rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white hover:bg-amber-700"
               >
-                <PlusCircle className="w-3.5 h-3.5" />
-                <span>Add Charge</span>
+                Assign Room
               </button>
             </div>
-            <RentObligationList
-              obligations={obligations as never[]}
-              onRecordPayment={(id) => {
-                setPayObligationId(id);
-                setShowPaymentModal(true);
-              }}
-              onWaiveObligation={(ob) => {
-                setWaiveObligation(ob);
-              }}
-              hasActivePlan={Number(tenant?.monthly_rent ?? overview?.rent ?? 0) > 0}
+          </div>
+        </div>
+      )}
+
+      {/* Pending billing change request */}
+      {pendingBillingRequests.length > 0 && (
+        <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 space-y-3 shadow-sm">
+          <p className="text-sm font-bold text-amber-950 flex items-center gap-1.5">
+            <AlertCircle className="w-4 h-4" />
+            <span>Pending Frequency Request</span>
+          </p>
+          {pendingBillingRequests.map((request: any) => (
+            <div key={request.id} className="rounded-lg bg-white border border-amber-200 p-3.5 space-y-3 shadow-xs">
+              <div>
+                <p className="text-xs font-bold text-foreground">
+                  Change payment terms: {String(request.current_frequency).replace(/_/g, ' ')} → {String(request.requested_frequency).replace(/_/g, ' ')}
+                </p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  Effective Date: {request.effective_from ? new Date(request.effective_from).toLocaleDateString('en-IN') : 'next period'}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={decisionMutation.isPending}
+                  onClick={() => decisionMutation.mutate({ id: request.id, action: 'APPROVE' })}
+                  className="bg-accent text-accent-foreground px-3 py-1.5 rounded-lg text-xs font-bold active:scale-95 transition-transform"
+                >
+                  Approve Change
+                </button>
+                <button
+                  type="button"
+                  disabled={decisionMutation.isPending}
+                  onClick={() => decisionMutation.mutate({ id: request.id, action: 'REJECT' })}
+                  className="border border-border bg-background px-3 py-1.5 rounded-lg text-xs font-bold active:scale-95 transition-transform"
+                >
+                  Reject
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ═══════════════════════ FINANCIAL WORKSPACE ═══════════════════════ */}
+      <FinancialWorkspaceNav onNavigate={handleNavigate} />
+
+      {/* §1 Summary */}
+      <CompactFinancialStrip
+        outstandingAmount={outstandingAmount}
+        overdueDays={overdueDays}
+        futureCredit={futureCredit}
+        depositPaid={securityDepositAmount}
+        overdueAmount={overdueAmount}
+        nextRentDate={nextRentDate}
+        nextRentAmount={nextRentAmount}
+        agreementMonthsElapsed={agreementMonthsElapsed}
+        agreementMonthsTotal={agreementMonthsTotal}
+        onNavigate={handleNavigate}
+      />
+
+      {/* §1b Financial Health Banner + Recommended Next Action */}
+      <FinancialHealthBanner
+        overdueAmount={overdueAmount}
+        overdueDays={overdueDays}
+        pendingAmount={outstandingAmount}
+        futureCredit={futureCredit}
+        nextRentLabel={nextRentLabel}
+        onCollect={(prefillAmount) => handleOpenReceivePayment(prefillAmount)}
+      />
+
+      {/* §2 Primary Actions */}
+      <PrimaryActionsBar
+        tenantId={tenantId}
+        onReceivePayment={() => handleOpenReceivePayment()}
+        onCreateCharge={() => setObligationModal({ mode: 'create' })}
+        onCreateRent={() => setObligationModal({ mode: 'create', initialValues: { obligationType: 'RENT' } })}
+        onViewReceipts={() => handleNavigate('fin-documents')}
+      />
+
+      {/* §3 Obligations + §4 Financial Activity */}
+      {isMobile ? (
+        <Tabs value={mobileTab} onValueChange={(v) => setMobileTab(v as MobileTab)}>
+          <TabsList className="w-full overflow-x-auto scrollbar-hide">
+            <TabsTrigger value="obligations">Obligations</TabsTrigger>
+            <TabsTrigger value="activity">Activity</TabsTrigger>
+            <TabsTrigger value="ledger">Ledger</TabsTrigger>
+            <TabsTrigger value="documents">Documents</TabsTrigger>
+          </TabsList>
+          <TabsContent value="obligations">{obligationsSection}</TabsContent>
+          <TabsContent value="activity">{activitySection}</TabsContent>
+          <TabsContent value="ledger">{ledgerSection}</TabsContent>
+          <TabsContent value="documents">{documentsSection}</TabsContent>
+        </Tabs>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            <div className="lg:col-span-5">{obligationsSection}</div>
+            <div className="lg:col-span-7">{activitySection}</div>
+          </div>
+          {ledgerSection}
+          {documentsSection}
+        </>
+      )}
+
+      {/* Collapsible Identity & KYC Documents Card */}
+      <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setIsKycExpanded(!isKycExpanded)}
+          className="w-full flex items-center justify-between p-4 font-bold text-foreground text-sm border-none bg-transparent hover:bg-muted/5 transition-colors text-left"
+        >
+          <span className="flex items-center gap-1.5">
+            <FileCheck2 className="w-4.5 h-4.5 text-accent" />
+            KYC Verification &amp; Documents
+          </span>
+          <span className="flex items-center gap-2">
+            <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold uppercase ${
+              compliance.document_verification_status === 'VERIFIED'
+                ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                : compliance.document_verification_status === 'PENDING'
+                ? 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                : 'bg-rose-500/10 text-rose-600 border-rose-500/20'
+            }`}>
+              {String(compliance.document_verification_status ?? 'MISSING')}
+            </span>
+            {isKycExpanded ? <ChevronUp className="w-4.5 h-4.5" /> : <ChevronDown className="w-4.5 h-4.5" />}
+          </span>
+        </button>
+        {isKycExpanded && (
+          <div className="p-4 border-t border-border bg-secondary/5 space-y-4">
+            <div className="flex gap-3 flex-wrap justify-between items-center text-xs">
+              <div className="flex gap-2">
+                <button type="button" onClick={() => runComplianceAction('REMIND_DOCUMENTS', 'Document reminder sent')} className="text-accent font-semibold hover:underline">
+                  Remind documents
+                </button>
+                <span className="text-muted-foreground/30">·</span>
+                <button type="button" onClick={() => runComplianceAction('RESEND_RULES', 'Rules reminder sent')} className="text-muted-foreground hover:text-foreground hover:underline">
+                  Resend rules reminder
+                </button>
+              </div>
+              <button type="button" onClick={downloadAcceptanceRecord} className="text-muted-foreground hover:text-foreground hover:underline">
+                Download rules acceptance JSON
+              </button>
+            </div>
+
+            <VerificationPanel
+              hostelId={hostelId}
+              tenantId={tenantId}
+              profileType={String(tenant?.profile_type ?? 'STUDENT')}
+              documents={(full?.identification_documents ?? full?.documents ?? []) as Record<string, unknown>[]}
+              photoUrl={photoUrl}
+              onUpdated={refetch}
             />
           </div>
-
-          {/* Collapsible Identity & KYC Documents Card */}
-          <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setIsKycExpanded(!isKycExpanded)}
-              className="w-full flex items-center justify-between p-4 font-bold text-foreground text-sm border-none bg-transparent hover:bg-muted/5 transition-colors text-left"
-            >
-              <span className="flex items-center gap-1.5">
-                <FileCheck2 className="w-4.5 h-4.5 text-accent" />
-                KYC Verification &amp; Documents
-              </span>
-              <span className="flex items-center gap-2">
-                <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold uppercase ${
-                  compliance.document_verification_status === 'VERIFIED'
-                    ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
-                    : compliance.document_verification_status === 'PENDING'
-                    ? 'bg-amber-500/10 text-amber-600 border-amber-500/20'
-                    : 'bg-rose-500/10 text-rose-600 border-rose-500/20'
-                }`}>
-                  {String(compliance.document_verification_status ?? 'MISSING')}
-                </span>
-                {isKycExpanded ? <ChevronUp className="w-4.5 h-4.5" /> : <ChevronDown className="w-4.5 h-4.5" />}
-              </span>
-            </button>
-            {isKycExpanded && (
-              <div className="p-4 border-t border-border bg-secondary/5 space-y-4">
-                {/* Secondary compliance actions links */}
-                <div className="flex gap-3 flex-wrap justify-between items-center text-xs">
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => runComplianceAction('REMIND_DOCUMENTS', 'Document reminder sent')}
-                      className="text-accent font-semibold hover:underline"
-                    >
-                      Remind documents
-                    </button>
-                    <span className="text-muted-foreground/30">·</span>
-                    <button
-                      type="button"
-                      onClick={() => runComplianceAction('RESEND_RULES', 'Rules reminder sent')}
-                      className="text-muted-foreground hover:text-foreground hover:underline"
-                    >
-                      Resend rules reminder
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={downloadAcceptanceRecord}
-                    className="text-muted-foreground hover:text-foreground hover:underline"
-                  >
-                    Download rules acceptance JSON
-                  </button>
-                </div>
-
-                <VerificationPanel
-                  hostelId={hostelId}
-                  tenantId={tenantId}
-                  profileType={String(tenant?.profile_type ?? 'STUDENT')}
-                  documents={
-                    (full?.identification_documents ?? full?.documents ?? []) as Record<string, unknown>[]
-                  }
-                  photoUrl={photoUrl}
-                  onUpdated={refetch}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Collapsible Stay History & Move-Out settings */}
-          <div id="stay-details-section" className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setIsStayExpanded(!isStayExpanded)}
-              className="w-full flex items-center justify-between p-4 font-bold text-foreground text-sm border-none bg-transparent hover:bg-muted/5 transition-colors text-left"
-            >
-              <span className="flex items-center gap-1.5">
-                <BedDouble className="w-4.5 h-4.5 text-accent" />
-                Stay Details &amp; Checkout Workflow
-              </span>
-              <span className="flex items-center gap-2">
-                <span className="text-[10px] px-2.5 py-0.5 rounded bg-secondary font-bold text-muted-foreground border border-border">
-                  Room {displayedRoomNo ?? 'None'}
-                </span>
-                {isStayExpanded ? <ChevronUp className="w-4.5 h-4.5" /> : <ChevronDown className="w-4.5 h-4.5" />}
-              </span>
-            </button>
-            {isStayExpanded && (
-              <div className="p-4 border-t border-border bg-secondary/5 space-y-6">
-                <AllocationHistoryTimeline
-                  hostelId={hostelId}
-                  tenantId={tenantId}
-                  allocations={allocations}
-                  currentRoom={currentRoom}
-                  onChanged={refetch}
-                />
-                
-                <div className="border-t border-border/60 pt-5">
-                  <h4 className="text-xs font-bold text-foreground mb-3 flex items-center gap-1.5 uppercase tracking-wider text-muted-foreground">
-                    <LogOut className="w-4 h-4 text-rose-500" />
-                    Move-Out Settlement Workflow
-                  </h4>
-                  <ExitWorkflowSection hostelId={hostelId} tenantId={tenantId} status={status} />
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right Column (Unified Activity log & Ledger timeline) */}
-        <div className="lg:col-span-5 space-y-5">
-          <div className="p-4 rounded-2xl border border-border bg-card shadow-sm space-y-4">
-            {/* Header tab buttons */}
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                <History className="w-4.5 h-4.5 text-accent" />
-                Workspace Feed
-              </h3>
-              <div className="flex gap-1.5 bg-secondary/60 p-1 rounded-xl border border-border/80">
-                <button
-                  type="button"
-                  onClick={() => setRightColumnTab('activity')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                    rightColumnTab === 'activity'
-                      ? 'bg-card text-foreground shadow-xs'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  Activity
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRightColumnTab('ledger')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                    rightColumnTab === 'ledger'
-                      ? 'bg-card text-foreground shadow-xs'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  Ledger
-                </button>
-              </div>
-            </div>
-
-            {/* Content body */}
-            {rightColumnTab === 'activity' ? (
-              <ActivityTimeline
-                hostelId={hostelId}
-                tenantId={tenantId}
-                tenantName={name}
-                joinedOn={String(tenant.joined_on ?? overview.joined_at ?? '')}
-                profileType={String(tenant?.profile_type ?? 'STUDENT')}
-                documents={(full?.identification_documents ?? full?.documents ?? [])}
-                allocations={allocations}
-                timelineItems={timelineItems}
-                recentPayments={recentPayments}
-                moveOutRequest={overview.move_out ?? overview.move_out_request}
-              />
-            ) : (
-              <div className="space-y-3">
-                {mergedTimeline.length === 0 ? (
-                  <p className="text-xs text-muted-foreground py-6 text-center">No ledger events recorded yet.</p>
-                ) : (
-                  <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
-                    {mergedTimeline.slice(0, 16).map((item) => (
-                      <div key={item.id} className={`flex justify-between gap-3 rounded-xl border p-3.5 text-xs ${item.tone} shadow-sm`}>
-                        <div className="min-w-0">
-                          <p className="font-bold text-foreground truncate">{item.title}</p>
-                          <p className="text-muted-foreground mt-0.5 text-[11px] leading-relaxed">{item.subtitle}</p>
-                          <p className="text-[10px] text-muted-foreground mt-1.5 font-semibold">
-                            {item.dateVerb}: {item.date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                          </p>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <p className="font-extrabold text-foreground text-sm">₹{item.amount.toLocaleString('en-IN')}</p>
-                          <span className={`inline-block text-[9px] font-bold uppercase mt-2 px-2 py-0.5 rounded-full border ${item.statusColor}`}>
-                            {item.status}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Invitation history card (only shown if invitations exist) */}
-          {((tenant?.tenant_invitations ?? overview?.tenant_invitations ?? []) as any[]).length > 0 && (
-            <div className="p-4 rounded-2xl border border-border bg-card shadow-sm space-y-4">
-              <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                <History className="w-4.5 h-4.5 text-accent" />
-                Invitation History Logs
-              </h3>
-              
-              <div className="relative pl-5 border-l border-border space-y-4 ml-1">
-                {((tenant?.tenant_invitations ?? overview?.tenant_invitations ?? []) as any[]).map((invite: any, index: number, arr: any[]) => {
-                  const versionNum = arr.length - index;
-                  const isActive = index === 0;
-                  
-                  let badgeText = 'Superseded';
-                  let badgeClass = 'bg-secondary/40 text-muted-foreground border-border/50';
-                  
-                  if (isActive) {
-                    if (status === 'ACTIVE') {
-                      badgeText = 'Accepted';
-                      badgeClass = 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20';
-                    } else if (status === 'CANCELLED') {
-                      badgeText = 'Cancelled';
-                      badgeClass = 'bg-rose-500/10 text-rose-600 border-rose-500/20';
-                    } else {
-                      badgeText = 'Active';
-                      badgeClass = 'bg-accent/10 text-accent border-accent/20';
-                    }
-                  }
-
-                  return (
-                    <div key={invite.id} className="relative group text-xs">
-                      <span className={`absolute -left-[26px] top-1.5 w-2 h-2 rounded-full border bg-card ${isActive ? 'border-accent animate-pulse' : 'border-muted'}`} />
-                      
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-bold text-foreground text-xs">Version {versionNum}</span>
-                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider ${badgeClass}`}>
-                            {badgeText}
-                          </span>
-                          <span className="text-[9px] text-muted-foreground ml-auto font-medium">
-                            {invite.created_at ? new Date(invite.created_at).toLocaleDateString('en-IN', {
-                              day: '2-digit',
-                              month: 'short',
-                              year: 'numeric'
-                            }) : ''}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-2 mt-1.5 text-[11px] text-muted-foreground p-2.5 bg-secondary/20 rounded-xl border border-border/40">
-                          <div>
-                            <span className="block text-[9px] text-muted-foreground/80 uppercase">Room</span>
-                            <span className="font-bold text-foreground">{invite.room?.room_no || 'Unassigned'}</span>
-                          </div>
-                          <div>
-                            <span className="block text-[9px] text-muted-foreground/80 uppercase font-semibold">Monthly Rent</span>
-                            <span className="font-bold text-foreground">{money(invite.monthly_rent)}</span>
-                          </div>
-                          <div>
-                            <span className="block text-[9px] text-muted-foreground/80 uppercase">Agreement</span>
-                            <span className="font-bold text-foreground">
-                              {invite.agreement_duration_months ? `${invite.agreement_duration_months} mo` : '—'}
-                            </span>
-                          </div>
-                        </div>
-
-                        {invite.notes && (
-                          <div className="mt-1 text-[10px] text-muted-foreground p-2.5 bg-rose-500/5 rounded-xl border border-rose-500/10 font-mono">
-                            {invite.notes}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
+        )}
       </div>
 
-      {/* Change Timeline Section */}
-      {status.toUpperCase() === 'ACTIVE' && (
-        <div id="change-timeline-section">
-          <ChangeTimeline
-            changes={recentChanges}
-            onViewAll={() => navigate(`/changes?tenantId=${tenantId}`)}
-          />
+      {/* Collapsible Stay History & Move-Out settings */}
+      <div id="stay-details-section" className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setIsStayExpanded(!isStayExpanded)}
+          className="w-full flex items-center justify-between p-4 font-bold text-foreground text-sm border-none bg-transparent hover:bg-muted/5 transition-colors text-left"
+        >
+          <span className="flex items-center gap-1.5">
+            <BedDouble className="w-4.5 h-4.5 text-accent" />
+            Stay Details &amp; Checkout Workflow
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="text-[10px] px-2.5 py-0.5 rounded bg-secondary font-bold text-muted-foreground border border-border">
+              Room {displayedRoomNo ?? 'None'}
+            </span>
+            {isStayExpanded ? <ChevronUp className="w-4.5 h-4.5" /> : <ChevronDown className="w-4.5 h-4.5" />}
+          </span>
+        </button>
+        {isStayExpanded && (
+          <div className="p-4 border-t border-border bg-secondary/5 space-y-6">
+            <AllocationHistoryTimeline
+              hostelId={hostelId}
+              tenantId={tenantId}
+              allocations={allocations}
+              currentRoom={currentRoom}
+              onChanged={refetch}
+            />
+            <div className="border-t border-border/60 pt-5">
+              <h4 className="text-xs font-bold text-foreground mb-3 flex items-center gap-1.5 uppercase tracking-wider text-muted-foreground">
+                <LogOut className="w-4 h-4 text-rose-500" />
+                Move-Out Settlement Workflow
+              </h4>
+              <ExitWorkflowSection hostelId={hostelId} tenantId={tenantId} status={status} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Non-financial general activity feed (KYC/room/comms) — kept separate from Financial Activity */}
+      <div className="p-4 rounded-2xl border border-border bg-card shadow-sm space-y-4">
+        <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
+          <History className="w-4.5 h-4.5 text-accent" />
+          Recent Activity
+        </h3>
+        <ActivityTimeline
+          hostelId={hostelId}
+          tenantId={tenantId}
+          tenantName={name}
+          joinedOn={String(tenant.joined_on ?? overview.joined_at ?? '')}
+          profileType={String(tenant?.profile_type ?? 'STUDENT')}
+          documents={(full?.identification_documents ?? full?.documents ?? [])}
+          allocations={allocations}
+          timelineItems={[]}
+          recentPayments={recentPayments}
+          moveOutRequest={overview.move_out ?? overview.move_out_request}
+        />
+      </div>
+
+      {/* Invitation history card (only shown if invitations exist) */}
+      {((tenant?.tenant_invitations ?? overview?.tenant_invitations ?? []) as any[]).length > 0 && (
+        <div className="p-4 rounded-2xl border border-border bg-card shadow-sm space-y-4">
+          <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
+            <History className="w-4.5 h-4.5 text-accent" />
+            Invitation History Logs
+          </h3>
+          <div className="relative pl-5 border-l border-border space-y-4 ml-1">
+            {((tenant?.tenant_invitations ?? overview?.tenant_invitations ?? []) as any[]).map((invite: any, index: number, arr: any[]) => {
+              const versionNum = arr.length - index;
+              const isActive = index === 0;
+              let badgeText = 'Superseded';
+              let badgeClass = 'bg-secondary/40 text-muted-foreground border-border/50';
+              if (isActive) {
+                if (status === 'ACTIVE') {
+                  badgeText = 'Accepted';
+                  badgeClass = 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20';
+                } else if (status === 'CANCELLED') {
+                  badgeText = 'Cancelled';
+                  badgeClass = 'bg-rose-500/10 text-rose-600 border-rose-500/20';
+                } else {
+                  badgeText = 'Active';
+                  badgeClass = 'bg-accent/10 text-accent border-accent/20';
+                }
+              }
+              return (
+                <div key={invite.id} className="relative group text-xs">
+                  <span className={`absolute -left-[26px] top-1.5 w-2 h-2 rounded-full border bg-card ${isActive ? 'border-accent animate-pulse' : 'border-muted'}`} />
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-foreground text-xs">Version {versionNum}</span>
+                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider ${badgeClass}`}>{badgeText}</span>
+                      <span className="text-[9px] text-muted-foreground ml-auto font-medium">
+                        {invite.created_at ? new Date(invite.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : ''}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 mt-1.5 text-[11px] text-muted-foreground p-2.5 bg-secondary/20 rounded-xl border border-border/40">
+                      <div>
+                        <span className="block text-[9px] text-muted-foreground/80 uppercase">Room</span>
+                        <span className="font-bold text-foreground">{invite.room?.room_no || 'Unassigned'}</span>
+                      </div>
+                      <div>
+                        <span className="block text-[9px] text-muted-foreground/80 uppercase font-semibold">Monthly Rent</span>
+                        <span className="font-bold text-foreground">{money(invite.monthly_rent)}</span>
+                      </div>
+                      <div>
+                        <span className="block text-[9px] text-muted-foreground/80 uppercase">Agreement</span>
+                        <span className="font-bold text-foreground">
+                          {invite.agreement_duration_months ? `${invite.agreement_duration_months} mo` : '—'}
+                        </span>
+                      </div>
+                    </div>
+                    {invite.notes && (
+                      <div className="mt-1 text-[10px] text-muted-foreground p-2.5 bg-rose-500/5 rounded-xl border border-rose-500/10 font-mono">{invite.notes}</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -956,12 +896,14 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
           context={{
             tenantId,
             obligationId: payObligationId || undefined,
+            defaultAmount: paymentPrefillAmount,
             source: 'tenant-profile',
           }}
           initialTenantData={overview}
           onClose={() => {
             setShowPaymentModal(false);
             setPayObligationId(null);
+            setPaymentPrefillAmount(undefined);
             refetch();
           }}
         />
@@ -978,6 +920,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
           }}
         />
       )}
+
       {/* Waive Obligation Modal */}
       {waiveObligation && (
         <WaiveObligationModal
@@ -994,14 +937,43 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
         />
       )}
 
-      {/* Create Obligation Modal */}
-      {showCreateObligationModal && (
+      {/* Cancel Obligation Modal (also used as the second step of "Edit") */}
+      {cancelObligationTarget && (
+        <CancelObligationModal
+          isOpen={true}
+          obligation={cancelObligationTarget}
+          onClose={() => setCancelObligationTarget(null)}
+          onConfirm={async (reason, identityToken) => {
+            const id = cancelObligationTarget.id || cancelObligationTarget.obligation_id;
+            await api.post(`/payments/obligations/${id}/cancel`, {
+              reason: cancelObligationTarget.__editReason ?? reason,
+              identityToken,
+            });
+            refetch();
+          }}
+        />
+      )}
+
+      {/* Obligation History Sheet */}
+      <ObligationHistorySheet
+        obligationId={historyObligation ? (historyObligation.id || historyObligation.obligation_id) : null}
+        label={historyObligation ? String(historyObligation.obligation_type || historyObligation.type || 'Obligation').replace(/_/g, ' ') : ''}
+        onClose={() => setHistoryObligation(null)}
+      />
+
+      {/* Create / Duplicate / Edit Obligation Modal */}
+      {(showCreateObligationModal || obligationModal) && (
         <CreateObligationModal
           isOpen={true}
           tenantId={tenantId}
           hostelId={hostelId}
-          onClose={() => setShowCreateObligationModal(false)}
-          onSuccess={() => refetch()}
+          mode={obligationModal?.mode ?? 'create'}
+          initialValues={obligationModal?.initialValues}
+          onClose={() => {
+            setShowCreateObligationModal(false);
+            setObligationModal(null);
+          }}
+          onSuccess={obligationModal?.mode === 'edit' ? handleEditObligationSuccess : () => refetch()}
         />
       )}
     </div>

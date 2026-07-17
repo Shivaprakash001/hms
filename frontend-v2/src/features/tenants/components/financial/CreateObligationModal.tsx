@@ -12,7 +12,17 @@ interface CreateObligationModalProps {
   tenantId: string;
   hostelId: string;
   onSuccess: () => void;
+  /** Prefill for "Create Rent" quick action and "Duplicate Charge"/"Edit" obligation actions */
+  initialValues?: { obligationType?: string; amount?: number; description?: string };
+  /** Cosmetic only — changes title/copy; all modes POST a new obligation the same way */
+  mode?: 'create' | 'duplicate' | 'edit';
 }
+
+const MODE_COPY: Record<NonNullable<CreateObligationModalProps['mode']>, { title: string; description: string }> = {
+  create: { title: 'Create Financial Obligation', description: 'Add a custom manual charge or obligation for this tenant' },
+  duplicate: { title: 'Duplicate Charge', description: 'Create a new charge based on this one' },
+  edit: { title: 'Edit Obligation', description: 'Obligations are immutable once created — this creates a corrected replacement and cancels the original' },
+};
 
 const ALLOWED_TYPES = [
   { value: 'RENT', label: 'Rent Installment' },
@@ -34,12 +44,15 @@ export function CreateObligationModal({
   tenantId,
   hostelId,
   onSuccess,
+  initialValues,
+  mode = 'create',
 }: CreateObligationModalProps) {
-  const [type, setType] = useState('RENT');
-  const [amount, setAmount] = useState('');
+  const copy = MODE_COPY[mode];
+  const [type, setType] = useState(initialValues?.obligationType ?? 'RENT');
+  const [amount, setAmount] = useState(initialValues?.amount ? String(initialValues.amount) : '');
   const [dueDate, setDueDate] = useState('');
   const [rentMonth, setRentMonth] = useState('');
-  const [description, setDescription] = useState('');
+  const [description, setDescription] = useState(initialValues?.description ?? '');
   const [notes, setNotes] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -121,8 +134,8 @@ export function CreateObligationModal({
             <PlusCircle className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-foreground">Create Financial Obligation</h3>
-            <p className="text-xs text-muted-foreground">Add a custom manual charge or obligation for this tenant</p>
+            <h3 className="text-base font-bold text-foreground">{copy.title}</h3>
+            <p className="text-xs text-muted-foreground">{copy.description}</p>
           </div>
         </div>
 
@@ -257,7 +270,7 @@ export function CreateObligationModal({
               ) : (
                 <PlusCircle className="w-4 h-4" />
               )}
-              <span>Create Obligation</span>
+              <span>{mode === 'edit' ? 'Create Replacement' : 'Create Obligation'}</span>
             </button>
           </div>
         </form>

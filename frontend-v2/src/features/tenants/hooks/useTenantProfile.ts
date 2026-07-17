@@ -40,12 +40,20 @@ export function useTenantProfile(hostelId: string, tenantId: string, section?: s
     staleTime: 60_000,
   });
 
+  const financialTimelineQuery = useQuery({
+    queryKey: queryKeys.tenants.financialTimeline(hostelId, tenantId),
+    queryFn: () => tenantService.getFinancialTimeline(tenantId, hostelId),
+    enabled: Boolean(hostelId && tenantId),
+    staleTime: 30_000,
+  });
+
   return {
     overview: overviewQuery.data,
     full: fullQuery.data,
     allocations: allocationsQuery.data,
     dues: duesQuery.data,
     advance: advanceQuery.data,
+    financialTimeline: financialTimelineQuery.data,
     isLoading: overviewQuery.isLoading,
     isError: overviewQuery.isError,
     refetch: () => {
@@ -54,6 +62,7 @@ export function useTenantProfile(hostelId: string, tenantId: string, section?: s
       allocationsQuery.refetch();
       duesQuery.refetch();
       advanceQuery.refetch();
+      financialTimelineQuery.refetch();
     },
   };
 }

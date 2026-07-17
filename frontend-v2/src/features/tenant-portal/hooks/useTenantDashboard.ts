@@ -6,6 +6,7 @@ export const tenantQueryKeys = {
   dashboard: () => ['tenant', 'dashboard'] as const,
   profile: () => ['tenant', 'me', 'profile'] as const,
   dues: () => ['tenant', 'me', 'dues'] as const,
+  readModel: () => ['tenant', 'me', 'financial-read-model'] as const,
   payments: () => ['tenant', 'me', 'payments'] as const,
   room: () => ['tenant', 'me', 'room'] as const,
   score: () => ['tenant', 'me', 'score'] as const,
@@ -27,6 +28,12 @@ export function useTenantDashboard() {
   const duesQ = useQuery({
     queryKey: tenantQueryKeys.dues(),
     queryFn: () => tenantPortalApi.getDuesBreakdown(),
+    staleTime: 30_000,
+  });
+
+  const readModelQ = useQuery({
+    queryKey: tenantQueryKeys.readModel(),
+    queryFn: () => tenantPortalApi.getFinancialReadModel(),
     staleTime: 30_000,
   });
 
@@ -111,6 +118,7 @@ export function useTenantDashboard() {
   const refetchAll = () => {
     profileQ.refetch();
     duesQ.refetch();
+    readModelQ.refetch();
     paymentsQ.refetch();
     roomQ.refetch();
     scoreQ.refetch();
@@ -125,6 +133,7 @@ export function useTenantDashboard() {
   return {
     profile: profileQ.data,
     dues: duesQ.data,
+    readModel: readModelQ.data,
     payments: paymentsQ.data,
     room: roomQ.data,
     score: scoreQ.data,

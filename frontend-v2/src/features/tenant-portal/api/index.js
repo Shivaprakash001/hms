@@ -28,6 +28,10 @@ export const tenantPortalApi = {
     return Array.isArray(data) ? data : data?.notifications ?? [];
   },
   getAdvance: async () => tenantService.getMyFinancialLedger(),
+  getFinancialReadModel: async () => {
+    const response = await api.get('/tenants/me/financial-read-model');
+    return unwrap(response);
+  },
   uploadMyPhoto: async (file) => {
     const formData = new FormData();
     formData.append('file', file);

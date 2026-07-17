@@ -58,6 +58,21 @@ export type PresentationStatus =
  * This is the ONLY function that computes display status — no other logic
  * should duplicate this derivation.
  */
+function utcMidnight(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
+
+/**
+ * Derive the presentation status from the canonical two-column state.
+ * This is the ONLY function that computes display status — no other logic
+ * should duplicate this derivation.
+ *
+ * Uses UTC-midnight comparison, matching settlement-planner.ts::isPastDueDate
+ * (due_date columns are always UTC-midnight-anchored business dates — see
+ * agreement-rent-schedule-service.ts's firstOfUtcMonth/dueDateForMonth).
+ * Comparing against a local-timezone "today" would shift the effective
+ * calendar-day boundary by up to the server's UTC offset.
+ */
 export function derivePresentationStatus(
   lifecycle: LifecycleStatus,
   settlement: SettlementStatus,
@@ -68,19 +83,15 @@ export function derivePresentationStatus(
   if (lifecycle === "WAIVED") return "WAIVED";
 
   // lifecycle === "ACTIVE"
+  const dueDateStart = utcMidnight(dueDate);
+  const nowStart = utcMidnight(now);
+
   if (settlement === "PAID") return "PAID";
   if (settlement === "PARTIAL") {
-    const dueDateStart = new Date(dueDate);
-    dueDateStart.setHours(0, 0, 0, 0);
-    return now > dueDateStart ? "OVERDUE" : "PARTIAL";
+    return nowStart > dueDateStart ? "OVERDUE" : "PARTIAL";
   }
 
   // UNPAID
-  const dueDateStart = new Date(dueDate);
-  dueDateStart.setHours(0, 0, 0, 0);
-  const nowStart = new Date(now);
-  nowStart.setHours(0, 0, 0, 0);
-
   if (nowStart > dueDateStart) return "OVERDUE";
   if (nowStart < dueDateStart) return "UPCOMING";
   return "PENDING"; // same day

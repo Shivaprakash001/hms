@@ -398,7 +398,7 @@ class FinancialTimelineService {
       where,
       select: {
         id: true,
-        entry_type: true,
+        type: true,
         amount: true,
         reason: true,
         notes: true,
@@ -413,9 +413,9 @@ class FinancialTimelineService {
     return entries.map((e: any) => ({
       id: `ledger:${e.id}`,
       timestamp: e.created_at,
-      type: (e.entry_type === "CREDIT" ? "LEDGER_CREDIT" : "LEDGER_DEBIT") as TimelineEventType,
-      summary: `${e.entry_type} ₹${Number(e.amount).toLocaleString("en-IN")} — ${e.reason || ""}`,
-      amount: e.entry_type === "CREDIT" ? Number(e.amount) : -(Number(e.amount)),
+      type: (e.type === "CREDIT" ? "LEDGER_CREDIT" : "LEDGER_DEBIT") as TimelineEventType,
+      summary: `${e.type} ₹${Number(e.amount).toLocaleString("en-IN")} — ${e.reason || ""}`,
+      amount: e.type === "CREDIT" ? Number(e.amount) : -(Number(e.amount)),
       source: { table: "tenant_financial_ledger", id: e.id },
       references: {
         ledger_entry_id: e.id,

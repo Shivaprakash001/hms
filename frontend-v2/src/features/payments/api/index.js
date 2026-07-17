@@ -173,6 +173,10 @@ export const paymentService = {
         const response = await api.get(`/payments/${obligationId}`, { params: { hostelId } });
         return response.data?.data ?? response.data;
     },
+    getObligationHistory: async (obligationId) => {
+        const response = await api.get(`/payments/obligations/${obligationId}/history`);
+        return unwrap(response);
+    },
     downloadReceipt: async (paymentId) => {
         const response = await api.get(`/payments/${paymentId}/receipt`, {
             responseType: 'blob'

@@ -31,8 +31,8 @@ async function getOverduePreview(ownerId: string, hostelId: string) {
       COALESCE(t.phone_1, p.phone) AS tenant_phone,
       r.room_no AS room_no,
       ro.due_date AS due_date,
-      ro.amount::float AS amount,
-      GREATEST(0, (ro.amount - COALESCE(SUM(pay.amount_paid), 0)))::float AS outstanding,
+      COALESCE(ro.total_amount, ro.amount)::float AS amount,
+      GREATEST(0, (COALESCE(ro.total_amount, ro.amount) - COALESCE(SUM(pay.amount_paid), 0)))::float AS outstanding,
       GREATEST(1, (CURRENT_DATE - ro.due_date)::int) AS days_overdue
     FROM rent_obligations ro
     JOIN tenants t ON t.id = ro.tenant_id
@@ -45,8 +45,8 @@ async function getOverduePreview(ownerId: string, hostelId: string) {
       AND ro.status IN ('PENDING', 'PARTIAL')
       AND t.status = 'ACTIVE'
       AND ro.due_date < CURRENT_DATE
-    GROUP BY ro.id, ro.tenant_id, p.name, t.phone_1, p.phone, r.room_no, ro.due_date, ro.amount
-    HAVING GREATEST(0, (ro.amount - COALESCE(SUM(pay.amount_paid), 0))) > 0
+    GROUP BY ro.id, ro.tenant_id, p.name, t.phone_1, p.phone, r.room_no, ro.due_date, ro.amount, ro.total_amount
+    HAVING GREATEST(0, (COALESCE(ro.total_amount, ro.amount) - COALESCE(SUM(pay.amount_paid), 0))) > 0
     ORDER BY outstanding DESC, ro.due_date ASC
     LIMIT 4
   `;

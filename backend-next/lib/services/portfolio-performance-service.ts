@@ -158,12 +158,12 @@ export class PortfolioPerformanceService {
           h.id::text AS hostel_id,
           h.name AS hostel_name,
           h.city,
-          COALESCE(SUM(o.amount - GREATEST(o.amount - COALESCE(pay_agg.total_paid, 0), 0)), 0)::float AS revenue,
-          COALESCE(SUM(o.amount - GREATEST(o.amount - COALESCE(pay_agg.total_paid, 0), 0)), 0)::float AS collections,
-          COALESCE(SUM(GREATEST(o.amount - COALESCE(pay_agg.total_paid, 0), 0)), 0)::float AS pending_dues,
+          COALESCE(SUM(COALESCE(o.total_amount, o.amount) - GREATEST(COALESCE(o.total_amount, o.amount) - COALESCE(pay_agg.total_paid, 0), 0)), 0)::float AS revenue,
+          COALESCE(SUM(COALESCE(o.total_amount, o.amount) - GREATEST(COALESCE(o.total_amount, o.amount) - COALESCE(pay_agg.total_paid, 0), 0)), 0)::float AS collections,
+          COALESCE(SUM(GREATEST(COALESCE(o.total_amount, o.amount) - COALESCE(pay_agg.total_paid, 0), 0)), 0)::float AS pending_dues,
           CASE
-            WHEN COALESCE(SUM(o.amount), 0) > 0
-              THEN ROUND((COALESCE(SUM(o.amount - GREATEST(o.amount - COALESCE(pay_agg.total_paid, 0), 0)), 0) / SUM(o.amount) * 10000)::numeric) / 100
+            WHEN COALESCE(SUM(COALESCE(o.total_amount, o.amount)), 0) > 0
+              THEN ROUND((COALESCE(SUM(COALESCE(o.total_amount, o.amount) - GREATEST(COALESCE(o.total_amount, o.amount) - COALESCE(pay_agg.total_paid, 0), 0)), 0) / SUM(COALESCE(o.total_amount, o.amount)) * 10000)::numeric) / 100
             ELSE 0
           END::float AS collection_rate
         FROM ranges r

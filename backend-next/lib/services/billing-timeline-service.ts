@@ -61,12 +61,6 @@ export class BillingTimelineService {
       take: 120,
     });
 
-    const payments = await prisma.payments.findMany({
-      where: { tenant_id: tenantId },
-      orderBy: { payment_date: "desc" },
-      take: 20,
-    });
-
     const rentAdvanceCredits = await prisma.tenant_financial_ledger.findMany({
       where: {
         tenant_id: tenantId,
@@ -225,7 +219,6 @@ export class BillingTimelineService {
     });
 
     const activeFrequency = (tenant.payment_frequency || "MONTHLY") as PaymentFrequency;
-    const projectedItems: any[] = [];
 
     const rentAdvanceItems = rentAdvanceCredits.map((entry: any) => ({
       id: `event:credit:${entry.id}`,
@@ -311,19 +304,18 @@ export class BillingTimelineService {
       installment_label: nextInstallment.installment_label,
     };
 
+    // Response trimmed to its two confirmed-live consumers — TenantFinancialsPage.tsx
+    // reads `items` (schedule/timeline UI grouping; overdue classification for
+    // financial-status purposes is now sourced from FinancialReadModelService,
+    // not this service), and TenantProfilePage.tsx (owner side) reads
+    // `next_rent_generation`. Every other field (billing_settings, plans,
+    // requests, tenant_id, active_frequency, effective_from, updated_at,
+    // obligation_items, payment_items, rent_advance_items, projected_items)
+    // had zero frontend consumers — confirmed via repo-wide grep — and is
+    // "financial state" this service should no longer be computing per
+    // docs/business-logic/financial-consistency-investigation-report.md.
     return {
-      tenant_id: tenant.id,
-      active_frequency: activeFrequency,
-      effective_from: tenant.payment_frequency_effective_from,
-      updated_at: tenant.payment_frequency_updated_at,
-      billing_settings: { due_day: dueDay, auto_rent_day: autoRentDay, grace_days: Number(billingPrefs.grace_days ?? 0) },
-      plans: tenant.tenant_billing_plans,
-      requests: tenant.payment_frequency_change_requests,
       items: timeline,
-      obligation_items: timelineEvents,
-      payment_items: [],
-      rent_advance_items: rentAdvanceItems,
-      projected_items: projectedItems,
       next_rent_generation: nextRentGeneration,
     };
   }

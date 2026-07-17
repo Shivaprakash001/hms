@@ -210,6 +210,12 @@ export const tenantService = {
         const response = await api.get(`/tenants/${tenantId}/financial-ledger`);
         return unwrap(response);
     },
+    getFinancialTimeline: async (tenantId, hostelId) => {
+        const response = await api.get(`/tenants/${tenantId}/financial-timeline`, {
+            params: hostelId ? { hostelId } : {},
+        });
+        return unwrap(response);
+    },
     getPendingDocuments: async (hostelId = '') => {
         const response = await api.get('/tenants/pending-documents', { params: { hostelId } });
         return unwrap(response);

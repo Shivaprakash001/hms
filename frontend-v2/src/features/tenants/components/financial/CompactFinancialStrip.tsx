@@ -1,4 +1,16 @@
+import { Card } from '@/app/components/ui/card';
+import { useIsMobile } from '@/app/components/ui/use-mobile';
+import { TONE_CLASSES, type FinancialTone } from '@features/tenants/utils/financialColors';
+
 const fmt = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
+
+export type FinancialSectionId =
+  | 'fin-summary'
+  | 'fin-actions'
+  | 'fin-obligations'
+  | 'fin-activity'
+  | 'fin-ledger'
+  | 'fin-documents';
 
 interface CompactFinancialStripProps {
   outstandingAmount: number;
@@ -6,6 +18,20 @@ interface CompactFinancialStripProps {
   futureCredit: number;
   depositPaid: number;
   overdueAmount: number;
+  nextRentDate?: string | null;
+  nextRentAmount?: number | null;
+  agreementMonthsElapsed?: number | null;
+  agreementMonthsTotal?: number | null;
+  onNavigate?: (section: FinancialSectionId) => void;
+}
+
+interface MetricCard {
+  label: string;
+  value: string;
+  subtext: string;
+  tone: FinancialTone | null;
+  target: FinancialSectionId;
+  wide?: boolean;
 }
 
 export function CompactFinancialStrip({
@@ -14,82 +40,95 @@ export function CompactFinancialStrip({
   futureCredit,
   depositPaid,
   overdueAmount,
+  nextRentDate,
+  nextRentAmount,
+  agreementMonthsElapsed,
+  agreementMonthsTotal,
+  onNavigate,
 }: CompactFinancialStripProps) {
-  const metrics = [
+  const metrics: MetricCard[] = [
     {
       label: 'Outstanding',
       value: fmt(outstandingAmount),
-      subtext: overdueDays > 0 ? `${fmt(overdueAmount)} Overdue` : 'No immediate dues',
-      highlight: outstandingAmount > 0,
-      type: 'outstanding',
+      subtext: overdueDays > 0 ? `${fmt(overdueAmount)} overdue` : 'No immediate dues',
+      tone: outstandingAmount > 0 ? (overdueDays > 0 ? 'red' : 'amber') : null,
+      target: 'fin-obligations',
+      wide: true,
     },
     {
-      label: 'Outstanding Since',
-      value: overdueDays > 0 ? `${overdueDays} Days` : '0 Days',
+      label: 'Overdue',
+      value: overdueDays > 0 ? `${overdueDays} day${overdueDays === 1 ? '' : 's'}` : '0 days',
       subtext: overdueDays > 0 ? 'Since oldest due date' : 'Paid on time',
-      highlight: overdueDays > 0,
-      type: 'since',
+      tone: overdueDays > 0 ? 'red' : null,
+      target: 'fin-obligations',
     },
     {
       label: 'Future Credit',
       value: fmt(futureCredit),
       subtext: 'Advance rent paid',
-      highlight: false,
-      type: 'credit',
+      tone: futureCredit > 0 ? 'blue' : null,
+      target: 'fin-ledger',
     },
     {
-      label: 'Deposit Paid',
+      label: 'Security Deposit',
       value: fmt(depositPaid),
       subtext: 'Refundable security',
-      highlight: false,
-      type: 'deposit',
+      tone: null,
+      target: 'fin-ledger',
     },
     {
-      label: 'Overdue Amount',
-      value: fmt(overdueAmount),
-      subtext: overdueDays > 0 ? 'Subject to late fees' : 'Healthy status',
-      highlight: overdueAmount > 0,
-      type: 'overdue',
+      label: 'Next Rent',
+      value: nextRentDate
+        ? new Date(nextRentDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+        : '—',
+      subtext: nextRentAmount ? fmt(nextRentAmount) : 'Not scheduled',
+      tone: 'orange',
+      target: 'fin-obligations',
+    },
+    {
+      label: 'Agreement',
+      value:
+        agreementMonthsElapsed != null && agreementMonthsTotal
+          ? `${agreementMonthsElapsed} / ${agreementMonthsTotal} mo`
+          : '—',
+      subtext:
+        agreementMonthsElapsed != null && agreementMonthsTotal
+          ? `${Math.round((agreementMonthsElapsed / agreementMonthsTotal) * 100)}% complete`
+          : 'No active agreement',
+      tone: null,
+      target: 'fin-documents',
     },
   ];
 
-  const getCardClasses = (metric: typeof metrics[number]) => {
-    let base = 'relative overflow-hidden bg-card border rounded-2xl p-3.5 flex flex-col justify-between transition-all hover:shadow-md';
-    if (metric.highlight) {
-      if (metric.type === 'outstanding' || metric.type === 'since' || metric.type === 'overdue') {
-        return `${base} border-rose-500/20 bg-rose-50/10 dark:bg-rose-950/5`;
-      }
-    }
-    return `${base} border-border`;
-  };
+  const isMobile = useIsMobile();
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+    <div
+      id="fin-summary"
+      className={
+        isMobile
+          ? 'flex gap-3 overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-1 scroll-mt-20'
+          : 'grid grid-cols-2 md:grid-cols-6 gap-3 scroll-mt-20'
+      }
+    >
       {metrics.map((metric) => (
-        <div
+        <Card
           key={metric.label}
-          className={`${getCardClasses(metric)} ${
-            metric.type === 'outstanding' ? 'col-span-2 md:col-span-1' : ''
-          }`}
+          onClick={() => onNavigate?.(metric.target)}
+          className={`p-3.5 flex flex-col justify-between gap-2 rounded-2xl border transition-all hover:shadow-md cursor-pointer active:scale-[0.98] ${
+            metric.tone ? TONE_CLASSES[metric.tone] : 'border-border bg-card'
+          } ${isMobile ? 'snap-start shrink-0 w-[42vw]' : metric.wide ? 'col-span-2 md:col-span-1' : ''}`}
         >
           <div className="space-y-1">
             <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block">
               {metric.label}
             </span>
-            <span
-              className={`text-lg font-extrabold tracking-tight block ${
-                metric.highlight
-                  ? 'text-rose-600 dark:text-rose-400'
-                  : 'text-foreground'
-              }`}
-            >
+            <span className="text-lg font-extrabold tracking-tight block text-foreground">
               {metric.value}
             </span>
           </div>
-          <span className="text-[10px] text-muted-foreground mt-2 block font-medium">
-            {metric.subtext}
-          </span>
-        </div>
+          <span className="text-[10px] text-muted-foreground block font-medium">{metric.subtext}</span>
+        </Card>
       ))}
     </div>
   );

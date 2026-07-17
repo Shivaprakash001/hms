@@ -29,6 +29,29 @@ import { isOverdue } from "./settlement-planner";
  *   Dashboard, analytics, tenant table, and reminders MUST call this service.
  *   Never write a raw obligation aggregate outside this file.
  */
+export type PaymentStatus = "PAID" | "PARTIAL" | "PENDING" | "NOT_GENERATED" | "OVERDUE";
+
+/**
+ * Single source of truth for the tenant-level payment_status enum. Called
+ * from both FinancialService.getTenantPaymentSummary() (sync, pre-fetched
+ * obligation rows, used in batch/list views to avoid N+1 queries) and
+ * FinancialReadModelService (async, single-tenant) — each caller derives
+ * these four inputs from its own already-fetched data, but the branching
+ * decision itself lives in exactly one place so the two paths can't drift.
+ */
+export function derivePaymentStatus(params: {
+  hasObligations: boolean;
+  pendingAmount: number;
+  hasOverdue: boolean;
+  hasAnyPayment: boolean;
+}): PaymentStatus {
+  if (!params.hasObligations) return "NOT_GENERATED";
+  if (params.pendingAmount <= 0) return "PAID";
+  if (params.hasOverdue) return "OVERDUE";
+  if (params.hasAnyPayment) return "PARTIAL";
+  return "PENDING";
+}
+
 export class FinancialService {
   async reconcileSettledOperationalObligations(ownerId: string, hostelId: string): Promise<number> {
     const rows = await prisma.$queryRaw<{ one: number }[]>`
@@ -364,13 +387,12 @@ export class FinancialService {
     let hasOverdueObligation = false;
 
     const now = new Date();
-    const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
     for (const ob of obligationRows) {
       if (ob.status === "WAIVED") continue;
       const totalAmt = Number(ob.total_amount || ob.amount);
       totalBilled += totalAmt;
-      
+
       let obPaid = 0;
       for (const p of ob.payments) {
         const amt = Number(p.amount_paid);
@@ -384,21 +406,18 @@ export class FinancialService {
       }
 
       const remaining = Math.max(0, totalAmt - obPaid);
-      if (remaining > 0 && ob.status !== "PAID" && ob.due_date) {
-        const dueDate = new Date(ob.due_date);
-        const dueDateUTC = new Date(Date.UTC(dueDate.getUTCFullYear(), dueDate.getUTCMonth(), dueDate.getUTCDate()));
-        if (dueDateUTC.getTime() < todayUTC.getTime()) {
-          hasOverdueObligation = true;
-        }
+      if (remaining > 0 && ob.status !== "PAID" && ob.due_date && isOverdue({ status: ob.status, due_date: new Date(ob.due_date) }, now)) {
+        hasOverdueObligation = true;
       }
     }
 
     const pending = Math.max(0, totalBilled - totalPaid);
-    let payment_status: "PAID" | "PARTIAL" | "PENDING" | "NOT_GENERATED" | "OVERDUE" = "PENDING";
-    if (totalBilled === 0)                         payment_status = "NOT_GENERATED";
-    else if (pending <= 0)                         payment_status = "PAID";
-    else if (hasOverdueObligation)                 payment_status = "OVERDUE";
-    else if (totalPaid > 0)                        payment_status = "PARTIAL";
+    const payment_status = derivePaymentStatus({
+      hasObligations: totalBilled > 0,
+      pendingAmount: pending,
+      hasOverdue: hasOverdueObligation,
+      hasAnyPayment: totalPaid > 0,
+    });
 
     return {
       total_billed:         totalBilled,
@@ -520,34 +539,11 @@ export class FinancialService {
     });
     const total_paid = payments.reduce((sum, p) => sum + Number(p.amount_paid), 0);
 
-    const obligations = await prisma.rent_obligations.findMany({
-      where: {
-        tenant_id: tenantId,
-        is_superseded: false,
-        status: { not: "WAIVED" },
-      },
-      include: {
-        payments: {
-          select: { amount_paid: true },
-        },
-      },
-    });
-
-    // Same definition as getTenantDues().current_payable_amount: every
-    // already-activated obligation (PENDING/PARTIAL, or legacy OVERDUE),
-    // regardless of due date. Note the fetch above uses `status: { not:
-    // "WAIVED" }` (broader than PAYABLE_STATUSES), so this must stay an
-    // explicit whitelist rather than "!== UPCOMING" — otherwise DRAFT/
-    // CANCELLED/PAID rows with a stray positive total_amount would be
-    // miscounted.
-    let payable_now = 0;
-    for (const ob of obligations) {
-      const obPaid = ob.payments.reduce((sum, p) => sum + Number(p.amount_paid), 0);
-      const obOutstanding = Math.max(0, Number(ob.total_amount || ob.amount || 0) - obPaid);
-      if (ob.status === "PENDING" || ob.status === "PARTIAL" || ob.status === "OVERDUE") {
-        payable_now += obOutstanding;
-      }
-    }
+    // Delegates to getTenantDues() — the canonical "already-activated
+    // obligation" definition — instead of re-fetching obligations and
+    // re-summing them here.
+    const dues = await this.getTenantDues(tenantId, tenant.owner_id ?? undefined, tenant.hostel_id);
+    const payable_now = dues.current_payable_amount;
 
     const projected_remaining_contract_value = Math.max(0, total_contract_value - total_paid - payable_now);
 

@@ -218,14 +218,14 @@ export class DashboardService {
           o.id,
           o.tenant_id,
           o.due_date,
-          GREATEST(o.amount::float - COALESCE(pbo.total_paid, 0), 0)::float AS remaining
+          GREATEST(COALESCE(o.total_amount, o.amount)::float - COALESCE(pbo.total_paid, 0), 0)::float AS remaining
         FROM rent_obligations o
         JOIN tenants t ON t.id = o.tenant_id
         LEFT JOIN payment_by_obligation pbo ON pbo.obligation_id = o.id
         WHERE o.owner_id = ${userId}::uuid
           AND o.hostel_id = ${hostelId}::uuid
           AND o.status IN ('PENDING', 'PARTIAL')
-          AND GREATEST(o.amount::float - COALESCE(pbo.total_paid, 0), 0) > 0
+          AND GREATEST(COALESCE(o.total_amount, o.amount)::float - COALESCE(pbo.total_paid, 0), 0) > 0
       ),
       dues_summary AS (
         SELECT

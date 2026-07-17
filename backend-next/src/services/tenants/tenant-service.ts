@@ -8,6 +8,7 @@ import { assertGuardianPhoneNotTenant } from "../../../lib/utils/phone-utils";
 
 import { allocationReconciliationService } from "../../../lib/services/allocation-reconciliation-service";
 import { financialService } from "../../../src/services/payments/financial-service";
+import { financialReadModelService } from "../../../src/services/payments/financial-read-model-service";
 import { obligationEngine } from "../../../src/services/payments/obligation-engine";
 import { getLogger } from "../../../lib/logger";
 import { eventLog } from "../../../lib/services/event-log-service";
@@ -861,23 +862,18 @@ export class TenantService {
 
     if (!legacyTenant.hostel_id) throw new Error("HOSTEL_CONTEXT_REQUIRED: tenant hostel scope unavailable");
     const [
-      dues,
+      readModel,
       paymentAgg,
-      advanceEntries,
       allPayments,
       reminders,
       allocations,
       moveOuts,
       notes
     ] = await Promise.all([
-      financialService.getTenantDues(tenantId, ownerId, legacyTenant.hostel_id),
+      financialReadModelService.getFinancialReadModel(tenantId, ownerId, legacyTenant.hostel_id),
       prisma.payments.aggregate({
         where: { tenant_id: tenantId, owner_id: ownerId, hostel_id: legacyTenant.hostel_id },
         _sum: { amount_paid: true },
-      }),
-      prisma.tenant_financial_ledger.findMany({
-        where: { tenant_id: tenantId, owner_id: ownerId },
-        orderBy: { created_at: "asc" },
       }),
       prisma.payments.findMany({
         where: { tenant_id: tenantId, owner_id: ownerId, hostel_id: legacyTenant.hostel_id },
@@ -916,17 +912,20 @@ export class TenantService {
     ]);
 
     const totalPaid = Number(paymentAgg._sum.amount_paid || 0);
-    const totalDue = dues.total_due;
-    const outstanding = dues.total_due;
-    // UTC-midnight-normalized (via settlement-planner.ts's isOverdue), not
-    // the previous inline Date.now() comparison — fixes a day-boundary
-    // inconsistency vs. the rest of the overdue-computation call sites.
-    const overdueAmount = dues.overdue_amount;
-    const currentPayableAmount = dues.current_payable_amount;
-    const advanceBalance = advanceEntries.reduce((acc: number, entry: any) => {
-      const amount = Number(entry.amount || 0);
-      return entry.type === "CREDIT" ? acc + amount : acc - amount;
-    }, 0);
+    const totalDue = readModel.total_due;
+    const outstanding = readModel.total_due;
+    // Sourced from FinancialReadModelService — the canonical composition of
+    // financialService.getTenantDues() (obligation amounts) and
+    // tenantFinancialLedgerService.getBalance() (ledger balance), so this
+    // response agrees field-for-field with what the tenant portal reads via
+    // GET /api/tenants/me/financial-read-model for the same tenant. Was
+    // previously a raw re-sum of tenant_financial_ledger entries with no
+    // security-deposit-aware subtraction — the direct cause of owner/tenant
+    // "Future Credit" disagreeing (see docs/business-logic/
+    // financial-consistency-investigation-report.md).
+    const overdueAmount = readModel.overdue_amount;
+    const currentPayableAmount = readModel.current_payable_amount;
+    const advanceBalance = readModel.future_rent_credit;
     const recentPayments = allPayments
       .sort((a, b) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime())
       .slice(0, 5)
@@ -1041,7 +1040,7 @@ export class TenantService {
         outstanding,
         overdue_amount: overdueAmount,
         current_payable_amount: currentPayableAmount,
-        payment_status: outstanding <= 0 ? "PAID" : totalPaid > 0 ? "PARTIAL" : "PENDING",
+        payment_status: readModel.payment_status,
       },
       financial_summary: {
         total_paid: totalPaid,

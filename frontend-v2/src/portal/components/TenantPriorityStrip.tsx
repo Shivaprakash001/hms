@@ -3,48 +3,36 @@ import { AlertTriangle, CheckCircle2, Clock, CreditCard } from 'lucide-react';
 
 const fmt = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
 
-interface DuesData {
+type PaymentStatus = 'PAID' | 'PARTIAL' | 'PENDING' | 'NOT_GENERATED' | 'OVERDUE';
+
+interface ReadModel {
   total_due?: number;
+  current_payable_amount?: number;
+  overdue_amount?: number;
+  overdue_days?: number;
   rent_due?: number;
   security_deposit_due?: number;
   maintenance_due?: number;
   late_fees_due?: number;
-  items?: { type?: string; outstanding?: number; due_date?: string; dueDate?: string }[];
+  payment_status?: PaymentStatus;
 }
 
 interface Props {
-  dues?: DuesData | null;
-  payments?: { next_due_date?: string; outstanding_balance?: number } | null;
+  readModel?: ReadModel | null;
   moveOut?: { status?: string; planned_exit_date?: string } | null;
 }
 
-function daysUntil(dateStr?: string | null) {
-  if (!dateStr) return null;
-  const d = new Date(dateStr);
-  d.setHours(0, 0, 0, 0);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Math.ceil((d.getTime() - today.getTime()) / 86400000);
-}
-
-export function TenantPriorityStrip({ dues, payments, moveOut }: Props) {
-  const totalDue = Number(dues?.total_due ?? payments?.outstanding_balance ?? 0);
-  const rentDue = Number(dues?.rent_due ?? 0);
-  const lateFees = Number(dues?.late_fees_due ?? 0);
-  const securityDepositDue = Number(dues?.security_deposit_due ?? (dues?.items ?? [])
-    .filter((i) => ['SECURITY_DEPOSIT', 'ADVANCE'].includes(String(i.type).toUpperCase()))
-    .reduce((s, i) => s + Number(i.outstanding ?? 0), 0));
-  const maintenanceDue = Number(dues?.maintenance_due ?? (dues?.items ?? [])
-    .filter((i) => String(i.type).toUpperCase() === 'MAINTENANCE')
-    .reduce((s, i) => s + Number(i.outstanding ?? 0), 0));
-
-  const nextDue = payments?.next_due_date ?? dues?.items
-    ?.map((item) => item.due_date ?? item.dueDate)
-    .filter(Boolean)
-    .sort((a, b) => new Date(String(a)).getTime() - new Date(String(b)).getTime())[0];
-  const days = daysUntil(nextDue);
-  const isOverdue = days != null && days < 0;
-  const isPaid = totalDue <= 0;
+export function TenantPriorityStrip({ readModel, moveOut }: Props) {
+  const currentPayable = Number(readModel?.current_payable_amount ?? 0);
+  const overdueAmount = Number(readModel?.overdue_amount ?? 0);
+  const overdueDays = Number(readModel?.overdue_days ?? 0);
+  const rentDue = Number(readModel?.rent_due ?? 0);
+  const lateFees = Number(readModel?.late_fees_due ?? 0);
+  const securityDepositDue = Number(readModel?.security_deposit_due ?? 0);
+  const maintenanceDue = Number(readModel?.maintenance_due ?? 0);
+  const paymentStatus = readModel?.payment_status;
+  const isPaid = paymentStatus === 'PAID' || paymentStatus === 'NOT_GENERATED' || currentPayable <= 0;
+  const isOverdue = paymentStatus === 'OVERDUE';
 
   let rentStatus = 'All clear';
   let statusTone = 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700';
@@ -53,11 +41,8 @@ export function TenantPriorityStrip({ dues, payments, moveOut }: Props) {
   if (!isPaid) {
     StatusIcon = isOverdue ? AlertTriangle : Clock;
     if (isOverdue) {
-      rentStatus = `Overdue by ${Math.abs(days!)} day${Math.abs(days!) === 1 ? '' : 's'}`;
+      rentStatus = `Overdue by ${overdueDays} day${overdueDays === 1 ? '' : 's'}`;
       statusTone = 'bg-destructive/10 border-destructive/30 text-destructive';
-    } else if (days != null && days <= 7) {
-      rentStatus = days === 0 ? 'Due today' : `Due in ${days} day${days === 1 ? '' : 's'}`;
-      statusTone = 'bg-amber-500/10 border-amber-500/30 text-amber-700';
     } else {
       rentStatus = 'Payment pending';
       statusTone = 'bg-amber-500/10 border-amber-500/30 text-amber-700';
@@ -100,9 +85,15 @@ export function TenantPriorityStrip({ dues, payments, moveOut }: Props) {
                   <span className="font-medium">{fmt(maintenanceDue)}</span>
                 </div>
               )}
+              {isOverdue && overdueAmount > 0 && overdueAmount !== currentPayable && (
+                <div className="flex justify-between">
+                  <span>Overdue</span>
+                  <span className="font-medium">{fmt(overdueAmount)}</span>
+                </div>
+              )}
               <div className="flex justify-between pt-1 border-t border-current/20 font-bold">
                 <span>Total due</span>
-                <span>{fmt(totalDue)}</span>
+                <span>{fmt(currentPayable)}</span>
               </div>
             </div>
           )}
@@ -112,13 +103,13 @@ export function TenantPriorityStrip({ dues, payments, moveOut }: Props) {
         </div>
       </div>
 
-      {!isPaid && totalDue > 0 && (
+      {!isPaid && currentPayable > 0 && (
         <Link
           to="/tenant/financials?pay=1"
           className="mt-4 flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-accent text-accent-foreground font-bold text-sm touch-manipulation"
         >
           <CreditCard className="w-4 h-4" />
-          Pay {fmt(totalDue)}
+          Pay {fmt(currentPayable)}
         </Link>
       )}
 
