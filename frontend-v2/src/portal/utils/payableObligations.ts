@@ -63,7 +63,7 @@ export function buildPayableObligations(
   const dueItems = dues?.items ?? [];
   if (dueItems.length > 0) {
     const mapped = dueItems
-      .filter((i) => Number(i.outstanding ?? 0) > 0)
+      .filter((i) => Number(i.outstanding ?? 0) > 0 && String(i.status ?? '').toUpperCase() !== 'UPCOMING')
       .map((i) =>
         normalizeObligation({
           id: i.obligation_id ?? i.id,
@@ -83,7 +83,7 @@ export function buildPayableObligations(
 
   return (payments?.obligations ?? [])
     .map((o) => normalizeObligation(o as Record<string, unknown>))
-    .filter((o) => o.id && !['paid', 'waived'].includes(o.status) && o.amount > 0)
+    .filter((o) => o.id && !['paid', 'waived', 'upcoming'].includes(o.status) && o.amount > 0)
     .sort(
       (a, b) =>
         new Date(a.cycle || a.due_date || 0).getTime() -

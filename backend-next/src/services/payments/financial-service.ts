@@ -336,6 +336,7 @@ export class FinancialService {
         amount: Number(ob.total_amount || ob.amount),
         paid,
         outstanding,
+        late_fee: itemLateFeeOutstanding,
         status: ob.status,
         room_no: (ob as any).room_allocations?.room?.room_no ?? null,
       };
@@ -648,6 +649,8 @@ export interface TenantDueItem {
   amount: number;
   paid: number;
   outstanding: number;
+  /** Portion of `outstanding` attributable to a late fee, per-item. */
+  late_fee: number;
   status: string;
   room_no: string | null;
 }

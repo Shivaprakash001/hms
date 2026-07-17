@@ -36,6 +36,8 @@ export interface FinancialReadModelItem {
   amount: number;
   paid: number;
   outstanding: number;
+  /** Portion of `outstanding` attributable to a late fee. */
+  late_fee: number;
   /** Raw rent_obligations.status, kept for callers still on the legacy single-column enum. */
   legacy_status: string;
   is_overdue: boolean;
@@ -59,6 +61,21 @@ export interface FinancialReadModel {
   maintenance_due: number;
   late_fees_due: number;
   obligation_count: number;
+
+  /**
+   * Same rent/security_deposit/maintenance/late_fees split as the fields
+   * above, but scoped to currently-payable items only (excludes UPCOMING),
+   * matching current_payable_amount's semantics. Use this for "what should
+   * I pay right now" breakdown displays; use the fields above only where the
+   * full-agreement "everything outstanding" semantic is actually wanted
+   * (e.g. move-out settlement, settlement-preview snapshot).
+   */
+  current_payable_breakdown: {
+    rent: number;
+    security_deposit: number;
+    maintenance: number;
+    late_fees: number;
+  };
 
   // Composed from `items`, not independently fetched.
   overdue_obligation_count: number;
@@ -141,6 +158,7 @@ class FinancialReadModelService {
         amount: i.amount,
         paid: i.paid,
         outstanding: i.outstanding,
+        late_fee: i.late_fee,
         legacy_status: i.status,
         is_overdue: overdue,
         overdue_days: overdue ? utcDaysOverdue(i.due_date, today) : 0,
@@ -150,6 +168,19 @@ class FinancialReadModelService {
 
     const overdueItems = items.filter((i) => i.is_overdue);
     const overdue_days = overdueItems.length ? Math.max(...overdueItems.map((i) => i.overdue_days)) : 0;
+
+    // Mirrors getTenantDues()'s type-classification (RENT / SECURITY_DEPOSIT|ADVANCE /
+    // MAINTENANCE / else->rent) and its late-fee-vs-pure-amount split, but scoped to
+    // currently-payable items only (excludes UPCOMING).
+    const current_payable_breakdown = { rent: 0, security_deposit: 0, maintenance: 0, late_fees: 0 };
+    for (const i of items) {
+      if (i.legacy_status === "UPCOMING") continue;
+      const pure = Math.max(0, i.outstanding - i.late_fee);
+      current_payable_breakdown.late_fees += i.late_fee;
+      if (i.type === "SECURITY_DEPOSIT" || i.type === "ADVANCE") current_payable_breakdown.security_deposit += pure;
+      else if (i.type === "MAINTENANCE") current_payable_breakdown.maintenance += pure;
+      else current_payable_breakdown.rent += pure;
+    }
 
     const payment_status = derivePaymentStatus({
       hasObligations: dues.obligation_count > 0,
@@ -171,6 +202,7 @@ class FinancialReadModelService {
       maintenance_due: dues.maintenance_due,
       late_fees_due: dues.late_fees_due,
       obligation_count: dues.obligation_count,
+      current_payable_breakdown,
       overdue_obligation_count: overdueItems.length,
       overdue_days,
       payment_status,

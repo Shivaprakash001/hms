@@ -10,10 +10,12 @@ interface ReadModel {
   current_payable_amount?: number;
   overdue_amount?: number;
   overdue_days?: number;
-  rent_due?: number;
-  security_deposit_due?: number;
-  maintenance_due?: number;
-  late_fees_due?: number;
+  current_payable_breakdown?: {
+    rent?: number;
+    security_deposit?: number;
+    maintenance?: number;
+    late_fees?: number;
+  };
   payment_status?: PaymentStatus;
 }
 
@@ -26,10 +28,10 @@ export function TenantPriorityStrip({ readModel, moveOut }: Props) {
   const currentPayable = Number(readModel?.current_payable_amount ?? 0);
   const overdueAmount = Number(readModel?.overdue_amount ?? 0);
   const overdueDays = Number(readModel?.overdue_days ?? 0);
-  const rentDue = Number(readModel?.rent_due ?? 0);
-  const lateFees = Number(readModel?.late_fees_due ?? 0);
-  const securityDepositDue = Number(readModel?.security_deposit_due ?? 0);
-  const maintenanceDue = Number(readModel?.maintenance_due ?? 0);
+  const rentDue = Number(readModel?.current_payable_breakdown?.rent ?? 0);
+  const lateFees = Number(readModel?.current_payable_breakdown?.late_fees ?? 0);
+  const securityDepositDue = Number(readModel?.current_payable_breakdown?.security_deposit ?? 0);
+  const maintenanceDue = Number(readModel?.current_payable_breakdown?.maintenance ?? 0);
   const paymentStatus = readModel?.payment_status;
   const isPaid = paymentStatus === 'PAID' || paymentStatus === 'NOT_GENERATED' || currentPayable <= 0;
   const isOverdue = paymentStatus === 'OVERDUE';

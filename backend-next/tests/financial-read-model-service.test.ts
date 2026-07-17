@@ -106,6 +106,13 @@ describe('FinancialReadModelService — composition, not reimplementation', () =
     expect(readModel.overdue_obligation_count).toBe(1);
     expect(readModel.overdue_days).toBeGreaterThanOrEqual(10);
     expect(readModel.payment_status).toBe('OVERDUE');
+
+    // Regression for the "Rent due ₹93,500 instead of ₹8,500" bug: rent_due
+    // (pass-through) includes the UPCOMING obligation, but
+    // current_payable_breakdown must not — it should match overdue_amount.
+    expect(readModel.rent_due).toBe(13000);
+    expect(readModel.current_payable_breakdown.rent).toBe(5000);
+    expect(readModel.current_payable_breakdown.rent).toBe(readModel.current_payable_amount);
   });
 
   it('tenant self-service entry point (getFinancialReadModelForTenant) agrees with the owner entry point', async () => {
