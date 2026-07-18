@@ -800,7 +800,7 @@ export function FinancialControlCenter({ hostelId }: Props) {
 
       {statsLoading ? (
         <div className="space-y-5">
-          {[1, 2, 3, 4].map((i) => (
+          {[1, 2, 3, 4, 5].map((i) => (
             <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />
           ))}
         </div>
