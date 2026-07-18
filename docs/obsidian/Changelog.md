@@ -1,0 +1,80 @@
+---
+tags: [changelog]
+---
+
+# Changelog
+
+Related: [[Decisions]] · [[Bugs]] · [[Features]]
+
+All notable changes to this project are documented in this file, in [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
+
+## [Unreleased]
+
+### Added
+- Obsidian-compatible documentation workspace under `docs/obsidian/`.
+- Expense export (CSV/Excel/PDF) on the Expenses Workspace — see the 2026-07-18 dated entry below for the full write-up ([[APIs]] `/api/expenses/export`, [[Decisions]] ADR-009).
+
+### Changed
+- **2026-07-18**: Full-codebase documentation audit. [[Architecture]], [[Backend]], [[Frontend]], [[Database]], [[APIs]], [[Business-Rules]], [[Features]], [[Decisions]], and [[README]] were rewritten from a direct read of `backend-next/` (294 API routes, ~140 services, full Prisma schema) and `frontend-v2/` (full `src/` tree) — previously these were generic starter templates. Confirmed the `docs/` reference tree (`docs/data-models/schema.md`, `docs/data-models/enums.md`) is out of date relative to the live schema (19 undocumented models, 13 undocumented enums, one stale rename — see [[Database]] §6). Also confirmed a decommissioned multi-hostel SaaS billing/subscription subsystem (37 routes returning 410) — see [[Decisions]] ADR-006.
+
+### Fixed
+
+---
+
+## 2026-07-18 — Expenses Workspace redesign
+
+### Added
+- Redesigned owner-facing "Expenses Workspace" tab (`frontend-v2/src/app/components/hostel-detail/tabs/ExpensesTab.tsx`, now a thin orchestrator) into a dedicated component set under `hostel-detail/tabs/expenses/`: `ExpenseDashboard` (consolidated Revenue/Expenses/Net Profit + Top Category/Unusual Spending/Top Vendor/Largest Expense action tiles + monthly-trend sparkline, replacing two previously-duplicated summary card sections), `ExpenseFilterBar` (search, status, category, vendor, payment method, recurring, amount range, saved filter views via `localStorage`), `ExpenseList`/`ExpenseCard` (dense rows, clickable-to-view + `•••` overflow menu instead of 4 permanent action buttons), `ExpenseDetailsModal` ("decision support": inline receipt preview/lightbox, category-anomaly trend banner, "similar past expenses" summary), `AddExpenseModal` (rebuilt on new sectioned Basic Information/Financial Details/Receipt/Advanced Options layout instead of one long scroll), `CategoryPicker` (searchable combobox with a personalized "recently used" section, replacing the old button-grid + redundant `<select>`), `ReceiptPreview`, `ExpenseCategoryBreakdown`, `ExpenseVendors`, `ExpenseInsightsPanel`.
+- New shared primitive `frontend-v2/src/app/components/ui/responsive-dialog.tsx` (`ResponsiveDialog*`) — renders a wide desktop `Dialog` or a mobile bottom-sheet `Drawer` from one JSX tree, switching on the existing `useIsMobile()` hook. Re-exported from `shared/ui` and `shared/ui/modals`. `DialogContent` gained an optional `showCloseButton` prop (default `true`, backward compatible) to support it.
+- `frontend-v2/src/features/expenses/constants.ts` — canonical category list, icon/tone maps, and client-side category-suggestion heuristics, consolidating 5 previously-duplicated copies across `ExpensesTab.tsx`, `FinancialControlCenter.tsx`, `OwnerQuickActions.tsx`, and `AddExpenseModal.tsx`.
+- Backend: `GET /api/expenses` gained `recurring` (`true`/`false`) and `amountMin`/`amountMax` query params, implemented as additive Prisma `where` conditions in `expense-service.ts::getAllExpenses` (composable with all existing filters, applied before pagination). Response payload gained `vendor_breakdown` (server-side `groupBy` on `vendor_name` for the current month, mirroring the existing `category_breakdown` pattern) — replaces a client-side, page-limited vendor approximation with an exact figure. See [[APIs]], [[Decisions]] ADR-008.
+- `backend-next/tests/expense-filters.test.ts` — integration tests for the new filters (composition with existing filters, pagination correctness, boundary values) and `vendor_breakdown` accuracy.
+
+### Changed
+- Color hierarchy in this feature area: solid `bg-accent` fill reserved for one primary action per screen (Add/Save, Details-panel Edit); selected/secondary states use the tinted `border-accent bg-accent/10 text-accent` treatment instead of solid fill.
+
+### Added — Expense Export
+- `GET /api/expenses/export` (`backend-next/app/api/expenses/export/route.ts`) — streams CSV/XLSX or generates a PDF report of expenses matching the same filters as `GET /api/expenses`. Built on a new shared query builder, `buildExpenseLedgerWhere()` (extracted from `expense-service.ts::getAllExpenses`, which now calls it too), so exported rows can never drift from what the UI's list/filters show. Rate-limited to 10 exports/min/owner.
+- `lib/services/expense-export-service.ts` — format/scope-agnostic export core, deliberately decoupled from HTTP (no `NextRequest`/`Response`) so a future scheduled-export cron or saved-report-template runner can call the same generators without redesigning anything:
+  - CSV and XLSX are true streams — batched `findMany` (500 rows/batch) feeds a `ReadableStream` (hand-rolled CSV) or an `exceljs` `WorkbookWriter` (genuine incremental zip writer, piped via a Node `PassThrough` → `Readable.toWeb()`) — memory stays bounded regardless of total export size.
+  - PDF (`pdf-lib`, consistent with the existing receipt-PDF convention) is a business report — summary metrics, category breakdown, vendor summary, applied filters, and an expense-list table capped at 500 rows with an explicit truncation note (a report artifact, not an unbounded data dump; use CSV/XLSX for the full list).
+  - Three export scopes: `current_view` (mirrors the on-screen page's `limit`/`offset`), `all_matching` (streams everything matching current filters, ignoring pagination), `selected` (exports exactly the given expense IDs, ignoring other filters — a distinct, much simpler `id IN (...)` query, not a variant of the filter builder).
+- New dependency: `exceljs` (backend-next) — the existing `xlsx`/SheetJS package doesn't support true streaming writes for the xlsx binary format in its free edition; `exceljs`'s `WorkbookWriter` does. See [[Decisions]] ADR-009.
+- Frontend: `ExpenseExportMenu.tsx` (format + scope picker, placed next to the search/filter bar via a new `trailingActions` slot on `ExpenseFilterBar`), lightweight row selection (checkbox per `ExpenseCard`, "Select all visible"/"Clear selection" in `ExpenseList`, selection state owned by `ExpensesTab`) to make the "Selected Expenses" scope actually usable rather than a permanent stub. `expenseService.export()` in `features/expenses/api/index.js` requests the file as a Blob (Bearer-token auth means a plain `<a href>` navigation won't carry credentials) and triggers a client-side download.
+- `backend-next/tests/expense-export.test.ts` — 7 integration tests: CSV/XLSX/PDF correctness, filter/scope consistency with `getAllExpenses`, `selected`-scope ID-only behavior, `current_view` pagination, and summary-aggregate consistency.
+
+### Fixed
+- `FinancialControlCenter.tsx`'s "Add Expense" launcher was passing `defaultHostelId`/`defaultHostelLabel` props that `AddExpenseModal` never declared or consumed (dead props, pre-existing) — removed rather than wired up, since every expense created through this workspace is forced to portfolio-level `expense_scope: 'BUSINESS'` by `features/expenses/api/index.js` regardless (see [[APIs]] `/api/expenses`); wiring hostel-scoping through would be a business-logic change out of scope for this pass.
+
+---
+
+## 2026-07-16 — Owner Financial Workspace redesign
+
+### Added
+- Redesigned owner-facing tenant financial UI: Summary → Financial Health Banner → Primary Actions → Obligations → Financial Activity → Ledger (collapsed) → Documents.
+- 5-step Receive Payment flow (Amount → Settlement Preview → Confirm → Success → Receipt).
+- Canonical `FinancialReadModel` (`backend-next/src/services/payments/financial-read-model-service.ts`) composing `financialService.getTenantDues()` + `tenantFinancialLedgerService.getBalance()`. See [[Decisions]] ADR-001.
+- New route `GET /api/tenants/[id]/financial-timeline` (tenant-level financial activity feed).
+
+### Fixed
+- `financial-timeline-service.ts`: field mismatch (`entry_type` vs actual Prisma field `type`) that crashed whenever ledger rows existed. See [[Bugs]].
+- Owner/tenant surfaces disagreeing on Outstanding/Overdue/Future Credit due to duplicated calculators, one using the wrong column (`o.amount` vs `o.total_amount`). See [[Bugs]], `docs/business-logic/financial-consistency-investigation-report.md`.
+- UTC-vs-local-timezone bug in `derivePresentationStatus()` (unused function, safe to fix in place).
+
+### Changed
+- `billing-timeline-service.ts` trimmed to the two fields (`items`, `next_rent_generation`) that had real frontend consumers.
+
+## Prior history (from git log, backfilled)
+
+- `7747cbe4` — fix(financial-engine): dual-write lifecycle_status/settlement_status in agreement rent schedule
+- `cf88ce94` — feat(financial-engine): unify obligation activation lifecycle, fix overdue dashboard and future-credit auto-consumption
+- `98102ccd` — feat(financial-engine): complete Stage 1 architecture refactor and stabilization phase
+- `1d77e5d2` — chore: data correction for Durga Prasad, Deepak, Manoj Kumar
+
+---
+
+## How to use this file
+
+- Add entries under `[Unreleased]` as you work; cut a dated section when a meaningful batch of work lands (doesn't need to map 1:1 to a deploy).
+- Use `Added` / `Changed` / `Fixed` / `Removed` / `Deprecated` / `Security` headers per Keep a Changelog.
+- Link to [[Decisions]] for the ADR behind a change, [[Bugs]] for the bug being fixed, [[Features]] for the feature affected.

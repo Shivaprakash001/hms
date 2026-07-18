@@ -1,0 +1,87 @@
+---
+tags: [features]
+---
+
+# Features
+
+Related: [[Business-Rules]] · [[APIs]] · [[Frontend]] · [[Changelog]]
+
+This is an inventory of features **confirmed implemented** (live route + live UI, or live route with a documented consumer), built from the same route-by-route and frontend-structure reads behind [[APIs]] and [[Frontend]]. Where a route exists but no frontend consumer was confirmed, or vice versa, that's noted rather than assumed.
+
+## Owner-facing (`frontend-v2` owner routes → `app/components/views/*`)
+
+| Feature | Route | Backing |
+|---|---|---|
+| Portfolio dashboard | `/dashboard` | `PortfolioView` → `/api/dashboard*`, `/api/owner/portfolio/summary` |
+| Hostel detail / config | `/hostels/:hostelId(/:tab)` | `HostelDetailView` → `/api/hostels/[id]/*` (billing/automation/notification/payment/receipt/security/system config) |
+| Tenant portfolio & profile | `/tenants`, `/hostels/:hostelId/tenants/:tenantId` | `TenantsPortfolioView`, `TenantProfileRoute` → `/api/tenants/*` |
+| Bulk tenant import | `/tenants/import` | `BulkInvitationImportView` → `/api/bulk-import/*` |
+| Move-outs | `/move-outs` | `MoveOutsView` → `/api/move-out/requests/*` — full inspection/dispute/settlement workflow |
+| Agreement renewals | `/agreements/renewals` | `RenewalQueueView` → `/api/agreements/renewal-offers*`, `/api/agreements/renewals` |
+| Agreement lifecycle recovery | `/agreements/lifecycle-recovery` | `AgreementLifecycleRecoveryView` → `/api/agreements/lifecycle-recovery*` |
+| Alerts | `/alerts` | `AlertsView` |
+| Billing / financial control center | `/billing` | `BillingView` + `app/components/views/billing/*` (~20 widgets: cashflow, collection pipeline, overdue intelligence, payment ledger, room performance) |
+| Settings | `/settings` | `SettingsView` |
+| Activity log | `/activity` | `ActivityLogsView` → `/api/owner/activity-logs` |
+| Admissions/CRM | (routed but currently redirects to `/dashboard` per `OwnerRoutes.tsx` — **flag: route exists in backend (`/api/leads/*`) but the dedicated `/admissions` frontend route redirects rather than rendering `AdmissionsView` directly; confirm current wiring before documenting as fully live**) | `AdmissionsView` component exists; `/api/leads/*`, `/api/visit/*` (public microsite) |
+| Owner WhatsApp assistant | (no dedicated frontend route found — WhatsApp-native) | `/api/owner/whatsapp/*`, `lib/services/notifications/owner-whatsapp-assistant.ts` (7180 lines) — conversational, ID-based interactive menus |
+| Owner daily briefings | (WhatsApp/email-delivered, no frontend page) | `/api/cron/daily-briefings`, `briefing-engine.ts` |
+| Expenses | `/billing?tab=expenses` (`Expenses Workspace` tab, sibling to `Overview`; not a standalone route) | `ExpensesTab` orchestrator + `hostel-detail/tabs/expenses/*` component set (dashboard, filters, list with row selection, Add/Edit modal with searchable category picker, Details modal with receipt preview/decision-support, CSV/Excel/PDF export via `ExpenseExportMenu`) → `/api/expenses*`, `/api/expenses/export`. Portfolio-level only — always queries `hostelId=all`; every expense created here is forced to `expense_scope: BUSINESS` (`hostel_id: null`) by the API wrapper, regardless of the page's hostel selector. |
+| Change-request approval workflow (owner side: propose/cancel) | Surfaced within tenant profile | `features/change-management` (most fully-built feature module) → `/api/change-requests/*` |
+
+## Tenant-facing (`frontend-v2` tenant routes → `src/portal/pages/*`, routed via `platforms/tenant/router`)
+
+| Feature | Route | Backing |
+|---|---|---|
+| Tenant dashboard | `/tenant/dashboard` | `TenantDashboardPage` |
+| Financials | `/tenant/financials` | `TenantFinancialsPage` → `/api/tenants/me/financial-read-model`, `/financial-timeline` |
+| Payments | `/tenant/payments` | `TenantPaymentsPage` → `/api/payments/create-intent`, `/api/tenants/me/payments/history` |
+| Room | `/tenant/room` | `TenantRoomPage` → `/api/tenants/me/room` |
+| Profile | `/tenant/profile` | `TenantProfilePortalPage` → `/api/tenants/me/profile`, change-request flow for governed fields |
+| Move-out | `/tenant/move-out` | `TenantMoveOutPage` → `/api/move-out/tenant`, `/api/move-out/timeline` |
+| Activation / onboarding | `/activate(/:token)`, `/complete-profile` | `ActivateAccountPage`, `CompleteProfilePage` → `/api/tenants/activate*`, `/api/tenants/me/complete-profile` |
+| Payment return handling | `/payment-return` | `TenantPaymentReturnPage` |
+| Billing-frequency change requests | (within Financials/Profile) | `/api/tenants/me/billing-frequency` |
+| Agreement renewal decisions | (within tenant flows) | `/api/tenant/renewal-offer/*` |
+
+## Public-facing (`frontend-v2` public routes)
+
+| Feature | Route | Backing |
+|---|---|---|
+| Marketing site | `/`, `/about`, `/facilities`, `/rooms`, `/gallery`, `/location`, `/contact`, `/pricing` | `app/pages/public/*`, Sanity CMS (`lib/sanity/`) |
+| Legal pages | `/legal/*` | `content/legal.ts` |
+| Hostel admissions microsite | `/visit/:hostelSlug` | `/api/visit/[hostelSlug]*` — public lead capture, honeypot-protected |
+| Receipt verification | `/verify/r/:token` | `/api/verify/receipt` — public, signed-token |
+
+## Backend-only / automation features (no dedicated frontend page — cron or webhook driven)
+
+- Monthly rent generation (`/api/cron/generate-rent`, `rent-generation-service.ts`)
+- Daily reminders + late-fee engine (`/api/cron/rent-reminders`, `reminder-service.ts` — see [[Business-Rules]])
+- Agreement lifecycle processing (`/api/cron/agreement-lifecycle`)
+- Hostel/financial invariant checks (`/api/cron/hostel-invariants`, `/api/cron/migration-audit`)
+- Move-out room release (`/api/cron/move-out-releases`)
+- Payment reconciliation sweep (`/api/cron/reconcile-payments`)
+- Admissions reservation expiry (`/api/cron/admissions`)
+- Payment webhooks: PhonePe/Razorpay (`/api/webhooks/payments/razorpay`), WhatsApp Cloud API (`/api/webhooks/notifications/whatsapp`)
+- Admin finance-ops dashboards (`/api/admin/finance-ops/*`, `/api/admin/finance/reconciliation/*`) — ADMIN/OWNER-only, no confirmed dedicated frontend surface found in `frontend-v2`; **Unknown** whether these are consumed by a separate internal tool or only via direct API access.
+
+## Decommissioned features (confirmed removed, not just undocumented)
+
+Multi-hostel SaaS billing/subscription/add-on/usage-plan system — 37 route files now 410. See [[APIs]] and [[Decisions]]. Do not build new work assuming subscription/plan/usage-quota concepts exist; they were deliberately torn out ("single-business migration").
+
+## Feature template (for adding new entries)
+
+```markdown
+### <Feature name>
+- **Status:** planned / in progress / shipped
+- **Owner-facing?** yes/no · **Tenant-facing?** yes/no
+- **Key files:** (backend service, frontend feature folder)
+- **Depends on:** [[Business-Rules]] rule(s), other features
+- **Notes:**
+```
+
+## See also
+- [[Business-Rules]] for the domain rules features must respect
+- [[APIs]] for the endpoints backing each feature
+- [[Bugs]] for known issues per feature
+- [[TODO]] for planned/unverified items surfaced during this audit

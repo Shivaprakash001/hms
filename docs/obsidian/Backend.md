@@ -1,0 +1,105 @@
+---
+tags: [backend]
+---
+
+# Backend — `backend-next/`
+
+Related: [[Architecture]] · [[APIs]] · [[Database]] · [[Business-Rules]]
+
+Canonical API: Next.js 14 App Router + Prisma + Postgres (Supabase). This page reflects a direct read of the service layer (`lib/services/`, `src/services/`, `src/repositories/`) — ~140 service files across both trees, plus 7 repository files. Not every file gets a line here; this covers structure, domain placement, and things worth knowing before touching this code.
+
+## Structure
+
+| Path | Role |
+|---|---|
+| `app/api/` | Route handlers — kept thin. 294 route files. See [[APIs]]. |
+| `lib/services/` | ~66 files. See "domain placement" below — not simply "legacy." |
+| `src/services/` | ~73 files across `payments/`, `tenants/`, `change-management/`, `admissions/`, `rooms/`. |
+| `src/repositories/` | 7 files — **partial**, not universal, indirection (see below). |
+| `prisma/schema.prisma` | Source of truth for models/enums — see [[Database]]. |
+| `lib/billing/engine.ts` | Pure late-fee math (flat/per-day/percentage, grace days, cap) — see [[Business-Rules]]. |
+| `lib/auth*` | JWT + httpOnly refresh-cookie auth; `lib/auth-edge.ts` is the edge-safe variant used by `middleware.ts`. |
+
+## Domain placement: `lib/services/` vs `src/services/`
+
+**Confirmed by cross-import check that both trees are genuinely live and mutually dependent** (11 `lib/` files import from `src/`, 17 `src/` files import from `lib/`) — this is not a legacy-vs-canonical split, it's a domain split:
+
+| Domain | Lives in |
+|---|---|
+| Payments/obligations execution (obligation lifecycle, settlement, ledger, receipts, reminders, rent generation) | `src/services/payments/` — `payment-service.ts` (3835 lines, the payment-flow orchestrator), `obligation-engine.ts`, `financial-service.ts`, `financial-read-model-service.ts`, `financial-timeline-service.ts`, `tenant-financial-ledger-service.ts`, `settlement-engine.ts`/`settlement-planner.ts`, `rent-generation-service.ts`, `reminder-service.ts` |
+| Billing *configuration*/rules-math | `lib/billing/engine.ts` (late-fee math), `lib/services/hostel-billing-preferences-service.ts`, `hostel-policy-service.ts`, `billing-schedule-service.ts`, `billing-timeline-service.ts`, `billing-transition-service.ts`, `billing-validation.ts` — payments *execution* is in `src`, billing *config/math* is in `lib`, and they actively import each other |
+| Tenants (onboarding, activation, agreements, renewal, transfer) | `src/services/tenants/` — `tenant-service.ts` (1577 lines), `tenant-onboarding-service.ts`, `activation-workflow-service.ts`, 8 `agreement-*-service.ts` files, `invitation-service.ts`, `tenant-invitation-lifecycle-service.ts` (1242 lines), `tenant-transfer-service.ts`, `renewal-*-service.ts` |
+| Tenant analytics/migration/self-service portal | `lib/services/` — `tenant-analytics-service.ts`, `tenant-migration-service.ts` (bulk import), `tenant-profile-portal-service.ts` |
+| Hostels/properties/portfolio/dashboards | `lib/services/` — `property-service.ts` (931 lines), `hostel-policy-service.ts`, `room-capacity-service.ts`, `portfolio-service.ts`, `portfolio-performance-service.ts`, `dashboard-service.ts` (1659 lines) |
+| Room *allocation* | `src/services/rooms/room-allocation-service.ts` |
+| Auth | `lib/services/` entirely — `auth-service.ts` (741 lines), `auth/auth-otp-service.ts`, `session-lifecycle-service.ts`, `rate-limit-service.ts`, `user-service.ts` |
+| Notifications (WhatsApp, email, briefings) | `lib/services/notifications/` entirely — see WhatsApp section below |
+| Change management (tenant-edit approval workflow) | `src/services/change-management/` — self-contained: `change-management-facade.ts`, `change-request-service.ts`, `approval-engine.ts`, `change-policies.ts`, `diff-engine.ts`, `domain-events.ts`, `entity-adapter.ts`, `field-classification.ts`, `simulation-engine.ts`, `validation-engine.ts` |
+| Admissions (leads pipeline) | `src/services/admissions/admissions-service.ts` (1388 lines) |
+| Financial invariants/reconciliation/integrity | `lib/services/` — `financial-invariant-service.ts`, `financial-reconciliation-service.ts`, `hostel-invariant-validator.ts`, `owner-isolation-invariant-service.ts`, `hostel-integrity-dashboard.ts`, `migration-audit-service.ts` |
+
+## `lib/billing/engine.ts` — the late-fee math primitive
+
+Header comment literally states this is "THE canonical implementation of all billing math," pure functions only. `calculateLateFees()` computes a full cumulative multi-day preview (flat/percentage/per-day rules, stacked, grace-days-adjusted, cap-enforced). **Only imported in one production file**: `src/services/payments/reminder-service.ts`. `calculateLateFees` itself has zero production callers found (only its own test) — the cron actually uses `resolveRules()`/`calculateSingleRuleFee()` (single-rule-per-day) and accumulates day by day itself. See [[Business-Rules]] for the full mechanics.
+
+## `src/repositories/` — a partial abstraction, not a full pattern
+
+7 files: `tenantRepository.ts`, `allocationRepository.ts`, `roomRepository.ts`, `paymentRepository.ts`, `invoiceRepository.ts`, `changeRequestRepository.ts`, `billingRepository.ts`. Most are near-1:1 passthroughs to `prisma.<model>.*`. **Most services call `prisma` directly rather than going through these** — the repository layer exists mainly to centralize a couple of complex hand-written aggregate queries (`billingRepository`'s operational-cashflow/dues/defaulter queries backing `financial-service.ts`) and provide a shared `transaction()` helper, not to enforce a universal data-access boundary.
+
+## Notification services (`lib/services/notifications/`)
+
+Two structurally separate WhatsApp systems:
+- **`owner-whatsapp-assistant.ts`** (7180 lines — the largest file in the entire services tree) — owner-facing conversational assistant, ID-based interactive menus rather than flat keyword commands.
+- **`whatsapp-webhook-event-service.ts`** (1774 lines) — tenant-facing entry point. Flat text-command router (`BAL`/`BALANCE`, `SWITCH`, `DUES`, `PAY`, `STATUS`, `HELP`) plus interactive button-reply handling. See [[Business-Rules]] for the exact command table.
+
+Plus: `briefing-engine.ts` (owner daily briefing cards), `whatsapp-reminder-delivery.ts`, `whatsapp-billing-intelligence.ts`, `whatsapp-selection-state.ts` (conversational state machine, Redis-backed), `whatsapp-resident-context.ts` (tracks which tenant a phone number is "acting as" in a shared household), `providers/whatsapp/meta-provider.ts` (the actual Meta Cloud API client).
+
+## Commands
+
+```bash
+cd backend-next
+npm install
+npm run prisma:generate      # regenerate Prisma client after schema.prisma changes
+npm run dev                  # :3000
+npm run build
+npm run lint
+npm test                     # vitest, tests/**/*.test.ts
+npx vitest run tests/<file>.test.ts
+npx vitest run tests/<file>.test.ts -t "case name"
+```
+
+Env vars load from `../.env` (repo root) via `DOTENV_CONFIG_PATH=../.env`. `.env.test` is used by the test suite. Vitest runs with `fileParallelism: false` — tests share a real Postgres connection, not safe to parallelize.
+
+**Important test-coverage gap, confirmed in code**: `vitest.config.ts` explicitly excludes `lib/**/*.test.ts` from the `npm test` run (`include: ['tests/**/*.test.ts']`). This means every `*.test.ts` file living inside `backend-next/lib/services/` and `lib/billing/engine.test.ts` (12+ files) **is never actually executed** by CI/`npm test`. One of them (`lib/services/rent-generation-service.test.ts`) imports a relative path that doesn't even exist anymore (the real file moved to `src/services/payments/rent-generation-service.ts`) — this would fail if the test ever ran, but it silently never does. Real, executed coverage for these domains lives under `backend-next/tests/` (80 files). **Do not cite a `lib/services/*.test.ts` file as evidence of test coverage.**
+
+## Safety checks (run before touching payment/obligation code)
+
+```bash
+npm run check:invariants
+npm run check:activation-invariants
+npm run check:financial-safety
+npm run check:payment-production
+```
+
+`backend-next/scripts/architectural-invariants-check.ts` is a static regex-based file scanner enforcing 9 rules, most notably: `hostelId` must never be optional in operational service/route signatures; no "first hostel" (`hostels[0]`) fallback pattern; no `$queryRawUnsafe` outside an allowlist of invariant/audit tooling; **settled `payments` rows must never be updated/upserted/deleted by application code anywhere**; payment-attempt status transitions must go through the one blessed helper (`payment-service.ts`/`payment-status-event-service.ts`); `portfolio-service.ts` must not query raw transactional tables without a hostel-scoping proximity check; frontend `useQuery` hooks must include `hostelId` in their query key (with 6 named exceptions).
+
+## Auth/session model
+
+- Access token: JWT, 20 min expiry, memory-only.
+- Refresh token: hashed in Postgres (`refresh_tokens.token_hash`), delivered via httpOnly `SameSite=Lax` cookie (`hms_refresh_token`).
+- Idle timeout 30 min; absolute owner/admin session cap 12 hours.
+- Refresh-token reuse triggers session revocation (replay detection).
+- A 401 triggers automatic refresh; refresh failure clears local storage and forces re-login.
+- Managed by `lib/services/session-lifecycle-service.ts` (constants: `ACCESS_TOKEN_MAX_AGE_SECONDS`, `INACTIVITY_TIMEOUT_MS`).
+
+## Things worth flagging before you rely on them
+
+- **Two files named `activity-service.ts` and `activity.service.ts`** in `lib/services/` both export a class called `ActivityService` with overlapping but not identical shape — looks like an accidental duplicate. Which is canonical is **Unknown / needs clarification**; check import counts before assuming either is dead.
+- **`lib/services/settlement-preview-service.ts` is not move-out settlement** — its only method, `buildFrequencyChangePreview()`, is for billing-*frequency-change* previews. Actual move-out settlement math lives inline in `lib/services/move-out-service.ts`. Easy to conflate given the filename.
+- `FinancialService`'s doc-comment says operational dues exclude "LEFT" tenants, but the `TenantStatus` enum has no `LEFT` value (only `FORMER_TENANT`) — likely stale wording from a prior enum name.
+
+## See also
+- [[APIs]] for the endpoint-level detail these services back
+- [[Database]] for schema/migrations
+- [[Business-Rules]] for the domain rules these services enforce
+- [[Frontend]] for the client side of this API
