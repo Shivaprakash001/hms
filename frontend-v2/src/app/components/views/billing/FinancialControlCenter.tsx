@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   ChevronDown, Phone, DollarSign, Receipt, X, Clock
@@ -172,8 +172,6 @@ function OutstandingDuesDrawer({ hostelId, dues, onClose, onCollect }: Outstandi
 
 export function FinancialControlCenter({ hostelId }: Props) {
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedObligationId, setSelectedObligationId] = useState<string | null>(null);
   const [showFullLedger, setShowFullLedger] = useState(false);
   
@@ -238,20 +236,6 @@ export function FinancialControlCenter({ hostelId }: Props) {
         meta: { type: 'statsActivity', hostelId: id }
       });
       configs.push({
-        queryKey: queryKeys.dashboard.cashflow(id),
-        queryFn: () => import('@features/dashboard/api').then((m) => m.dashboardService.getCashflow(id)),
-        staleTime: 3 * 60 * 1000,
-        enabled: !!id,
-        meta: { type: 'cashflow', hostelId: id }
-      });
-      configs.push({
-        queryKey: queryKeys.dashboard.funnel(id),
-        queryFn: () => import('@features/dashboard/api').then((m) => m.dashboardService.getFunnel(id)),
-        staleTime: 5 * 60 * 1000,
-        enabled: !!id,
-        meta: { type: 'funnel', hostelId: id }
-      });
-      configs.push({
         queryKey: queryKeys.payments.ledger(id, { limit: 40 }),
         queryFn: () => import('@features/payments/api').then((m) => m.paymentService.getAll(id, { limit: 40 })),
         staleTime: 2 * 60 * 1000,
@@ -292,20 +276,6 @@ export function FinancialControlCenter({ hostelId }: Props) {
   const statsAnalyticsList = useMemo(() => {
     return queryResults
       .filter((_, idx) => queryConfigs[idx]?.meta?.type === 'statsAnalytics')
-      .map((res) => res.data)
-      .filter(Boolean);
-  }, [queryResults, queryConfigs]);
-
-  const cashflows = useMemo(() => {
-    return queryResults
-      .filter((_, idx) => queryConfigs[idx]?.meta?.type === 'cashflow')
-      .map((res) => res.data)
-      .filter(Boolean);
-  }, [queryResults, queryConfigs]);
-
-  const funnels = useMemo(() => {
-    return queryResults
-      .filter((_, idx) => queryConfigs[idx]?.meta?.type === 'funnel')
       .map((res) => res.data)
       .filter(Boolean);
   }, [queryResults, queryConfigs]);
@@ -526,8 +496,6 @@ export function FinancialControlCenter({ hostelId }: Props) {
     };
   }, [statsShells, statsAnalyticsList, queryConfigs, queryResults, hostels]);
 
-  const intel = stats?.intelligence;
-  
   const payments: any[] = useMemo(() => {
     const allPayments: any[] = [];
     paymentsDataList.forEach((data: any) => {
@@ -567,22 +535,15 @@ export function FinancialControlCenter({ hostelId }: Props) {
     };
   }, [paymentsDataList]);
 
-  // Calculate Expected/Collected/Outstanding/Expenses MTD
+  // Calculate Expected/Collected/Outstanding MTD
   const expectedVal = stats?.expected_revenue ?? 0;
   const collectedVal = stats?.revenue ?? 0;
   const outstandingVal = stats?.pending_dues ?? 0;
-  const expensesVal = stats?.monthly_expenses ?? stats?.expenses ?? 0;
   const collectionRate = stats?.collection_rate ?? 0;
-  const netCashFlow = collectedVal - expensesVal;
-  const activeTenants = stats?.active_tenants ?? stats?.total_tenants ?? 0;
-  const perTenantYield = activeTenants > 0 ? Math.round(collectedVal / activeTenants) : 0;
 
-  // Revenue Health metrics from analytics
+  // Reminder dependency (feeds Smart Insights)
   const paymentBehavior = stats?.intelligence?.dues?.payment_behavior ?? {};
-  const onTimeRate = paymentBehavior?.on_time_percentage ?? 0;
-  const avgDelay = paymentBehavior?.avg_delay_days ?? 0;
   const reminderDependency = paymentBehavior?.reminder_dependency_rate ?? 0;
-  const expenseRatio = stats?.expense_revenue_ratio ?? (expectedVal > 0 ? Math.round((expensesVal / expectedVal) * 100) : 0);
 
   // Compute Cash vs UPI Split (MTD)
   const collectionsSplit = useMemo(() => {
@@ -751,9 +712,6 @@ export function FinancialControlCenter({ hostelId }: Props) {
   const pendingPaymentsTotal = pendingPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
   const pendingPaymentsCount = pendingPayments.length;
 
-  // Expense Summary categories
-  const expenseCategories = Array.isArray(intel?.expenses?.categories) ? intel.expenses.categories : [];
-
   // Finance-only Recent Activity Feed
   const financeActivity = useMemo(() => {
     return (stats?.intelligence?.recent_activity ?? []).filter(
@@ -777,91 +735,6 @@ export function FinancialControlCenter({ hostelId }: Props) {
       } : undefined
     });
   };
-
-  const cashflow = useMemo(() => {
-    let due_today = 0;
-    let due_this_week = 0;
-    let overdue_amount = 0;
-    let predicted_collection = 0;
-    const dailyMap = new Map<string, { collected: number; expected: number }>();
-    
-    cashflows.forEach((cf: any) => {
-      due_today += Number(cf?.due_today ?? 0);
-      due_this_week += Number(cf?.due_this_week ?? 0);
-      overdue_amount += Number(cf?.overdue_amount ?? 0);
-      predicted_collection += Number(cf?.predicted_collection ?? cf?.expected_rent ?? 0);
-      
-      const list = Array.isArray(cf?.daily_collection) ? cf.daily_collection : [];
-      list.forEach((entry: any) => {
-        const dStr = entry.date ?? entry.day;
-        if (!dStr) return;
-        const dateKey = new Date(dStr).toISOString().split('T')[0];
-        const prev = dailyMap.get(dateKey) || { collected: 0, expected: 0 };
-        dailyMap.set(dateKey, {
-          collected: prev.collected + Number(entry.amount ?? entry.collected ?? 0),
-          expected: prev.expected + Number(entry.expected ?? 0),
-        });
-      });
-    });
-    
-    const daily_collection = Array.from(dailyMap.entries())
-      .map(([date, val]) => ({
-        date,
-        day: date,
-        amount: val.collected,
-        collected: val.collected,
-        expected: val.expected,
-      }))
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-      
-    return {
-      due_today,
-      due_this_week,
-      overdue_amount,
-      predicted_collection,
-      daily_collection,
-    };
-  }, [cashflows]);
-
-  const funnel = useMemo(() => {
-    let reminders_sent = 0;
-    let total_conversion = 0;
-    let count_conversion = 0;
-    const channelMap = new Map<string, { totalRate: number; count: number }>();
-    
-    funnels.forEach((fn: any) => {
-      reminders_sent += Number(fn?.reminders_sent ?? 0);
-      if (typeof fn?.conversion_rate === 'number') {
-        total_conversion += fn.conversion_rate;
-        count_conversion++;
-      }
-      
-      const channels = Array.isArray(fn?.channel_performance) ? fn.channel_performance : [];
-      channels.forEach((ch: any) => {
-        if (!ch.channel) return;
-        const prev = channelMap.get(ch.channel) || { totalRate: 0, count: 0 };
-        channelMap.set(ch.channel, {
-          totalRate: prev.totalRate + Number(ch.conversion_rate ?? 0),
-          count: prev.count + 1,
-        });
-      });
-    });
-    
-    const conversion_rate = count_conversion > 0
-      ? Math.round(total_conversion / count_conversion)
-      : 0;
-      
-    const channel_performance = Array.from(channelMap.entries()).map(([channel, val]) => ({
-      channel,
-      conversion_rate: val.count > 0 ? Math.round(val.totalRate / val.count) : 0,
-    }));
-    
-    return {
-      reminders_sent,
-      conversion_rate,
-      channel_performance,
-    };
-  }, [funnels]);
 
   const isAllHostels = hostelId === 'all';
 
@@ -925,6 +798,14 @@ export function FinancialControlCenter({ hostelId }: Props) {
         hostelId={hostelId}
       />
 
+      {statsLoading ? (
+        <div className="space-y-5">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />
+          ))}
+        </div>
+      ) : (
+        <>
       {/* 1. Collection Progress */}
       <div className="bg-card border border-border rounded-xl p-4 space-y-3 shadow-sm">
         <div className="flex items-center justify-between text-xs font-semibold">
@@ -1062,23 +943,37 @@ export function FinancialControlCenter({ hostelId }: Props) {
       <div className="bg-card border border-border rounded-xl p-4 space-y-2.5 shadow-sm">
         <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Smart Insights</h3>
         <div className="space-y-2">
-          {smartInsights.map((insight, i) => (
-            <div
-              key={i}
-              className={`flex items-start gap-2 text-xs rounded-lg px-2.5 py-2 ${
-                insight.tone === 'good'
-                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400'
-                  : insight.tone === 'warning'
-                  ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400'
-                  : insight.tone === 'critical'
-                  ? 'bg-red-50 text-red-700 dark:bg-red-950/20 dark:text-red-400'
-                  : 'bg-muted/40 text-foreground'
-              }`}
-            >
-              <span className="shrink-0">{insight.icon}</span>
-              <span>{insight.text}</span>
-            </div>
-          ))}
+          {smartInsights.map((insight, i) => {
+            const isUnconfirmedPayments = insight.icon === '🧾';
+            const toneClass =
+              insight.tone === 'good'
+                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400'
+                : insight.tone === 'warning'
+                ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400'
+                : insight.tone === 'critical'
+                ? 'bg-red-50 text-red-700 dark:bg-red-950/20 dark:text-red-400'
+                : 'bg-muted/40 text-foreground';
+
+            if (isUnconfirmedPayments) {
+              return (
+                <Link
+                  key={i}
+                  to="/alerts"
+                  className={`flex items-start gap-2 text-xs rounded-lg px-2.5 py-2 hover:opacity-80 transition-opacity ${toneClass}`}
+                >
+                  <span className="shrink-0">{insight.icon}</span>
+                  <span>{insight.text}</span>
+                </Link>
+              );
+            }
+
+            return (
+              <div key={i} className={`flex items-start gap-2 text-xs rounded-lg px-2.5 py-2 ${toneClass}`}>
+                <span className="shrink-0">{insight.icon}</span>
+                <span>{insight.text}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -1190,6 +1085,8 @@ export function FinancialControlCenter({ hostelId }: Props) {
           </div>
         )}
       </div>
+        </>
+      )}
 
       {/* Modals & Drawers */}
       {selectedObligationId && (
