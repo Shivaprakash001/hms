@@ -1,19 +1,17 @@
 import { lazy, Suspense, useState, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { 
-  BarChart3, ChevronDown, Phone, Calendar, DollarSign, Receipt, X, Clock
+import {
+  ChevronDown, Phone, DollarSign, Receipt, X, Clock
 } from 'lucide-react';
 import { queryKeys } from '@lib/queryKeys';
 import { OwnerActionsBar } from './OwnerActionsBar';
 import { PaymentLedger } from './PaymentLedger';
 import { RecordPaymentModal } from '../../modals/RecordPaymentModal';
 import { EXPENSE_CATEGORIES } from '@features/expenses/constants';
+import { computeTodaysCollection, computePropertyFinance, computeSmartInsights, getUrgencyMeta } from './financeInsights';
 
-const CashflowForecast = lazy(() => import('./CashflowForecast').then((m) => ({ default: m.CashflowForecast })));
-const CollectionAnalytics = lazy(() => import('./CollectionAnalytics').then((m) => ({ default: m.CollectionAnalytics })));
-const ExpenseIntelligence = lazy(() => import('./ExpenseIntelligence').then((m) => ({ default: m.ExpenseIntelligence })));
 const PaymentDetailDrawer = lazy(() => import('./PaymentDetailDrawer').then((m) => ({ default: m.PaymentDetailDrawer })));
 const AddExpenseModal = lazy(() => import('../../hostel-detail/tabs/expenses/AddExpenseModal').then((m) => ({ default: m.AddExpenseModal })));
 
@@ -21,15 +19,6 @@ interface Props {
   hostelId: string;
   onRecordPayment?: () => void;
   onAddExpense?: () => void;
-}
-
-function AnalyticsFallback() {
-  return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      <div className="h-44 rounded-xl bg-muted animate-pulse" />
-      <div className="h-44 rounded-xl bg-muted animate-pulse" />
-    </div>
-  );
 }
 
 function WhatsAppIcon() {
@@ -183,10 +172,8 @@ function OutstandingDuesDrawer({ hostelId, dues, onClose, onCollect }: Outstandi
 
 export function FinancialControlCenter({ hostelId }: Props) {
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedObligationId, setSelectedObligationId] = useState<string | null>(null);
-  const [showAnalytics, setShowAnalytics] = useState(true);
+  const [showFullLedger, setShowFullLedger] = useState(false);
   
   // Modals & Drawers states
   const [showDuesDrawer, setShowDuesDrawer] = useState(false);
@@ -249,20 +236,6 @@ export function FinancialControlCenter({ hostelId }: Props) {
         meta: { type: 'statsActivity', hostelId: id }
       });
       configs.push({
-        queryKey: queryKeys.dashboard.cashflow(id),
-        queryFn: () => import('@features/dashboard/api').then((m) => m.dashboardService.getCashflow(id)),
-        staleTime: 3 * 60 * 1000,
-        enabled: !!id,
-        meta: { type: 'cashflow', hostelId: id }
-      });
-      configs.push({
-        queryKey: queryKeys.dashboard.funnel(id),
-        queryFn: () => import('@features/dashboard/api').then((m) => m.dashboardService.getFunnel(id)),
-        staleTime: 5 * 60 * 1000,
-        enabled: !!id,
-        meta: { type: 'funnel', hostelId: id }
-      });
-      configs.push({
         queryKey: queryKeys.payments.ledger(id, { limit: 40 }),
         queryFn: () => import('@features/payments/api').then((m) => m.paymentService.getAll(id, { limit: 40 })),
         staleTime: 2 * 60 * 1000,
@@ -303,20 +276,6 @@ export function FinancialControlCenter({ hostelId }: Props) {
   const statsAnalyticsList = useMemo(() => {
     return queryResults
       .filter((_, idx) => queryConfigs[idx]?.meta?.type === 'statsAnalytics')
-      .map((res) => res.data)
-      .filter(Boolean);
-  }, [queryResults, queryConfigs]);
-
-  const cashflows = useMemo(() => {
-    return queryResults
-      .filter((_, idx) => queryConfigs[idx]?.meta?.type === 'cashflow')
-      .map((res) => res.data)
-      .filter(Boolean);
-  }, [queryResults, queryConfigs]);
-
-  const funnels = useMemo(() => {
-    return queryResults
-      .filter((_, idx) => queryConfigs[idx]?.meta?.type === 'funnel')
       .map((res) => res.data)
       .filter(Boolean);
   }, [queryResults, queryConfigs]);
@@ -537,8 +496,6 @@ export function FinancialControlCenter({ hostelId }: Props) {
     };
   }, [statsShells, statsAnalyticsList, queryConfigs, queryResults, hostels]);
 
-  const intel = stats?.intelligence;
-  
   const payments: any[] = useMemo(() => {
     const allPayments: any[] = [];
     paymentsDataList.forEach((data: any) => {
@@ -578,22 +535,15 @@ export function FinancialControlCenter({ hostelId }: Props) {
     };
   }, [paymentsDataList]);
 
-  // Calculate Expected/Collected/Outstanding/Expenses MTD
+  // Calculate Expected/Collected/Outstanding MTD
   const expectedVal = stats?.expected_revenue ?? 0;
   const collectedVal = stats?.revenue ?? 0;
   const outstandingVal = stats?.pending_dues ?? 0;
-  const expensesVal = stats?.monthly_expenses ?? stats?.expenses ?? 0;
   const collectionRate = stats?.collection_rate ?? 0;
-  const netCashFlow = collectedVal - expensesVal;
-  const activeTenants = stats?.active_tenants ?? stats?.total_tenants ?? 0;
-  const perTenantYield = activeTenants > 0 ? Math.round(collectedVal / activeTenants) : 0;
 
-  // Revenue Health metrics from analytics
+  // Reminder dependency (feeds Smart Insights)
   const paymentBehavior = stats?.intelligence?.dues?.payment_behavior ?? {};
-  const onTimeRate = paymentBehavior?.on_time_percentage ?? 0;
-  const avgDelay = paymentBehavior?.avg_delay_days ?? 0;
   const reminderDependency = paymentBehavior?.reminder_dependency_rate ?? 0;
-  const expenseRatio = stats?.expense_revenue_ratio ?? (expectedVal > 0 ? Math.round((expensesVal / expectedVal) * 100) : 0);
 
   // Compute Cash vs UPI Split (MTD)
   const collectionsSplit = useMemo(() => {
@@ -762,9 +712,6 @@ export function FinancialControlCenter({ hostelId }: Props) {
   const pendingPaymentsTotal = pendingPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
   const pendingPaymentsCount = pendingPayments.length;
 
-  // Expense Summary categories
-  const expenseCategories = Array.isArray(intel?.expenses?.categories) ? intel.expenses.categories : [];
-
   // Finance-only Recent Activity Feed
   const financeActivity = useMemo(() => {
     return (stats?.intelligence?.recent_activity ?? []).filter(
@@ -789,90 +736,59 @@ export function FinancialControlCenter({ hostelId }: Props) {
     });
   };
 
-  const cashflow = useMemo(() => {
-    let due_today = 0;
-    let due_this_week = 0;
-    let overdue_amount = 0;
-    let predicted_collection = 0;
-    const dailyMap = new Map<string, { collected: number; expected: number }>();
-    
-    cashflows.forEach((cf: any) => {
-      due_today += Number(cf?.due_today ?? 0);
-      due_this_week += Number(cf?.due_this_week ?? 0);
-      overdue_amount += Number(cf?.overdue_amount ?? 0);
-      predicted_collection += Number(cf?.predicted_collection ?? cf?.expected_rent ?? 0);
-      
-      const list = Array.isArray(cf?.daily_collection) ? cf.daily_collection : [];
-      list.forEach((entry: any) => {
-        const dStr = entry.date ?? entry.day;
-        if (!dStr) return;
-        const dateKey = new Date(dStr).toISOString().split('T')[0];
-        const prev = dailyMap.get(dateKey) || { collected: 0, expected: 0 };
-        dailyMap.set(dateKey, {
-          collected: prev.collected + Number(entry.amount ?? entry.collected ?? 0),
-          expected: prev.expected + Number(entry.expected ?? 0),
-        });
-      });
-    });
-    
-    const daily_collection = Array.from(dailyMap.entries())
-      .map(([date, val]) => ({
-        date,
-        day: date,
-        amount: val.collected,
-        collected: val.collected,
-        expected: val.expected,
-      }))
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-      
-    return {
-      due_today,
-      due_this_week,
-      overdue_amount,
-      predicted_collection,
-      daily_collection,
-    };
-  }, [cashflows]);
+  const isAllHostels = hostelId === 'all';
 
-  const funnel = useMemo(() => {
-    let reminders_sent = 0;
-    let total_conversion = 0;
-    let count_conversion = 0;
-    const channelMap = new Map<string, { totalRate: number; count: number }>();
-    
-    funnels.forEach((fn: any) => {
-      reminders_sent += Number(fn?.reminders_sent ?? 0);
-      if (typeof fn?.conversion_rate === 'number') {
-        total_conversion += fn.conversion_rate;
-        count_conversion++;
-      }
-      
-      const channels = Array.isArray(fn?.channel_performance) ? fn.channel_performance : [];
-      channels.forEach((ch: any) => {
-        if (!ch.channel) return;
-        const prev = channelMap.get(ch.channel) || { totalRate: 0, count: 0 };
-        channelMap.set(ch.channel, {
-          totalRate: prev.totalRate + Number(ch.conversion_rate ?? 0),
-          count: prev.count + 1,
-        });
-      });
-    });
-    
-    const conversion_rate = count_conversion > 0
-      ? Math.round(total_conversion / count_conversion)
-      : 0;
-      
-    const channel_performance = Array.from(channelMap.entries()).map(([channel, val]) => ({
-      channel,
-      conversion_rate: val.count > 0 ? Math.round(val.totalRate / val.count) : 0,
-    }));
-    
-    return {
-      reminders_sent,
-      conversion_rate,
-      channel_performance,
-    };
-  }, [funnels]);
+  const perHostelFinance = useMemo(() => {
+    return statsShells
+      .map((shell: any) => {
+        const shellConfig = queryConfigs.find(
+          (c, cidx) => queryResults[cidx]?.data === shell && c.meta?.type === 'statsShell'
+        );
+        const hId = shellConfig?.meta?.hostelId;
+        const hostelName = hostels.find((h: any) => h.id === hId)?.name ?? 'Hostel';
+        return {
+          hostelId: hId,
+          hostelName,
+          revenue: Number(shell?.revenue ?? 0),
+          expected_revenue: Number(shell?.expected_revenue ?? 0),
+          pending_dues: Number(shell?.pending_dues ?? 0),
+        };
+      })
+      .filter((h) => Boolean(h.hostelId));
+  }, [statsShells, queryConfigs, queryResults, hostels]);
+
+  const todaysCollection = useMemo(() => computeTodaysCollection(payments), [payments]);
+
+  const propertyFinanceCards = useMemo(() => computePropertyFinance(perHostelFinance), [perHostelFinance]);
+
+  const smartInsights = useMemo(
+    () =>
+      computeSmartInsights({
+        expectedVal,
+        collectedVal,
+        collectionRate,
+        reminderDependency,
+        pendingPaymentsCount,
+        pendingPaymentsTotal,
+        upcomingCount,
+        upcomingTotal,
+        isAllHostels,
+        perHostel: perHostelFinance,
+        fmtK,
+      }),
+    [
+      expectedVal,
+      collectedVal,
+      collectionRate,
+      reminderDependency,
+      pendingPaymentsCount,
+      pendingPaymentsTotal,
+      upcomingCount,
+      upcomingTotal,
+      isAllHostels,
+      perHostelFinance,
+    ]
+  );
 
   return (
     <div className="space-y-5 pb-20">
@@ -882,109 +798,75 @@ export function FinancialControlCenter({ hostelId }: Props) {
         hostelId={hostelId}
       />
 
-      {/* 1. Financial Command Card */}
-      <div className="bg-card border border-border rounded-xl p-4 space-y-3 shadow-sm">
-        {/* Hero: Net Cash Flow */}
-        <div className="flex items-start justify-between gap-3 pb-3 border-b border-border/50">
-          <div>
-            <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">Net Cash Flow</p>
-            <p className={`text-2xl font-black ${netCashFlow >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-              {netCashFlow >= 0 ? '+' : ''}{fmtK(netCashFlow)}
-            </p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Collected minus expenses this month</p>
-          </div>
-          <div className="text-right space-y-1">
-            {activeTenants > 0 && (
-              <div>
-                <p className="text-[10px] text-muted-foreground font-medium">Per Tenant</p>
-                <p className="text-sm font-bold text-foreground">{fmtK(perTenantYield)}</p>
-              </div>
-            )}
-          </div>
+      {statsLoading ? (
+        <div className="space-y-5">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />
+          ))}
         </div>
+      ) : (
+        <>
+      {/* 1. Collection Progress */}
+      <div className="bg-card border border-border rounded-xl p-4 space-y-3 shadow-sm">
+        <div className="flex items-center justify-between text-xs font-semibold">
+          <span className="text-muted-foreground uppercase tracking-wider">Collection Progress</span>
+          <span className={collectionRate >= 80 ? 'text-emerald-600 dark:text-emerald-400' : collectionRate >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}>
+            {collectionRate}%
+          </span>
+        </div>
+        <div className="w-full h-2.5 bg-secondary rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all duration-300 ${collectionRate >= 80 ? 'bg-emerald-500' : collectionRate >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
+            style={{ width: `${Math.min(collectionRate, 100)}%` }}
+          />
+        </div>
+        <p className="text-[11px] text-muted-foreground">{fmtK(collectedVal)} / {fmtK(expectedVal)}</p>
 
-        {/* KPI Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="space-y-1">
-            <span className="text-xs text-muted-foreground font-medium">Expected</span>
-            <p className="text-lg font-bold text-foreground">{fmtK(expectedVal)}</p>
-          </div>
+        <div className="grid grid-cols-2 gap-4 pt-2 border-t border-border/50">
           <div className="space-y-1">
             <span className="text-xs text-muted-foreground font-medium">Collected</span>
             <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{fmtK(collectedVal)}</p>
           </div>
           <div className="space-y-1">
-            <span className="text-xs text-muted-foreground font-medium">Outstanding</span>
+            <span className="text-xs text-muted-foreground font-medium">Pending</span>
             <p className="text-lg font-bold text-red-600 dark:text-red-400">{fmtK(outstandingVal)}</p>
           </div>
           <div className="space-y-1">
-            <span className="text-xs text-muted-foreground font-medium">Expenses</span>
-            <p className="text-lg font-bold text-foreground">{fmtK(expensesVal)}</p>
+            <span className="text-xs text-muted-foreground font-medium">Today's Collection</span>
+            <p className="text-lg font-bold text-foreground">{fmtK(todaysCollection)}</p>
+          </div>
+          <div className="space-y-1">
+            <span className="text-xs text-muted-foreground font-medium">Target</span>
+            <p className="text-lg font-bold text-foreground">{fmtK(expectedVal)}</p>
           </div>
         </div>
-        
-        {/* Collection Rate */}
-        <div className="space-y-1 pt-2 border-t border-border/50">
-          <div className="flex items-center justify-between text-xs font-semibold">
-            <span className="text-muted-foreground">Collection Rate</span>
-            <span className={collectionRate >= 80 ? 'text-emerald-600 dark:text-emerald-400' : collectionRate >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}>{collectionRate}%</span>
-          </div>
-          <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
-            <div className={`h-full rounded-full transition-all duration-300 ${collectionRate >= 80 ? 'bg-emerald-500' : collectionRate >= 50 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${Math.min(collectionRate, 100)}%` }} />
-          </div>
-          <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px] text-muted-foreground pt-1.5">
-            <div className="flex items-center gap-1">
-              <span>Receipts:</span>
-              <span className="font-semibold text-foreground">
-                Cash: {fmtK(collectionsSplit.cash)} · UPI: {fmtK(collectionsSplit.upi)}
-              </span>
-            </div>
-          </div>
 
-          {(upcomingCount === 0 || pendingPaymentsCount === 0 || expensesVal === 0) && (
-            <div className="flex flex-wrap gap-1.5 pt-2 border-t border-border/30 mt-2">
-              {upcomingCount === 0 && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border border-emerald-100/50 dark:border-emerald-900/30">
-                  ✓ No upcoming collections
-                </span>
-              )}
-              {pendingPaymentsCount === 0 && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border border-emerald-100/50 dark:border-emerald-900/30">
-                  ✓ All payments verified
-                </span>
-              )}
-              {expensesVal === 0 && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border border-emerald-100/50 dark:border-emerald-900/30">
-                  ✓ No expenses recorded
-                </span>
-              )}
-            </div>
-          )}
-        </div>
+        <p className="text-[11px] text-muted-foreground pt-2 border-t border-border/50">
+          Cash: <span className="font-semibold text-foreground">{fmtK(collectionsSplit.cash)}</span> · UPI:{' '}
+          <span className="font-semibold text-foreground">{fmtK(collectionsSplit.upi)}</span>
+        </p>
       </div>
 
-      {/* 2. Collection Queue */}
+      {/* 2. Priority Collections */}
       <div className="bg-card border border-border rounded-xl p-4 space-y-3 shadow-sm">
         <div className="flex items-center justify-between">
-          <h3 className="text-xs font-bold text-red-600 uppercase tracking-wider flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-red-600 animate-pulse" />
-            Collection Queue
-          </h3>
+          <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Priority Collections</h3>
           <span className="text-[10px] bg-red-50 text-red-600 px-1.5 py-0.5 rounded font-semibold">{overdueList.length} overdue</span>
         </div>
-        
+
         {overdueList.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {overdueList.slice(0, 4).map((due, i) => {
+            {overdueList.slice(0, 3).map((due, i) => {
               const tenantName = due.tenant_name ?? due.name ?? 'Tenant';
               const roomNo = due.room_no ?? due.room_number ?? 'N/A';
               const balance = dueBalance(due);
               const rawPhone = due.phone ?? due.tenant_phone ?? due.tenantPhone;
               const phone = rawPhone ? String(rawPhone).trim() : null;
               const telPhone = phone ? phone.replace(/[^\d+]/g, '') : null;
-              
+
               const dueTime = due.due_date ? new Date(String(due.due_date)).getTime() : 0;
               const daysLate = Math.max(0, Math.floor((Date.now() - dueTime) / (1000 * 60 * 60 * 24)));
+              const urgency = getUrgencyMeta(daysLate);
 
               let whatsappUrl = null;
               if (phone) {
@@ -999,7 +881,7 @@ export function FinancialControlCenter({ hostelId }: Props) {
                   <div className="flex justify-between items-start">
                     <div>
                       <h4 className="font-semibold text-foreground text-sm flex items-center gap-1">
-                        <span className="text-red-500">🔴</span>
+                        <span>{urgency.emoji}</span>
                         {tenantName}
                       </h4>
                       <p className="text-xs text-muted-foreground mt-0.5">
@@ -1008,9 +890,9 @@ export function FinancialControlCenter({ hostelId }: Props) {
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-bold text-red-600 dark:text-red-400">{fmtK(balance)} overdue</p>
-                      <p className="text-[10px] text-muted-foreground font-semibold mt-0.5">
-                        {daysLate === 0 ? 'Due Today' : `${daysLate} days late`}
-                      </p>
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded mt-0.5 inline-block ${urgency.badgeClass}`}>
+                        {urgency.label}
+                      </span>
                     </div>
                   </div>
                   <div className="flex gap-2 pt-2 border-t border-border/50">
@@ -1057,135 +939,86 @@ export function FinancialControlCenter({ hostelId }: Props) {
         )}
       </div>
 
-      {/* 2.5 Revenue Health — Always Visible */}
-      <div className="bg-card border border-border rounded-xl p-4 shadow-sm">
-        <div className="flex items-center gap-2 mb-3">
-          <BarChart3 className="h-4 w-4 text-accent" />
-          <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Revenue Health</h3>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-center">
-            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">On-Time</p>
-            <p className={`text-lg font-black mt-0.5 ${onTimeRate >= 80 ? 'text-emerald-600 dark:text-emerald-400' : onTimeRate >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>{onTimeRate}%</p>
-            <p className="text-[10px] text-muted-foreground">payments</p>
-          </div>
-          <div className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-center">
-            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Avg Delay</p>
-            <p className={`text-lg font-black mt-0.5 ${avgDelay <= 2 ? 'text-emerald-600 dark:text-emerald-400' : avgDelay <= 7 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>{avgDelay}</p>
-            <p className="text-[10px] text-muted-foreground">days late</p>
-          </div>
-          <div className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-center">
-            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Need Nudge</p>
-            <p className={`text-lg font-black mt-0.5 ${reminderDependency <= 20 ? 'text-emerald-600 dark:text-emerald-400' : reminderDependency <= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>{reminderDependency}%</p>
-            <p className="text-[10px] text-muted-foreground">reminders</p>
-          </div>
-          <div className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-center">
-            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Expense Ratio</p>
-            <p className={`text-lg font-black mt-0.5 ${expenseRatio <= 35 ? 'text-emerald-600 dark:text-emerald-400' : expenseRatio <= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>{expenseRatio}%</p>
-            <p className="text-[10px] text-muted-foreground">of revenue</p>
-          </div>
+      {/* 3. Smart Insights */}
+      <div className="bg-card border border-border rounded-xl p-4 space-y-2.5 shadow-sm">
+        <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Smart Insights</h3>
+        <div className="space-y-2">
+          {smartInsights.map((insight, i) => {
+            const isUnconfirmedPayments = insight.icon === '🧾';
+            const toneClass =
+              insight.tone === 'good'
+                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400'
+                : insight.tone === 'warning'
+                ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400'
+                : insight.tone === 'critical'
+                ? 'bg-red-50 text-red-700 dark:bg-red-950/20 dark:text-red-400'
+                : 'bg-muted/40 text-foreground';
+
+            if (isUnconfirmedPayments) {
+              return (
+                <Link
+                  key={i}
+                  to="/alerts"
+                  className={`flex items-start gap-2 text-xs rounded-lg px-2.5 py-2 hover:opacity-80 transition-opacity ${toneClass}`}
+                >
+                  <span className="shrink-0">{insight.icon}</span>
+                  <span>{insight.text}</span>
+                </Link>
+              );
+            }
+
+            return (
+              <div key={i} className={`flex items-start gap-2 text-xs rounded-lg px-2.5 py-2 ${toneClass}`}>
+                <span className="shrink-0">{insight.icon}</span>
+                <span>{insight.text}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      {(upcomingCount > 0 || pendingPaymentsCount > 0) && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* 3. Upcoming Collections */}
-          {upcomingCount > 0 && (
-            <div className="bg-card border border-border rounded-xl p-4 flex items-center justify-between shadow-sm">
-              <div className="space-y-1">
-                <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wider flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-amber-500" />
-                  Due This Week
-                </span>
-                <p className="text-sm font-semibold text-foreground mt-1">{upcomingCount} tenant{upcomingCount === 1 ? '' : 's'}</p>
-              </div>
-              <p className="text-xl font-bold text-amber-600 dark:text-amber-400">{fmtK(upcomingTotal)}</p>
-            </div>
-          )}
-
-          {/* 4. Unconfirmed Payments */}
-          {pendingPaymentsCount > 0 && (
-            <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-xl p-4 flex items-center justify-between shadow-sm">
-              <div className="space-y-1">
-                <span className="text-xs text-amber-700 dark:text-amber-400 font-semibold uppercase tracking-wider flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                  Unconfirmed Payments
-                </span>
-                <p className="text-sm font-medium text-amber-800 dark:text-amber-300 mt-1">
-                  {pendingPaymentsCount} payment proof{pendingPaymentsCount === 1 ? '' : 's'} waiting review
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-lg font-bold text-amber-700 dark:text-amber-400">{fmtK(pendingPaymentsTotal)}</p>
-                <Link to="/alerts" className="text-xs text-amber-600 dark:text-amber-500 font-semibold hover:underline flex items-center gap-1 justify-end mt-0.5">
-                  Review proofs →
-                </Link>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 5. Expense Summary */}
-      {expensesVal > 0 && (
-        <div className="bg-card border border-border rounded-xl p-4 space-y-4 shadow-sm">
-          <div className="flex justify-between items-start">
-            <div className="space-y-1">
-              <span className="text-xs text-muted-foreground font-medium">Expenses This Month</span>
-              <p className="text-xl font-bold text-foreground">{fmtK(expensesVal)}</p>
-            </div>
-          </div>
-        {expenseCategories.length > 0 ? (
-          <div className="space-y-2 border-t border-border/50 pt-3">
-            {expenseCategories.slice(0, 3).map((c: any) => (
-              <div key={c.category} className="flex justify-between text-xs text-muted-foreground">
-                <span>{c.category}</span>
-                <span className="font-semibold text-foreground">{fmtK(c.amount)}</span>
+      {/* 4. Property Finance */}
+      {isAllHostels && propertyFinanceCards.length >= 2 && (
+        <div className="bg-card border border-border rounded-xl p-4 space-y-3 shadow-sm">
+          <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">Property Finance</h3>
+          <div className="space-y-2">
+            {propertyFinanceCards.map((card) => (
+              <div key={card.hostelId} className="flex items-center justify-between rounded-lg border border-border/80 px-3 py-2.5">
+                <div className="flex items-center gap-2">
+                  <span>{card.medal}</span>
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">{card.hostelName}</p>
+                    <p className="text-[11px] text-muted-foreground">Revenue {fmtK(card.revenue)}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className={`text-sm font-bold ${card.tone === 'good' ? 'text-emerald-600 dark:text-emerald-400' : card.tone === 'warning' ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>
+                    {card.collectionRate}%
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">{fmtK(card.pending)} pending</p>
+                </div>
               </div>
             ))}
           </div>
-        ) : (
-          <div className="text-xs text-muted-foreground py-2 text-center">No expense details logged.</div>
-        )}
-        <div className="flex gap-2 pt-2">
-          <button
-            onClick={() => setShowAddExpense(true)}
-            className="flex-1 py-2 px-3 text-xs font-semibold rounded-lg bg-primary text-primary-foreground hover:bg-primary/95 transition-all text-center active:scale-[0.98]"
-          >
-            Add Expense
-          </button>
-          <button
-            onClick={() => {
-              setSearchParams((prev) => {
-                prev.set('tab', 'expenses');
-                return prev;
-              });
-            }}
-            className="flex-1 py-2 px-3 text-xs font-semibold rounded-lg border border-border text-foreground hover:bg-muted transition-all text-center active:scale-[0.98]"
-          >
-            View Expenses
-          </button>
         </div>
-      </div>
       )}
 
-      {/* 6. Recent Financial Activity */}
+      {/* 5. Recent Transactions */}
       <div className="rounded-xl border border-border bg-card overflow-hidden">
         <div className="px-4 py-3 border-b border-border flex items-center gap-2">
           <Clock className="h-4 w-4 text-muted-foreground" />
-          <h3 className="text-sm font-semibold text-foreground">Recent Financial Activity</h3>
+          <h3 className="text-sm font-semibold text-foreground">Recent Transactions</h3>
           <span className="ml-auto text-xs text-muted-foreground">{financeActivity.length} events</span>
         </div>
-        <div className="divide-y divide-border px-4 max-h-[300px] overflow-y-auto">
+        <div className="divide-y divide-border px-4">
           {financeActivity.length > 0 ? (
-            financeActivity.map((item: any, i: number) => {
+            financeActivity.slice(0, 5).map((item: any, i: number) => {
               const dateStr = item.date ?? '';
               const type = item.type;
-              
+
               let primary = item.title ?? '';
               let secondary = item.detail ?? '';
 
-              // Parse date to relative format
               let relativeDate = '';
               if (dateStr) {
                 try {
@@ -1230,46 +1063,30 @@ export function FinancialControlCenter({ hostelId }: Props) {
             <div className="py-6 text-center text-xs text-muted-foreground">No recent financial activity</div>
           )}
         </div>
-      </div>
 
-      {/* 7. Payment Ledger */}
-      <PaymentLedger
-        hostelId={hostelId}
-        payments={payments}
-        paymentsData={paymentsData}
-        onRowClick={handleRowClick}
-        refetch={refetchPayments}
-      />
-
-      {/* 8. Detailed Charts */}
-      <section className="rounded-xl border border-border bg-card p-4">
         <button
           type="button"
-          onClick={() => setShowAnalytics((value) => !value)}
-          className="flex w-full items-center justify-between gap-3 text-left"
+          onClick={() => setShowFullLedger((value) => !value)}
+          className="flex w-full items-center justify-center gap-2 px-4 py-2.5 border-t border-border text-xs font-medium text-primary hover:bg-muted/40 transition-colors"
         >
-          <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <BarChart3 className="h-4 w-4 text-accent" />
-            Cashflow, Expenses & Collection Charts
-          </span>
-          <span className="flex items-center gap-2 text-xs text-muted-foreground">
-            {showAnalytics ? 'Collapse' : 'Expand'}
-            <ChevronDown className={`h-4 w-4 transition-transform ${showAnalytics ? 'rotate-180' : ''}`} />
-          </span>
+          {showFullLedger ? 'Hide full ledger' : 'View All →'}
+          <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showFullLedger ? 'rotate-180' : ''}`} />
         </button>
 
-        {showAnalytics && (
-          <div className="mt-4" id="expense-intelligence">
-            <Suspense fallback={<AnalyticsFallback />}>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <CashflowForecast cashflow={cashflow} stats={stats} />
-                <ExpenseIntelligence intel={intel} stats={stats} />
-                <CollectionAnalytics payments={payments} funnel={funnel} />
-              </div>
-            </Suspense>
+        {showFullLedger && (
+          <div className="border-t border-border">
+            <PaymentLedger
+              hostelId={hostelId}
+              payments={payments}
+              paymentsData={paymentsData}
+              onRowClick={handleRowClick}
+              refetch={refetchPayments}
+            />
           </div>
         )}
-      </section>
+      </div>
+        </>
+      )}
 
       {/* Modals & Drawers */}
       {selectedObligationId && (
