@@ -1,5 +1,5 @@
 import { lazy, Suspense, useDeferredValue, useMemo, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { queryKeys } from '@lib/queryKeys';
@@ -73,6 +73,10 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
     queryKey: [...queryKeys.expenses.list(queryHostelKey), params],
     queryFn: () => import('@features/expenses/api').then((m) => m.expenseService.getAll(targetHostelId, params)),
     staleTime: 2 * 60 * 1000,
+    // Keep showing the previous result set while a new filter/search combination
+    // fetches in the background, instead of unmounting the whole tab into TabSkeleton
+    // on every keystroke (each keystroke changes `params`, and therefore the query key).
+    placeholderData: keepPreviousData,
   });
 
   // Lightweight second query for the dashboard's "Largest Expense" card — exact,
@@ -84,6 +88,7 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
         m.expenseService.getAll(targetHostelId, { ...params, sort: 'highest', limit: 1, offset: 0 }),
       ),
     staleTime: 2 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 
   const invalidateExpenseQueries = () => {
@@ -194,6 +199,10 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
         recurring: filters.recurring === '' ? undefined : filters.recurring,
         amountMin: filters.amountMin || undefined,
         amountMax: filters.amountMax || undefined,
+        // Display-only, for the report's Filter Snapshot — actual row filtering already
+        // happens server-side via `search` (see combinedSearch above).
+        vendor: filters.vendor || undefined,
+        paymentMethod: filters.paymentMethod || undefined,
       };
       if (targetHostelId) exportParams.hostelId = targetHostelId;
       if (scope === 'current_view') {
@@ -204,7 +213,13 @@ export function ExpensesTab({ hostelId }: { hostelId: string }) {
         exportParams.ids = Array.from(selectedIds).join(',');
       }
 
-      const { blob, filename } = await import('@features/expenses/api').then((m) => m.expenseService.export(exportParams));
+      // Deliberately not `const { blob, filename } = await import(...).then((m) => m.expenseService.export(...))` —
+      // that shape makes Vite's production preload-wrapping transform mis-generate the dynamic
+      // import's inner wrapper (it destructures `blob`/`filename` off the module namespace instead
+      // of the export() result), throwing "Cannot read properties of undefined (reading 'export')"
+      // in the built bundle only (not in `vite dev`). Splitting the import from the call avoids it.
+      const { expenseService } = await import('@features/expenses/api');
+      const { blob, filename } = await expenseService.export(exportParams);
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;

@@ -116,6 +116,16 @@ Architecture Decision Records — each entry below was **inferred from code evid
 - **Consequences:** One more npm dependency (`exceljs`, moderate-severity transitive `uuid` advisory, no direct vulnerability) in exchange for correct streaming behavior. Any future change to expense filtering must go through `buildExpenseLedgerWhere()` — a filter added only to the list route's inline logic would silently not apply to exports, so this is now a single deliberate touch-point to keep in mind.
 - **Related:** [[APIs]], [[Changelog]], [[Frontend]]
 
+## ADR-010: Expense export financials reuse the dashboard's calculation functions, parameterized by period — never a second implementation
+
+- **Date:** 2026-07-18
+- **Status:** accepted
+- **Context:** The expense export's Financial Summary needed Revenue/Net Profit/Expense Ratio/largest-expense figures. Two options existed: literally reuse the dashboard's current "this month" KPI numbers regardless of what period the export covers, or reimplement the calculation independently, scoped to the export's own filters. Both were rejected — the first would print a report whose stated "Reporting Period" and whose Revenue figure describe two different windows (e.g. exporting "Last Quarter" but showing this month's revenue); the second is exactly the "~6 independent calculators" drift pattern [[Decisions]] ADR-001 already fixed once for tenant financials, now at risk of recurring for business expenses.
+- **Decision:** Extract the calculation logic itself out of `expense-service.ts::getAllExpenses()` into standalone, period-parameterized functions (`getBusinessRevenue`, `computeNetProfit`, `computeProfitMargin`, `computeExpenseRatio`, `withCategoryPercentages`). The dashboard calls them with its fixed "this month" window; `expense-export-service.ts::getExportSummary()` calls the exact same functions with the export's own resolved date range (or a min–max fallback for `scope=selected`, which has no shared date filter). Same formulas and query shape everywhere; only the date window and expense total each caller supplies differ — verified by a dashboard-vs-export parity test in `tests/expense-export.test.ts`.
+- **Alternatives considered:** (1) Export always shows today's dashboard figures — rejected, described above. (2) Independent revenue query in the export service — rejected as reintroducing the exact drift risk ADR-001 was written to prevent, just in a new domain.
+- **Consequences:** A revenue-lookup failure is isolated to just the financials section (logged, fields marked "unavailable") rather than failing the whole export, since revenue now comes from a real query (`payments` table) that can fail independently of the expense data itself. Any future business-expense financial figure shown anywhere (dashboard, export, or a future surface) must be added to these shared functions, not computed locally.
+- **Related:** [[Business-Rules]], [[APIs]], [[Changelog]]
+
 ## See also
 - [[Changelog]] for the chronological record of what shipped
 - [[Architecture]] for the system these decisions govern

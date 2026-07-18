@@ -136,11 +136,45 @@ function suggestedOperationalType(title: string, category: string) {
   return "Operational";
 }
 
-function businessPaymentWhere(ownerId: string, start: Date, end: Date) {
+function businessPaymentWhere(ownerId: string, start: Date, end: Date, hostelId?: string) {
   return {
     payment_date: { gte: start, lt: end },
     OR: [{ owner_id: ownerId }, { hostels: { owner_id: ownerId } }],
+    ...(hostelId ? { hostel_id: hostelId } : {}),
   } as any;
+}
+
+// ── Shared financial calculations ──────────────────────────────────────────
+// Single source of truth for revenue-vs-expense math, used by BOTH the dashboard
+// (getAllExpenses, below — fixed "this month" window) and expense-export-service.ts
+// (the export's own filtered period). Same query shape, same formulas — only the
+// date window and expense total passed in differ per caller. Do not reimplement
+// this arithmetic anywhere else (see docs/obsidian/Decisions.md ADR-001 for why).
+
+/** Revenue collected in [start, end) for an owner (optionally scoped to one hostel). */
+export async function getBusinessRevenue(ownerId: string, start: Date, end: Date, hostelId?: string): Promise<number> {
+  const agg = await prisma.payments.aggregate({
+    where: businessPaymentWhere(ownerId, start, end, hostelId),
+    _sum: { amount_paid: true },
+  });
+  return Number(agg._sum.amount_paid || 0);
+}
+
+export function computeNetProfit(revenue: number, expenses: number): number {
+  return round(revenue - expenses);
+}
+
+export function computeProfitMargin(netProfit: number, revenue: number): number {
+  return revenue > 0 ? round((netProfit / revenue) * 100) : 0;
+}
+
+export function computeExpenseRatio(expenses: number, revenue: number): number {
+  return revenue > 0 ? round((expenses / revenue) * 100) : 0;
+}
+
+/** Attaches a `percentage` (of `total`) to each row — same rounding rule everywhere this is shown. */
+export function withCategoryPercentages<T extends { amount: number }>(rows: T[], total: number): (T & { percentage: number })[] {
+  return rows.map((r) => ({ ...r, percentage: total > 0 ? round((r.amount / total) * 100) : 0 }));
 }
 
 function buildSearchWhere(search: string) {
@@ -252,14 +286,8 @@ export class ExpenseService {
         where: businessPreviousWhere,
         _sum: { amount: true },
       }),
-      prisma.payments.aggregate({
-        where: businessPaymentWhere(ownerId, currentMonthStart, nextMonthStart),
-        _sum: { amount_paid: true },
-      }),
-      prisma.payments.aggregate({
-        where: businessPaymentWhere(ownerId, previousMonthStart, currentMonthStart),
-        _sum: { amount_paid: true },
-      }),
+      getBusinessRevenue(ownerId, currentMonthStart, nextMonthStart),
+      getBusinessRevenue(ownerId, previousMonthStart, currentMonthStart),
       prisma.expenses.groupBy({
         by: ["category"],
         where: businessCurrentWhere,
@@ -325,11 +353,11 @@ export class ExpenseService {
 
     const currentExpenses = Number(currentAgg._sum.amount || 0);
     const previousExpenses = Number(previousAgg._sum.amount || 0);
-    const collectedRevenue = Number(currentRevenue._sum.amount_paid || 0);
-    const previousCollected = Number(previousRevenue._sum.amount_paid || 0);
-    const netProfit = round(collectedRevenue - currentExpenses);
-    const margin = collectedRevenue > 0 ? round((netProfit / collectedRevenue) * 100) : 0;
-    const expenseRevenueRatio = collectedRevenue > 0 ? round((currentExpenses / collectedRevenue) * 100) : 0;
+    const collectedRevenue = currentRevenue;
+    const previousCollected = previousRevenue;
+    const netProfit = computeNetProfit(collectedRevenue, currentExpenses);
+    const margin = computeProfitMargin(netProfit, collectedRevenue);
+    const expenseRevenueRatio = computeExpenseRatio(currentExpenses, collectedRevenue);
 
     const previousByCategory = new Map<string, number>(
       (categoryPrevious as any[]).map((row: any) => [normalizeCategory(row.category), Number(row._sum.amount || 0)])

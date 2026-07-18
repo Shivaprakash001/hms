@@ -48,6 +48,26 @@ Copy this block for each new entry:
 - **Fix:** Introduced `financial-read-model-service.ts` composing existing services; migrated consumers. See `docs/business-logic/financial-consistency-investigation-report.md` and [[Decisions]] ADR-001.
 - **Related:** [[Business-Rules]], [[Decisions]]
 
+### Typing in the Expenses Workspace search box unmounted the whole tab (looked like a full page reload)
+
+- **Status:** fixed
+- **Found:** 2026-07-18
+- **Area:** [[Frontend]] — `ExpensesTab.tsx`
+- **Symptom:** Every keystroke in the expense search box blanked the entire tab (dashboard, filter bar, the search input itself) into a loading skeleton, dropping input focus.
+- **Root cause:** `search` was part of the React Query key, so every keystroke produced a brand-new, never-cached query key; React Query v5's `isLoading` is `true` whenever there's no cached data for the *current* key, and `ExpensesTab.tsx` gated its entire render on `isLoading`.
+- **Fix:** Added `placeholderData: keepPreviousData` to the list query so the previous result set stays mounted while a new key fetches in the background, instead of unmounting into `TabSkeleton`.
+- **Related:** [[Features]] (Expenses)
+
+### Export button threw "Cannot read properties of undefined (reading 'export')" in production only
+
+- **Status:** fixed
+- **Found:** 2026-07-18
+- **Area:** [[Frontend]] — `ExpensesTab.tsx`
+- **Symptom:** Clicking Export in the deployed app threw immediately; worked fine in `vite dev`.
+- **Root cause:** Not a stale deploy (verified by diffing the live production chunk against a fresh local build — identical). Vite's production bundler mis-transforms `const { blob, filename } = await import(...).then((m) => m.expenseService.export(...))` — its chunk-preload wrapper ends up destructuring `blob`/`filename` off the *module namespace* (which only has `expenseService` on it) instead of the `.then()` result, so `.expenseService` reads as `undefined` before `.export` is ever reached.
+- **Fix:** Split the import resolution from the destructuring (`const { expenseService } = await import(...); const { blob, filename } = await expenseService.export(...)`) — verified by inspecting the compiled bundle before/after.
+- **Related:** [[Features]] (Expenses)
+
 ## Open / known issues
 
 > See also `docs/known-issues.md` for the maintained list of known drift/gaps in `docs/`.

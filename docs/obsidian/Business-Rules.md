@@ -87,6 +87,12 @@ Composes exactly three existing sources, nothing recomputed beyond pure display 
 
 Two entry points: `getFinancialReadModel(tenantId, ownerId, hostelId)` (owner context) and `getFinancialReadModelForTenant(profileId)` (tenant self-service, backing `GET /api/tenants/me/financial-read-model`). **Any new financial-summary surface must follow this pattern** — see [[Decisions]] ADR-001.
 
+### Same pattern, second domain: business-expense financials
+
+`backend-next/lib/services/expense-service.ts` exports shared, period-parameterized functions — `getBusinessRevenue(ownerId, start, end, hostelId?)`, `computeNetProfit()`, `computeProfitMargin()`, `computeExpenseRatio()`, `withCategoryPercentages()` — used by both the Expenses dashboard (`getAllExpenses()`, called with a fixed "this month" window) and the expense export report (`expense-export-service.ts::getExportSummary()`, called with the export's own filtered date range). Same formulas and query shape in both places; only the date window and the expense total each caller supplies differ. See [[Decisions]] ADR-010.
+
+A revenue-lookup failure in the export is isolated (try/catch around just that one call) so it degrades only the Financial Summary section (`revenue`/`netProfit`/`expenseRatio` become `null`, exposed to the UI/report as "unavailable") rather than failing the whole export — no partial/estimated figures are substituted.
+
 ## Notification triggers
 
 **Files:** `src/services/payments/reminder-service.ts`, `lib/services/collection-strategy-service.ts`, `lib/services/notifications/whatsapp-webhook-event-service.ts`.
