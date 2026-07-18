@@ -126,6 +126,16 @@ Architecture Decision Records — each entry below was **inferred from code evid
 - **Consequences:** A revenue-lookup failure is isolated to just the financials section (logged, fields marked "unavailable") rather than failing the whole export, since revenue now comes from a real query (`payments` table) that can fail independently of the expense data itself. Any future business-expense financial figure shown anywhere (dashboard, export, or a future surface) must be added to these shared functions, not computed locally.
 - **Related:** [[Business-Rules]], [[APIs]], [[Changelog]]
 
+## ADR-011: `operational_type` becomes a derived classification, not an owner-entry field
+
+- **Date:** 2026-07-18
+- **Status:** accepted
+- **Context:** The Add/Edit Expense modal previously showed an "Expense type (auto-detected)" chip row (Operational/Utility/Maintenance/Staff/Emergency) that was actually fully manual — the owner could freely override it, and the "auto-detect" logic was a fuzzy title+category regex heuristic (`suggestedOperationalType`) duplicated almost identically on both frontend (`features/expenses/constants.ts`) and backend (`expense-service.ts`). This asked owners to make a classification decision that has no bearing on the expense itself — it exists purely for internal analytics/reporting — and the fuzzy heuristic could disagree with itself between frontend suggestion and backend fallback.
+- **Decision:** Remove the field from the UI entirely. `operational_type` is now always computed server-side from a canonical, deterministic `CATEGORY_TO_OPERATIONAL_TYPE` lookup (`deriveOperationalType(category)` in `expense-service.ts`) — one mapping, one place. `createExpense` always derives it; `updateExpense` recomputes it only when `category` changes (editing other fields leaves it untouched, so old rows work without a migration and self-correct the next time their category is edited). The `expense_type` DB column (a separate, pre-existing field, always `"VARIABLE"`/`"BUSINESS"` by default) is unrelated and untouched by this change.
+- **Alternatives considered:** Keep the manual override but seed it from the canonical map (rejected — still asks the owner to make a decision that doesn't belong at entry time, and still permits drift between what a category "should" map to and what a specific row says). Backfill-migrate all existing rows to the canonical values immediately (rejected — unnecessary; recompute-on-next-edit achieves the same end state without a migration, per the explicit requirement).
+- **Consequences:** One fewer field/decision during expense entry (aligned with the "fewer clicks, less cognitive load" redesign philosophy). Any future feature that needs `operational_type` accuracy for records that haven't been edited since this change should be aware some legacy rows may still carry their pre-migration heuristic value until next edited.
+- **Related:** [[Business-Rules]], [[Frontend]], [[Changelog]]
+
 ## See also
 - [[Changelog]] for the chronological record of what shipped
 - [[Architecture]] for the system these decisions govern

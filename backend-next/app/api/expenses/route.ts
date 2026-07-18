@@ -156,7 +156,8 @@ export async function POST(req: NextRequest) {
       created_by: session.sub,
       expense_type: body.expense_type,
       expense_scope: body.expense_scope ?? body.expenseScope ?? "BUSINESS",
-      operational_type: body.operational_type,
+      // operational_type is intentionally not read from the request body — it is
+      // always derived server-side from category (see expenseService.createExpense).
       tags: Array.isArray(body.tags) ? body.tags : [],
       metadata: body.metadata,
     });

@@ -127,13 +127,34 @@ function suggestedCategory(title: string) {
   return "Miscellaneous";
 }
 
-function suggestedOperationalType(title: string, category: string) {
-  const text = `${title} ${category}`.toLowerCase();
-  if (/(salary|staff|warden|watchman|cook|guard)/.test(text)) return "Staff";
-  if (/(electric|water|gas|internet|wifi|broadband|sewage)/.test(text)) return "Utility";
-  if (/(repair|plumb|paint|fix|carpenter|leak|pipe|roof)/.test(text)) return "Maintenance";
-  if (/(emergency|urgent|flood|fire|accident|break)/.test(text)) return "Emergency";
-  return "Operational";
+// Canonical category → operational-type mapping — the single source of truth for
+// deriving `operational_type`. This is an internal classification for
+// analytics/dashboards/reports/advanced filters only; owners never pick it directly.
+// Keyed on the normalized (canonical) category, so it stays correct even as new
+// categories are added — unmapped/custom categories fall back to "Operational".
+export const CATEGORY_TO_OPERATIONAL_TYPE: Record<string, string> = {
+  "Food & Groceries": "Operational",
+  "Staff Salary": "Staff",
+  Electricity: "Utility",
+  Water: "Utility",
+  "Gas Cylinders": "Utility",
+  Internet: "Utility",
+  "Cleaning Supplies": "Operational",
+  "Maintenance & Repairs": "Maintenance",
+  Security: "Staff",
+  Laundry: "Operational",
+  Transportation: "Operational",
+  "Furniture & Equipment": "Operational",
+  "Licenses & Government": "Operational",
+  Marketing: "Operational",
+  "Medical & Emergency": "Emergency",
+  Miscellaneous: "Operational",
+};
+
+/** Derives `operational_type` from `category` alone — the only place this mapping lives. */
+export function deriveOperationalType(category: string): string {
+  const normalized = normalizeCategory(category);
+  return CATEGORY_TO_OPERATIONAL_TYPE[normalized] || "Operational";
 }
 
 function businessPaymentWhere(ownerId: string, start: Date, end: Date, hostelId?: string) {
@@ -348,7 +369,6 @@ export class ExpenseService {
       occurrence_count: Number(r.occurrence_count || 0),
       last_amount: Number(r.last_amount || 0),
       last_date: r.last_date,
-      suggested_operational_type: suggestedOperationalType(r.title || "", r.category || ""),
     }));
 
     const currentExpenses = Number(currentAgg._sum.amount || 0);
@@ -551,7 +571,6 @@ export class ExpenseService {
     expense_type?: string;
     expense_scope?: "BUSINESS" | "HOSTEL" | null;
     tags?: string[];
-    operational_type?: string;
     metadata?: any;
   }) {
     if (!data.title?.trim()) throw new Error("VALIDATION: Title is required");
@@ -572,7 +591,9 @@ export class ExpenseService {
     }
 
     const category = normalizeCategory(data.category || suggestedCategory(data.title));
-    const operationalType = data.operational_type || suggestedOperationalType(data.title, category);
+    // operational_type is never owner-supplied — always derived from the canonical
+    // category mapping (analytics/dashboards-only classification, not an entry field).
+    const operationalType = deriveOperationalType(category);
     const expense = await prisma.expenses.create({
       data: {
         id: randomUUID(),
@@ -631,7 +652,12 @@ export class ExpenseService {
       }
       updateData.amount = Number(data.amount);
     }
-    if (data.category !== undefined) updateData.category = normalizeCategory(data.category);
+    if (data.category !== undefined) {
+      updateData.category = normalizeCategory(data.category);
+      // Recompute the derived classification whenever category changes — operational_type
+      // is never owner-supplied, so there is no client value to prefer here.
+      updateData.operational_type = deriveOperationalType(updateData.category);
+    }
     if (data.status !== undefined) updateData.status = data.status;
     if (data.hostel_id !== undefined || data.hostelId !== undefined) updateData.hostel_id = data.hostel_id ?? data.hostelId ?? null;
     if (data.notes !== undefined) updateData.notes = data.notes || null;
@@ -653,8 +679,6 @@ export class ExpenseService {
       const d = new Date(data.date);
       if (!Number.isNaN(d.getTime())) updateData.date = d;
     }
-
-    if (data.operational_type !== undefined) updateData.operational_type = data.operational_type || null;
 
     const scopeToValidate = updateData.expense_scope ?? existing.expense_scope;
     const hostelIdToValidate = updateData.hostel_id !== undefined ? updateData.hostel_id : existing.hostel_id;
@@ -718,7 +742,6 @@ export class ExpenseService {
       occurrence_count: r.occurrence_count,
       last_amount: Number(r.last_amount || 0),
       last_date: r.last_date,
-      suggested_operational_type: suggestedOperationalType(r.title || "", r.category || ""),
     }));
   }
 

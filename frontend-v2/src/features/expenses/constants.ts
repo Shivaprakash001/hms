@@ -21,13 +21,10 @@ export const EXPENSE_CATEGORIES = [
 
 export const QUICK_PAYMENT_METHODS = ['Cash', 'UPI', 'Bank Transfer', 'Debit Card', 'Credit Card', 'Cheque'];
 
-export const OPERATIONAL_TYPES = [
-  { value: 'Operational', label: 'Operational', emoji: '⚙️' },
-  { value: 'Utility', label: 'Utility', emoji: '💡' },
-  { value: 'Maintenance', label: 'Maintenance', emoji: '🔧' },
-  { value: 'Staff', label: 'Staff', emoji: '👨‍🍳' },
-  { value: 'Emergency', label: 'Emergency', emoji: '🚨' },
-];
+// Expense type (operational_type) is an internal analytics/dashboard classification
+// derived server-side from category — see CATEGORY_TO_OPERATIONAL_TYPE in
+// backend-next/lib/services/expense-service.ts. It is never entered or edited by the
+// owner, so there is deliberately no client-side copy of that mapping here.
 
 export function categoryIcon(category: string): string {
   if (category.includes('Food')) return '🍚';
@@ -69,7 +66,7 @@ export function categoryTone(category: string): { chip: string; bar: string } {
   return tones[category] || { chip: 'bg-muted text-muted-foreground', bar: 'bg-muted-foreground' };
 }
 
-// Zero-latency client-side mirror of the backend's suggestedCategory()/suggestedOperationalType()
+// Zero-latency client-side mirror of the backend's suggestedCategory()
 // (lib/services/expense-service.ts) — kept in sync manually; a UX nicety, not a source of truth.
 export function suggestCategory(title: string): string {
   const text = title.toLowerCase();
@@ -89,13 +86,4 @@ export function suggestCategory(title: string): string {
   if (/(medical|emergency|first aid|doctor)/.test(text)) return 'Medical & Emergency';
   if (/(water|tanker)/.test(text)) return 'Water';
   return 'Miscellaneous';
-}
-
-export function suggestOperationalType(title: string, category: string): string {
-  const text = `${title} ${category}`.toLowerCase();
-  if (/(salary|staff|warden|watchman|cook|guard)/.test(text)) return 'Staff';
-  if (/(electric|water|gas|internet|wifi|broadband|sewage)/.test(text)) return 'Utility';
-  if (/(repair|plumb|paint|fix|carpenter|leak|pipe|roof|maintenance)/.test(text)) return 'Maintenance';
-  if (/(emergency|urgent|flood|fire|accident|break)/.test(text)) return 'Emergency';
-  return 'Operational';
 }

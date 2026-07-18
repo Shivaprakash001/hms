@@ -14,7 +14,7 @@ import {
   AccordionTrigger,
   AccordionContent,
 } from '@shared/ui';
-import { EXPENSE_CATEGORIES, QUICK_PAYMENT_METHODS, OPERATIONAL_TYPES, suggestCategory, suggestOperationalType } from '@features/expenses/constants';
+import { EXPENSE_CATEGORIES, QUICK_PAYMENT_METHODS, suggestCategory } from '@features/expenses/constants';
 import { CategoryPicker } from './CategoryPicker';
 import { ReceiptPreview } from './ReceiptPreview';
 
@@ -92,7 +92,6 @@ export function AddExpenseModal({
       amount: s.last_amount ? String(s.last_amount) : f.amount,
       category: s.category || f.category,
       payment_method: s.payment_method || f.payment_method,
-      operational_type: s.suggested_operational_type || suggestOperationalType(s.title || '', s.category || ''),
     }));
     setShowAutoComplete(false);
   };
@@ -110,7 +109,6 @@ export function AddExpenseModal({
       receipt_image: receiptFile || undefined,
       is_recurring: form.is_recurring,
       recurring_frequency: form.is_recurring ? form.recurring_frequency : undefined,
-      operational_type: form.operational_type || undefined,
       expense_scope: 'BUSINESS',
       metadata: suggestion && suggestion !== form.category ? { category_suggestion: suggestion } : undefined,
     });
@@ -178,7 +176,6 @@ export function AddExpenseModal({
                     ...f,
                     title,
                     category: f.category === 'Miscellaneous' ? suggestCategory(title) : f.category,
-                    operational_type: suggestOperationalType(title, f.category),
                   }));
                   setShowAutoComplete(true);
                 }}
@@ -323,28 +320,6 @@ export function AddExpenseModal({
                     ))}
                   </div>
                 </div>
-
-                <div>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Expense type <span className="text-muted-foreground/60 normal-case">(auto-detected)</span>
-                  </p>
-                  <div className="flex gap-2 overflow-x-auto scrollbar-hide">
-                    {OPERATIONAL_TYPES.map((type) => (
-                      <button
-                        key={type.value}
-                        type="button"
-                        onClick={() => setForm((f) => ({ ...f, operational_type: type.value }))}
-                        className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold ${
-                          form.operational_type === type.value
-                            ? 'border-accent bg-accent/10 text-accent'
-                            : 'border-border bg-background text-muted-foreground'
-                        }`}
-                      >
-                        {type.emoji} {type.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
               </AccordionContent>
             </AccordionItem>
 
@@ -480,6 +455,5 @@ function expenseToForm(expense?: Record<string, any> | null) {
     vendor_name: String(expense?.vendor_name || ''),
     is_recurring: Boolean(expense?.is_recurring),
     recurring_frequency: String(expense?.recurring_frequency || 'monthly'),
-    operational_type: String(expense?.operational_type || suggestOperationalType(expense?.title || '', expense?.category || '')),
   };
 }

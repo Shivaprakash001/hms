@@ -93,6 +93,14 @@ Two entry points: `getFinancialReadModel(tenantId, ownerId, hostelId)` (owner co
 
 A revenue-lookup failure in the export is isolated (try/catch around just that one call) so it degrades only the Financial Summary section (`revenue`/`netProfit`/`expenseRatio` become `null`, exposed to the UI/report as "unavailable") rather than failing the whole export — no partial/estimated figures are substituted.
 
+### `operational_type` is a derived classification, never owner-entered
+
+The owner picks only a **Category** when logging an expense. `operational_type` (Operational/Utility/Maintenance/Staff/Emergency — analytics/dashboard/report classification, distinct from the `expense_type` column) is always computed server-side from the canonical `CATEGORY_TO_OPERATIONAL_TYPE` map in `expense-service.ts` via `deriveOperationalType(category)` — the single source of truth for this mapping (e.g. Electricity/Water/Gas Cylinders/Internet → Utility, Staff Salary/Security → Staff, Maintenance & Repairs → Maintenance, Medical & Emergency → Emergency, everything else → Operational).
+
+- `createExpense` always derives it from the resolved category; any client-supplied `operational_type` is ignored (the field was removed from the create/edit UI and the service's typed input entirely — see [[Decisions]] and [[Changelog]]).
+- `updateExpense` recomputes it **only when `category` is part of the update** — editing an expense without changing its category leaves the existing `operational_type` untouched. This means older rows keep whatever value they already have (no migration needed) and are corrected automatically the next time their category is edited.
+- There used to be a second, fuzzy title+category regex heuristic (`suggestedOperationalType`) that duplicated this classification with different logic and a client-side copy in `frontend-v2/src/features/expenses/constants.ts` — both were removed in favor of the single canonical map, per the "don't duplicate mappings across frontend/backend" requirement.
+
 ## Notification triggers
 
 **Files:** `src/services/payments/reminder-service.ts`, `lib/services/collection-strategy-service.ts`, `lib/services/notifications/whatsapp-webhook-event-service.ts`.
