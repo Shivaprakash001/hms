@@ -10,6 +10,7 @@ import { OwnerActionsBar } from './OwnerActionsBar';
 import { PaymentLedger } from './PaymentLedger';
 import { RecordPaymentModal } from '../../modals/RecordPaymentModal';
 import { EXPENSE_CATEGORIES } from '@features/expenses/constants';
+import { computeTodaysCollection, computePropertyFinance, computeSmartInsights } from './financeInsights';
 
 const CashflowForecast = lazy(() => import('./CashflowForecast').then((m) => ({ default: m.CashflowForecast })));
 const CollectionAnalytics = lazy(() => import('./CollectionAnalytics').then((m) => ({ default: m.CollectionAnalytics })));
@@ -873,6 +874,60 @@ export function FinancialControlCenter({ hostelId }: Props) {
       channel_performance,
     };
   }, [funnels]);
+
+  const isAllHostels = hostelId === 'all';
+
+  const perHostelFinance = useMemo(() => {
+    return statsShells
+      .map((shell: any) => {
+        const shellConfig = queryConfigs.find(
+          (c, cidx) => queryResults[cidx]?.data === shell && c.meta?.type === 'statsShell'
+        );
+        const hId = shellConfig?.meta?.hostelId;
+        const hostelName = hostels.find((h: any) => h.id === hId)?.name ?? 'Hostel';
+        return {
+          hostelId: hId,
+          hostelName,
+          revenue: Number(shell?.revenue ?? 0),
+          expected_revenue: Number(shell?.expected_revenue ?? 0),
+          pending_dues: Number(shell?.pending_dues ?? 0),
+        };
+      })
+      .filter((h) => Boolean(h.hostelId));
+  }, [statsShells, queryConfigs, queryResults, hostels]);
+
+  const todaysCollection = useMemo(() => computeTodaysCollection(payments), [payments]);
+
+  const propertyFinanceCards = useMemo(() => computePropertyFinance(perHostelFinance), [perHostelFinance]);
+
+  const smartInsights = useMemo(
+    () =>
+      computeSmartInsights({
+        expectedVal,
+        collectedVal,
+        collectionRate,
+        reminderDependency,
+        pendingPaymentsCount,
+        pendingPaymentsTotal,
+        upcomingCount,
+        upcomingTotal,
+        isAllHostels,
+        perHostel: perHostelFinance,
+        fmtK,
+      }),
+    [
+      expectedVal,
+      collectedVal,
+      collectionRate,
+      reminderDependency,
+      pendingPaymentsCount,
+      pendingPaymentsTotal,
+      upcomingCount,
+      upcomingTotal,
+      isAllHostels,
+      perHostelFinance,
+    ]
+  );
 
   return (
     <div className="space-y-5 pb-20">
