@@ -21,7 +21,7 @@ const EXPENSE_CATEGORIES = [
   "Miscellaneous",
 ];
 
-type ExpenseFilters = {
+export type ExpenseFilters = {
   range?: string;
   startDate?: string;
   endDate?: string;
@@ -30,6 +30,9 @@ type ExpenseFilters = {
   status?: string;
   sort?: string;
   search?: string;
+  recurring?: boolean;
+  amountMin?: number;
+  amountMax?: number;
   limit?: number;
   offset?: number;
 };
@@ -164,33 +167,56 @@ function buildSearchWhere(search: string) {
   return { AND: termConditions };
 }
 
-export class ExpenseService {
-  async getAllExpenses(ownerId: string, filters: ExpenseFilters = {}) {
-    const { start, end } = getRange(filters);
-    const now = new Date();
-    const currentMonthStart = startOfMonth(now);
-    const nextMonthStart = endExclusiveMonth(now);
-    const previousMonthStart = addMonths(currentMonthStart, -1);
-    const sixMonthStart = addMonths(currentMonthStart, -5);
-
-    const ledgerWhere: any = {
+// Single source of truth for the expenses list WHERE clause — reused by getAllExpenses
+// (paginated UI query) AND expense-export-service.ts (CSV/XLSX/PDF export), so exported
+// data is guaranteed to match whatever the UI shows for the same filters. Do not
+// reimplement this filtering logic anywhere else.
+export function buildExpenseLedgerWhere(ownerId: string, filters: ExpenseFilters = {}) {
+  const { start, end } = getRange(filters);
+  return {
+    where: {
       owner_id: ownerId,
       date: { gte: start, lt: end },
       ...(filters.hostelId ? { hostel_id: filters.hostelId } : {}),
       ...(filters.status && filters.status !== "all" ? { status: filters.status } : {}),
       ...(filters.categories?.length ? { category: { in: filters.categories.map(normalizeCategory) } } : {}),
       ...(filters.search ? buildSearchWhere(filters.search) : {}),
-    };
+      ...(typeof filters.recurring === "boolean" ? { is_recurring: filters.recurring } : {}),
+      ...(filters.amountMin !== undefined || filters.amountMax !== undefined
+        ? {
+            amount: {
+              ...(filters.amountMin !== undefined ? { gte: filters.amountMin } : {}),
+              ...(filters.amountMax !== undefined ? { lte: filters.amountMax } : {}),
+            },
+          }
+        : {}),
+    } as any,
+    range: { start, end },
+  };
+}
 
-    const sort = filters.sort || "recent";
-    const orderBy: any =
-      sort === "highest"
-        ? { amount: "desc" }
-        : sort === "oldest"
-          ? { date: "asc" }
-          : sort === "category"
-            ? { category: "asc" }
-            : { date: "desc" };
+export function resolveExpenseSort(sort?: string) {
+  const orderBy: any =
+    sort === "highest"
+      ? { amount: "desc" }
+      : sort === "oldest"
+        ? { date: "asc" }
+        : sort === "category"
+          ? { category: "asc" }
+          : { date: "desc" };
+  return orderBy;
+}
+
+export class ExpenseService {
+  async getAllExpenses(ownerId: string, filters: ExpenseFilters = {}) {
+    const now = new Date();
+    const currentMonthStart = startOfMonth(now);
+    const nextMonthStart = endExclusiveMonth(now);
+    const previousMonthStart = addMonths(currentMonthStart, -1);
+    const sixMonthStart = addMonths(currentMonthStart, -5);
+
+    const { where: ledgerWhere, range: { start, end } } = buildExpenseLedgerWhere(ownerId, filters);
+    const orderBy = resolveExpenseSort(filters.sort);
 
     const businessCurrentWhere = { owner_id: ownerId, date: { gte: currentMonthStart, lt: nextMonthStart } };
     const businessPreviousWhere = { owner_id: ownerId, date: { gte: previousMonthStart, lt: currentMonthStart } };
@@ -204,6 +230,7 @@ export class ExpenseService {
       previousRevenue,
       categoryCurrent,
       categoryPrevious,
+      vendorCurrent,
       monthlyExpenses,
       monthlyPayments,
       duplicateCandidates,
@@ -242,6 +269,12 @@ export class ExpenseService {
         by: ["category"],
         where: businessPreviousWhere,
         _sum: { amount: true },
+      }),
+      prisma.expenses.groupBy({
+        by: ["vendor_name"],
+        where: { ...businessCurrentWhere, vendor_name: { not: null } },
+        _sum: { amount: true },
+        _count: { _all: true },
       }),
       prisma.expenses.groupBy({
         by: ["date"],
@@ -317,6 +350,15 @@ export class ExpenseService {
       })
       .sort((a: any, b: any) => b.amount - a.amount);
 
+    const vendorBreakdown = (vendorCurrent as any[])
+      .filter((row: any) => row.vendor_name && String(row.vendor_name).trim())
+      .map((row: any) => ({
+        vendor: row.vendor_name,
+        amount: Number(row._sum.amount || 0),
+        count: Number(row._count?._all || 0),
+      }))
+      .sort((a: any, b: any) => b.amount - a.amount);
+
     const months = Array.from({ length: 6 }, (_, i) => addMonths(sixMonthStart, i));
     const expensesByMonth = new Map<string, number>();
     for (const row of monthlyExpenses) {
@@ -377,6 +419,7 @@ export class ExpenseService {
         fastest_growing_category: fastestGrowingCategory,
       },
       category_breakdown: categoryBreakdown,
+      vendor_breakdown: vendorBreakdown,
       insights,
       monthly_trend: monthlyTrend,
       frequent_expenses: frequentExpenses,

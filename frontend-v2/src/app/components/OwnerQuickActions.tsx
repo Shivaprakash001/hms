@@ -5,31 +5,13 @@ import { IndianRupee, Plus, Receipt, Search, UserPlus, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { ownerService } from '@features/owners/api';
 import { queryKeys } from '@lib/queryKeys';
+import { EXPENSE_CATEGORIES } from '@features/expenses/constants';
 
 const AddTenantModal = lazy(() => import('./modals/AddTenantModal').then((m) => ({ default: m.AddTenantModal })));
 const RecordPaymentModal = lazy(() => import('./modals/RecordPaymentModal').then((m) => ({ default: m.RecordPaymentModal })));
 const AddExpenseModal = lazy(() => import('./hostel-detail/tabs/expenses/AddExpenseModal').then((m) => ({ default: m.AddExpenseModal })));
 
 type Action = 'menu' | 'payment' | 'tenant' | 'expense' | null;
-
-const EXPENSE_CATEGORIES = [
-  'Food & Groceries',
-  'Staff Salary',
-  'Electricity',
-  'Water',
-  'Gas Cylinders',
-  'Internet',
-  'Cleaning Supplies',
-  'Maintenance & Repairs',
-  'Security',
-  'Laundry',
-  'Transportation',
-  'Furniture & Equipment',
-  'Licenses & Government',
-  'Marketing',
-  'Medical & Emergency',
-  'Miscellaneous',
-];
 
 function unwrapHostels(raw: unknown): Record<string, unknown>[] {
   if (Array.isArray(raw)) return raw as Record<string, unknown>[];

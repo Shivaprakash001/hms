@@ -83,6 +83,21 @@ export async function GET(req: NextRequest) {
     if (hostelId) await requireHostelBelongsToOwner(scope.owner_id, hostelId);
     const categories = req.nextUrl.searchParams.get("categories");
     const { limit, offset } = safePagination(req.nextUrl.searchParams.get("limit"), req.nextUrl.searchParams.get("offset"));
+
+    const recurringParam = req.nextUrl.searchParams.get("recurring");
+    const recurring = recurringParam === null || recurringParam === "" ? undefined : recurringParam === "true";
+
+    const amountMinParam = req.nextUrl.searchParams.get("amountMin");
+    const amountMaxParam = req.nextUrl.searchParams.get("amountMax");
+    const amountMin = amountMinParam !== null && amountMinParam !== "" ? Number(amountMinParam) : undefined;
+    const amountMax = amountMaxParam !== null && amountMaxParam !== "" ? Number(amountMaxParam) : undefined;
+    if (amountMin !== undefined && !Number.isFinite(amountMin)) {
+      return apiError("amountMin must be a valid number", "VALIDATION_ERROR", 400);
+    }
+    if (amountMax !== undefined && !Number.isFinite(amountMax)) {
+      return apiError("amountMax must be a valid number", "VALIDATION_ERROR", 400);
+    }
+
     const expenses = await expenseService.getAllExpenses(scope.owner_id, {
       range: req.nextUrl.searchParams.get("range") || undefined,
       startDate: req.nextUrl.searchParams.get("startDate") || undefined,
@@ -92,6 +107,9 @@ export async function GET(req: NextRequest) {
       status: req.nextUrl.searchParams.get("status") || undefined,
       sort: req.nextUrl.searchParams.get("sort") || undefined,
       search: req.nextUrl.searchParams.get("search") || undefined,
+      recurring,
+      amountMin,
+      amountMax,
       limit,
       offset,
     });

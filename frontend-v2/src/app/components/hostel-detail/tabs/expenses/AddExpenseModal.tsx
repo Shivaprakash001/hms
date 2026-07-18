@@ -1,44 +1,22 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronDown, Upload, X, Zap, Clock, FileText, Camera } from 'lucide-react';
-
-const QUICK_CATEGORIES = [
-  'Food & Groceries',
-  'Staff Salary',
-  'Electricity',
-  'Water',
-  'Gas Cylinders',
-  'Internet',
-  'Cleaning Supplies',
-  'Maintenance & Repairs',
-];
-const QUICK_METHODS = ['Cash', 'UPI', 'Bank Transfer', 'Debit Card', 'Credit Card', 'Cheque'];
-const BUSINESS_CATEGORIES = [
-  'Food & Groceries',
-  'Staff Salary',
-  'Electricity',
-  'Water',
-  'Gas Cylinders',
-  'Internet',
-  'Cleaning Supplies',
-  'Maintenance & Repairs',
-  'Security',
-  'Laundry',
-  'Transportation',
-  'Furniture & Equipment',
-  'Licenses & Government',
-  'Marketing',
-  'Medical & Emergency',
-  'Miscellaneous',
-];
-
-const OPERATIONAL_TYPES = [
-  { value: 'Operational', label: 'Operational', emoji: '⚙️' },
-  { value: 'Utility', label: 'Utility', emoji: '💡' },
-  { value: 'Maintenance', label: 'Maintenance', emoji: '🔧' },
-  { value: 'Staff', label: 'Staff', emoji: '👨‍🍳' },
-  { value: 'Emergency', label: 'Emergency', emoji: '🚨' },
-];
+import { Camera, Clock, FileText, X, Zap } from 'lucide-react';
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogDescription,
+  ResponsiveDialogBody,
+  ResponsiveDialogFooter,
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionContent,
+} from '@shared/ui';
+import { EXPENSE_CATEGORIES, QUICK_PAYMENT_METHODS, OPERATIONAL_TYPES, suggestCategory, suggestOperationalType } from '@features/expenses/constants';
+import { CategoryPicker } from './CategoryPicker';
+import { ReceiptPreview } from './ReceiptPreview';
 
 export function AddExpenseModal({
   categories,
@@ -59,16 +37,17 @@ export function AddExpenseModal({
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [showAutoComplete, setShowAutoComplete] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch frequent expense suggestions
+  // Fetch frequent expense suggestions — also feeds the CategoryPicker's "recently used" section.
   const { data: suggestions = [] } = useQuery({
     queryKey: ['expenses', 'suggestions'],
     queryFn: () => import('@features/expenses/api').then((m) => m.expenseService.getSuggestions()),
     staleTime: 5 * 60 * 1000,
   });
 
-  const suggestion = form.title ? suggestExpenseCategory(form.title) : '';
-  const categoryOptions = Array.from(new Set([...QUICK_CATEGORIES, ...categories, ...BUSINESS_CATEGORIES]));
+  const suggestion = form.title ? suggestCategory(form.title) : '';
+  const categoryOptions = categories?.length ? categories : EXPENSE_CATEGORIES;
   const amountValue = Number(form.amount);
   const canSave =
     Number.isFinite(amountValue) &&
@@ -77,14 +56,34 @@ export function AddExpenseModal({
     Boolean(form.category) &&
     Boolean(form.date);
 
-  // Title autocomplete filtering
   const filteredSuggestions = useMemo(() => {
     if (!form.title.trim() || !Array.isArray(suggestions) || suggestions.length === 0) return [];
     const query = form.title.trim().toLowerCase();
-    return suggestions.filter((s: any) =>
-      String(s.title || '').toLowerCase().includes(query)
-    );
+    return suggestions.filter((s: any) => String(s.title || '').toLowerCase().includes(query));
   }, [form.title, suggestions]);
+
+  const existingReceiptUrl = String(initialExpense?.receipt_url || '');
+  const financialSummary =
+    [
+      form.status && form.status !== 'paid' ? titleCase(form.status) : form.status === 'paid' ? 'Paid' : null,
+      form.payment_method || null,
+      form.vendor_name || null,
+    ]
+      .filter(Boolean)
+      .join(' · ') || 'Optional details';
+  const receiptSummary = receiptFile ? receiptFile.name : existingReceiptUrl ? '1 attached' : 'None yet';
+  const advancedSummary =
+    [form.notes.trim() ? 'Notes added' : null, form.is_recurring ? `Recurring · ${form.recurring_frequency}` : null]
+      .filter(Boolean)
+      .join(' · ') || 'Optional';
+
+  const defaultOpenSections = useMemo(() => {
+    const sections: string[] = [];
+    if (mode === 'create') sections.push('financial');
+    if (!existingReceiptUrl) sections.push('receipt');
+    return sections;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applySuggestion = (s: any) => {
     setForm((f) => ({
@@ -93,7 +92,7 @@ export function AddExpenseModal({
       amount: s.last_amount ? String(s.last_amount) : f.amount,
       category: s.category || f.category,
       payment_method: s.payment_method || f.payment_method,
-      operational_type: s.suggested_operational_type || suggestedOperationalType(s.title || '', s.category || ''),
+      operational_type: s.suggested_operational_type || suggestOperationalType(s.title || '', s.category || ''),
     }));
     setShowAutoComplete(false);
   };
@@ -118,23 +117,21 @@ export function AddExpenseModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center">
-      <div className="w-full sm:max-w-lg bg-card rounded-t-2xl sm:rounded-2xl border border-border h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[92dvh] overflow-hidden flex flex-col shadow-2xl">
-        <div className="flex shrink-0 items-center justify-between border-b border-border/60 pb-3">
-          <div className="px-4 pt-4">
-            <h3 className="text-lg font-bold text-foreground">
-              {mode === 'edit' ? 'Edit expense' : 'Add expense'}
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              {mode === 'edit' ? 'Update the expense details.' : 'Title → Amount → Category → Save. Fast.'}
-            </p>
-          </div>
-          <button type="button" onClick={onClose} className="mr-2 mt-2 p-2 rounded-lg hover:bg-muted">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+    <ResponsiveDialog
+      open
+      onOpenChange={(next: boolean) => {
+        if (!next) onClose();
+      }}
+    >
+      <ResponsiveDialogContent>
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>{mode === 'edit' ? 'Edit expense' : 'Add expense'}</ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
+            {mode === 'edit' ? 'Update the expense details.' : 'Title → Amount → Category → Save. Fast.'}
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
 
-        <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+        <ResponsiveDialogBody className="space-y-5">
           {/* Smart Suggestions — Quick Add from Memory */}
           {mode === 'create' && Array.isArray(suggestions) && suggestions.length > 0 && !form.title.trim() && (
             <div>
@@ -164,114 +161,96 @@ export function AddExpenseModal({
             </div>
           )}
 
-          {/* 1. Title — First-class, with autocomplete */}
-          <div className="relative">
-            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Expense title *
-            </label>
-            <input
-              ref={titleRef}
-              value={form.title}
-              onChange={(e) => {
-                const title = e.target.value;
-                setForm((f) => ({
-                  ...f,
-                  title,
-                  category: f.category === 'Miscellaneous' ? suggestExpenseCategory(title) : f.category,
-                  operational_type: suggestedOperationalType(title, f.category),
-                }));
-                setShowAutoComplete(true);
-              }}
-              onFocus={() => setShowAutoComplete(true)}
-              onBlur={() => setTimeout(() => setShowAutoComplete(false), 200)}
-              placeholder="e.g. Rice purchase, Electricity bill, Staff salary"
-              className="w-full px-3 py-3 rounded-xl border border-border bg-background text-sm outline-none focus:ring-2 focus:ring-accent/20"
-              autoFocus
-            />
-            {suggestion && suggestion !== form.category && (
-              <button
-                type="button"
-                onClick={() => setForm((f) => ({ ...f, category: suggestion }))}
-                className="mt-1.5 rounded-full bg-accent/10 px-3 py-1.5 text-[11px] font-semibold text-accent"
-              >
-                Use suggested category: {suggestion}
-              </button>
-            )}
+          {/* Basic Information — always visible, matches the fields the backend actually requires */}
+          <div className="space-y-3">
+            <p className="text-xs font-bold uppercase tracking-wide text-foreground">Basic Information</p>
 
-            {/* Autocomplete dropdown */}
-            {showAutoComplete && filteredSuggestions.length > 0 && (
-              <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-48 overflow-y-auto rounded-xl border border-border bg-card shadow-lg">
-                {filteredSuggestions.map((s: any, i: number) => (
-                  <button
-                    key={`auto-${i}`}
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => applySuggestion(s)}
-                    className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-muted/50 transition-colors border-b border-border/30 last:border-0"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-foreground truncate">{s.title}</p>
-                      <p className="text-[11px] text-muted-foreground">{s.category} · {s.occurrence_count}× used</p>
-                    </div>
-                    <span className="shrink-0 text-sm font-bold text-accent">
-                      ₹{Number(s.last_amount || 0).toLocaleString('en-IN')}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* 2. Amount */}
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Amount *
-            </label>
             <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-bold text-muted-foreground">₹</span>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Expense title *
+              </label>
               <input
-                type="number"
-                inputMode="decimal"
-                value={form.amount}
-                onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
-                placeholder="0"
-                className="w-full rounded-2xl border border-border bg-background py-4 pl-10 pr-4 text-3xl font-bold outline-none focus:ring-2 focus:ring-accent/20"
+                ref={titleRef}
+                value={form.title}
+                onChange={(e) => {
+                  const title = e.target.value;
+                  setForm((f) => ({
+                    ...f,
+                    title,
+                    category: f.category === 'Miscellaneous' ? suggestCategory(title) : f.category,
+                    operational_type: suggestOperationalType(title, f.category),
+                  }));
+                  setShowAutoComplete(true);
+                }}
+                onFocus={() => setShowAutoComplete(true)}
+                onBlur={() => setTimeout(() => setShowAutoComplete(false), 200)}
+                placeholder="e.g. Rice purchase, Electricity bill, Staff salary"
+                className="w-full px-3 py-3 rounded-xl border border-border bg-background text-sm outline-none focus:ring-2 focus:ring-accent/20"
+                autoFocus
               />
-            </div>
-          </div>
-
-          {/* 3. Category */}
-          <div>
-            <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Category *
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              {QUICK_CATEGORIES.map((category) => (
+              {suggestion && suggestion !== form.category && (
                 <button
-                  key={category}
                   type="button"
-                  onClick={() => setForm((f) => ({ ...f, category }))}
-                  className={`rounded-xl border px-3 py-2.5 text-sm font-semibold ${
-                    form.category === category
-                      ? 'border-accent bg-accent text-accent-foreground'
-                      : 'border-border bg-background text-foreground'
-                  }`}
+                  onClick={() => setForm((f) => ({ ...f, category: suggestion }))}
+                  className="mt-1.5 rounded-full bg-accent/10 px-3 py-1.5 text-[11px] font-semibold text-accent"
                 >
-                  {category}
+                  Use suggested category: {suggestion}
                 </button>
-              ))}
-            </div>
-            <select
-              value={form.category}
-              onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-              className="mt-2 w-full px-3 py-3 rounded-xl border border-border bg-background text-sm"
-            >
-              {categoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
-            </select>
-          </div>
+              )}
 
-          {/* 4. Date + Status */}
-          <div className="grid grid-cols-2 gap-2">
+              {showAutoComplete && filteredSuggestions.length > 0 && (
+                <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-48 overflow-y-auto rounded-xl border border-border bg-card shadow-lg">
+                  {filteredSuggestions.map((s: any, i: number) => (
+                    <button
+                      key={`auto-${i}`}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => applySuggestion(s)}
+                      className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-muted/50 transition-colors border-b border-border/30 last:border-0"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-foreground truncate">{s.title}</p>
+                        <p className="text-[11px] text-muted-foreground">{s.category} · {s.occurrence_count}× used</p>
+                      </div>
+                      <span className="shrink-0 text-sm font-bold text-accent">
+                        ₹{Number(s.last_amount || 0).toLocaleString('en-IN')}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Amount *
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-bold text-muted-foreground">₹</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    value={form.amount}
+                    onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+                    placeholder="0"
+                    className="w-full rounded-2xl border border-border bg-background py-3.5 pl-10 pr-4 text-2xl font-bold outline-none focus:ring-2 focus:ring-accent/20"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Category *
+                </label>
+                <CategoryPicker
+                  value={form.category}
+                  onChange={(category) => setForm((f) => ({ ...f, category }))}
+                  categories={categoryOptions}
+                  frequentExpenses={suggestions}
+                />
+              </div>
+            </div>
+
             <div>
               <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Date *
@@ -280,140 +259,191 @@ export function AddExpenseModal({
                 type="date"
                 value={form.date}
                 onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-                className="w-full px-3 py-3 rounded-xl border border-border bg-background text-sm outline-none"
+                className="w-full sm:max-w-[240px] px-3 py-3 rounded-xl border border-border bg-background text-sm outline-none"
               />
             </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Status
-              </label>
-              <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} className="w-full px-3 py-3 rounded-xl border border-border bg-background text-sm">
-                <option value="paid">Paid</option>
-                <option value="pending">Pending</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
-            </div>
           </div>
 
-          {/* 5. Payment method (optional) */}
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Payment method <span className="text-muted-foreground/60 normal-case">(optional)</span>
-            </p>
-            <div className="flex gap-2 overflow-x-auto scrollbar-hide">
-              {QUICK_METHODS.map((method) => (
-                <button
-                  key={method}
-                  type="button"
-                  onClick={() => setForm((f) => ({ ...f, payment_method: f.payment_method === method ? '' : method }))}
-                  className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold ${
-                    form.payment_method === method
-                      ? 'border-accent bg-accent text-accent-foreground'
-                      : 'border-border bg-background text-muted-foreground'
-                  }`}
-                >
-                  {method}
-                </button>
-              ))}
-            </div>
-          </div>
+          {/* Collapsible secondary sections */}
+          <Accordion type="multiple" defaultValue={defaultOpenSections} className="space-y-2">
+            <AccordionItem value="financial" className="rounded-xl border border-border bg-card px-3">
+              <AccordionTrigger className="py-3 hover:no-underline">
+                <span className="flex flex-1 items-center justify-between gap-3 pr-2">
+                  <span className="text-sm font-bold text-foreground">Financial Details</span>
+                  <span className="max-w-[55%] truncate text-xs text-muted-foreground">{financialSummary}</span>
+                </span>
+              </AccordionTrigger>
+              <AccordionContent className="space-y-3 pb-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Status
+                    </label>
+                    <select
+                      value={form.status}
+                      onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+                      className="w-full px-3 py-3 rounded-xl border border-border bg-background text-sm"
+                    >
+                      <option value="paid">Paid</option>
+                      <option value="pending">Pending</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Vendor
+                    </label>
+                    <input
+                      value={form.vendor_name}
+                      onChange={(e) => setForm((f) => ({ ...f, vendor_name: e.target.value }))}
+                      placeholder="e.g. milk supplier"
+                      className="w-full px-3 py-3 rounded-xl border border-border bg-background text-sm outline-none"
+                    />
+                  </div>
+                </div>
 
-          {/* 6. Expense Type (HMS operational classification) */}
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Expense type <span className="text-muted-foreground/60 normal-case">(auto-detected)</span>
-            </p>
-            <div className="flex gap-2 overflow-x-auto scrollbar-hide">
-              {OPERATIONAL_TYPES.map((type) => (
-                <button
-                  key={type.value}
-                  type="button"
-                  onClick={() => setForm((f) => ({ ...f, operational_type: type.value }))}
-                  className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold ${
-                    form.operational_type === type.value
-                      ? 'border-accent bg-accent text-accent-foreground'
-                      : 'border-border bg-background text-muted-foreground'
-                  }`}
-                >
-                  {type.emoji} {type.label}
-                </button>
-              ))}
-            </div>
-          </div>
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Payment method <span className="text-muted-foreground/60 normal-case">(optional)</span>
+                  </p>
+                  <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+                    {QUICK_PAYMENT_METHODS.map((method) => (
+                      <button
+                        key={method}
+                        type="button"
+                        onClick={() => setForm((f) => ({ ...f, payment_method: f.payment_method === method ? '' : method }))}
+                        className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold ${
+                          form.payment_method === method
+                            ? 'border-accent bg-accent/10 text-accent'
+                            : 'border-border bg-background text-muted-foreground'
+                        }`}
+                      >
+                        {method}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-          {/* 7. Vendor (optional) */}
-          <input
-            value={form.vendor_name}
-            onChange={(e) => setForm((f) => ({ ...f, vendor_name: e.target.value }))}
-            placeholder="Vendor (optional), e.g. milk supplier"
-            className="w-full px-3 py-3 rounded-xl border border-border bg-background text-sm outline-none"
-          />
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Expense type <span className="text-muted-foreground/60 normal-case">(auto-detected)</span>
+                  </p>
+                  <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+                    {OPERATIONAL_TYPES.map((type) => (
+                      <button
+                        key={type.value}
+                        type="button"
+                        onClick={() => setForm((f) => ({ ...f, operational_type: type.value }))}
+                        className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold ${
+                          form.operational_type === type.value
+                            ? 'border-accent bg-accent/10 text-accent'
+                            : 'border-border bg-background text-muted-foreground'
+                        }`}
+                      >
+                        {type.emoji} {type.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
 
-          {/* 8. Notes (independent, always visible) */}
-          <div>
-            <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              <FileText className="h-3 w-3" />
-              Notes <span className="text-muted-foreground/60 normal-case">(optional)</span>
-            </label>
-            <textarea
-              value={form.notes}
-              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-              placeholder="e.g. Monthly grocery stock purchase, no receipt available"
-              rows={2}
-              className="w-full px-3 py-3 rounded-xl border border-border bg-background text-sm outline-none resize-none"
-            />
-          </div>
+            <AccordionItem value="receipt" className="rounded-xl border border-border bg-card px-3">
+              <AccordionTrigger className="py-3 hover:no-underline">
+                <span className="flex flex-1 items-center justify-between gap-3 pr-2">
+                  <span className="text-sm font-bold text-foreground">Receipt</span>
+                  <span className="max-w-[55%] truncate text-xs text-muted-foreground">{receiptSummary}</span>
+                </span>
+              </AccordionTrigger>
+              <AccordionContent className="pb-4">
+                {receiptFile ? (
+                  <div className="flex items-center gap-3 rounded-xl border border-border bg-background p-3">
+                    <Camera className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{receiptFile.name}</p>
+                    <button
+                      type="button"
+                      onClick={() => setReceiptFile(null)}
+                      className="rounded-lg p-1 hover:bg-muted"
+                    >
+                      <X className="h-4 w-4 text-muted-foreground" />
+                    </button>
+                  </div>
+                ) : existingReceiptUrl ? (
+                  <ReceiptPreview url={existingReceiptUrl} variant="compact" onReplace={() => fileInputRef.current?.click()} />
+                ) : (
+                  <label className="flex items-center gap-3 rounded-xl border border-dashed border-border bg-background p-3 cursor-pointer hover:bg-muted/40">
+                    <Camera className="w-4 h-4 text-muted-foreground" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-foreground">Attach receipt image</p>
+                      <p className="text-[11px] text-muted-foreground">Optional · JPG, PNG or WEBP under 4MB</p>
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
+                    />
+                  </label>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
+                />
+              </AccordionContent>
+            </AccordionItem>
 
-          {/* 9. Receipt (independent, always visible) */}
-          <label className="flex items-center gap-3 rounded-xl border border-dashed border-border bg-background p-3 cursor-pointer hover:bg-muted/40">
-            <Camera className="w-4 h-4 text-muted-foreground" />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-foreground truncate">
-                {receiptFile ? receiptFile.name : 'Attach receipt image'}
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                {receiptFile ? 'Tap to change' : 'Optional · JPG, PNG or WEBP under 4MB'}
-              </p>
-            </div>
-            {receiptFile && (
-              <button
-                type="button"
-                onClick={(e) => { e.preventDefault(); setReceiptFile(null); }}
-                className="rounded-lg p-1 hover:bg-muted"
-              >
-                <X className="h-4 w-4 text-muted-foreground" />
-              </button>
-            )}
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              className="hidden"
-              onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
-            />
-          </label>
+            <AccordionItem value="advanced" className="rounded-xl border border-border bg-card px-3">
+              <AccordionTrigger className="py-3 hover:no-underline">
+                <span className="flex flex-1 items-center justify-between gap-3 pr-2">
+                  <span className="text-sm font-bold text-foreground">Advanced Options</span>
+                  <span className="max-w-[55%] truncate text-xs text-muted-foreground">{advancedSummary}</span>
+                </span>
+              </AccordionTrigger>
+              <AccordionContent className="space-y-3 pb-4">
+                <div>
+                  <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <FileText className="h-3 w-3" />
+                    Notes
+                  </label>
+                  <textarea
+                    value={form.notes}
+                    onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                    placeholder="e.g. Monthly grocery stock purchase, no receipt available"
+                    rows={2}
+                    className="w-full px-3 py-3 rounded-xl border border-border bg-background text-sm outline-none resize-none"
+                  />
+                </div>
 
-          {/* 10. Recurring toggle */}
-          <div className="rounded-xl border border-border bg-background p-3 space-y-2">
-            <label className="flex items-center justify-between">
-              <span className="text-sm font-medium text-foreground">Recurring expense</span>
-              <input
-                type="checkbox"
-                checked={form.is_recurring}
-                onChange={(e) => setForm((f) => ({ ...f, is_recurring: e.target.checked }))}
-              />
-            </label>
-            {form.is_recurring && (
-              <select value={form.recurring_frequency} onChange={(e) => setForm((f) => ({ ...f, recurring_frequency: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm">
-                <option value="monthly">Monthly</option>
-                <option value="quarterly">Quarterly</option>
-                <option value="yearly">Yearly</option>
-              </select>
-            )}
-          </div>
-        </div>
+                <div className="rounded-xl border border-border bg-background p-3 space-y-2">
+                  <label className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-foreground">Recurring expense</span>
+                    <input
+                      type="checkbox"
+                      checked={form.is_recurring}
+                      onChange={(e) => setForm((f) => ({ ...f, is_recurring: e.target.checked }))}
+                    />
+                  </label>
+                  {form.is_recurring && (
+                    <select
+                      value={form.recurring_frequency}
+                      onChange={(e) => setForm((f) => ({ ...f, recurring_frequency: e.target.value }))}
+                      className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm"
+                    >
+                      <option value="monthly">Monthly</option>
+                      <option value="quarterly">Quarterly</option>
+                      <option value="yearly">Yearly</option>
+                    </select>
+                  )}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </ResponsiveDialogBody>
 
-        {/* Save button */}
-        <div className="shrink-0 border-t border-border bg-card p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] shadow-[0_-8px_24px_rgba(0,0,0,0.06)]">
+        <ResponsiveDialogFooter>
           <button
             type="button"
             onClick={submit}
@@ -428,10 +458,14 @@ export function AddExpenseModal({
                   ? 'Choose a category'
                   : `${mode === 'edit' ? 'Update' : 'Save'} ${amountValue > 0 ? `₹${amountValue.toLocaleString('en-IN')}` : 'expense'}`}
           </button>
-        </div>
-      </div>
-    </div>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   );
+}
+
+function titleCase(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function expenseToForm(expense?: Record<string, any> | null) {
@@ -446,35 +480,6 @@ function expenseToForm(expense?: Record<string, any> | null) {
     vendor_name: String(expense?.vendor_name || ''),
     is_recurring: Boolean(expense?.is_recurring),
     recurring_frequency: String(expense?.recurring_frequency || 'monthly'),
-    operational_type: String(expense?.operational_type || suggestedOperationalType(expense?.title || '', expense?.category || '')),
+    operational_type: String(expense?.operational_type || suggestOperationalType(expense?.title || '', expense?.category || '')),
   };
-}
-
-function suggestExpenseCategory(title: string) {
-  const text = title.toLowerCase();
-  if (/(electric|power|eb|current|bill)/.test(text)) return 'Electricity';
-  if (/(food|rice|milk|grocery|vegetable|kitchen|meal|dal|oil)/.test(text)) return 'Food & Groceries';
-  if (/(gas|cylinder|lpg)/.test(text)) return 'Gas Cylinders';
-  if (/(wifi|internet|broadband|router|airtel|jio)/.test(text)) return 'Internet';
-  if (/(repair|plumb|paint|fix|carpenter|maintenance)/.test(text)) return 'Maintenance & Repairs';
-  if (/(clean|housekeep|soap|phenyl)/.test(text)) return 'Cleaning Supplies';
-  if (/(salary|staff|warden|watchman)/.test(text)) return 'Staff Salary';
-  if (/(security|guard|cctv)/.test(text)) return 'Security';
-  if (/(laundry|washing)/.test(text)) return 'Laundry';
-  if (/(transport|auto|fuel|petrol|diesel)/.test(text)) return 'Transportation';
-  if (/(bed|mattress|furniture|fridge|geyser|fan|machine|equipment)/.test(text)) return 'Furniture & Equipment';
-  if (/(license|licence|government|tax|permit)/.test(text)) return 'Licenses & Government';
-  if (/(marketing|banner|ad|poster)/.test(text)) return 'Marketing';
-  if (/(medical|emergency|first aid|doctor)/.test(text)) return 'Medical & Emergency';
-  if (/(water|tanker)/.test(text)) return 'Water';
-  return 'Miscellaneous';
-}
-
-function suggestedOperationalType(title: string, category: string) {
-  const text = `${title} ${category}`.toLowerCase();
-  if (/(salary|staff|warden|watchman|cook|guard)/.test(text)) return 'Staff';
-  if (/(electric|water|gas|internet|wifi|broadband|sewage)/.test(text)) return 'Utility';
-  if (/(repair|plumb|paint|fix|carpenter|leak|pipe|roof|maintenance)/.test(text)) return 'Maintenance';
-  if (/(emergency|urgent|flood|fire|accident|break)/.test(text)) return 'Emergency';
-  return 'Operational';
 }

@@ -9,6 +9,7 @@ import { queryKeys } from '@lib/queryKeys';
 import { OwnerActionsBar } from './OwnerActionsBar';
 import { PaymentLedger } from './PaymentLedger';
 import { RecordPaymentModal } from '../../modals/RecordPaymentModal';
+import { EXPENSE_CATEGORIES } from '@features/expenses/constants';
 
 const CashflowForecast = lazy(() => import('./CashflowForecast').then((m) => ({ default: m.CashflowForecast })));
 const CollectionAnalytics = lazy(() => import('./CollectionAnalytics').then((m) => ({ default: m.CollectionAnalytics })));
@@ -51,24 +52,6 @@ function dueBalance(due: Record<string, unknown>): number {
   return Number.isFinite(amount) ? Math.max(0, amount) : 0;
 }
 
-const EXPENSE_CATEGORIES = [
-  'Food & Groceries',
-  'Staff Salary',
-  'Electricity',
-  'Water',
-  'Gas Cylinders',
-  'Internet',
-  'Cleaning Supplies',
-  'Maintenance & Repairs',
-  'Security',
-  'Laundry',
-  'Transportation',
-  'Furniture & Equipment',
-  'Licenses & Government',
-  'Marketing',
-  'Medical & Emergency',
-  'Miscellaneous',
-];
 
 interface OutstandingDuesDrawerProps {
   hostelId: string;
@@ -1334,8 +1317,6 @@ export function FinancialControlCenter({ hostelId }: Props) {
           <AddExpenseModal
             categories={EXPENSE_CATEGORIES}
             mode="create"
-            defaultHostelId={hostelId}
-            defaultHostelLabel="This hostel"
             loading={createExpenseMutation.isPending}
             onClose={() => setShowAddExpense(false)}
             onSubmit={(body) => createExpenseMutation.mutate(body)}
