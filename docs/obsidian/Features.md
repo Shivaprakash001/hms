@@ -20,7 +20,7 @@ This is an inventory of features **confirmed implemented** (live route + live UI
 | Agreement renewals | `/agreements/renewals` | `RenewalQueueView` → `/api/agreements/renewal-offers*`, `/api/agreements/renewals` |
 | Agreement lifecycle recovery | `/agreements/lifecycle-recovery` | `AgreementLifecycleRecoveryView` → `/api/agreements/lifecycle-recovery*` |
 | Alerts | `/alerts` | `AlertsView` |
-| Billing / financial control center | `/billing` | `BillingView` + `app/components/views/billing/*` (~20 widgets: cashflow, collection pipeline, overdue intelligence, payment ledger, room performance) |
+| Billing / financial control center | `/billing` | `BillingView` + `FinancialControlCenter.tsx` (Overview tab: Collection Progress, Priority Collections, Smart Insights, Property Finance (all-hostels view only), Recent Transactions with expandable full `PaymentLedger`) + `ExpensesTab` (Expenses Workspace tab) — redesigned 2026-07-18, see [[Changelog]]; most of the older `billing/*` widget set (cashflow/collection-pipeline/overdue-intelligence/room-performance charts) was dead code by this point and was removed |
 | Settings | `/settings` | `SettingsView` |
 | Activity log | `/activity` | `ActivityLogsView` → `/api/owner/activity-logs` |
 | Admissions/CRM | (routed but currently redirects to `/dashboard` per `OwnerRoutes.tsx` — **flag: route exists in backend (`/api/leads/*`) but the dedicated `/admissions` frontend route redirects rather than rendering `AdmissionsView` directly; confirm current wiring before documenting as fully live**) | `AdmissionsView` component exists; `/api/leads/*`, `/api/visit/*` (public microsite) |
