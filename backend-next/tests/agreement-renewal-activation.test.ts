@@ -3,12 +3,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   agreementFindMany: vi.fn(),
   agreementUpdate: vi.fn(),
+  agreementUpdateMany: vi.fn(async () => ({ count: 1 })),
   tenantsUpdate: vi.fn(),
   eventLogLog: vi.fn(),
+  queryRaw: vi.fn(),
+  moveOutFindFirst: vi.fn().mockResolvedValue(null),
   generateForAgreementInTx: vi.fn().mockResolvedValue({ created: 12, updated: 0, skipped: 0, months: [] }),
   notifyActivated: vi.fn(),
   transaction: vi.fn(async (cb: any) => cb({
-    agreement: { update: mocks.agreementUpdate },
+    $queryRaw: mocks.queryRaw,
+    agreement: { update: mocks.agreementUpdate, updateMany: mocks.agreementUpdateMany },
     tenants: { update: mocks.tenantsUpdate },
   })),
 }));
@@ -18,6 +22,9 @@ vi.mock("@/lib/db", () => ({
     agreement: {
       findMany: mocks.agreementFindMany,
       update: mocks.agreementUpdate,
+    },
+    move_out_requests: {
+      findFirst: mocks.moveOutFindFirst,
     },
     $transaction: mocks.transaction,
   },
@@ -99,6 +106,7 @@ describe("AgreementRenewalActivation", () => {
       },
       renewed_from_agreement: {
         id: "predecessor-agreement-id",
+        status: "SIGNED",
         tenant_signature_url: "tenant-signature-predecessor",
         tenant_signature_name: "Tenant Name",
         tenant_signed_at: new Date("2026-01-01T00:00:00.000Z"),
@@ -147,18 +155,18 @@ describe("AgreementRenewalActivation", () => {
     expect(touchedOwnerIds.has("owner-id")).toBe(true);
     expect(touchedHostelIds.has("hostel-id")).toBe(true);
 
-    // Verify transaction updates predecessor to RENEWED
-    expect(mocks.agreementUpdate).toHaveBeenCalledWith(
+    // Verify transaction updates predecessor to RENEWED (conditional, count-checked)
+    expect(mocks.agreementUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: "predecessor-agreement-id" },
+        where: expect.objectContaining({ id: "predecessor-agreement-id" }),
         data: expect.objectContaining({ status: "RENEWED" }),
       })
     );
 
-    // Verify transaction updates draft to SIGNED with copied credentials
-    expect(mocks.agreementUpdate).toHaveBeenCalledWith(
+    // Verify transaction updates draft to SIGNED with copied credentials (conditional, count-checked)
+    expect(mocks.agreementUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: "draft-agreement-id" },
+        where: expect.objectContaining({ id: "draft-agreement-id" }),
         data: expect.objectContaining({
           status: "SIGNED",
           tenant_signature_url: "tenant-signature-predecessor",
@@ -189,7 +197,7 @@ describe("AgreementRenewalActivation", () => {
     );
 
     // Verify content snapshot was merged with predecessor details
-    const updateCall = mocks.agreementUpdate.mock.calls.find(
+    const updateCall = mocks.agreementUpdateMany.mock.calls.find(
       (call: any) => call[0].where.id === "draft-agreement-id"
     );
     expect(updateCall).toBeDefined();
@@ -215,6 +223,13 @@ describe("AgreementRenewalActivation", () => {
       hostel_id: "hostel-id",
       status: "DRAFT",
       agreement_start_date: today,
+      agreement_end_date: new Date("2027-06-30T00:00:00.000Z"),
+      agreement_duration_months: 12,
+      contract_rent: 8500,
+      contract_security_deposit: 6000,
+      contract_maintenance: 1000,
+      contract_maintenance_type: "MONTHLY",
+      contract_payment_frequency: "MONTHLY",
       tenant: {
         owner_id: "owner-id",
         profiles: { name: "Adithya" },
@@ -230,6 +245,7 @@ describe("AgreementRenewalActivation", () => {
       },
       renewed_from_agreement: {
         id: "predecessor-agreement-id",
+        status: "SIGNED",
       },
     };
 
@@ -256,6 +272,7 @@ describe("AgreementRenewalActivation", () => {
     expect(summary.renewals_activated).toBe(0);
     expect(summary.failed).toBe(0); // not a failure/throw, just skipped/blocked
     expect(mocks.agreementUpdate).not.toHaveBeenCalled();
+    expect(mocks.agreementUpdateMany).not.toHaveBeenCalled();
 
     // Verify blocking event was logged
     expect(mocks.eventLogLog).toHaveBeenCalledWith(
@@ -304,6 +321,7 @@ describe("AgreementRenewalActivation", () => {
       },
       renewed_from_agreement: {
         id: "predecessor-agreement-id",
+        status: "SIGNED",
         tenant_signature_url: "tenant-signature-predecessor",
         tenant_signature_name: "Tenant Name",
         tenant_signed_at: new Date("2026-01-01T00:00:00.000Z"),
@@ -355,5 +373,121 @@ describe("AgreementRenewalActivation", () => {
     expect(mocks.notifyActivated).toHaveBeenCalledWith(
       expect.objectContaining({ tenantId: "tenant-id", ownerId: "owner-id", hostelId: "hostel-id" })
     );
+  });
+
+  it("blocks activation when the predecessor is no longer in a renewable status", async () => {
+    const today = new Date("2026-07-01T00:00:00.000Z");
+    const mockDraft = {
+      id: "draft-agreement-id",
+      tenant_id: "tenant-id",
+      hostel_id: "hostel-id",
+      status: "DRAFT",
+      agreement_start_date: today,
+      tenant: { owner_id: "owner-id", profiles: { name: "Adithya" }, rent_obligations: [] },
+      renewed_from_agreement: { id: "predecessor-agreement-id", status: "TERMINATED" },
+    };
+    mocks.agreementFindMany.mockResolvedValue([mockDraft]);
+
+    const summary = {
+      checked: 0, marked_expiring: 0, marked_expired: 0, reminders_30d: 0, reminders_15d: 0,
+      expiry_notifications: 0, skipped_legacy: 0, failed: 0, errors: [], renewals_activated: 0,
+    };
+
+    await service.activateScheduledRenewals(today, summary, new Set(), new Set());
+
+    expect(summary.renewals_activated).toBe(0);
+    expect(summary.failed).toBe(0);
+    expect(mocks.agreementUpdateMany).not.toHaveBeenCalled();
+    expect(mocks.eventLogLog).toHaveBeenCalledWith(
+      "RENEWAL_ACTIVATION_BLOCKED",
+      "owner-id",
+      expect.objectContaining({
+        agreement_id: "draft-agreement-id",
+        reason: "Predecessor agreement is not in a renewable status",
+        predecessor_status: "TERMINATED",
+      }),
+      "tenant-id"
+    );
+  });
+
+  it("blocks activation when the tenant has an active move-out request", async () => {
+    const today = new Date("2026-07-01T00:00:00.000Z");
+    mocks.moveOutFindFirst.mockResolvedValueOnce({ id: "move-1", status: "REQUESTED" });
+    const mockDraft = {
+      id: "draft-agreement-id",
+      tenant_id: "tenant-id",
+      hostel_id: "hostel-id",
+      status: "DRAFT",
+      agreement_start_date: today,
+      tenant: { owner_id: "owner-id", profiles: { name: "Adithya" }, rent_obligations: [] },
+      renewed_from_agreement: { id: "predecessor-agreement-id", status: "SIGNED" },
+    };
+    mocks.agreementFindMany.mockResolvedValue([mockDraft]);
+
+    const summary = {
+      checked: 0, marked_expiring: 0, marked_expired: 0, reminders_30d: 0, reminders_15d: 0,
+      expiry_notifications: 0, skipped_legacy: 0, failed: 0, errors: [], renewals_activated: 0,
+    };
+
+    await service.activateScheduledRenewals(today, summary, new Set(), new Set());
+
+    expect(summary.renewals_activated).toBe(0);
+    expect(mocks.agreementUpdateMany).not.toHaveBeenCalled();
+    expect(mocks.eventLogLog).toHaveBeenCalledWith(
+      "RENEWAL_ACTIVATION_BLOCKED",
+      "owner-id",
+      expect.objectContaining({
+        agreement_id: "draft-agreement-id",
+        reason: "Move-out already in progress",
+        move_out_request_id: "move-1",
+      }),
+      "tenant-id"
+    );
+  });
+
+  it("fails activation instead of silently proceeding when the predecessor's status changed concurrently", async () => {
+    const today = new Date("2026-07-01T00:00:00.000Z");
+    mocks.agreementUpdateMany.mockResolvedValueOnce({ count: 0 });
+    const mockDraft = {
+      id: "draft-agreement-id",
+      tenant_id: "tenant-id",
+      hostel_id: "hostel-id",
+      status: "DRAFT",
+      agreement_start_date: today,
+      agreement_end_date: new Date("2027-06-30T00:00:00.000Z"),
+      agreement_duration_months: 12,
+      contract_rent: 8500,
+      contract_security_deposit: 6000,
+      contract_maintenance: 1000,
+      contract_maintenance_type: "MONTHLY",
+      contract_payment_frequency: "MONTHLY",
+      template_id: "template-id",
+      content_snapshot: { source: "renewal_offer", renewal_offer_id: "offer-id" },
+      tenant: { owner_id: "owner-id", profiles: { name: "Adithya" }, rent_obligations: [] },
+      template: { owner_signature_url: "url", owner_name: "Owner", rules_content: { rules: [] }, version_number: 1 },
+      renewed_from_agreement: {
+        id: "predecessor-agreement-id",
+        status: "SIGNED",
+        tenant_signature_url: "s", tenant_signature_name: "n", tenant_signed_at: today,
+        tenant_ip: "127.0.0.1", tenant_user_agent: "UA",
+        guardian_signature_url: null, guardian_signature_name: null, guardian_relation: null,
+        guardian_signed_at: null, guardian_ip: null, guardian_user_agent: null,
+        owner_signature_url: "o", owner_signature_name: "Owner",
+        rules_snapshot: { rules: [] }, rule_version_id: "rule-v1", rule_version_number: "v1",
+        content_snapshot: {},
+      },
+    };
+    mocks.agreementFindMany.mockResolvedValue([mockDraft]);
+
+    const summary = {
+      checked: 0, marked_expiring: 0, marked_expired: 0, reminders_30d: 0, reminders_15d: 0,
+      expiry_notifications: 0, skipped_legacy: 0, failed: 0, errors: [] as string[], renewals_activated: 0,
+    };
+
+    await service.activateScheduledRenewals(today, summary, new Set(), new Set());
+
+    expect(summary.renewals_activated).toBe(0);
+    expect(summary.failed).toBe(1);
+    expect(summary.errors[0]).toMatch(/Renewal chain changed during cron activation/);
   });
 });

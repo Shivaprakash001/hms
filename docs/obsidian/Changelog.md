@@ -27,6 +27,7 @@ All notable changes to this project are documented in this file, in [Keep a Chan
 - **2026-07-18**: Export button throwing in production only due to a Vite production-bundler mis-transform of a chained dynamic-import destructure — see [[Bugs]].
 - **2026-07-19**: Cron-activated renewal agreements (`AgreementLifecycleService.activateScheduledRenewals`) now generate a rent schedule inside the activation transaction, matching manual signing (`AgreementRenewalSigningService`) — previously cron-activated renewals shipped with zero rent obligations. See [[Bugs]].
 - **2026-07-19**: Manual renewal signing (`AgreementRenewalSigningService.signRenewalAgreement`) now blocks on an unpaid renewal security deposit obligation, matching the check cron activation already had — previously only the cron path enforced this. See [[Bugs]].
+- **2026-07-19**: Cron renewal activation (`AgreementLifecycleService.activateScheduledRenewals`) now checks predecessor renewability, active move-out, and lifecycle-metadata completeness before activating, and both it and `RenewalOfferService.acceptOffer` now use row-locked, count-checked conditional updates for every renewal-chain mutation, closing two concurrency races that could corrupt the renewal chain. See [[Bugs]], [[Decisions]] ADR-012.
 
 ---
 

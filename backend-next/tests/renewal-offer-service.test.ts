@@ -130,6 +130,7 @@ function createDbMock(agreementOverride: Partial<typeof mockAgreement> = {}) {
     renewalDecision: {
       create: vi.fn().mockImplementation(async ({ data }: any) => ({ id: randomUUID(), ...data })),
     },
+    $queryRaw: vi.fn(),
   };
 
   const dbMock = {
@@ -415,6 +416,37 @@ describe("RenewalOfferService", () => {
       await expect(
         service.acceptOffer("offer-1", "profile-1")
       ).rejects.toThrow("BAD_REQUEST: This offer has expired");
+    });
+
+    it("fails acceptance instead of creating an orphaned successor when the predecessor's renewed_to_agreement_id changed concurrently", async () => {
+      const { dbMock, txMock } = createDbMock();
+      // Simulate a concurrent acceptance that already won: the predecessor's
+      // renewed_to_agreement_id is no longer null by the time this
+      // transaction's updateMany runs, so it matches zero rows.
+      txMock.agreement.updateMany = vi.fn().mockResolvedValue({ count: 0 });
+      const service = new RenewalOfferService(dbMock as any);
+
+      await expect(
+        service.acceptOffer("offer-1", "profile-1")
+      ).rejects.toThrow("CONFLICT: A renewal was already accepted for this agreement");
+
+      expect(txMock.renewalOffer.update).not.toHaveBeenCalled();
+      expect(txMock.renewalDecision.create).not.toHaveBeenCalled();
+    });
+
+    it("re-checks the offer status inside the transaction instead of trusting the pre-transaction read", async () => {
+      const { dbMock, txMock } = createDbMock();
+      // The pre-transaction fetch (dbMock.renewalOffer.findUnique) still
+      // returns SENT, but by the time the transaction's own fresh read runs,
+      // another request has already accepted the offer.
+      txMock.renewalOffer.findUnique = vi.fn().mockResolvedValue({ ...mockOfferFull, status: "ACCEPTED" });
+      const service = new RenewalOfferService(dbMock as any);
+
+      await expect(
+        service.acceptOffer("offer-1", "profile-1")
+      ).rejects.toThrow("BAD_REQUEST: Cannot accept offer in status ACCEPTED");
+
+      expect(txMock.agreement.create).not.toHaveBeenCalled();
     });
   });
 

@@ -2,10 +2,11 @@ import { prisma } from "@/lib/db";
 import { invalidateHostelDashboardCache, invalidateOwnerDashboardCache } from "@/lib/cache/dashboard-cache";
 import { eventLog } from "@/lib/services/event-log-service";
 import { notificationService } from "@/lib/services/notification-service";
-import { AGREEMENT_ACTIVITY_EVENTS, AGREEMENT_LIFECYCLE_MANAGED_STATUSES } from "./agreement-status";
+import { AGREEMENT_ACTIVITY_EVENTS, AGREEMENT_LIFECYCLE_MANAGED_STATUSES, isCurrentAgreementStatus } from "./agreement-status";
 import { agreementRenewalNotificationService } from "./agreement-renewal-notification-service";
 import { agreementRentScheduleService } from "../payments/agreement-rent-schedule-service";
 import { financialLifecycleService } from "../payments/financial-lifecycle-service";
+import { assertAgreementLifecycleComplete } from "./agreement-lifecycle-completeness";
 
 type AgreementLifecycleSummary = {
   checked: number;
@@ -318,6 +319,51 @@ export class AgreementLifecycleService {
           throw new Error("Predecessor agreement not found for renewal draft");
         }
 
+        const ownerId = draft.tenant?.owner_id || draft.hostel?.owner_id || null;
+
+        if (!isCurrentAgreementStatus(predecessor.status)) {
+          await eventLog.log("RENEWAL_ACTIVATION_BLOCKED", ownerId, {
+            agreement_id: draft.id,
+            predecessor_id: predecessor.id,
+            tenant_id: draft.tenant_id,
+            reason: "Predecessor agreement is not in a renewable status",
+            predecessor_status: predecessor.status,
+          }, draft.tenant_id);
+          continue;
+        }
+
+        const activeMoveOut = await prisma.move_out_requests.findFirst({
+          where: {
+            tenant_id: draft.tenant_id,
+            status: { notIn: ["COMPLETED", "REJECTED"] },
+          },
+          select: { id: true, status: true },
+          orderBy: { created_at: "desc" },
+        });
+        if (activeMoveOut) {
+          await eventLog.log("RENEWAL_ACTIVATION_BLOCKED", ownerId, {
+            agreement_id: draft.id,
+            predecessor_id: predecessor.id,
+            tenant_id: draft.tenant_id,
+            reason: "Move-out already in progress",
+            move_out_request_id: activeMoveOut.id,
+          }, draft.tenant_id);
+          continue;
+        }
+
+        try {
+          assertAgreementLifecycleComplete(draft, { agreementId: draft.id });
+        } catch (error: any) {
+          await eventLog.log("RENEWAL_ACTIVATION_BLOCKED", ownerId, {
+            agreement_id: draft.id,
+            predecessor_id: predecessor.id,
+            tenant_id: draft.tenant_id,
+            reason: "Agreement lifecycle metadata is incomplete",
+            details: error?.details || null,
+          }, draft.tenant_id);
+          continue;
+        }
+
         // Filter obligations to those belonging to this draft agreement
         const pendingDeposit = draft.tenant?.rent_obligations?.find(
           (ob) => ob.agreement_id === draft.id
@@ -325,7 +371,7 @@ export class AgreementLifecycleService {
 
         if (pendingDeposit) {
           // Activation blocked by unpaid security deposit top-up
-          await eventLog.log("RENEWAL_ACTIVATION_BLOCKED", draft.tenant?.owner_id || null, {
+          await eventLog.log("RENEWAL_ACTIVATION_BLOCKED", ownerId, {
             agreement_id: draft.id,
             predecessor_id: predecessor.id,
             tenant_id: draft.tenant_id,
@@ -338,6 +384,14 @@ export class AgreementLifecycleService {
 
         // Execute activation in a transaction
         await prisma.$transaction(async (tx) => {
+          // Lock both rows for the duration of the transaction so a concurrent
+          // cron run (or a concurrent manual sign) can't interleave with this
+          // activation — mirrors the locking pattern already used by
+          // agreementRenewalSigningService.signRenewalAgreement and
+          // agreementRenewalService.createRenewalDraft.
+          await tx.$queryRaw`SELECT id FROM "Agreement" WHERE id = ${predecessor.id}::uuid FOR UPDATE`;
+          await tx.$queryRaw`SELECT id FROM "Agreement" WHERE id = ${draft.id}::uuid FOR UPDATE`;
+
           // Copy predecessor signatures and rules snapshot
           const predecessorContent = (predecessor.content_snapshot as Record<string, any>) || {};
           const contentSnapshot = {
@@ -353,18 +407,33 @@ export class AgreementLifecycleService {
             contract_payment_frequency: draft.contract_payment_frequency || predecessorContent.contract_payment_frequency || "MONTHLY",
           };
 
-          // Mark predecessor as RENEWED
-          await tx.agreement.update({
-            where: { id: predecessor.id },
+          // Mark predecessor as RENEWED — conditional on it still being in a
+          // renewable status and still chained to this draft, with the count
+          // checked so a chain change since the pre-transaction read (e.g. a
+          // concurrent manual sign) fails activation instead of silently
+          // overwriting it.
+          const predecessorUpdate = await tx.agreement.updateMany({
+            where: {
+              id: predecessor.id,
+              status: { in: ["SIGNED", "EXPIRING_SOON", "AGREEMENT_EXPIRED"] },
+            },
             data: {
               status: "RENEWED",
               renewed_at: today,
             },
           });
+          if (predecessorUpdate.count !== 1) {
+            throw new Error("Renewal chain changed during cron activation (predecessor)");
+          }
 
-          // Mark draft as SIGNED (activated)
-          await tx.agreement.update({
-            where: { id: draft.id },
+          // Mark draft as SIGNED (activated) — conditional on it still being
+          // DRAFT and still chained to this predecessor.
+          const draftUpdate = await tx.agreement.updateMany({
+            where: {
+              id: draft.id,
+              status: "DRAFT",
+              renewed_from_agreement_id: predecessor.id,
+            },
             data: {
               status: "SIGNED",
               signed_at: today,
@@ -388,6 +457,9 @@ export class AgreementLifecycleService {
               content_snapshot: contentSnapshot,
             },
           });
+          if (draftUpdate.count !== 1) {
+            throw new Error("Renewal chain changed during cron activation (draft)");
+          }
 
           // Update active parameters on the main tenants model
           await tx.tenants.update({

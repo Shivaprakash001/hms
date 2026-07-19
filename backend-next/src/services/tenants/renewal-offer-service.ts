@@ -400,6 +400,18 @@ export class RenewalOfferService {
     }
 
     const result = await this.db.$transaction(async (tx) => {
+      // Lock the predecessor row and re-check the offer status inside the
+      // transaction — the pre-transaction checks above are a TOCTOU-prone
+      // read; two concurrent accept calls could both pass them. Mirrors the
+      // locking pattern already used by agreementRenewalService.createRenewalDraft
+      // and agreementRenewalSigningService.signRenewalAgreement.
+      await tx.$queryRaw`SELECT id FROM "Agreement" WHERE id = ${offer.agreement_id}::uuid FOR UPDATE`;
+
+      const freshOffer = await tx.renewalOffer.findUnique({ where: { id: offerId } });
+      if (!freshOffer || freshOffer.status !== "SENT") {
+        throw new Error(`BAD_REQUEST: Cannot accept offer in status ${freshOffer?.status || "UNKNOWN"}`);
+      }
+
       const roomAllocation = offer.tenant?.room_allocations?.[0];
       const roomCategory = roomAllocation?.room?.room_type || null;
 
@@ -435,11 +447,16 @@ export class RenewalOfferService {
         },
       });
 
-      // Link predecessor → successor
-      await tx.agreement.updateMany({
+      // Link predecessor → successor — count-checked so a losing concurrent
+      // acceptance fails loudly instead of leaving an orphaned, unlinked
+      // successor Agreement behind.
+      const linkUpdate = await tx.agreement.updateMany({
         where: { id: offer.agreement_id, renewed_to_agreement_id: null },
         data: { renewed_to_agreement_id: newAgreement.id },
       });
+      if (linkUpdate.count !== 1) {
+        throw new Error("CONFLICT: A renewal was already accepted for this agreement");
+      }
 
       // Update offer status
       await tx.renewalOffer.update({
