@@ -5,6 +5,8 @@ const mocks = vi.hoisted(() => ({
   agreementUpdate: vi.fn(),
   tenantsUpdate: vi.fn(),
   eventLogLog: vi.fn(),
+  generateForAgreementInTx: vi.fn().mockResolvedValue({ created: 12, updated: 0, skipped: 0, months: [] }),
+  notifyActivated: vi.fn(),
   transaction: vi.fn(async (cb: any) => cb({
     agreement: { update: mocks.agreementUpdate },
     tenants: { update: mocks.tenantsUpdate },
@@ -18,6 +20,18 @@ vi.mock("@/lib/db", () => ({
       update: mocks.agreementUpdate,
     },
     $transaction: mocks.transaction,
+  },
+}));
+
+vi.mock("@/src/services/payments/agreement-rent-schedule-service", () => ({
+  agreementRentScheduleService: {
+    generateForAgreementInTx: mocks.generateForAgreementInTx,
+  },
+}));
+
+vi.mock("@/src/services/payments/financial-lifecycle-service", () => ({
+  financialLifecycleService: {
+    notifyActivated: mocks.notifyActivated,
   },
 }));
 
@@ -254,6 +268,92 @@ describe("AgreementRenewalActivation", () => {
         amount: 1000,
       }),
       "tenant-id"
+    );
+  });
+
+  it("generates the rent schedule for the activated draft inside the same transaction", async () => {
+    const today = new Date("2026-07-01T00:00:00.000Z");
+    const mockDraft = {
+      id: "draft-agreement-id",
+      tenant_id: "tenant-id",
+      hostel_id: "hostel-id",
+      status: "DRAFT",
+      agreement_start_date: today,
+      agreement_end_date: new Date("2027-06-30T00:00:00.000Z"),
+      agreement_duration_months: 12,
+      contract_rent: 8500,
+      contract_security_deposit: 6000,
+      contract_maintenance: 1000,
+      contract_maintenance_type: "MONTHLY",
+      contract_payment_frequency: "MONTHLY",
+      template_id: "template-id",
+      content_snapshot: {
+        source: "renewal_offer",
+        renewal_offer_id: "offer-id",
+      },
+      tenant: {
+        owner_id: "owner-id",
+        profiles: { name: "Adithya" },
+        rent_obligations: [],
+      },
+      template: {
+        owner_signature_url: "owner-signature-template",
+        owner_name: "Owner Name",
+        rules_content: { rules: [] },
+        version_number: 1,
+      },
+      renewed_from_agreement: {
+        id: "predecessor-agreement-id",
+        tenant_signature_url: "tenant-signature-predecessor",
+        tenant_signature_name: "Tenant Name",
+        tenant_signed_at: new Date("2026-01-01T00:00:00.000Z"),
+        tenant_ip: "127.0.0.1",
+        tenant_user_agent: "Mozilla",
+        guardian_signature_url: "guardian-signature-predecessor",
+        guardian_signature_name: "Guardian Name",
+        guardian_relation: "Father",
+        guardian_signed_at: new Date("2026-01-01T00:00:00.000Z"),
+        guardian_ip: "127.0.0.1",
+        guardian_user_agent: "Mozilla",
+        owner_signature_url: "owner-signature-predecessor",
+        owner_signature_name: "Owner Name",
+        rules_snapshot: { rules: ["Existing Rules"] },
+        rule_version_id: "rule-v1",
+        rule_version_number: "v1",
+        content_snapshot: {
+          tenant_name: "Adithya",
+          room_no: "101",
+        },
+      },
+    };
+
+    mocks.agreementFindMany.mockResolvedValue([mockDraft]);
+
+    const summary = {
+      checked: 0,
+      marked_expiring: 0,
+      marked_expired: 0,
+      reminders_30d: 0,
+      reminders_15d: 0,
+      expiry_notifications: 0,
+      skipped_legacy: 0,
+      failed: 0,
+      errors: [],
+      renewals_activated: 0,
+    };
+
+    const touchedOwnerIds = new Set<string>();
+    const touchedHostelIds = new Set<string>();
+
+    await service.activateScheduledRenewals(today, summary, touchedOwnerIds, touchedHostelIds);
+
+    expect(summary.renewals_activated).toBe(1);
+    expect(mocks.generateForAgreementInTx).toHaveBeenCalledWith(
+      expect.anything(),
+      "draft-agreement-id"
+    );
+    expect(mocks.notifyActivated).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: "tenant-id", ownerId: "owner-id", hostelId: "hostel-id" })
     );
   });
 });

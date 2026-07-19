@@ -4,6 +4,8 @@ import { eventLog } from "@/lib/services/event-log-service";
 import { notificationService } from "@/lib/services/notification-service";
 import { AGREEMENT_ACTIVITY_EVENTS, AGREEMENT_LIFECYCLE_MANAGED_STATUSES } from "./agreement-status";
 import { agreementRenewalNotificationService } from "./agreement-renewal-notification-service";
+import { agreementRentScheduleService } from "../payments/agreement-rent-schedule-service";
+import { financialLifecycleService } from "../payments/financial-lifecycle-service";
 
 type AgreementLifecycleSummary = {
   checked: number;
@@ -38,9 +40,16 @@ function profileName(agreement: any) {
 
 export class AgreementLifecycleService {
   /**
-   * Agreement lifecycle is deliberately isolated from occupancy and financials.
-   * This cron must never create obligations, touch ledgers, change tenant status,
+   * The expiry-tracking walk below (status marking + 30d/15d/expiry-day
+   * reminders) is deliberately isolated from occupancy and financials and
+   * must never create obligations, touch ledgers, change tenant.status,
    * release rooms, or start move-outs.
+   *
+   * activateScheduledRenewals() is a different concern: it completes a
+   * renewal activation that manual signing (agreementRenewalSigningService)
+   * can also complete, so it intentionally mirrors that path's financial
+   * writes (tenant contract fields, rent schedule generation) to keep both
+   * activation routes producing identical state.
    */
   async processDailyLifecycle(asOf: Date = new Date()): Promise<AgreementLifecycleSummary> {
     const today = utcDateOnly(asOf);
@@ -391,6 +400,13 @@ export class AgreementLifecycleService {
             },
           });
 
+          // Generate the rent schedule synchronously in the same transaction as
+          // activation, exactly as the manual signing path does in
+          // agreementRenewalSigningService.signRenewalAgreement — this is what
+          // keeps cron activation and manual signing producing identical
+          // financial state.
+          await agreementRentScheduleService.generateForAgreementInTx(tx, draft.id);
+
           // Log activation event
           const ownerId = draft.tenant?.owner_id || draft.hostel?.owner_id || null;
           await eventLog.log(AGREEMENT_ACTIVITY_EVENTS.RENEWED, ownerId, {
@@ -406,6 +422,16 @@ export class AgreementLifecycleService {
         });
 
         summary.renewals_activated++;
+
+        const activatedOwnerId = draft.tenant?.owner_id || draft.hostel?.owner_id || null;
+        if (activatedOwnerId) {
+          financialLifecycleService.notifyActivated({
+            tenantId: draft.tenant_id,
+            ownerId: activatedOwnerId,
+            hostelId: draft.hostel_id,
+            source: "renewal_cron_activation",
+          });
+        }
       } catch (err: any) {
         summary.failed++;
         summary.errors.push(`Activation failed for draft ${draft.id}: ${err.message || String(err)}`);
