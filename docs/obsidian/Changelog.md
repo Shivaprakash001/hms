@@ -26,6 +26,7 @@ All notable changes to this project are documented in this file, in [Keep a Chan
 - **2026-07-18**: Expenses Workspace search box unmounting the whole tab into a loading skeleton on every keystroke (`placeholderData: keepPreviousData`) — see [[Bugs]].
 - **2026-07-18**: Export button throwing in production only due to a Vite production-bundler mis-transform of a chained dynamic-import destructure — see [[Bugs]].
 - **2026-07-19**: Cron-activated renewal agreements (`AgreementLifecycleService.activateScheduledRenewals`) now generate a rent schedule inside the activation transaction, matching manual signing (`AgreementRenewalSigningService`) — previously cron-activated renewals shipped with zero rent obligations. See [[Bugs]].
+- **2026-07-19**: Manual renewal signing (`AgreementRenewalSigningService.signRenewalAgreement`) now blocks on an unpaid renewal security deposit obligation, matching the check cron activation already had — previously only the cron path enforced this. See [[Bugs]].
 
 ---
 

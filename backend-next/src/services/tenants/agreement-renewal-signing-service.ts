@@ -14,6 +14,7 @@ type AgreementRenewalSigningErrorCode =
   | "PREDECESSOR_NOT_RENEWABLE"
   | "INVALID_RENEWAL_CHAIN"
   | "MOVE_OUT_IN_PROGRESS"
+  | "SECURITY_DEPOSIT_UNPAID"
   | "SIGNATURE_REQUIRED"
   | "AGREEMENT_LIFECYCLE_INCOMPLETE";
 
@@ -186,6 +187,29 @@ export class AgreementRenewalSigningService {
             tenantId: renewalAgreement.tenant_id,
             moveOutRequestId: activeMoveOut.id,
             moveOutStatus: activeMoveOut.status,
+          }
+        );
+      }
+
+      // Mirrors the same block used by the cron activation path
+      // (AgreementLifecycleService.activateScheduledRenewals) so both
+      // activation routes enforce identical financial preconditions.
+      const unpaidDeposit = await tx.rent_obligations.findFirst({
+        where: {
+          agreement_id: renewalAgreement.id,
+          obligation_type: "SECURITY_DEPOSIT",
+          status: { in: ["PENDING", "PARTIAL"] },
+          is_superseded: false,
+        },
+      });
+      if (unpaidDeposit) {
+        throw new AgreementRenewalSigningError(
+          "SECURITY_DEPOSIT_UNPAID",
+          "Renewal security deposit must be paid before signing",
+          {
+            renewalAgreementId: renewalAgreement.id,
+            obligationId: unpaidDeposit.id,
+            amount: Number(unpaidDeposit.amount),
           }
         );
       }

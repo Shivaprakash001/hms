@@ -64,6 +64,7 @@ function createDb(options: {
   renewal?: Partial<typeof renewalBase> | null;
   predecessor?: Partial<typeof predecessorBase> | null;
   activeMoveOut?: any;
+  unpaidDeposit?: any;
 } = {}) {
   const predecessor = options.predecessor === null ? null : { ...predecessorBase, ...options.predecessor };
   const renewal = options.renewal === null
@@ -170,6 +171,7 @@ function createDb(options: {
       updateMany: vi.fn(),
     },
     rent_obligations: {
+      findFirst: vi.fn().mockResolvedValue(options.unpaidDeposit ?? null),
       create: vi.fn(),
       createMany: vi.fn(),
       update: vi.fn(),
@@ -349,6 +351,31 @@ describe("AgreementRenewalSigningService", () => {
     expect(records.get("agreement-1").status).toBe("SIGNED");
     expect(records.get("agreement-2").status).toBe("DRAFT");
     expect(tx.agreement.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("blocks signing when an unpaid security deposit obligation exists for the renewal agreement", async () => {
+    const { db, tx, records } = createDb({
+      unpaidDeposit: { id: "deposit-ob-1", agreement_id: "agreement-2", amount: 4000, status: "PENDING" },
+    });
+    const { service } = createService(db);
+
+    await expect(service.signRenewalAgreement(validInput)).rejects.toMatchObject({
+      code: "SECURITY_DEPOSIT_UNPAID",
+      status: 409,
+      details: expect.objectContaining({ obligationId: "deposit-ob-1", amount: 4000 }),
+    });
+    expect(records.get("agreement-1").status).toBe("SIGNED");
+    expect(records.get("agreement-2").status).toBe("DRAFT");
+    expect(tx.agreement.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("allows signing when there is no unpaid security deposit obligation", async () => {
+    const { db, records } = createDb({ unpaidDeposit: null });
+    const { service } = createService(db);
+
+    await service.signRenewalAgreement(validInput);
+
+    expect(records.get("agreement-2").status).toBe("SIGNED");
   });
 
   it("keeps signing committed when PDF generation fails", async () => {
