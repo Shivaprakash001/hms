@@ -6,6 +6,7 @@ import { AGREEMENT_ACTIVITY_EVENTS, AGREEMENT_LIFECYCLE_MANAGED_STATUSES } from 
 import { agreementRenewalNotificationService } from "./agreement-renewal-notification-service";
 import { financialLifecycleService } from "../payments/financial-lifecycle-service";
 import { renewalOfferService } from "./renewal-offer-service";
+import { renewalTimelineService } from "./renewal-timeline-service";
 import {
   activateRenewal,
   RenewalActivationBlockedError,
@@ -376,6 +377,7 @@ export class AgreementLifecycleService {
               maintenance_charge: draft.contract_maintenance,
               maintenance_type: draft.contract_maintenance_type || "MONTHLY",
             },
+            timelineActor: { type: "SYSTEM" },
           });
 
           await eventLog.log(AGREEMENT_ACTIVITY_EVENTS.RENEWED, ownerId, {
@@ -402,12 +404,26 @@ export class AgreementLifecycleService {
         }
       } catch (err: any) {
         if (err instanceof RenewalActivationBlockedError) {
+          const failure = err.failures[0];
           await eventLog.log(
             "RENEWAL_ACTIVATION_BLOCKED",
             ownerId,
-            this.blockedEventMetadata(err.failures[0], draft.id, draft.tenant_id, predecessor?.id),
+            this.blockedEventMetadata(failure, draft.id, draft.tenant_id, predecessor?.id),
             draft.tenant_id
           );
+          try {
+            await renewalTimelineService.registerEvent(prisma, {
+              hostelId: draft.hostel_id,
+              tenantId: draft.tenant_id,
+              agreementId: draft.id,
+              eventType: "RENEWAL_ACTIVATION_BLOCKED",
+              actorType: "SYSTEM",
+              reason: failure.reason,
+              metadata: failure.details,
+            });
+          } catch (timelineErr: any) {
+            console.error("[CRON] Failed to register renewal timeline event:", timelineErr);
+          }
           continue;
         }
         if (err instanceof RenewalChainRaceError) {

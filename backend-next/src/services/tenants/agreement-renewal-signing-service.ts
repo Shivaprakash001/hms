@@ -223,6 +223,9 @@ export class AgreementRenewalSigningService {
             maintenance_charge: renewalAgreement.contract_maintenance,
             maintenance_type: renewalAgreement.contract_maintenance_type || "MONTHLY",
           },
+          timelineActor: {
+            type: (input.signedBy || "TENANT") === "TENANT" ? "TENANT" : "OWNER",
+          },
         });
       } catch (err: any) {
         if (err instanceof RenewalActivationBlockedError) {

@@ -10,6 +10,11 @@ vi.mock("@/src/services/payments/agreement-rent-schedule-service", () => ({
   },
 }));
 
+const { registerEvent } = vi.hoisted(() => ({ registerEvent: vi.fn().mockResolvedValue({ id: "event-1" }) }));
+vi.mock("@/src/services/tenants/renewal-timeline-service", () => ({
+  renewalTimelineService: { registerEvent },
+}));
+
 const predecessorBase = {
   id: "agreement-1",
   tenant_id: "tenant-1",
@@ -264,6 +269,10 @@ describe("AgreementRenewalSigningService", () => {
       }),
       "tenant-1"
     );
+    expect(registerEvent).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ eventType: "RENEWAL_ACTIVATED", actorType: "TENANT" })
+    );
     expect(result.pdfGenerated).toBe(true);
     expect(tx.agreement.updateMany).toHaveBeenCalledTimes(2);
   });
@@ -452,6 +461,18 @@ describe("AgreementRenewalSigningService", () => {
       },
     });
     expect(tx.tenants.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("records the timeline actor as OWNER when signedBy is not TENANT", async () => {
+    const { db, tx } = createDb();
+    const { service } = createService(db);
+
+    await service.signRenewalAgreement({ ...validInput, signedBy: "OWNER" });
+
+    expect(registerEvent).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ eventType: "RENEWAL_ACTIVATED", actorType: "OWNER" })
+    );
   });
 
   it("uses structured signing errors", () => {

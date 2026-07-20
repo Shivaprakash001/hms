@@ -2,10 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   generateForAgreementInTx: vi.fn().mockResolvedValue({ created: 1, updated: 0, skipped: 0, months: [] }),
+  registerEvent: vi.fn().mockResolvedValue({ id: "event-1" }),
 }));
 
 vi.mock("@/src/services/payments/agreement-rent-schedule-service", () => ({
   agreementRentScheduleService: { generateForAgreementInTx: mocks.generateForAgreementInTx },
+}));
+
+vi.mock("@/src/services/tenants/renewal-timeline-service", () => ({
+  renewalTimelineService: { registerEvent: mocks.registerEvent },
 }));
 
 import {
@@ -45,7 +50,7 @@ function createTx(overrides: { predecessorUpdateCount?: number; successorUpdateC
 }
 
 const predecessor = { id: "agreement-1", status: "SIGNED", renewed_to_agreement_id: "agreement-2" };
-const successor = { id: "agreement-2", tenant_id: "tenant-1", ...completeLifecycle };
+const successor = { id: "agreement-2", tenant_id: "tenant-1", hostel_id: "hostel-1", ...completeLifecycle };
 
 describe("activateRenewal", () => {
   beforeEach(() => {
@@ -64,6 +69,7 @@ describe("activateRenewal", () => {
       now,
       buildSuccessorUpdateData,
       tenantContractSync: null,
+      timelineActor: { type: "SYSTEM" },
     });
 
     expect(queryRaw).toHaveBeenCalledTimes(2);
@@ -85,6 +91,7 @@ describe("activateRenewal", () => {
       predecessor,
       successor,
       now: new Date(),
+      timelineActor: { type: "SYSTEM" },
       buildSuccessorUpdateData: () => ({ status: "SIGNED" }),
       tenantContractSync: { monthly_rent: 8500, security_deposit: 10000, maintenance_charge: 1400, maintenance_type: "ONE_TIME" },
     });
@@ -98,16 +105,51 @@ describe("activateRenewal", () => {
     const { tx, tenantsUpdate } = createTx();
     await activateRenewal({
       tx, predecessor, successor, now: new Date(),
+      timelineActor: { type: "SYSTEM" },
       buildSuccessorUpdateData: () => ({ status: "SIGNED" }),
       tenantContractSync: null,
     });
     expect(tenantsUpdate).not.toHaveBeenCalled();
   });
 
+  it("registers a RENEWAL_ACTIVATED timeline event using the caller-supplied actor", async () => {
+    const { tx } = createTx();
+    const now = new Date("2027-06-14T00:00:00.000Z");
+    await activateRenewal({
+      tx, predecessor, successor, now,
+      timelineActor: { type: "OWNER", id: "owner-1" },
+      buildSuccessorUpdateData: () => ({ status: "SIGNED" }),
+      tenantContractSync: null,
+    });
+
+    expect(mocks.registerEvent).toHaveBeenCalledWith(tx, {
+      hostelId: "hostel-1",
+      tenantId: "tenant-1",
+      agreementId: "agreement-2",
+      eventType: "RENEWAL_ACTIVATED",
+      actorType: "OWNER",
+      actorId: "owner-1",
+    });
+  });
+
+  it("does not register a timeline event when activation is blocked or races", async () => {
+    const { tx } = createTx({ successorUpdateCount: 0 });
+    await expect(
+      activateRenewal({
+        tx, predecessor, successor, now: new Date(),
+        timelineActor: { type: "SYSTEM" },
+        buildSuccessorUpdateData: () => ({ status: "SIGNED" }),
+        tenantContractSync: null,
+      })
+    ).rejects.toBeInstanceOf(RenewalChainRaceError);
+    expect(mocks.registerEvent).not.toHaveBeenCalled();
+  });
+
   it("generates the rent schedule for the successor after activation", async () => {
     const { tx } = createTx();
     await activateRenewal({
       tx, predecessor, successor, now: new Date(),
+      timelineActor: { type: "SYSTEM" },
       buildSuccessorUpdateData: () => ({ status: "SIGNED" }),
       tenantContractSync: null,
     });
@@ -120,6 +162,7 @@ describe("activateRenewal", () => {
     await expect(
       activateRenewal({
         tx, predecessor, successor, now: new Date(),
+      timelineActor: { type: "SYSTEM" },
         buildSuccessorUpdateData: () => ({ status: "SIGNED" }),
         tenantContractSync: null,
       })
@@ -137,6 +180,7 @@ describe("activateRenewal", () => {
     try {
       await activateRenewal({
         tx, predecessor: badPredecessor, successor, now: new Date(),
+      timelineActor: { type: "SYSTEM" },
         buildSuccessorUpdateData: () => ({ status: "SIGNED" }),
         tenantContractSync: null,
       });
@@ -156,6 +200,7 @@ describe("activateRenewal", () => {
     try {
       await activateRenewal({
         tx, predecessor, successor, now: new Date(),
+      timelineActor: { type: "SYSTEM" },
         buildSuccessorUpdateData: () => ({ status: "SIGNED" }),
         tenantContractSync: null,
       });
@@ -172,6 +217,7 @@ describe("activateRenewal", () => {
     try {
       await activateRenewal({
         tx, predecessor, successor, now: new Date(),
+      timelineActor: { type: "SYSTEM" },
         buildSuccessorUpdateData: () => ({ status: "SIGNED" }),
         tenantContractSync: null,
       });
@@ -187,6 +233,7 @@ describe("activateRenewal", () => {
     await expect(
       activateRenewal({
         tx, predecessor, successor, now: new Date(),
+      timelineActor: { type: "SYSTEM" },
         buildSuccessorUpdateData: () => ({ status: "SIGNED" }),
         tenantContractSync: { monthly_rent: 1, security_deposit: 1, maintenance_charge: 1, maintenance_type: "MONTHLY" },
       })

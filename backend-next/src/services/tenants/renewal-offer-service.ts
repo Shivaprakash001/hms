@@ -3,6 +3,7 @@ import { Prisma, DepositRefundPolicy, RenewalNotificationTarget } from "@prisma/
 import { getLogger } from "@/lib/logger";
 import { randomUUID } from "crypto";
 import { currentAgreementWhere } from "./agreement-status";
+import { renewalTimelineService } from "./renewal-timeline-service";
 
 const logger = getLogger("renewal-offer");
 
@@ -157,34 +158,49 @@ export class RenewalOfferService {
     const additionalDeposit = Math.max(0, proposedDeposit - depositHeld);
     const depositRefund = Math.max(0, depositHeld - proposedDeposit);
 
-    const offer = await this.db.renewalOffer.create({
-      data: {
-        id: randomUUID(),
-        agreement_id: agreementId,
-        tenant_id: agreement.tenant_id,
-        hostel_id: agreement.hostel_id,
-        owner_id: ownerId,
-        proposed_rent: proposedRent,
-        proposed_security_deposit: proposedDeposit,
-        proposed_maintenance: proposed.proposed_maintenance ?? Number(activeContract.maintenance || 0),
-        proposed_maintenance_type: proposed.proposed_maintenance_type || agreement.contract_maintenance_type || null,
-        proposed_duration_months: proposedDuration,
-        proposed_start_date: proposedStartDate,
-        proposed_end_date: proposedEndDate,
-        proposed_payment_frequency: proposed.proposed_payment_frequency || null,
-        effective_from: effectiveFrom,
-        current_rent: Number(activeContract.rent || 0),
-        current_security_deposit: Number(activeContract.security_deposit || 0),
-        current_maintenance: Number(activeContract.maintenance || 0),
-        deposit_held: depositHeld,
-        additional_deposit_required: additionalDeposit,
-        deposit_refund_eligible: depositRefund,
-        deposit_refund_policy: proposed.deposit_refund_policy || "KEEP_AS_CREDIT",
-        notification_target: proposed.notification_target || "TENANT",
-        status: "DRAFT",
-        offer_expires_at: proposed.offer_expires_at ? new Date(proposed.offer_expires_at) : addDays(new Date(), 15),
-        owner_notes: proposed.owner_notes || null,
-      },
+    const offer = await this.db.$transaction(async (tx: Prisma.TransactionClient) => {
+      const created = await tx.renewalOffer.create({
+        data: {
+          id: randomUUID(),
+          agreement_id: agreementId,
+          tenant_id: agreement.tenant_id,
+          hostel_id: agreement.hostel_id,
+          owner_id: ownerId,
+          proposed_rent: proposedRent,
+          proposed_security_deposit: proposedDeposit,
+          proposed_maintenance: proposed.proposed_maintenance ?? Number(activeContract.maintenance || 0),
+          proposed_maintenance_type: proposed.proposed_maintenance_type || agreement.contract_maintenance_type || null,
+          proposed_duration_months: proposedDuration,
+          proposed_start_date: proposedStartDate,
+          proposed_end_date: proposedEndDate,
+          proposed_payment_frequency: proposed.proposed_payment_frequency || null,
+          effective_from: effectiveFrom,
+          current_rent: Number(activeContract.rent || 0),
+          current_security_deposit: Number(activeContract.security_deposit || 0),
+          current_maintenance: Number(activeContract.maintenance || 0),
+          deposit_held: depositHeld,
+          additional_deposit_required: additionalDeposit,
+          deposit_refund_eligible: depositRefund,
+          deposit_refund_policy: proposed.deposit_refund_policy || "KEEP_AS_CREDIT",
+          notification_target: proposed.notification_target || "TENANT",
+          status: "DRAFT",
+          offer_expires_at: proposed.offer_expires_at ? new Date(proposed.offer_expires_at) : addDays(new Date(), 15),
+          owner_notes: proposed.owner_notes || null,
+        },
+      });
+
+      await renewalTimelineService.registerEvent(tx, {
+        hostelId: agreement.hostel_id,
+        tenantId: agreement.tenant_id,
+        agreementId,
+        offerId: created.id,
+        eventType: "OFFER_CREATED",
+        actorType: "OWNER",
+        actorId: ownerId,
+        metadata: { proposedRent, additionalDeposit },
+      });
+
+      return created;
     });
 
     logger.info("renewal-offer.generated", {
@@ -323,6 +339,17 @@ export class RenewalOfferService {
           },
         });
         offerIds.push(offer.id);
+
+        await renewalTimelineService.registerEvent(tx, {
+          hostelId,
+          tenantId: agreement.tenant_id,
+          agreementId: agreement.id,
+          offerId: offer.id,
+          eventType: "OFFER_CREATED",
+          actorType: "OWNER",
+          actorId: ownerId,
+          metadata: { proposedRent, batchId: batch.id },
+        });
       }
 
       logger.info("renewal-offer.bulk-generated", { batch_id: batch.id, hostel_id: hostelId, count: offerIds.length, strategy: renewal_strategy });
@@ -337,9 +364,21 @@ export class RenewalOfferService {
     if (offer.owner_id !== ownerId) throw new Error("FORBIDDEN: Not your offer");
     if (offer.status !== "DRAFT") throw new Error(`BAD_REQUEST: Cannot send offer in status ${offer.status}`);
 
-    const updated = await this.db.renewalOffer.update({
-      where: { id: offerId },
-      data: { status: "SENT", sent_at: new Date(), updated_at: new Date() },
+    const updated = await this.db.$transaction(async (tx: Prisma.TransactionClient) => {
+      const u = await tx.renewalOffer.update({
+        where: { id: offerId },
+        data: { status: "SENT", sent_at: new Date(), updated_at: new Date() },
+      });
+      await renewalTimelineService.registerEvent(tx, {
+        hostelId: offer.hostel_id,
+        tenantId: offer.tenant_id,
+        agreementId: offer.agreement_id,
+        offerId,
+        eventType: "OFFER_SENT",
+        actorType: "OWNER",
+        actorId: ownerId,
+      });
+      return u;
     });
 
     try {
@@ -462,6 +501,25 @@ export class RenewalOfferService {
       await tx.renewalOffer.update({
         where: { id: offerId },
         data: { status: "ACCEPTED", accepted_at: new Date(), resulting_agreement_id: newAgreement.id, updated_at: new Date() },
+      });
+
+      await renewalTimelineService.registerEvent(tx, {
+        hostelId: offer.hostel_id,
+        tenantId: offer.tenant_id,
+        agreementId: offer.agreement_id,
+        offerId,
+        eventType: "OFFER_ACCEPTED",
+        actorType: "TENANT",
+        actorId: tenantProfileId,
+      });
+      await renewalTimelineService.registerEvent(tx, {
+        hostelId: offer.hostel_id,
+        tenantId: offer.tenant_id,
+        agreementId: newAgreement.id,
+        offerId,
+        eventType: "DRAFT_CREATED",
+        actorType: "TENANT",
+        actorId: tenantProfileId,
       });
 
       // Create structured decision log
@@ -611,6 +669,17 @@ export class RenewalOfferService {
         },
       });
 
+      await renewalTimelineService.registerEvent(tx, {
+        hostelId: offer.hostel_id,
+        tenantId: offer.tenant_id,
+        agreementId: offer.agreement_id,
+        offerId,
+        eventType: "OFFER_DECLINED",
+        actorType: "TENANT",
+        actorId: tenantProfileId,
+        reason: reason || "Tenant declined",
+      });
+
       if (offer.batch_id) {
         await tx.bulkRenewalBatch.update({ where: { id: offer.batch_id }, data: { offers_declined: { increment: 1 } } });
       }
@@ -640,14 +709,26 @@ export class RenewalOfferService {
     if (offer.tenant.profile_id !== tenantProfileId) throw new Error("FORBIDDEN: This offer is not for you");
     if (offer.status !== "SENT") throw new Error("BAD_REQUEST: Cannot discuss offer in status " + offer.status);
 
-    await this.db.renewalDecision.create({
-      data: {
-        id: randomUUID(),
-        offer_id: offerId,
-        tenant_id: offer.tenant_id,
-        decision: "SENT",
+    await this.db.$transaction(async (tx: Prisma.TransactionClient) => {
+      await tx.renewalDecision.create({
+        data: {
+          id: randomUUID(),
+          offer_id: offerId,
+          tenant_id: offer.tenant_id,
+          decision: "SENT",
+          reason: message || "Tenant requested discussion",
+        },
+      });
+      await renewalTimelineService.registerEvent(tx, {
+        hostelId: offer.hostel_id,
+        tenantId: offer.tenant_id,
+        agreementId: offer.agreement_id,
+        offerId,
+        eventType: "OFFER_DISCUSSED",
+        actorType: "TENANT",
+        actorId: tenantProfileId,
         reason: message || "Tenant requested discussion",
-      },
+      });
     });
 
     try {
@@ -713,6 +794,17 @@ export class RenewalOfferService {
           revised_from_offer_id: offerId, is_custom_override: true,
           owner_notes: newTerms.owner_notes || null,
         },
+      });
+
+      await renewalTimelineService.registerEvent(tx, {
+        hostelId: oldOffer.hostel_id,
+        tenantId: oldOffer.tenant_id,
+        agreementId: oldOffer.agreement_id,
+        offerId: revised.id,
+        eventType: "OFFER_REVISED",
+        actorType: "OWNER",
+        actorId: ownerId,
+        metadata: { previousOfferId: offerId },
       });
 
       logger.info("renewal-offer.revised", { old_offer_id: offerId, new_offer_id: revised.id });
@@ -818,12 +910,33 @@ export class RenewalOfferService {
 
   /** Expire stale offers past their expiry date. Called by lifecycle cron. */
   async expireStaleOffers() {
-    const result = await this.db.renewalOffer.updateMany({
-      where: { status: { in: ["DRAFT", "SENT"] }, offer_expires_at: { lte: new Date() } },
-      data: { status: "EXPIRED", updated_at: new Date() },
+    const staleWhere = { status: { in: ["DRAFT", "SENT"] } as Prisma.RenewalOfferWhereInput["status"], offer_expires_at: { lte: new Date() } };
+
+    const staleOffers = await this.db.renewalOffer.findMany({
+      where: staleWhere,
+      select: { id: true, agreement_id: true, tenant_id: true, hostel_id: true },
     });
-    if (result.count > 0) logger.info("renewal-offer.expired-stale", { expired_count: result.count });
-    return { expiredCount: result.count };
+    if (staleOffers.length === 0) return { expiredCount: 0 };
+
+    await this.db.$transaction(async (tx: Prisma.TransactionClient) => {
+      await tx.renewalOffer.updateMany({
+        where: { ...staleWhere, id: { in: staleOffers.map((o: { id: string }) => o.id) } },
+        data: { status: "EXPIRED", updated_at: new Date() },
+      });
+      for (const o of staleOffers) {
+        await renewalTimelineService.registerEvent(tx, {
+          hostelId: o.hostel_id,
+          tenantId: o.tenant_id,
+          agreementId: o.agreement_id,
+          offerId: o.id,
+          eventType: "OFFER_EXPIRED",
+          actorType: "SYSTEM",
+        });
+      }
+    });
+
+    logger.info("renewal-offer.expired-stale", { expired_count: staleOffers.length });
+    return { expiredCount: staleOffers.length };
   }
 
   private _computeDepositHeld(tenant: any): number {

@@ -7,6 +7,7 @@ import {
 } from "./agreement-lifecycle-completeness";
 import type { RenewalLifecycleInput } from "./agreement-lifecycle-completeness";
 import { evaluateCreationReadiness } from "./renewal-readiness-engine";
+import { renewalTimelineService } from "./renewal-timeline-service";
 
 const RENEWABLE_AGREEMENT_STATUSES = ["SIGNED", "EXPIRING_SOON", "AGREEMENT_EXPIRED"] as const;
 const BLOCKED_RENEWAL_STATUSES = ["RENEWED", "TERMINATED", "VOID"] as const;
@@ -246,6 +247,14 @@ export class AgreementRenewalService {
           { sourceAgreementId: sourceAgreement.id }
         );
       }
+
+      await renewalTimelineService.registerEvent(tx, {
+        hostelId: sourceAgreement.hostel_id,
+        tenantId: sourceAgreement.tenant_id,
+        agreementId: renewalDraft.id,
+        eventType: "DRAFT_CREATED",
+        actorType: "SYSTEM",
+      });
 
       return {
         sourceAgreement: {

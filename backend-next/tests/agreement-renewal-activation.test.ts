@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   generateForAgreementInTx: vi.fn().mockResolvedValue({ created: 12, updated: 0, skipped: 0, months: [] }),
   notifyActivated: vi.fn(),
   expireStaleOffers: vi.fn().mockResolvedValue({ expiredCount: 0 }),
+  registerEvent: vi.fn().mockResolvedValue({ id: "event-1" }),
   transaction: vi.fn(async (cb: any) => cb({
     $queryRaw: mocks.queryRaw,
     agreement: { update: mocks.agreementUpdate, updateMany: mocks.agreementUpdateMany },
@@ -68,6 +69,10 @@ vi.mock("@/src/services/tenants/agreement-renewal-notification-service", () => (
 
 vi.mock("@/src/services/tenants/renewal-offer-service", () => ({
   renewalOfferService: { expireStaleOffers: mocks.expireStaleOffers },
+}));
+
+vi.mock("@/src/services/tenants/renewal-timeline-service", () => ({
+  renewalTimelineService: { registerEvent: mocks.registerEvent },
 }));
 
 import { AgreementLifecycleService } from "@/src/services/tenants/agreement-lifecycle-service";
@@ -379,6 +384,10 @@ describe("AgreementRenewalActivation", () => {
     expect(mocks.notifyActivated).toHaveBeenCalledWith(
       expect.objectContaining({ tenantId: "tenant-id", ownerId: "owner-id", hostelId: "hostel-id" })
     );
+    expect(mocks.registerEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ eventType: "RENEWAL_ACTIVATED", actorType: "SYSTEM" })
+    );
   });
 
   it("blocks activation when the predecessor is no longer in a renewable status", async () => {
@@ -413,6 +422,17 @@ describe("AgreementRenewalActivation", () => {
         predecessor_status: "TERMINATED",
       }),
       "tenant-id"
+    );
+    expect(mocks.registerEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        hostelId: "hostel-id",
+        tenantId: "tenant-id",
+        agreementId: "draft-agreement-id",
+        eventType: "RENEWAL_ACTIVATION_BLOCKED",
+        actorType: "SYSTEM",
+        reason: "Predecessor agreement is not in a renewable status",
+      })
     );
   });
 

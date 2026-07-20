@@ -130,6 +130,9 @@ function createDbMock(agreementOverride: Partial<typeof mockAgreement> = {}) {
     renewalDecision: {
       create: vi.fn().mockImplementation(async ({ data }: any) => ({ id: randomUUID(), ...data })),
     },
+    renewalTimelineEvent: {
+      create: vi.fn().mockImplementation(async ({ data }: any) => ({ id: randomUUID(), ...data })),
+    },
     $queryRaw: vi.fn(),
   };
 
@@ -174,6 +177,9 @@ function createDbMock(agreementOverride: Partial<typeof mockAgreement> = {}) {
       findUnique: vi.fn().mockResolvedValue({ id: "tenant-1", profile_id: "profile-1" }),
     },
     renewalDecision: {
+      create: vi.fn().mockImplementation(async ({ data }: any) => ({ id: randomUUID(), ...data })),
+    },
+    renewalTimelineEvent: {
       create: vi.fn().mockImplementation(async ({ data }: any) => ({ id: randomUUID(), ...data })),
     },
     $transaction: vi.fn(async (callback: any) => callback(txMock)),
@@ -474,7 +480,7 @@ describe("RenewalOfferService", () => {
 
       await service.discussOffer("offer-1", "profile-1", "Can we lower deposit?");
 
-      expect(dbMock.renewalDecision.create).toHaveBeenCalledWith(
+      expect(txMock.renewalDecision.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             offer_id: "offer-1",

@@ -91,9 +91,11 @@ Bulk support that **already exists**: bulk-generate (`generateBulkOffers`, 3 str
 
 ### 1.6 Renewal Timeline
 
+**Status: closed 2026-07-20.** See [[Decisions]] ADR-016. `RenewalTimelineEvent` (new table) + `renewal-timeline-service.ts` now give every renewal write path a persisted, queryable, actor-aware event, written inside the same transaction as the mutation it describes. Not fully complete against the original vision: `OFFER_VIEWED` is not implemented (no write-on-GET tracking added — deliberately out of scope for this pass, since it wasn't part of the previewed instrumentation list and needs its own idempotency/debounce design), and `discussOffer()`'s `RenewalDecision.decision: "SENT"` enum-overload (finding #3 below) was not fixed — `OFFER_DISCUSSED` is now recorded correctly on the *new* `RenewalTimelineEvent` table, but the older `RenewalDecision` row it writes alongside is untouched. `createRenewalDraft`'s `DRAFT_CREATED` and cron's `RENEWAL_ACTIVATION_BLOCKED` events are recorded with actor `SYSTEM` since neither call site currently receives caller-identity through its API (see ADR-016 consequences).
+
 **Vision:** Immutable, queryable timeline (Offer Created → Sent → Viewed → Discussion Requested → Revised → Sent Again → Accepted → Signed → Activated → Completed), each event with timestamp/actor/source/reason/related-IDs.
 
-**Current state — this is the single largest, best-evidenced gap in the whole audit.** Two different mechanisms exist and neither is a real timeline:
+**Original finding (now resolved for all but Viewed):** Two different mechanisms existed and neither was a real timeline:
 
 1. **Owner-side actions produce zero persisted, queryable audit trail.** Every owner action in `renewal-offer-service.ts` (`generateOffer`, `sendOffer`, `sendBulkOffers`, `reviseOffer`) logs only via `logger.info(...)`/`logger.error(...)` (`getLogger("renewal-offer")`, backend-next/lib/logger) — application/console log lines, not a database table. Confirmed by grep: **zero** `eventLog.log(...)` calls anywhere in `renewal-offer-service.ts`, despite `eventLog` (writing to `systemEventLog`, the same table `agreement-lifecycle-service.ts` uses for `RENEWAL_ACTIVATION_BLOCKED`/`AGREEMENT_RENEWED`) being available and used elsewhere in this exact subsystem. Once log retention rotates, "Offer Created"/"Offer Sent"/"Offer Revised" events are gone forever.
 2. **Tenant-side actions are partially captured** in `RenewalDecision` (`offer_id, tenant_id, decision: RenewalOfferStatus, reason, created_at`) — but only for `acceptOffer`/`declineOffer`/`discussOffer`. This table has **no actor-role field** (always implicitly "tenant," can't represent "owner marked negotiating on tenant's behalf" or similar), and **no `VIEWED` event at all** — there is no "tenant opened the offer" tracking anywhere in the codebase (`getActiveOfferForTenant`/`GET /api/tenant/renewal-offer` is a pure read with no side effect).
@@ -179,7 +181,7 @@ Bulk support that **already exists**: bulk-generate (`generateBulkOffers`, 3 str
 | Renewal Details Page | Full (UI) | Backend data mostly exists piecemeal; needs one composing endpoint |
 | Agreement Comparison | Low | `diff-engine.ts` + `field-classification.ts` — near-direct reuse |
 | Offer Versioning | **Already done** | `revised_from_offer_id` chain, `SUPERSEDED` pattern — matches vision closely |
-| Renewal Timeline | **Full — biggest gap in this audit** | Nothing to compose from; needs one new append-only table |
+| Renewal Timeline | **Closed 2026-07-20** (Viewed-tracking excluded — see §1.6) | `RenewalTimelineEvent` + `renewal-timeline-service.ts` — see ADR-016 |
 | Policy Engine | High | Only `renewal_grace_period_days` is configurable today |
 | Readiness Engine | **Closed 2026-07-20** | `renewal-readiness-engine.ts` — see ADR-015 |
 | Activation Engine | **Closed 2026-07-20** | `renewal-activation-engine.ts` — see ADR-015; `tenants` sync gap also closed |
@@ -205,7 +207,7 @@ This is a discussion point for Phase 2, not a decision made here.
 ## 5. Open questions requiring a decision before Phase 2 design starts
 
 1. **`RenewalCase` — new table or computed read-model?** §1.1 lays out the evidence; the audit's lean is "compose, don't build a new entity" for most of the 12 states, with the exception of `WITHDRAWN`/`FAILED`/`COMPLETED`/`READY_FOR_ACTIVATION` which have no derivable signal today. Needs an explicit decision before any schema is drafted.
-2. **Timeline table shape** — model it as a bespoke `renewal_timeline_events` table, or generalize `recovery_events`/`change_request_events`'s existing append-only-event shape (from the Undo proposal, not yet implemented) into a shared "domain event log" both subsystems use? The latter avoids a third near-identical event table in this codebase but couples this work's timeline to the Undo proposal's (also not-yet-approved) schema.
+2. ~~Timeline table shape~~ — **resolved 2026-07-20**: bespoke `RenewalTimelineEvent` table, not coupled to the Undo proposal's schema. See ADR-016 "Alternatives considered."
 3. **Policy Engine scope for v1** — the vision lists 11 configurable policies (§"Policy Engine" in the original prompt). Confirm which subset ships in Phase 2 vs. deferred; recommend at minimum promoting the existing `renewal_grace_period_days` pattern to cover offer-expiry-days and the reminder-day-list first, since those are the two most hardcoded values found in §2.4.
 4. **Does "Bulk Withdraw" need a new domain concept, or is it "bulk decline-on-owner's-behalf"?** No `WITHDRAWN` concept exists anywhere in the current offer lifecycle (owner can only let an offer expire or supersede it via revise) — needs product clarification on whether withdrawal is materially different from expiry before it's designed.
 5. **Confirm this document's scope boundary** — this audit does not include a Phase 2 design (Renewal Case schema, orchestration service code, API contracts). Confirm that's the next deliverable expected, and confirm the answers to Q1-Q4 above before that design starts, per the vision's own "never make large uncontrolled changes" principle.

@@ -1,5 +1,6 @@
 import { agreementRentScheduleService } from "../payments/agreement-rent-schedule-service";
 import { evaluateActivationReadiness, type ReadinessFailure } from "./renewal-readiness-engine";
+import { renewalTimelineService, type RenewalTimelineActorType } from "./renewal-timeline-service";
 
 /**
  * Shared activation pipeline for both renewal activation paths:
@@ -43,7 +44,7 @@ export type TenantContractSync = {
 export type ActivateRenewalParams = {
   tx: any;
   predecessor: { id: string; status: string | null | undefined; renewed_to_agreement_id: string | null };
-  successor: { id: string; tenant_id: string; [key: string]: any };
+  successor: { id: string; tenant_id: string; hostel_id: string; [key: string]: any };
   now: Date;
   /**
    * Builds the successor's DRAFT->SIGNED update payload. Called only after
@@ -55,10 +56,12 @@ export type ActivateRenewalParams = {
   buildSuccessorUpdateData: () => Record<string, any>;
   /** Pass null to skip the tenants-table sync (should not normally happen — both activation paths sync it). */
   tenantContractSync: TenantContractSync | null;
+  /** Who/what caused this activation — recorded on the RENEWAL_ACTIVATED timeline event. */
+  timelineActor: { type: RenewalTimelineActorType; id?: string | null };
 };
 
 export async function activateRenewal(params: ActivateRenewalParams): Promise<void> {
-  const { tx, predecessor, successor, now, buildSuccessorUpdateData, tenantContractSync } = params;
+  const { tx, predecessor, successor, now, buildSuccessorUpdateData, tenantContractSync, timelineActor } = params;
 
   // Lock both rows for the duration of the transaction so a concurrent
   // activation attempt (cron vs. manual sign, or two concurrent cron runs)
@@ -92,4 +95,13 @@ export async function activateRenewal(params: ActivateRenewalParams): Promise<vo
   }
 
   await agreementRentScheduleService.generateForAgreementInTx(tx, successor.id);
+
+  await renewalTimelineService.registerEvent(tx, {
+    hostelId: successor.hostel_id,
+    tenantId: successor.tenant_id,
+    agreementId: successor.id,
+    eventType: "RENEWAL_ACTIVATED",
+    actorType: timelineActor.type,
+    actorId: timelineActor.id ?? null,
+  });
 }

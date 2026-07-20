@@ -273,6 +273,7 @@ model hostels {
   renewal_offers      RenewalOffer[]
   bulk_renewal_batches BulkRenewalBatch[]
   change_requests      change_requests[]
+  renewal_timeline_events RenewalTimelineEvent[]
 }
 
 model identity_tokens {
@@ -1367,6 +1368,7 @@ model tenants {
   renewal_decisions        RenewalDecision[]
   tenant_notes             tenant_notes[]
   change_requests          change_requests[]
+  renewal_timeline_events  RenewalTimelineEvent[]
 
   @@index([hostel_id])
   @@index([owner_id])
@@ -2127,6 +2129,7 @@ model Agreement {
   rent_obligations        rent_obligations[]
   renewal_offers_source   RenewalOffer[]   @relation("OfferSourceAgreement")
   renewal_offers_result   RenewalOffer[]   @relation("OfferResultAgreement")
+  renewal_timeline_events RenewalTimelineEvent[]
 
   @@index([tenant_id])
   @@index([tenant_id, status])
@@ -2221,6 +2224,7 @@ model RenewalOffer {
   revised_offers             RenewalOffer[]            @relation("OfferRevision")
   resulting_agreement        Agreement?                @relation("OfferResultAgreement", fields: [resulting_agreement_id], references: [id], onDelete: SetNull)
   decisions                  RenewalDecision[]
+  timeline_events            RenewalTimelineEvent[]
 
   @@index([agreement_id, status])
   @@index([tenant_id, status])
@@ -2276,6 +2280,55 @@ model RenewalDecision {
 
   @@index([offer_id])
   @@index([tenant_id])
+}
+
+// Append-only renewal timeline: the queryable audit trail RenewalDecision
+// only partially provides (tenant actions only, no actor-role, no owner-side
+// events at all — those previously lived only in logger.info() calls with no
+// DB record). Written inside the same transaction as the mutation it
+// describes wherever the caller already has one open, per the "audit writes
+// must be transactionally coupled" finding (see Decisions.md).
+model RenewalTimelineEvent {
+  id           String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  hostel_id    String                    @db.Uuid
+  tenant_id    String                    @db.Uuid
+  agreement_id String?                   @db.Uuid
+  offer_id     String?                   @db.Uuid
+  event_type   RenewalTimelineEventType
+  actor_type   RenewalTimelineActorType
+  actor_id     String?                   @db.Uuid
+  reason       String?
+  metadata     Json?
+  created_at   DateTime                  @default(now()) @db.Timestamptz(6)
+
+  hostel       hostels                   @relation(fields: [hostel_id], references: [id], onDelete: Cascade)
+  tenant       tenants                   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  agreement    Agreement?                @relation(fields: [agreement_id], references: [id], onDelete: SetNull)
+  offer        RenewalOffer?             @relation(fields: [offer_id], references: [id], onDelete: SetNull)
+
+  @@index([tenant_id, created_at])
+  @@index([agreement_id, created_at])
+  @@index([offer_id, created_at])
+  @@index([hostel_id, created_at])
+}
+
+enum RenewalTimelineEventType {
+  OFFER_CREATED
+  OFFER_SENT
+  OFFER_DISCUSSED
+  OFFER_REVISED
+  OFFER_ACCEPTED
+  OFFER_DECLINED
+  OFFER_EXPIRED
+  DRAFT_CREATED
+  RENEWAL_ACTIVATED
+  RENEWAL_ACTIVATION_BLOCKED
+}
+
+enum RenewalTimelineActorType {
+  OWNER
+  TENANT
+  SYSTEM
 }
 
 enum DepositRefundPolicy {
