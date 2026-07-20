@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { ownerActionRegistry } from '@/src/services/owner-actions/owner-action-registry';
 import type { OwnerAction } from '@/src/services/owner-actions/types';
 
@@ -118,5 +118,67 @@ describe('owner-actions bootstrap', () => {
     expect(ownerActionRegistry.has('TENANT_EDIT_PERSONAL_INFO')).toBe(true);
     expect(ownerActionRegistry.has('ROOM_MOVE')).toBe(true);
     expect(ownerActionRegistry.has('PAYMENT_RECEIVE')).toBe(true);
+  });
+});
+
+vi.mock('@/lib/auth', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/auth')>();
+  return { ...actual, getSession: vi.fn() };
+});
+
+import { getSession } from '@/lib/auth';
+import { GET } from '@/app/api/owner-actions/route';
+import { createTestOwner, createTestHostel } from '../factories/owner-factory';
+import { createTestTenant } from '../factories/tenant-factory';
+
+describe('GET /api/owner-actions', () => {
+  it('returns the tenant-scoped action list for an authenticated owner', async () => {
+    const owner = await createTestOwner();
+    const hostel = await createTestHostel(owner.id);
+    const tenant = await createTestTenant(owner.id, hostel.id, { status: 'ACTIVE' });
+
+    vi.mocked(getSession).mockResolvedValue({
+      sub: owner.id,
+      email: owner.email,
+      role: 'OWNER',
+      owner_id: owner.id,
+    });
+
+    const req = new Request(
+      `http://localhost/api/owner-actions?entity=tenant&tenantId=${tenant.id}`
+    ) as any;
+
+    const res = await GET(req);
+    const body = await res.json();
+
+    expect(body.success).toBe(true);
+    const action = body.data.find((a: any) => a.actionId === 'TENANT_EDIT_PERSONAL_INFO');
+    expect(action).toEqual({
+      actionId: 'TENANT_EDIT_PERSONAL_INFO',
+      entity: 'tenant',
+      category: 'EDIT',
+      label: 'Request Change',
+      available: true,
+    });
+  });
+
+  it('rejects requests with no session', async () => {
+    vi.mocked(getSession).mockResolvedValue(null);
+    const req = new Request('http://localhost/api/owner-actions?entity=tenant&tenantId=irrelevant') as any;
+    const res = await GET(req);
+    expect(res.status).toBe(401);
+  });
+
+  it('rejects requests missing entity or tenantId', async () => {
+    const owner = await createTestOwner();
+    vi.mocked(getSession).mockResolvedValue({
+      sub: owner.id,
+      email: owner.email,
+      role: 'OWNER',
+      owner_id: owner.id,
+    });
+    const req = new Request('http://localhost/api/owner-actions') as any;
+    const res = await GET(req);
+    expect(res.status).toBe(400);
   });
 });
