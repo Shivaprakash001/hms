@@ -90,7 +90,7 @@ export class PaymentLinkService {
       data: {
         obligation_id: targetObligationId,
         tenant_id: targetTenantId,
-        host_id: obligation.hostel_id,
+        hostel_id: obligation.hostel_id,
         owner_id: obligation.owner_id || obligation.tenants?.owner_id || null,
         expires_at: expiresAt,
       },
