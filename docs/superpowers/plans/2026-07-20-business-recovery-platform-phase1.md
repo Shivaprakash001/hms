@@ -18,6 +18,7 @@
 - New Prisma models follow existing convention: no `@@map` needed since table names are already snake_case-plural; schema changes are hand-authored SQL under `prisma/migrations/<timestamp>_<name>/migration.sql` (this repo does NOT use `prisma migrate dev` — no `migration_lock.toml` exists — apply via `npm run prisma:push` then `npm run prisma:generate`).
 - Money amounts on `payments`/`rent_obligations` are `Decimal` in rupees (not paise) in this specific table set — match existing sign/rounding conventions exactly (`Math.round(x * 100) / 100` where seen).
 - Test files go in `backend-next/tests/integration/*.test.ts`, run via `npx vitest run tests/integration/<file>.test.ts` from `backend-next/`, using the existing factories in `tests/factories/*.ts` and the global real-Postgres reset in `tests/setup.ts`.
+- **Documentation is per-task, not batched.** Per CLAUDE.md's Documentation Rules ("must be reflected here in the same change, not as a follow-up"), any task that changes the database schema, adds/changes an API route, or establishes a new business rule must update the relevant `docs/obsidian/` page (`Database.md`, `APIs.md`, `Business-Rules.md`) **in that same task's commit(s)**, not deferred to Task 17. Task 17 is narrowed accordingly — see its brief.
 
 ## Scope note (read before starting)
 
@@ -2031,11 +2032,15 @@ correctionRegistry.register(referenceEditHandler);
 Run: `npx vitest run tests/integration/reference-edit-handler.test.ts -v`
 Expected: PASS, 1 test.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Update `docs/obsidian/Business-Rules.md` and `docs/obsidian/Changelog.md`**
+
+This is the last of the three Phase 1 handler tasks, so the correction-case business rules are now fully formed — document them per CLAUDE.md's Documentation Rules (business-rule changes must be documented in the same change). In `docs/obsidian/Business-Rules.md`, add a section covering: payments are never mutated — corrections are always new reversal/forward rows; one reversal case per payment enforced via a deterministic `idempotency_key` (`PAYMENT_REVERSAL:<paymentId>` / `PAYMENT_TRANSFER:<paymentId>`); cross-hostel payment transfers are blocked by policy; execution retries are capped at 3 attempts before a case is permanently `FAILED`; Edit Reference/Notes only touches `payment_groups.reference_number`/`notes`, never `payments`. Add a matching bullet to `docs/obsidian/Changelog.md` under `## [Unreleased]` → `### Added` summarizing the three handlers shipped in this task group.
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add backend-next/src/services/payments/corrections/reference-edit-handler.ts backend-next/tests/integration/reference-edit-handler.test.ts
-git commit -m "feat(recovery): add Edit Reference/Notes correction handler"
+git add backend-next/src/services/payments/corrections/reference-edit-handler.ts backend-next/tests/integration/reference-edit-handler.test.ts docs/obsidian/Business-Rules.md docs/obsidian/Changelog.md
+git commit -m "feat(recovery): add Edit Reference/Notes correction handler; document correction-case business rules"
 ```
 
 ---
@@ -2354,11 +2359,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 Run: `npx vitest run tests/integration/recovery-cases-api.test.ts -v`
 Expected: PASS. Adjust the auth-mocking mechanism in the test (per the Step 1 note) to match whatever `getSession`/`authService` actually look like — do not proceed past this step with a skipped/pending test.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Update `docs/obsidian/APIs.md`**
+
+Per CLAUDE.md's Documentation Rules (API changes documented in the same change), add a new "Recovery / Corrections" section listing the four routes: `GET /api/recovery/cases` (list, query params `hostelId` required, `status`/`domain` optional), `POST /api/recovery/cases` (create + auto-preview, body `{hostelId, caseType, reason, input}`), `GET /api/recovery/cases/:id` (detail incl. events), `POST /api/recovery/cases/:id/validate`, `POST /api/recovery/cases/:id/execute` (also serves as retry when `status = FAILED`) — note auth requirement (`OWNER`/`ADMIN` via `resolveOwnerScope`) for all five, matching the file's existing per-route documentation format. Add a matching bullet to `docs/obsidian/Changelog.md` under `## [Unreleased]` → `### Added`.
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add backend-next/app/api/recovery backend-next/tests/integration/recovery-cases-api.test.ts
-git commit -m "feat(recovery): add /api/recovery/cases routes (list, create+preview, validate, execute)"
+git add backend-next/app/api/recovery backend-next/tests/integration/recovery-cases-api.test.ts docs/obsidian/APIs.md docs/obsidian/Changelog.md
+git commit -m "feat(recovery): add /api/recovery/cases routes (list, create+preview, validate, execute); document in APIs.md"
 ```
 
 ---
@@ -2862,43 +2871,41 @@ npm run build
 ```
 Expected: both exit 0.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Update `docs/obsidian/Features.md`**
+
+Per CLAUDE.md's Documentation Rules (feature implementations documented in the same change), add an entry: "Recovery Center (`/recovery-center`, owner-facing) — Business Recovery Platform Phase 1. Lists Correction Cases across domains, shows the impact-preview + timeline before/after applying a correction, and supports Reverse Payment / Transfer Payment / Edit Reference-Notes via `POST /api/recovery/cases` → validate → execute." Cross-reference `[[APIs]]` and `[[Database]]`. Add a matching bullet to `docs/obsidian/Changelog.md` under `## [Unreleased]` → `### Added`.
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add frontend-v2/src/app/components/views/RecoveryCenterView.tsx frontend-v2/src/platforms/owner/router/OwnerRoutes.tsx
-git commit -m "feat(recovery): add Recovery Center view and route registration"
+git add frontend-v2/src/app/components/views/RecoveryCenterView.tsx frontend-v2/src/platforms/owner/router/OwnerRoutes.tsx docs/obsidian/Features.md docs/obsidian/Changelog.md
+git commit -m "feat(recovery): add Recovery Center view and route registration; document in Features.md"
 ```
 
 ---
 
-### Task 17: Documentation updates (required by CLAUDE.md's Documentation Rules)
+### Task 17: Final documentation pass — Decisions ADR + Changelog wrap-up
+
+**Documentation is per-task, not batched** (see Global Constraints) — `Database.md` (Task 1), `APIs.md` (Task 13), `Business-Rules.md` (Task 11), and `Features.md` (Task 16) are each updated by the task that introduces the thing they describe, in that task's own commit. This final task only covers the two things that can't be written until the whole phase is done: the architectural-decision record and the closing changelog summary.
 
 **Files:**
-- Modify: `docs/obsidian/Database.md`, `docs/obsidian/APIs.md`, `docs/obsidian/Features.md`, `docs/obsidian/Business-Rules.md`, `docs/obsidian/Changelog.md`, `docs/obsidian/Decisions.md`
+- Modify: `docs/obsidian/Decisions.md`, `docs/obsidian/Changelog.md`
 
 **Interfaces:** none — documentation only.
 
-- [ ] **Step 1: Update `docs/obsidian/Database.md`**
+- [ ] **Step 1: Add an ADR to `docs/obsidian/Decisions.md`**
 
-Add entries for `correction_cases` and `correction_case_events` (columns, purpose, relation to `hostels`), following the file's existing per-table format. Link to `[[Business Recovery Platform]]` conceptually via a note referencing `docs/business-logic/business-recovery-platform-architecture.md`.
+Record the decision to unify Operational Undo + Financial Corrections under one Correction Case platform (one lifecycle, one registry, one `correction_cases` table) rather than building them as two separate systems plus a bolt-on Tier 3 — reference the three design docs under `docs/business-logic/` and note the three refinements folded in before implementation (platform/policy separation, dependencies, idempotency/retry, event-bus decoupling, self-registration).
 
-- [ ] **Step 2: Update `docs/obsidian/APIs.md`**
+- [ ] **Step 2: Add a closing entry to `docs/obsidian/Changelog.md`**
 
-Add the four new routes under a new "Recovery / Corrections" section: `GET /api/recovery/cases`, `POST /api/recovery/cases`, `POST /api/recovery/cases/:id/validate`, `POST /api/recovery/cases/:id/execute`, `GET /api/recovery/cases/:id` — with auth requirements (`OWNER`/`ADMIN`, `resolveOwnerScope`).
+Under `## [Unreleased]` → `### Added`, add one summary bullet: "**Business Recovery Platform Phase 1 complete**: Correction Case lifecycle (DRAFT→PREVIEW→VALIDATED→EXECUTING→COMPLETED/FAILED), self-registering handler registry, and three correction handlers (Reverse Payment, Transfer Payment, Edit Reference/Notes) shipped via the new Recovery Center (`/recovery-center`). See [[Database]], [[APIs]], [[Business-Rules]], [[Features]], [[Decisions]]." This is additive to (not a replacement for) the per-task Changelog bullets already added in Tasks 1/13/11/16.
 
-- [ ] **Step 3: Update `docs/obsidian/Features.md` and `docs/obsidian/Changelog.md`**
-
-Add a Features entry for "Business Recovery Platform (Phase 1) — Reverse Payment, Transfer Payment, Edit Reference/Notes corrections via the Recovery Center." Add a Changelog entry (Keep a Changelog format) under `### Added` for this release.
-
-- [ ] **Step 4: Update `docs/obsidian/Business-Rules.md` and add an ADR to `docs/obsidian/Decisions.md`**
-
-Business-Rules.md: document the correction-case lifecycle rules (payments never mutated, one reversal case per payment via idempotency key, cross-hostel transfers blocked, 3-attempt retry cap). Decisions.md: add an ADR recording the decision to unify Operational Undo + Financial Corrections under one Correction Case platform rather than building them as separate systems, referencing the three design docs in `docs/business-logic/`.
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add docs/obsidian
-git commit -m "docs: document Business Recovery Platform Phase 1 in the obsidian vault"
+git add docs/obsidian/Decisions.md docs/obsidian/Changelog.md
+git commit -m "docs: add Business Recovery Platform ADR and Phase 1 changelog wrap-up"
 ```
 
 ---
