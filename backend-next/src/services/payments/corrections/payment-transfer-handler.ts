@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { correctionRegistry } from "../../recovery/correction-registry";
 import { reverseObligationPayment } from "./payment-correction-shared";
-import { buildSettlementPlan, toObligationSnapshot } from "../settlement-planner";
+import { buildSettlementPlan, toObligationSnapshot, PAYABLE_STATUSES } from "../settlement-planner";
 import { executePlanInTx } from "../settlement-engine";
 import type {
   CaseDraft,
@@ -23,12 +23,23 @@ async function loadPayment(paymentId: string) {
   });
 }
 
-async function buildForwardPlan(toTenantId: string, amountRupees: number) {
-  const openObligations = await prisma.rent_obligations.findMany({
-    where: { tenant_id: toTenantId, lifecycle_status: "ACTIVE" },
+// Note: `lifecycle_status: "ACTIVE"` is NOT the payable-obligations filter — a DRAFT-status
+// obligation is also lifecycle_status ACTIVE (see fromLegacyStatus() in financial-obligation.types.ts),
+// so filtering on lifecycle alone would let transferred money get allocated into an obligation
+// that hasn't been activated yet. Use the canonical PAYABLE_STATUSES filter instead (matches
+// financial-payment-facade.ts's receivePayment()), which is what makes an obligation eligible for
+// buildSettlementPlan's allocation loop — that loop does not itself filter by payability
+// (see settlement-planner.ts's doc-comment on PAYABLE_STATUSES).
+//
+// `db` accepts either the module-level `prisma` client (read-only preview/impact paths) or an
+// in-flight transaction client (`tx`, from execute()) so there is exactly one implementation of
+// this query shared by canExecute, computeImpact, and execute.
+async function buildForwardPlan(db: any, toTenantId: string, amountRupees: number) {
+  const openObligations = await db.rent_obligations.findMany({
+    where: { tenant_id: toTenantId, status: { in: PAYABLE_STATUSES } },
     include: { payments: { select: { amount_paid: true } } },
   });
-  const snapshots = openObligations.map((ob) =>
+  const snapshots = openObligations.map((ob: any) =>
     toObligationSnapshot({
       id: ob.id,
       obligation_type: ob.obligation_type,
@@ -63,7 +74,7 @@ export const paymentTransferHandler: CorrectionHandler<PaymentTransferDetail> = 
         return { allowed: false, reason: "Target tenant belongs to a different hostel" };
       }
 
-      const plan = await buildForwardPlan(kase.caseDetail.toTenantId, Number(payment.amount_paid));
+      const plan = await buildForwardPlan(prisma, kase.caseDetail.toTenantId, Number(payment.amount_paid));
       if (!plan.payment_accepted) {
         return { allowed: false, reason: `Target tenant cannot accept this amount: ${plan.rejection_reason}` };
       }
@@ -78,6 +89,14 @@ export const paymentTransferHandler: CorrectionHandler<PaymentTransferDetail> = 
 
     if (payment.hostel_id !== ctx.hostelId) {
       throw new Error(`Payment ${paymentId} does not belong to hostel ${ctx.hostelId}`);
+    }
+
+    const toTenant = await prisma.tenants.findUnique({ where: { id: toTenantId } });
+    if (!toTenant) {
+      throw new Error(`Target tenant ${toTenantId} does not exist`);
+    }
+    if (toTenant.hostel_id !== ctx.hostelId) {
+      throw new Error(`Target tenant ${toTenantId} does not belong to hostel ${ctx.hostelId}`);
     }
 
     return {
@@ -100,7 +119,7 @@ export const paymentTransferHandler: CorrectionHandler<PaymentTransferDetail> = 
 
   async computeImpact(kase: CorrectionCaseRecord<PaymentTransferDetail>): Promise<ImpactReport> {
     const payment = await loadPayment(kase.caseDetail.paymentId);
-    const plan = await buildForwardPlan(kase.caseDetail.toTenantId, Number(payment.amount_paid));
+    const plan = await buildForwardPlan(prisma, kase.caseDetail.toTenantId, Number(payment.amount_paid));
 
     return {
       balanceChanges: [
@@ -130,17 +149,7 @@ export const paymentTransferHandler: CorrectionHandler<PaymentTransferDetail> = 
       reason: kase.reason,
     });
 
-    const openObligations = await tx.rent_obligations.findMany({
-      where: { tenant_id: kase.caseDetail.toTenantId, lifecycle_status: "ACTIVE" },
-      include: { payments: { select: { amount_paid: true } } },
-    });
-    const snapshots = openObligations.map((ob: any) =>
-      toObligationSnapshot({
-        id: ob.id, obligation_type: ob.obligation_type, amount: ob.amount, due_date: ob.due_date,
-        rent_month: ob.rent_month, owner_id: ob.owner_id ?? "", payments: ob.payments, status: ob.status,
-      })
-    );
-    const plan = buildSettlementPlan(snapshots, Number(payment.amount_paid), { allow_partial: true, minimum_amount: 0 });
+    const plan = await buildForwardPlan(tx, kase.caseDetail.toTenantId, Number(payment.amount_paid));
 
     const settlement = await executePlanInTx(tx, plan as any, {
       hostelId: kase.hostelId,

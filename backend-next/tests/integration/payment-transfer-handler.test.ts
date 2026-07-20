@@ -48,7 +48,10 @@ describe('paymentTransferHandler (end to end via recoveryService)', () => {
     const hostelA = await createTestHostel(owner.id);
     const hostelB = await createTestHostel(owner.id);
     const tenantA = await createTestTenant(owner.id, hostelA.id);
-    const tenantB = await createTestTenant(owner.id, hostelB.id);
+    // tenantB starts in hostelA so createCase's own target-tenant hostel check (added
+    // alongside this test) doesn't block case creation — we want to exercise
+    // policy.canExecute()'s independent guard, not createCase's.
+    const tenantB = await createTestTenant(owner.id, hostelA.id);
 
     const obligationA = await createTestObligation(tenantA.id, owner.id, hostelA.id, { amount: 2000 });
     const payment = await createTestPayment(obligationA.id, 2000);
@@ -59,6 +62,12 @@ describe('paymentTransferHandler (end to end via recoveryService)', () => {
       reason: 'cross-hostel attempt',
       input: { paymentId: payment.id, toTenantId: tenantB.id },
     });
+
+    // Simulate the target tenant moving to a different hostel after the case was created
+    // (drift) — createCase's snapshot-time validation can't catch this, so
+    // policy.canExecute must guard it independently at preview/validate/execute time.
+    await prisma.tenants.update({ where: { id: tenantB.id }, data: { hostel_id: hostelB.id } });
+
     await recoveryService.preview(kase.id);
 
     const validation = await recoveryService.validate(kase.id);
@@ -117,5 +126,72 @@ describe('paymentTransferHandler (end to end via recoveryService)', () => {
     const validation = await recoveryService.validate(kase.id);
     expect(validation.allowed).toBe(false);
     expect(validation.reason).toMatch(/hostel/i);
+  });
+
+  it('createCase throws when the target tenant belongs to a different hostel than the case claims', async () => {
+    const owner = await createTestOwner();
+    const hostelA = await createTestHostel(owner.id);
+    const hostelB = await createTestHostel(owner.id);
+    const tenantA = await createTestTenant(owner.id, hostelA.id);
+    const tenantInHostelB = await createTestTenant(owner.id, hostelB.id);
+
+    const obligationA = await createTestObligation(tenantA.id, owner.id, hostelA.id, { amount: 2500 });
+    const payment = await createTestPayment(obligationA.id, 2500);
+
+    // Source payment legitimately belongs to hostelA (the claimed hostel) — only the target
+    // tenant is cross-hostel here, exercising the target-tenant check independently of the
+    // already-covered source-payment check.
+    await expect(
+      recoveryService.createCase('PAYMENT_TRANSFER', {
+        hostelId: hostelA.id,
+        actor: { actorId: owner.id, actorRole: 'OWNER' },
+        reason: 'wrong hostel claimed for target tenant',
+        input: { paymentId: payment.id, toTenantId: tenantInHostelB.id },
+      })
+    ).rejects.toThrow(/hostel/i);
+  });
+
+  it('does not allocate transferred funds into a DRAFT obligation on the target tenant', async () => {
+    const owner = await createTestOwner();
+    const hostel = await createTestHostel(owner.id);
+    const tenantA = await createTestTenant(owner.id, hostel.id);
+    const tenantB = await createTestTenant(owner.id, hostel.id);
+
+    const obligationA = await createTestObligation(tenantA.id, owner.id, hostel.id, { amount: 4000 });
+    const payment = await createTestPayment(obligationA.id, 4000);
+
+    // Target tenant's ONLY obligation is DRAFT (lifecycle_status ACTIVE by default, per
+    // fromLegacyStatus()) — not yet activated, and must be excluded from the payable set.
+    const draftObligationB = await createTestObligation(tenantB.id, owner.id, hostel.id, {
+      amount: 4000,
+      status: 'DRAFT',
+    });
+
+    const kase = await recoveryService.createCase('PAYMENT_TRANSFER', {
+      hostelId: hostel.id,
+      actor: { actorId: owner.id, actorRole: 'OWNER' },
+      reason: 'transfer to tenant with only a DRAFT obligation',
+      input: { paymentId: payment.id, toTenantId: tenantB.id },
+    });
+
+    await recoveryService.preview(kase.id);
+    // With zero payable obligations, buildSettlementPlan treats the full amount as future
+    // credit (total_outstanding === 0 => minimum_allowed = 1 => payment_accepted = true), so
+    // the correction is still allowed — the fix is about WHERE the money lands, not whether
+    // the transfer is permitted.
+    const validation = await recoveryService.validate(kase.id);
+    expect(validation.allowed).toBe(true);
+
+    const executed = await recoveryService.execute(kase.id, { actorId: owner.id, actorRole: 'OWNER' });
+    expect(executed.status).toBe('COMPLETED');
+
+    // The DRAFT obligation must NOT have received any allocation.
+    const paymentsOnDraft = await prisma.payments.findMany({
+      where: { obligation_id: draftObligationB.id, amount_paid: { gt: 0 } },
+    });
+    expect(paymentsOnDraft).toHaveLength(0);
+
+    const refreshedDraft = await prisma.rent_obligations.findUniqueOrThrow({ where: { id: draftObligationB.id } });
+    expect(refreshedDraft.status).toBe('DRAFT');
   });
 });
