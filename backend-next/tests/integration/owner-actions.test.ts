@@ -71,3 +71,20 @@ describe('ownerActionRegistry', () => {
     expect(ownerActionRegistry.has('NOT_REGISTERED_ANYWHERE')).toBe(false);
   });
 });
+
+import '@/src/services/owner-actions/definitions/tenant-actions';
+
+describe('tenant-actions definitions', () => {
+  it('registers TENANT_EDIT_PERSONAL_INFO, available only for ACTIVE tenants', () => {
+    expect(ownerActionRegistry.has('TENANT_EDIT_PERSONAL_INFO')).toBe(true);
+
+    const activeList = ownerActionRegistry.listForEntity('tenant', { tenantStatus: 'ACTIVE', actorRole: 'OWNER' });
+    const activeAction = activeList.find((a) => a.actionId === 'TENANT_EDIT_PERSONAL_INFO');
+    expect(activeAction?.available).toBe(true);
+    expect(activeAction?.label).toBe('Request Change');
+
+    const invitedList = ownerActionRegistry.listForEntity('tenant', { tenantStatus: 'INVITED', actorRole: 'OWNER' });
+    const invitedAction = invitedList.find((a) => a.actionId === 'TENANT_EDIT_PERSONAL_INFO');
+    expect(invitedAction?.available).toBe(false);
+  });
+});
