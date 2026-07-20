@@ -69,7 +69,7 @@ const checks: Array<{
   {
     name: "settled Payment ledger rows must not be mutated by operational code",
     roots: ["lib/services", "app/api"],
-    pattern: /prisma\.payment\.(update|updateMany|upsert|delete|deleteMany)\b|tx\.payment\.(update|updateMany|upsert|delete|deleteMany)\b/,
+    pattern: /prisma\.payments\.(update|updateMany|upsert|delete|deleteMany)\b|tx\.payments\.(update|updateMany|upsert|delete|deleteMany)\b/,
     allow: [
       /architectural-invariants-check\.ts$/,
     ],
