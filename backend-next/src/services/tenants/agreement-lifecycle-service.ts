@@ -7,6 +7,7 @@ import { agreementRenewalNotificationService } from "./agreement-renewal-notific
 import { agreementRentScheduleService } from "../payments/agreement-rent-schedule-service";
 import { financialLifecycleService } from "../payments/financial-lifecycle-service";
 import { assertAgreementLifecycleComplete } from "./agreement-lifecycle-completeness";
+import { renewalOfferService } from "./renewal-offer-service";
 
 type AgreementLifecycleSummary = {
   checked: number;
@@ -19,6 +20,7 @@ type AgreementLifecycleSummary = {
   failed: number;
   errors: string[];
   renewals_activated: number;
+  offers_expired: number;
 };
 
 function utcDateOnly(input = new Date()) {
@@ -65,12 +67,22 @@ export class AgreementLifecycleService {
       failed: 0,
       errors: [],
       renewals_activated: 0,
+      offers_expired: 0,
     };
     const touchedOwnerIds = new Set<string>();
     const touchedHostelIds = new Set<string>();
 
     // Activate scheduled renewals whose effective dates have arrived
     await this.activateScheduledRenewals(today, summary, touchedOwnerIds, touchedHostelIds);
+
+    // Expire stale renewal offers past their offer_expires_at
+    try {
+      const { expiredCount } = await renewalOfferService.expireStaleOffers();
+      summary.offers_expired = expiredCount;
+    } catch (err: any) {
+      console.error("[CRON] Failed to expire stale renewal offers:", err);
+      summary.errors.push(`Offer expiration failed: ${err?.message || String(err)}`);
+    }
 
     // Verify template health and write drift alerts if needed
     if (process.env.OTP_PROVIDER === "whatsapp") {

@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   moveOutFindFirst: vi.fn().mockResolvedValue(null),
   generateForAgreementInTx: vi.fn().mockResolvedValue({ created: 12, updated: 0, skipped: 0, months: [] }),
   notifyActivated: vi.fn(),
+  expireStaleOffers: vi.fn().mockResolvedValue({ expiredCount: 0 }),
   transaction: vi.fn(async (cb: any) => cb({
     $queryRaw: mocks.queryRaw,
     agreement: { update: mocks.agreementUpdate, updateMany: mocks.agreementUpdateMany },
@@ -55,11 +56,15 @@ vi.mock("@/lib/services/notification-service", () => ({
   notificationService: { createNotification: vi.fn().mockResolvedValue(undefined) },
 }));
 
-vi.mock("./agreement-renewal-notification-service", () => ({
+vi.mock("@/src/services/tenants/agreement-renewal-notification-service", () => ({
   agreementRenewalNotificationService: {
     checkTemplatesHealth: vi.fn().mockResolvedValue([]),
     processRenewalNotifications: vi.fn().mockResolvedValue(undefined),
   },
+}));
+
+vi.mock("@/src/services/tenants/renewal-offer-service", () => ({
+  renewalOfferService: { expireStaleOffers: mocks.expireStaleOffers },
 }));
 
 import { AgreementLifecycleService } from "@/src/services/tenants/agreement-lifecycle-service";
@@ -143,6 +148,7 @@ describe("AgreementRenewalActivation", () => {
       failed: 0,
       errors: [],
       renewals_activated: 0,
+      offers_expired: 0,
     };
 
     const touchedOwnerIds = new Set<string>();
@@ -262,6 +268,7 @@ describe("AgreementRenewalActivation", () => {
       failed: 0,
       errors: [],
       renewals_activated: 0,
+      offers_expired: 0,
     };
 
     const touchedOwnerIds = new Set<string>();
@@ -358,6 +365,7 @@ describe("AgreementRenewalActivation", () => {
       failed: 0,
       errors: [],
       renewals_activated: 0,
+      offers_expired: 0,
     };
 
     const touchedOwnerIds = new Set<string>();
@@ -390,7 +398,7 @@ describe("AgreementRenewalActivation", () => {
 
     const summary = {
       checked: 0, marked_expiring: 0, marked_expired: 0, reminders_30d: 0, reminders_15d: 0,
-      expiry_notifications: 0, skipped_legacy: 0, failed: 0, errors: [], renewals_activated: 0,
+      expiry_notifications: 0, skipped_legacy: 0, failed: 0, errors: [], renewals_activated: 0, offers_expired: 0,
     };
 
     await service.activateScheduledRenewals(today, summary, new Set(), new Set());
@@ -426,7 +434,7 @@ describe("AgreementRenewalActivation", () => {
 
     const summary = {
       checked: 0, marked_expiring: 0, marked_expired: 0, reminders_30d: 0, reminders_15d: 0,
-      expiry_notifications: 0, skipped_legacy: 0, failed: 0, errors: [], renewals_activated: 0,
+      expiry_notifications: 0, skipped_legacy: 0, failed: 0, errors: [], renewals_activated: 0, offers_expired: 0,
     };
 
     await service.activateScheduledRenewals(today, summary, new Set(), new Set());
@@ -481,7 +489,7 @@ describe("AgreementRenewalActivation", () => {
 
     const summary = {
       checked: 0, marked_expiring: 0, marked_expired: 0, reminders_30d: 0, reminders_15d: 0,
-      expiry_notifications: 0, skipped_legacy: 0, failed: 0, errors: [] as string[], renewals_activated: 0,
+      expiry_notifications: 0, skipped_legacy: 0, failed: 0, errors: [] as string[], renewals_activated: 0, offers_expired: 0,
     };
 
     await service.activateScheduledRenewals(today, summary, new Set(), new Set());
@@ -489,5 +497,15 @@ describe("AgreementRenewalActivation", () => {
     expect(summary.renewals_activated).toBe(0);
     expect(summary.failed).toBe(1);
     expect(summary.errors[0]).toMatch(/Renewal chain changed during cron activation/);
+  });
+
+  it("expires stale renewal offers as part of the daily lifecycle run", async () => {
+    mocks.agreementFindMany.mockResolvedValue([]);
+    mocks.expireStaleOffers.mockResolvedValue({ expiredCount: 3 });
+
+    const summary = await service.processDailyLifecycle(new Date("2026-07-01T00:00:00.000Z"));
+
+    expect(mocks.expireStaleOffers).toHaveBeenCalledTimes(1);
+    expect(summary.offers_expired).toBe(3);
   });
 });
