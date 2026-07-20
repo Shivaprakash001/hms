@@ -26,6 +26,15 @@ export function FinancialActivityCard({
   const amount = primary.amount != null ? Math.abs(primary.amount) : null;
   const isGrouped = payments.length > 0 || credits.length > 0;
   const obligationId = primary.references.obligation_id;
+  // A PAYMENT_GROUP_SETTLED card can fold >1 distinct `payments` rows (one
+  // FIFO settlement split across obligations) into a single card, but
+  // `receiptPaymentId` only ever points at one of them (payments[0] —
+  // see groupFinancialActivity.ts). Reversing that single payment id would
+  // only undo a fraction of the amount shown on the card, so "Correct
+  // Payment" must stay hidden whenever more than one payment is folded in.
+  // "View Receipt" is unaffected — a receipt for any one payment id in the
+  // group is still a valid receipt to view.
+  const canCorrectPayment = payments.length <= 1;
 
   const allocations = (primary.metadata?.settlement_breakdown?.allocations ?? []) as {
     obligation_id: string;
@@ -137,7 +146,7 @@ export function FinancialActivityCard({
             </button>
           )}
 
-          {receiptPaymentId && onCorrectPayment && (
+          {receiptPaymentId && onCorrectPayment && canCorrectPayment && (
             <button
               type="button"
               onClick={(e) => {
