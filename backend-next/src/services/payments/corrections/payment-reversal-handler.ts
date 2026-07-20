@@ -30,6 +30,9 @@ export const paymentReversalHandler: CorrectionHandler<PaymentReversalDetail> = 
     canExecute: async (kase: CorrectionCaseRecord<PaymentReversalDetail>) => {
       const payment = await prisma.payments.findUnique({ where: { id: kase.caseDetail.paymentId } });
       if (!payment) return { allowed: false, reason: "Payment no longer exists" };
+      if (payment.hostel_id !== kase.hostelId) {
+        return { allowed: false, reason: "Payment does not belong to this hostel" };
+      }
       return { allowed: true };
     },
   },
@@ -37,6 +40,10 @@ export const paymentReversalHandler: CorrectionHandler<PaymentReversalDetail> = 
   async createCase(ctx: OperationContext): Promise<CaseDraft<PaymentReversalDetail>> {
     const paymentId = String(ctx.input.paymentId);
     const payment = await loadPayment(paymentId);
+
+    if (payment.hostel_id !== ctx.hostelId) {
+      throw new Error(`Payment ${paymentId} does not belong to hostel ${ctx.hostelId}`);
+    }
 
     return {
       domain: "PAYMENTS",

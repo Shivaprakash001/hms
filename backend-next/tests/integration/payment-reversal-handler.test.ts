@@ -126,4 +126,23 @@ describe('paymentReversalHandler (end to end via recoveryService)', () => {
       expect.objectContaining({ allowed: expect.any(Boolean) })
     );
   });
+
+  it('refuses to create a case when the payment belongs to a different hostel than claimed', async () => {
+    const owner = await createTestOwner();
+    const hostelA = await createTestHostel(owner.id);
+    const hostelB = await createTestHostel(owner.id);
+    const tenant = await createTestTenant(owner.id, hostelA.id);
+    const obligation = await createTestObligation(tenant.id, owner.id, hostelA.id, { amount: 4000 });
+    const payment = await createTestPayment(obligation.id, 4000);
+
+    // payment actually belongs to hostelA, but the case is created claiming hostelB
+    await expect(
+      recoveryService.createCase('PAYMENT_REVERSAL', {
+        hostelId: hostelB.id,
+        actor: { actorId: owner.id, actorRole: 'OWNER' },
+        reason: 'cross-hostel attempt',
+        input: { paymentId: payment.id },
+      })
+    ).rejects.toThrow(`Payment ${payment.id} does not belong to hostel ${hostelB.id}`);
+  });
 });
