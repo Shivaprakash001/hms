@@ -103,6 +103,22 @@ describe("AgreementRenewalNotificationService integration", () => {
     },
   };
 
+  it("does not send any expiry reminder once a successor agreement already exists", async () => {
+    const now = new Date("2026-06-29T00:00:00.000Z"); // would be exactly 15 days remaining
+    const agreementWithSuccessor = {
+      ...baseAgreement,
+      renewed_to_agreement_id: "successor-1",
+      renewed_to_agreement: { id: "successor-1", status: "DRAFT" },
+    };
+
+    const result = await agreementRenewalNotificationService.processRenewalNotifications(agreementWithSuccessor, now);
+
+    expect(result.skipped).toBe(true);
+    expect(result.tenantSent).toBe(false);
+    expect(result.ownerSent).toBe(false);
+    expect(mockDeliverySend).not.toHaveBeenCalled();
+  });
+
   it("sends 30-day reminder when exactly 30 days remain", async () => {
     const now = new Date("2026-06-14T00:00:00.000Z"); // 30 days before July 14
     mockDeliverySend.mockResolvedValue({ sent: true, skipped: false, providerMessageId: "wamid.1" });

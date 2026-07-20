@@ -146,6 +146,16 @@ Architecture Decision Records — each entry below was **inferred from code evid
 - **Consequences:** Any future renewal-chain-mutating code path must follow this same pattern (lock → fresh re-check → conditional `updateMany` → count check) rather than inventing a fourth variant. A losing concurrent request now gets a clear thrown error (`CONFLICT: ...` / `Renewal chain changed during cron activation (...)`) instead of silently succeeding into a corrupted state.
 - **Related:** [[Bugs]], [[Backend]]
 
+## ADR-013: A renewal's expiry-reminder stage is suppressed once a successor agreement exists
+
+- **Date:** 2026-07-19
+- **Status:** accepted
+- **Context:** `RenewalStatusService.determineRenewalStage` computed 30-day/15-day/expiry-day/overdue WhatsApp reminder stages purely from the predecessor agreement's own days-until-expiry / days-overdue, without checking whether the tenant had already accepted a renewal offer (or an owner had already created a manual renewal draft). `RenewalDecisionService.evaluateAgreement` already computes `has_successor` for exactly this purpose (used elsewhere to compute `renewal_blocked_reason: "SUCCESSOR_EXISTS"`), but `determineRenewalStage` never consulted it — so a tenant who had already renewed kept receiving "please renew" nudges on the agreement they'd already acted on, right up until the predecessor's actual expiry date.
+- **Decision:** `determineRenewalStage` now returns `null` immediately whenever `decision.has_successor` is true, before evaluating any day-count band. This is a full suppression, not a softened message — once a successor exists, the predecessor's expiry-reminder concern is fully superseded; the tenant is now waiting on the successor's own activation (cron `activateScheduledRenewals` or manual signing), which is communicated through a different flow.
+- **Alternatives considered:** Softening the message copy to acknowledge a pending renewal while still sending (rejected — adds template/payload complexity for a stage that's simply no longer relevant) — Scoping the fix to only `RenewalStatusService`/WhatsApp rather than also touching the plain in-app 30d/15d notifications in `AgreementLifecycleService.processDailyLifecycle`'s main loop, which has the identical gap (deferred — out of scope for the specific bug as reported; flagged as a discovered adjacent issue for a follow-up decision rather than silently expanding scope).
+- **Consequences:** Any future renewal-adjacent notification path (in-app, email, SMS) that fires based on days-until-expiry should apply the same `has_successor` guard, or it will reintroduce this exact bug independently.
+- **Related:** [[Bugs]], [[Business-Rules]]
+
 ## See also
 - [[Changelog]] for the chronological record of what shipped
 - [[Architecture]] for the system these decisions govern

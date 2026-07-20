@@ -15,6 +15,14 @@ export class RenewalStatusService {
     }
 
     const decision = renewalDecisionService.evaluateAgreement(agreement, now);
+
+    if (decision.has_successor) {
+      // A successor draft/agreement already exists (offer accepted or manual
+      // renewal draft created) — the predecessor no longer needs "please
+      // renew" nudges; it's just waiting on the successor's own activation.
+      return null;
+    }
+
     const daysUntilExpiry = decision.days_until_expiry; // number or null
     const daysOverdue = decision.days_overdue; // number
     const states = decision.states || [];
