@@ -6,6 +6,10 @@
  *
  * @see https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation
  */
+
+// Guarantee correction handlers are registered at server startup
+import "./src/services/recovery/bootstrap";
+
 export async function register() {
   // Only run security checks on the Node.js server, not on Edge runtime
   if (process.env.NEXT_RUNTIME === "nodejs") {
