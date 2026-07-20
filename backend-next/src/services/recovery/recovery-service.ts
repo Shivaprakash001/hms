@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { eventSystem } from "@/lib/events";
 import { correctionRegistry } from "./correction-registry";
 import type {
   Actor,
@@ -189,6 +190,87 @@ class RecoveryService {
     });
 
     return { allowed: true };
+  }
+
+  async execute(caseId: string, actor: Actor): Promise<CorrectionCaseRecord> {
+    const kase = await this.getCase(caseId);
+    const handler = correctionRegistry.resolve(kase.caseType);
+
+    if (kase.status !== "VALIDATED" && kase.status !== "FAILED") {
+      throw new Error(`case ${caseId} is not executable from status ${kase.status}`);
+    }
+
+    // MAX_RETRY_ATTEMPTS: number of prior FAILED executions after which any
+    // further execute() call is refused outright (synchronously, before any
+    // DB write). Two prior failures means two handler invocations have
+    // already happened (attempts 1 and 2); a third call is the one that gets
+    // permanently blocked here.
+    const MAX_RETRY_ATTEMPTS = 2;
+    const priorAttempts = Number((kase.executionResult as any)?.attempts ?? 0);
+    if (priorAttempts >= MAX_RETRY_ATTEMPTS) {
+      throw new Error(`case ${caseId} exceeded maximum retry attempts (${MAX_RETRY_ATTEMPTS})`);
+    }
+
+    if (kase.dependsOn.length > 0) {
+      const dependencies = await prisma.correction_cases.findMany({
+        where: { id: { in: kase.dependsOn } },
+        select: { status: true },
+      });
+      if (dependencies.some((d) => d.status !== "COMPLETED")) {
+        throw new Error(`case ${caseId} has an unmet dependency at execute-time`);
+      }
+    }
+
+    // Phase 1: mark EXECUTING and commit before running the handler — the case
+    // must never appear stuck in VALIDATED while work is genuinely in flight.
+    await prisma.$transaction(async (tx) => {
+      await tx.correction_cases.update({ where: { id: caseId }, data: { status: "EXECUTING" } });
+      await writeEvent(tx, caseId, "EXECUTION_STARTED", actor, undefined, { attempt: priorAttempts + 1 });
+    });
+    eventSystem.trigger("correction_case_transitioned", {
+      caseId, domain: kase.domain, caseType: kase.caseType, tier: kase.tier,
+      fromStatus: kase.status, toStatus: "EXECUTING", actorId: actor.actorId, hostelId: kase.hostelId,
+    });
+
+    // Phase 2: run the handler's compensating writes and, on success, the
+    // COMPLETED status+event update in the SAME transaction — so if the
+    // handler's writes commit, COMPLETED commits atomically with them, and if
+    // the handler throws, nothing it wrote persists (transaction rolls back).
+    try {
+      await prisma.$transaction(async (tx) => {
+        const result = await handler.execute(tx, kase, actor);
+        await tx.correction_cases.update({
+          where: { id: caseId },
+          data: { status: "COMPLETED", execution_result: result as any },
+        });
+        await writeEvent(tx, caseId, "EXECUTION_SUCCEEDED", actor);
+      });
+      eventSystem.trigger("correction_case_transitioned", {
+        caseId, domain: kase.domain, caseType: kase.caseType, tier: kase.tier,
+        fromStatus: "EXECUTING", toStatus: "COMPLETED", actorId: actor.actorId, hostelId: kase.hostelId,
+      });
+    } catch (err: any) {
+      // Phase 3: always-runs transaction that records the failure. This does
+      // NOT re-throw — a case ending up FAILED is the success path for
+      // execute() itself; only the retry-cap guard above throws synchronously.
+      const errorMessage = String(err?.message ?? err);
+      await prisma.$transaction(async (tx) => {
+        await tx.correction_cases.update({
+          where: { id: caseId },
+          data: {
+            status: "FAILED",
+            execution_result: { attempts: priorAttempts + 1, error: errorMessage } as any,
+          },
+        });
+        await writeEvent(tx, caseId, "EXECUTION_FAILED", actor, errorMessage);
+      });
+      eventSystem.trigger("correction_case_transitioned", {
+        caseId, domain: kase.domain, caseType: kase.caseType, tier: kase.tier,
+        fromStatus: "EXECUTING", toStatus: "FAILED", actorId: actor.actorId, hostelId: kase.hostelId,
+      });
+    }
+
+    return this.getCase(caseId);
   }
 }
 

@@ -264,3 +264,107 @@ describe('recoveryService.validate', () => {
     expect(result.reason).toMatch(/dependency/i);
   });
 });
+
+describe('recoveryService.execute', () => {
+  it('runs execute() inside a transaction and marks the case COMPLETED', async () => {
+    const owner = await createTestOwner();
+    const hostel = await createTestHostel(owner.id);
+    let executeCalls = 0;
+
+    correctionRegistry.register({
+      caseType: 'EXECUTE_TEST_TYPE',
+      domain: 'PAYMENTS',
+      tier: 'FINANCIAL_CORRECTION',
+      policy: { canPreview: async () => true, canExecute: async () => ({ allowed: true }) },
+      createCase: async () => ({
+        domain: 'PAYMENTS', tier: 'FINANCIAL_CORRECTION', entityRefs: [],
+        beforeSnapshot: {}, caseDetail: {}, idempotencyKey: `EXECUTE_TEST_TYPE:${hostel.id}`,
+      }),
+      computeImpact: async () => ({ balanceChanges: [], obligationChanges: [], ledgerEntries: [], affectedReports: [], notifications: [], warnings: [] }),
+      execute: async () => {
+        executeCalls += 1;
+        return { wrote: 'something' };
+      },
+      affectedEntities: () => [],
+    });
+
+    const kase = await recoveryService.createCase('EXECUTE_TEST_TYPE', {
+      hostelId: hostel.id, actor: { actorId: owner.id, actorRole: 'OWNER' }, reason: 'x', input: {},
+    });
+    await recoveryService.preview(kase.id);
+    await recoveryService.validate(kase.id);
+
+    const result = await recoveryService.execute(kase.id, { actorId: owner.id, actorRole: 'OWNER' });
+    expect(result.status).toBe('COMPLETED');
+    expect(result.executionResult).toEqual({ wrote: 'something' });
+    expect(executeCalls).toBe(1);
+  });
+
+  it('marks the case FAILED when the handler throws, and allows a retry', async () => {
+    const owner = await createTestOwner();
+    const hostel = await createTestHostel(owner.id);
+    let attempt = 0;
+
+    correctionRegistry.register({
+      caseType: 'EXECUTE_FAIL_TYPE',
+      domain: 'PAYMENTS',
+      tier: 'FINANCIAL_CORRECTION',
+      policy: { canPreview: async () => true, canExecute: async () => ({ allowed: true }) },
+      createCase: async () => ({
+        domain: 'PAYMENTS', tier: 'FINANCIAL_CORRECTION', entityRefs: [],
+        beforeSnapshot: {}, caseDetail: {}, idempotencyKey: `EXECUTE_FAIL_TYPE:${hostel.id}`,
+      }),
+      computeImpact: async () => ({ balanceChanges: [], obligationChanges: [], ledgerEntries: [], affectedReports: [], notifications: [], warnings: [] }),
+      execute: async () => {
+        attempt += 1;
+        if (attempt === 1) throw new Error('simulated infra failure');
+        return { wrote: 'on retry' };
+      },
+      affectedEntities: () => [],
+    });
+
+    const kase = await recoveryService.createCase('EXECUTE_FAIL_TYPE', {
+      hostelId: hostel.id, actor: { actorId: owner.id, actorRole: 'OWNER' }, reason: 'x', input: {},
+    });
+    await recoveryService.preview(kase.id);
+    await recoveryService.validate(kase.id);
+
+    const failed = await recoveryService.execute(kase.id, { actorId: owner.id, actorRole: 'OWNER' });
+    expect(failed.status).toBe('FAILED');
+
+    const retried = await recoveryService.execute(kase.id, { actorId: owner.id, actorRole: 'OWNER' });
+    expect(retried.status).toBe('COMPLETED');
+    expect(retried.executionResult).toEqual({ wrote: 'on retry' });
+  });
+
+  it('permanently fails after 3 attempts', async () => {
+    const owner = await createTestOwner();
+    const hostel = await createTestHostel(owner.id);
+
+    correctionRegistry.register({
+      caseType: 'EXECUTE_ALWAYS_FAIL_TYPE',
+      domain: 'PAYMENTS',
+      tier: 'FINANCIAL_CORRECTION',
+      policy: { canPreview: async () => true, canExecute: async () => ({ allowed: true }) },
+      createCase: async () => ({
+        domain: 'PAYMENTS', tier: 'FINANCIAL_CORRECTION', entityRefs: [],
+        beforeSnapshot: {}, caseDetail: {}, idempotencyKey: `EXECUTE_ALWAYS_FAIL_TYPE:${hostel.id}`,
+      }),
+      computeImpact: async () => ({ balanceChanges: [], obligationChanges: [], ledgerEntries: [], affectedReports: [], notifications: [], warnings: [] }),
+      execute: async () => { throw new Error('always fails'); },
+      affectedEntities: () => [],
+    });
+
+    const kase = await recoveryService.createCase('EXECUTE_ALWAYS_FAIL_TYPE', {
+      hostelId: hostel.id, actor: { actorId: owner.id, actorRole: 'OWNER' }, reason: 'x', input: {},
+    });
+    await recoveryService.preview(kase.id);
+    await recoveryService.validate(kase.id);
+
+    await recoveryService.execute(kase.id, { actorId: owner.id, actorRole: 'OWNER' });
+    await recoveryService.execute(kase.id, { actorId: owner.id, actorRole: 'OWNER' });
+    await expect(
+      recoveryService.execute(kase.id, { actorId: owner.id, actorRole: 'OWNER' })
+    ).rejects.toThrow(/exceeded maximum retry attempts/i);
+  });
+});
