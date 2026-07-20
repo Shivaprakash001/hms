@@ -31,10 +31,12 @@ import { ActivityTimeline } from '@features/tenants/components/profile/ActivityT
 import { ExitWorkflowSection } from '@features/tenants/components/profile/ExitWorkflowSection';
 import { getInitials } from '@features/tenants/utils/normalize';
 import { RecordPaymentModal } from '@/app/components/modals/RecordPaymentModal';
+import { CorrectPaymentModal } from '@/app/components/modals/CorrectPaymentModal';
 import { hmsToast } from '@lib/toast';
 import { useIsMobile } from '@/app/components/ui/use-mobile';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/app/components/ui/tabs';
 import api from '@lib/api-client';
+import { queryKeys } from '@lib/queryKeys';
 import { EditInviteModal } from '@/app/components/modals/EditInviteModal';
 import {
   ChangeRequestDrawer,
@@ -119,6 +121,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   const [historyObligation, setHistoryObligation] = useState<any>(null);
   const [obligationModal, setObligationModal] = useState<ObligationModalState>(null);
   const [mobileTab, setMobileTab] = useState<MobileTab>('obligations');
+  const [correctingPaymentId, setCorrectingPaymentId] = useState<string | null>(null);
 
   const { overview, allocations, dues, advance, full, financialTimeline, isLoading, isError, refetch } =
     useTenantProfile(hostelId, tenantId);
@@ -417,6 +420,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
       isLoading={(financialTimeline as any) === undefined}
       onDownloadReceipt={handleDownloadReceipt}
       onViewObligation={() => handleNavigate('fin-obligations')}
+      onCorrectPayment={setCorrectingPaymentId}
     />
   );
 
@@ -954,6 +958,24 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
               reason: cancelObligationTarget.__editReason ?? reason,
               identityToken,
             });
+            refetch();
+          }}
+        />
+      )}
+
+      {/* Correct Payment Modal (Reverse only — Transfer/Edit Reference are a future task) */}
+      {correctingPaymentId && (
+        <CorrectPaymentModal
+          paymentId={correctingPaymentId}
+          hostelId={hostelId}
+          tenantId={tenantId}
+          onClose={() => {
+            setCorrectingPaymentId(null);
+            queryClient.invalidateQueries({ queryKey: queryKeys.tenants.obligations(hostelId, tenantId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.tenants.financialTimeline(hostelId, tenantId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.tenants.advance(hostelId, tenantId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.tenants.full(hostelId, tenantId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.tenants.overview(hostelId, tenantId) });
             refetch();
           }}
         />

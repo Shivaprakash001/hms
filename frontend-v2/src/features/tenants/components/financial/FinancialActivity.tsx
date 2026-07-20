@@ -30,11 +30,12 @@ interface FinancialActivityProps {
   isLoading?: boolean;
   onDownloadReceipt?: (paymentId: string) => void;
   onViewObligation?: (obligationId: string) => void;
+  onCorrectPayment?: (paymentId: string) => void;
 }
 
 const PAGE_SIZE = 8;
 
-export function FinancialActivity({ events, isLoading, onDownloadReceipt, onViewObligation }: FinancialActivityProps) {
+export function FinancialActivity({ events, isLoading, onDownloadReceipt, onViewObligation, onCorrectPayment }: FinancialActivityProps) {
   const [activeFilter, setActiveFilter] = useState<FilterCategory>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -95,6 +96,7 @@ export function FinancialActivity({ events, isLoading, onDownloadReceipt, onView
               onToggle={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
               onDownloadReceipt={onDownloadReceipt}
               onViewObligation={onViewObligation}
+              onCorrectPayment={onCorrectPayment}
             />
           ))}
           {filtered.length > visibleCount && (

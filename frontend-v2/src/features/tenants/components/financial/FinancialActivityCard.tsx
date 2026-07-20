@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Receipt, FileCheck2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Receipt, FileCheck2, Undo2 } from 'lucide-react';
 import { getEventDisplay, TONE_CLASSES, TONE_DOT_CLASSES, TONE_ICON_CLASSES } from '@features/tenants/utils/financialColors';
 import type { FinancialActivityEntry } from '@features/tenants/utils/groupFinancialActivity';
 
@@ -10,9 +10,17 @@ interface FinancialActivityCardProps {
   onToggle: () => void;
   onDownloadReceipt?: (paymentId: string) => void;
   onViewObligation?: (obligationId: string) => void;
+  onCorrectPayment?: (paymentId: string) => void;
 }
 
-export function FinancialActivityCard({ entry, isExpanded, onToggle, onDownloadReceipt, onViewObligation }: FinancialActivityCardProps) {
+export function FinancialActivityCard({
+  entry,
+  isExpanded,
+  onToggle,
+  onDownloadReceipt,
+  onViewObligation,
+  onCorrectPayment,
+}: FinancialActivityCardProps) {
   const { primary, payments, credits, receiptPaymentId } = entry;
   const { label, icon: Icon, tone } = getEventDisplay(primary);
   const amount = primary.amount != null ? Math.abs(primary.amount) : null;
@@ -126,6 +134,20 @@ export function FinancialActivityCard({ entry, isExpanded, onToggle, onDownloadR
             >
               <Receipt className="w-3.5 h-3.5" />
               View Receipt
+            </button>
+          )}
+
+          {receiptPaymentId && onCorrectPayment && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCorrectPayment(receiptPaymentId);
+              }}
+              className="flex items-center gap-1.5 text-[11px] font-semibold text-accent hover:underline"
+            >
+              <Undo2 className="w-3.5 h-3.5" />
+              Correct Payment
             </button>
           )}
         </div>
