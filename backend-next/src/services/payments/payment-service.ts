@@ -138,23 +138,52 @@ export class PaymentService {
     });
     const totalAllocated = paymentsAllocations.reduce((sum: number, p: any) => sum + Number(p.amount_paid), 0);
 
-    // Sum ledger credits
-    const ledgerCredits = await tx.tenant_financial_ledger.findMany({
-      where: {
-        tenant_id: tenantId,
-        reference_id: attemptId,
-        type: "CREDIT",
-      },
-    });
-    const totalLedgerCredited = ledgerCredits.reduce((sum: number, e: any) => sum + Number(e.amount), 0);
+    // Ledger credits tied to this attempt come in two distinct shapes that
+    // must NOT be summed together:
+    //  - A future-rent-credit topup, keyed directly by attemptId
+    //    (settlement-engine.ts's EXISTING_CREDIT/futureCredit branch,
+    //    referenceType PAYMENT_ATTEMPT_REMAINDER/PAYMENT_GROUP_REMAINDER).
+    //    This is genuinely *unallocated* money — it did not go toward any
+    //    obligation, so it belongs on the right-hand side of invariant #1
+    //    ("captured = allocated + this").
+    //  - A security-deposit/advance "collected" marker, keyed by the
+    //    individual `payments` row it accompanies (settlement-engine.ts's
+    //    ADVANCE/SECURITY_DEPOSIT branch, referenceType PAYMENT — see its
+    //    comment: "the obligation being marked PAID/PARTIAL tracks that the
+    //    deposit/advance was billed, while this credit tracks that it was
+    //    collected"). This is a *second record of money already counted* in
+    //    `totalAllocated` via that same payments row — including it in
+    //    invariant #1 would double-count the same rupee. It DOES move the
+    //    real ledger_balance, though, so invariant #3 (which checks the
+    //    ledger balance actually moved by the right amount) needs it.
+    // Using one shared sum for both checks made invariant #1 false-pass (by
+    // omission) and invariant #3 false-fail on every gateway payment that
+    // allocated into a deposit/advance obligation — the settlement was
+    // correct, but this self-check rolled back the whole transaction and
+    // returned a 500 despite the provider having captured the charge. See
+    // docs/obsidian/Bugs.md.
+    const paymentIds = paymentsAllocations.map((p: any) => p.id);
+    const [attemptLedgerCredits, depositMirrorCredits] = await Promise.all([
+      tx.tenant_financial_ledger.findMany({
+        where: { tenant_id: tenantId, reference_id: attemptId, type: "CREDIT" },
+      }),
+      paymentIds.length > 0
+        ? tx.tenant_financial_ledger.findMany({
+            where: { tenant_id: tenantId, reference_id: { in: paymentIds }, reference_type: "PAYMENT", type: "CREDIT" },
+          })
+        : Promise.resolve([]),
+    ]);
+    const unallocatedLedgerCredited = attemptLedgerCredits.reduce((sum: number, e: any) => sum + Number(e.amount), 0);
+    const depositMirrorCredited = depositMirrorCredits.reduce((sum: number, e: any) => sum + Number(e.amount), 0);
+    const totalLedgerBalanceMovement = unallocatedLedgerCredited + depositMirrorCredited;
 
     // Invariants checks:
-    // 1. Captured Amount = Obligation Allocations + Net Ledger Credit Increase
-    const totalSettled = totalAllocated + totalLedgerCredited;
+    // 1. Captured Amount = Obligation Allocations + Net *Unallocated* Ledger Credit
+    const totalSettled = totalAllocated + unallocatedLedgerCredited;
     if (Math.abs(totalSettled - capturedAmount) > 0.01) {
       throw new Error(
         `INVARIANT_VIOLATION: Settlement mismatch. Captured: ₹${capturedAmount.toFixed(2)}, ` +
-        `Allocated Dues: ₹${totalAllocated.toFixed(2)}, Ledger Credits: ₹${totalLedgerCredited.toFixed(2)}, ` +
+        `Allocated Dues: ₹${totalAllocated.toFixed(2)}, Ledger Credits: ₹${unallocatedLedgerCredited.toFixed(2)}, ` +
         `Total Settled: ₹${totalSettled.toFixed(2)}. Difference: ₹${(capturedAmount - totalSettled).toFixed(2)}`
       );
     }
@@ -170,13 +199,13 @@ export class PaymentService {
       );
     }
 
-    // 3. Ledger Balance After - Ledger Balance Before = Net Ledger Credit Increase
+    // 3. Ledger Balance After - Ledger Balance Before = Total Ledger Credit Movement (both shapes)
     const finalLedgerBalance = await this.getTenantLedgerBalanceInTx(tx, tenantId);
-    if (Math.abs((finalLedgerBalance - initialLedgerBalance) - totalLedgerCredited) > 0.01) {
+    if (Math.abs((finalLedgerBalance - initialLedgerBalance) - totalLedgerBalanceMovement) > 0.01) {
       throw new Error(
         `INVARIANT_VIOLATION: Ledger balance inconsistency. ` +
         `Ledger Balance Before: ₹${initialLedgerBalance.toFixed(2)}, Ledger Balance After: ₹${finalLedgerBalance.toFixed(2)}, ` +
-        `Expected Ledger Change: ₹${totalLedgerCredited.toFixed(2)}, Actual Ledger Change: ₹${(finalLedgerBalance - initialLedgerBalance).toFixed(2)}`
+        `Expected Ledger Change: ₹${totalLedgerBalanceMovement.toFixed(2)}, Actual Ledger Change: ₹${(finalLedgerBalance - initialLedgerBalance).toFixed(2)}`
       );
     }
   }

@@ -57,10 +57,24 @@ const mocks = vi.hoisted(() => {
     tenant_financial_ledger: {
       findMany: vi.fn(async (params?: any) => {
         const where = params?.where || {};
+        const matchesCondition = (entry: any, cond: any) => {
+          if (cond.tenant_id && entry.tenant_id !== cond.tenant_id) return false;
+          if (cond.type && entry.type !== cond.type) return false;
+          if (cond.reference_type && entry.reference_type !== cond.reference_type) return false;
+          if (cond.reference_id) {
+            if (typeof cond.reference_id === "object" && cond.reference_id.in) {
+              if (!cond.reference_id.in.includes(entry.reference_id)) return false;
+            } else if (entry.reference_id !== cond.reference_id) {
+              return false;
+            }
+          }
+          return true;
+        };
         return ledgerEntries.filter(entry => {
-          if (where.tenant_id && entry.tenant_id !== where.tenant_id) return false;
-          if (where.reference_id && entry.reference_id !== where.reference_id) return false;
-          if (where.type && entry.type !== where.type) return false;
+          if (!matchesCondition(entry, where)) return false;
+          if (where.OR) {
+            return where.OR.some((cond: any) => matchesCondition(entry, { ...cond, tenant_id: where.tenant_id, type: where.type }));
+          }
           return true;
         });
       }),
@@ -221,6 +235,7 @@ describe("Transaction-Level Settlement Invariant Auditing", () => {
         amount: params.amount,
         type: "CREDIT",
         reference_id: params.referenceId,
+        reference_type: params.referenceType,
         tenant_id: params.tenantId,
       });
       return { alreadyCredited: false };
@@ -319,6 +334,74 @@ describe("Transaction-Level Settlement Invariant Auditing", () => {
     expect(totalLedgerCredited).toBe(15000);
 
     expect(totalAllocated + totalLedgerCredited).toBe(15000);
+  });
+
+  it("settles a gateway Rent payment that fully allocates into a SECURITY_DEPOSIT obligation without a false invariant violation", async () => {
+    // Regression test: settlement-engine.ts credits the ledger a second time
+    // (reason DEPOSIT, referenceType PAYMENT, keyed by the individual
+    // `payments` row) whenever an allocation lands on a SECURITY_DEPOSIT or
+    // ADVANCE obligation. That credit is a "collected" mirror of money
+    // already counted in `totalAllocated`, not additional unallocated money.
+    // Before the fix, validatePaymentAttemptSettlementInTx only looked for
+    // ledger credits keyed by attemptId, so it never found this mirror
+    // credit — a real gateway payment (Razorpay captured the charge) rolled
+    // back with INVARIANT_VIOLATION and returned a 500 despite the
+    // settlement itself being entirely correct.
+    mocks.rentObligations.push({
+      id: "ob-deposit",
+      amount: 15000,
+      tenant_id: "tenant-abc",
+      hostel_id: "hostel-abc",
+      status: "PENDING",
+      obligation_type: "SECURITY_DEPOSIT",
+      tenants: { id: "tenant-abc", hostel_id: "hostel-abc" },
+      payments: [],
+    });
+
+    const attempt = {
+      ...baseAttempt,
+      flow_type: PAYMENT_FLOW.RENT,
+      payment_type: "RENT",
+      amount: 15000,
+    };
+
+    mocks.prisma.paymentAttempt.findUnique
+      .mockResolvedValueOnce({ ...attempt, status: "PENDING" })
+      .mockResolvedValueOnce(attempt);
+
+    mocks.tx.rent_obligations.update.mockImplementation(async ({ where, data }: any) => {
+      const ob = mocks.rentObligations.find(o => o.id === where.id);
+      if (ob) ob.status = data.status;
+      return ob;
+    });
+
+    // Mirror settlement-engine.ts's real ADVANCE/SECURITY_DEPOSIT branch:
+    // credited with referenceType "PAYMENT", keyed by the payment row's id,
+    // NOT by attemptId.
+    mocks.tenantFinancialLedgerService.creditIdempotentInTx.mockImplementation(async (_tx: any, params: any) => {
+      mocks.ledgerEntries.push({
+        amount: params.amount,
+        type: "CREDIT",
+        reference_id: params.referenceId,
+        reference_type: params.referenceType,
+        tenant_id: params.tenantId,
+      });
+      return { alreadyCredited: false };
+    });
+
+    const { PaymentService } = await import("@/src/services/payments/payment-service");
+    const service = new PaymentService();
+
+    await expect(
+      service.finalizePaymentAttempt("attempt-abc", "SUCCESS", "gateway-abc")
+    ).resolves.toBeDefined();
+
+    const totalAllocated = mocks.payments.reduce((sum, p) => sum + Number(p.amount_paid), 0);
+    expect(totalAllocated).toBe(15000);
+
+    const depositCredit = mocks.ledgerEntries.find(e => e.reference_type === "PAYMENT" && e.type === "CREDIT");
+    expect(depositCredit?.amount).toBe(15000);
+    expect(depositCredit?.reference_id).not.toBe("attempt-abc");
   });
 
   it("settles offline cash payment via recordTenantPayment successfully and passes invariants", async () => {
