@@ -141,6 +141,55 @@ class RecoveryService {
       return impact;
     });
   }
+
+  async validate(caseId: string): Promise<{ allowed: boolean; reason?: string }> {
+    const kase = await this.getCase(caseId);
+    const handler = correctionRegistry.resolve(kase.caseType);
+    const actor = { actorId: kase.actorId, actorRole: kase.actorRole };
+
+    // Check dependencies (reads outside transaction)
+    if (kase.dependsOn.length > 0) {
+      const dependencies = await prisma.correction_cases.findMany({
+        where: { id: { in: kase.dependsOn } },
+        select: { id: true, status: true },
+      });
+      const unmet = dependencies.filter((d) => d.status !== "COMPLETED");
+      if (unmet.length > 0) {
+        // Write event inside transaction
+        await prisma.$transaction(async (tx) => {
+          await writeEvent(
+            tx,
+            caseId,
+            "BLOCKED_ON_DEPENDENCY",
+            actor,
+            `waiting on ${unmet.length} dependency case(s)`
+          );
+        });
+        return { allowed: false, reason: `Blocked: ${unmet.length} dependency case(s) not yet completed` };
+      }
+    }
+
+    // Check policy
+    const result = await handler.policy.canExecute(kase);
+    if (!result.allowed) {
+      // Write event inside transaction (status unchanged)
+      await prisma.$transaction(async (tx) => {
+        await writeEvent(tx, caseId, "VALIDATION_REJECTED", actor, result.reason);
+      });
+      return result;
+    }
+
+    // Success path: update status and write event inside transaction
+    await prisma.$transaction(async (tx) => {
+      await tx.correction_cases.update({
+        where: { id: caseId },
+        data: { status: "VALIDATED" },
+      });
+      await writeEvent(tx, caseId, "VALIDATED", actor);
+    });
+
+    return { allowed: true };
+  }
 }
 
 export const recoveryService = new RecoveryService();

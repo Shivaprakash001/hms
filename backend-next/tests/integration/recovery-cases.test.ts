@@ -164,3 +164,103 @@ describe('recoveryService.createCase + preview', () => {
     expect(first.status).toBe('DRAFT');
   });
 });
+
+describe('recoveryService.validate', () => {
+  it('transitions PREVIEW to VALIDATED when the policy allows it', async () => {
+    const owner = await createTestOwner();
+    const hostel = await createTestHostel(owner.id);
+
+    correctionRegistry.register({
+      caseType: 'VALIDATE_TEST_TYPE',
+      domain: 'PAYMENTS',
+      tier: 'FINANCIAL_CORRECTION',
+      policy: { canPreview: async () => true, canExecute: async () => ({ allowed: true }) },
+      createCase: async () => ({
+        domain: 'PAYMENTS', tier: 'FINANCIAL_CORRECTION', entityRefs: [],
+        beforeSnapshot: {}, caseDetail: {}, idempotencyKey: `VALIDATE_TEST_TYPE:${hostel.id}`,
+      }),
+      computeImpact: async () => ({ balanceChanges: [], obligationChanges: [], ledgerEntries: [], affectedReports: [], notifications: [], warnings: [] }),
+      execute: async () => ({}),
+      affectedEntities: () => [],
+    });
+
+    const kase = await recoveryService.createCase('VALIDATE_TEST_TYPE', {
+      hostelId: hostel.id, actor: { actorId: owner.id, actorRole: 'OWNER' }, reason: 'x', input: {},
+    });
+    await recoveryService.preview(kase.id);
+
+    const result = await recoveryService.validate(kase.id);
+    expect(result.allowed).toBe(true);
+
+    const reloaded = await recoveryService.getCase(kase.id);
+    expect(reloaded.status).toBe('VALIDATED');
+  });
+
+  it('refuses validation and reports the reason when the policy denies it', async () => {
+    const owner = await createTestOwner();
+    const hostel = await createTestHostel(owner.id);
+
+    correctionRegistry.register({
+      caseType: 'VALIDATE_DENY_TYPE',
+      domain: 'PAYMENTS',
+      tier: 'FINANCIAL_CORRECTION',
+      policy: { canPreview: async () => true, canExecute: async () => ({ allowed: false, reason: 'business rule says no' }) },
+      createCase: async () => ({
+        domain: 'PAYMENTS', tier: 'FINANCIAL_CORRECTION', entityRefs: [],
+        beforeSnapshot: {}, caseDetail: {}, idempotencyKey: `VALIDATE_DENY_TYPE:${hostel.id}`,
+      }),
+      computeImpact: async () => ({ balanceChanges: [], obligationChanges: [], ledgerEntries: [], affectedReports: [], notifications: [], warnings: [] }),
+      execute: async () => ({}),
+      affectedEntities: () => [],
+    });
+
+    const kase = await recoveryService.createCase('VALIDATE_DENY_TYPE', {
+      hostelId: hostel.id, actor: { actorId: owner.id, actorRole: 'OWNER' }, reason: 'x', input: {},
+    });
+    await recoveryService.preview(kase.id);
+
+    const result = await recoveryService.validate(kase.id);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toBe('business rule says no');
+
+    const reloaded = await recoveryService.getCase(kase.id);
+    expect(reloaded.status).toBe('PREVIEW'); // unchanged
+  });
+
+  it('blocks validation while an unmet dependency exists', async () => {
+    const owner = await createTestOwner();
+    const hostel = await createTestHostel(owner.id);
+
+    correctionRegistry.register({
+      caseType: 'DEP_TEST_TYPE',
+      domain: 'PAYMENTS',
+      tier: 'FINANCIAL_CORRECTION',
+      policy: { canPreview: async () => true, canExecute: async () => ({ allowed: true }) },
+      createCase: async (ctx) => ({
+        domain: 'PAYMENTS', tier: 'FINANCIAL_CORRECTION', entityRefs: [],
+        beforeSnapshot: {}, caseDetail: {},
+        idempotencyKey: `DEP_TEST_TYPE:${hostel.id}:${ctx.input.marker}`,
+        dependsOn: (ctx.input.dependsOn as string[]) ?? [],
+      }),
+      computeImpact: async () => ({ balanceChanges: [], obligationChanges: [], ledgerEntries: [], affectedReports: [], notifications: [], warnings: [] }),
+      execute: async () => ({}),
+      affectedEntities: () => [],
+    });
+
+    const dependency = await recoveryService.createCase('DEP_TEST_TYPE', {
+      hostelId: hostel.id, actor: { actorId: owner.id, actorRole: 'OWNER' }, reason: 'x', input: { marker: 'dep' },
+    });
+    await recoveryService.preview(dependency.id);
+    // dependency is left in PREVIEW — not yet COMPLETED
+
+    const dependent = await recoveryService.createCase('DEP_TEST_TYPE', {
+      hostelId: hostel.id, actor: { actorId: owner.id, actorRole: 'OWNER' }, reason: 'x',
+      input: { marker: 'main', dependsOn: [dependency.id] },
+    });
+    await recoveryService.preview(dependent.id);
+
+    const result = await recoveryService.validate(dependent.id);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toMatch(/dependency/i);
+  });
+});
