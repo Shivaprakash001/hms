@@ -58,6 +58,8 @@ export const queryKeys = {
       hostelKey(hostelId, 'tenants', tenantId, 'advance'),
     financialTimeline: (hostelId: string, tenantId: string) =>
       hostelKey(hostelId, 'tenants', tenantId, 'financial-timeline'),
+    ownerActions: (hostelId: string, tenantId: string) =>
+      hostelKey(hostelId, 'tenants', tenantId, 'owner-actions'),
     documents: (hostelId: string, tenantId: string) =>
       hostelKey(hostelId, 'tenants', tenantId, 'documents'),
     activity: (hostelId: string, tenantId: string) =>
