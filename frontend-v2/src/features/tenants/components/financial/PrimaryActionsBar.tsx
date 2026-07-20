@@ -19,6 +19,7 @@ interface PrimaryActionsBarProps {
   onCreateCharge: () => void;
   onCreateRent: () => void;
   onViewReceipts: () => void;
+  receiveLabel?: string;
 }
 
 export function PrimaryActionsBar({
@@ -27,6 +28,7 @@ export function PrimaryActionsBar({
   onCreateCharge,
   onCreateRent,
   onViewReceipts,
+  receiveLabel = 'Receive Payment',
 }: PrimaryActionsBarProps) {
   const isMobile = useIsMobile();
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -43,7 +45,7 @@ export function PrimaryActionsBar({
   };
 
   const actions: PrimaryAction[] = [
-    { key: 'receive', label: 'Receive Payment', icon: IndianRupee, onClick: onReceivePayment, emphasis: true },
+    { key: 'receive', label: receiveLabel, icon: IndianRupee, onClick: onReceivePayment, emphasis: true },
     { key: 'charge', label: 'Create Charge', icon: ReceiptText, onClick: onCreateCharge },
     { key: 'rent', label: 'Create Rent', icon: CalendarPlus, onClick: onCreateRent },
     { key: 'link', label: 'Share Payment Link', icon: Share2, onClick: handleSharePaymentLink },

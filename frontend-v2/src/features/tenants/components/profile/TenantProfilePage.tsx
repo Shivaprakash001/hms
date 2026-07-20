@@ -682,6 +682,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
         onCreateCharge={() => setObligationModal({ mode: 'create' })}
         onCreateRent={() => setObligationModal({ mode: 'create', initialValues: { obligationType: 'RENT' } })}
         onViewReceipts={() => handleNavigate('fin-documents')}
+        receiveLabel={findAction('PAYMENT_RECEIVE')?.label}
       />
 
       {/* §3 Obligations + §4 Financial Activity */}
