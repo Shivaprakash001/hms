@@ -38,3 +38,46 @@ describe('correction_cases schema', () => {
     expect(event.correction_case_id).toBe(kase.id);
   });
 });
+
+import { correctionRegistry } from '@/src/services/recovery/correction-registry';
+import type { CorrectionHandler } from '@/src/services/recovery/types';
+
+describe('correctionRegistry', () => {
+  it('registers and resolves a handler by case_type', () => {
+    const fakeHandler: CorrectionHandler = {
+      caseType: 'TEST_CASE_TYPE',
+      domain: 'PAYMENTS',
+      tier: 'FINANCIAL_CORRECTION',
+      policy: {
+        canPreview: async () => true,
+        canExecute: async () => ({ allowed: true }),
+      },
+      createCase: async () => ({ domain: 'PAYMENTS', tier: 'FINANCIAL_CORRECTION', entityRefs: [], beforeSnapshot: {}, caseDetail: {}, idempotencyKey: 'x' }),
+      computeImpact: async () => ({ balanceChanges: [], obligationChanges: [], ledgerEntries: [], affectedReports: [], notifications: [], warnings: [] }),
+      execute: async () => ({}),
+      affectedEntities: () => [],
+    };
+
+    correctionRegistry.register(fakeHandler);
+    expect(correctionRegistry.resolve('TEST_CASE_TYPE')).toBe(fakeHandler);
+  });
+
+  it('throws when registering a duplicate case_type', () => {
+    const handler: CorrectionHandler = {
+      caseType: 'DUPLICATE_TYPE',
+      domain: 'PAYMENTS',
+      tier: 'FINANCIAL_CORRECTION',
+      policy: { canPreview: async () => true, canExecute: async () => ({ allowed: true }) },
+      createCase: async () => ({ domain: 'PAYMENTS', tier: 'FINANCIAL_CORRECTION', entityRefs: [], beforeSnapshot: {}, caseDetail: {}, idempotencyKey: 'y' }),
+      computeImpact: async () => ({ balanceChanges: [], obligationChanges: [], ledgerEntries: [], affectedReports: [], notifications: [], warnings: [] }),
+      execute: async () => ({}),
+      affectedEntities: () => [],
+    };
+    correctionRegistry.register(handler);
+    expect(() => correctionRegistry.register(handler)).toThrow(/duplicate case_type/);
+  });
+
+  it('throws a clear error when resolving an unknown case_type', () => {
+    expect(() => correctionRegistry.resolve('NOT_REGISTERED')).toThrow(/no handler registered/i);
+  });
+});
