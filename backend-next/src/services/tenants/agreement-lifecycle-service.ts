@@ -4,6 +4,15 @@ import { eventLog } from "@/lib/services/event-log-service";
 import { notificationService } from "@/lib/services/notification-service";
 import { AGREEMENT_ACTIVITY_EVENTS, AGREEMENT_LIFECYCLE_MANAGED_STATUSES } from "./agreement-status";
 import { agreementRenewalNotificationService } from "./agreement-renewal-notification-service";
+import { financialLifecycleService } from "../payments/financial-lifecycle-service";
+import { renewalOfferService } from "./renewal-offer-service";
+import { renewalTimelineService } from "./renewal-timeline-service";
+import {
+  activateRenewal,
+  RenewalActivationBlockedError,
+  RenewalChainRaceError,
+} from "./renewal-activation-engine";
+import type { ReadinessFailure } from "./renewal-readiness-engine";
 
 type AgreementLifecycleSummary = {
   checked: number;
@@ -16,6 +25,7 @@ type AgreementLifecycleSummary = {
   failed: number;
   errors: string[];
   renewals_activated: number;
+  offers_expired: number;
 };
 
 function utcDateOnly(input = new Date()) {
@@ -38,9 +48,16 @@ function profileName(agreement: any) {
 
 export class AgreementLifecycleService {
   /**
-   * Agreement lifecycle is deliberately isolated from occupancy and financials.
-   * This cron must never create obligations, touch ledgers, change tenant status,
+   * The expiry-tracking walk below (status marking + 30d/15d/expiry-day
+   * reminders) is deliberately isolated from occupancy and financials and
+   * must never create obligations, touch ledgers, change tenant.status,
    * release rooms, or start move-outs.
+   *
+   * activateScheduledRenewals() is a different concern: it completes a
+   * renewal activation that manual signing (agreementRenewalSigningService)
+   * can also complete, so it intentionally mirrors that path's financial
+   * writes (tenant contract fields, rent schedule generation) to keep both
+   * activation routes producing identical state.
    */
   async processDailyLifecycle(asOf: Date = new Date()): Promise<AgreementLifecycleSummary> {
     const today = utcDateOnly(asOf);
@@ -55,12 +72,22 @@ export class AgreementLifecycleService {
       failed: 0,
       errors: [],
       renewals_activated: 0,
+      offers_expired: 0,
     };
     const touchedOwnerIds = new Set<string>();
     const touchedHostelIds = new Set<string>();
 
     // Activate scheduled renewals whose effective dates have arrived
     await this.activateScheduledRenewals(today, summary, touchedOwnerIds, touchedHostelIds);
+
+    // Expire stale renewal offers past their offer_expires_at
+    try {
+      const { expiredCount } = await renewalOfferService.expireStaleOffers();
+      summary.offers_expired = expiredCount;
+    } catch (err: any) {
+      console.error("[CRON] Failed to expire stale renewal offers:", err);
+      summary.errors.push(`Offer expiration failed: ${err?.message || String(err)}`);
+    }
 
     // Verify template health and write drift alerts if needed
     if (process.env.OTP_PROVIDER === "whatsapp") {
@@ -282,20 +309,7 @@ export class AgreementLifecycleService {
         agreement_start_date: { lte: today },
       },
       include: {
-        tenant: {
-          include: {
-            profiles: { select: { name: true } },
-            rent_obligations: {
-              where: {
-                agreement_id: { not: null },
-                obligation_type: "SECURITY_DEPOSIT",
-                status: { in: ["PENDING", "PARTIAL"] },
-                is_superseded: false,
-              },
-              take: 1,
-            },
-          },
-        },
+        tenant: { include: { profiles: { select: { name: true } } } },
         hostel: true,
         template: true,
         renewed_from_agreement: true,
@@ -303,60 +317,39 @@ export class AgreementLifecycleService {
     });
 
     for (const draft of pendingActivations) {
+      const predecessor = draft.renewed_from_agreement;
+      const ownerId = draft.tenant?.owner_id || draft.hostel?.owner_id || null;
+
       try {
-        const predecessor = draft.renewed_from_agreement;
         if (!predecessor) {
           throw new Error("Predecessor agreement not found for renewal draft");
         }
 
-        // Filter obligations to those belonging to this draft agreement
-        const pendingDeposit = draft.tenant?.rent_obligations?.find(
-          (ob) => ob.agreement_id === draft.id
-        ) || null;
+        // Copy predecessor signatures and rules snapshot — cron activation
+        // never requires a fresh e-signature; the tenant already consented
+        // by accepting the renewal offer, so the predecessor's existing
+        // signature is carried forward onto the successor document.
+        const predecessorContent = (predecessor.content_snapshot as Record<string, any>) || {};
+        const contentSnapshot = {
+          ...predecessorContent,
+          ...(draft.content_snapshot as Record<string, any> || {}),
+          agreement_start_date: draft.agreement_start_date?.toISOString().slice(0, 10) || predecessorContent.agreement_start_date,
+          agreement_end_date: draft.agreement_end_date?.toISOString().slice(0, 10) || predecessorContent.agreement_end_date,
+          agreement_duration_months: draft.agreement_duration_months || predecessorContent.agreement_duration_months,
+          contract_rent: Number(draft.contract_rent || predecessorContent.contract_rent),
+          contract_security_deposit: Number(draft.contract_security_deposit || predecessorContent.contract_security_deposit),
+          contract_maintenance: Number(draft.contract_maintenance || predecessorContent.contract_maintenance || 0),
+          contract_maintenance_type: draft.contract_maintenance_type || predecessorContent.contract_maintenance_type || "NONE",
+          contract_payment_frequency: draft.contract_payment_frequency || predecessorContent.contract_payment_frequency || "MONTHLY",
+        };
 
-        if (pendingDeposit) {
-          // Activation blocked by unpaid security deposit top-up
-          await eventLog.log("RENEWAL_ACTIVATION_BLOCKED", draft.tenant?.owner_id || null, {
-            agreement_id: draft.id,
-            predecessor_id: predecessor.id,
-            tenant_id: draft.tenant_id,
-            reason: "Unpaid security deposit top-up obligation",
-            obligation_id: pendingDeposit.id,
-            amount: Number(pendingDeposit.amount),
-          }, draft.tenant_id);
-          continue;
-        }
-
-        // Execute activation in a transaction
         await prisma.$transaction(async (tx) => {
-          // Copy predecessor signatures and rules snapshot
-          const predecessorContent = (predecessor.content_snapshot as Record<string, any>) || {};
-          const contentSnapshot = {
-            ...predecessorContent,
-            ...(draft.content_snapshot as Record<string, any> || {}),
-            agreement_start_date: draft.agreement_start_date?.toISOString().slice(0, 10) || predecessorContent.agreement_start_date,
-            agreement_end_date: draft.agreement_end_date?.toISOString().slice(0, 10) || predecessorContent.agreement_end_date,
-            agreement_duration_months: draft.agreement_duration_months || predecessorContent.agreement_duration_months,
-            contract_rent: Number(draft.contract_rent || predecessorContent.contract_rent),
-            contract_security_deposit: Number(draft.contract_security_deposit || predecessorContent.contract_security_deposit),
-            contract_maintenance: Number(draft.contract_maintenance || predecessorContent.contract_maintenance || 0),
-            contract_maintenance_type: draft.contract_maintenance_type || predecessorContent.contract_maintenance_type || "NONE",
-            contract_payment_frequency: draft.contract_payment_frequency || predecessorContent.contract_payment_frequency || "MONTHLY",
-          };
-
-          // Mark predecessor as RENEWED
-          await tx.agreement.update({
-            where: { id: predecessor.id },
-            data: {
-              status: "RENEWED",
-              renewed_at: today,
-            },
-          });
-
-          // Mark draft as SIGNED (activated)
-          await tx.agreement.update({
-            where: { id: draft.id },
-            data: {
+          await activateRenewal({
+            tx,
+            predecessor,
+            successor: draft,
+            now: today,
+            buildSuccessorUpdateData: () => ({
               status: "SIGNED",
               signed_at: today,
               tenant_signature_url: predecessor.tenant_signature_url,
@@ -377,22 +370,16 @@ export class AgreementLifecycleService {
               rule_version_id: predecessor.rule_version_id || draft.template_id,
               rule_version_number: predecessor.rule_version_number || (draft.template ? `v${draft.template.version_number}` : null),
               content_snapshot: contentSnapshot,
-            },
-          });
-
-          // Update active parameters on the main tenants model
-          await tx.tenants.update({
-            where: { id: draft.tenant_id },
-            data: {
+            }),
+            tenantContractSync: {
               monthly_rent: draft.contract_rent,
               security_deposit: draft.contract_security_deposit,
               maintenance_charge: draft.contract_maintenance,
               maintenance_type: draft.contract_maintenance_type || "MONTHLY",
             },
+            timelineActor: { type: "SYSTEM" },
           });
 
-          // Log activation event
-          const ownerId = draft.tenant?.owner_id || draft.hostel?.owner_id || null;
           await eventLog.log(AGREEMENT_ACTIVITY_EVENTS.RENEWED, ownerId, {
             agreement_id: draft.id,
             predecessor_agreement_id: predecessor.id,
@@ -406,10 +393,78 @@ export class AgreementLifecycleService {
         });
 
         summary.renewals_activated++;
+
+        if (ownerId) {
+          financialLifecycleService.notifyActivated({
+            tenantId: draft.tenant_id,
+            ownerId,
+            hostelId: draft.hostel_id,
+            source: "renewal_cron_activation",
+          });
+        }
       } catch (err: any) {
+        if (err instanceof RenewalActivationBlockedError) {
+          const failure = err.failures[0];
+          await eventLog.log(
+            "RENEWAL_ACTIVATION_BLOCKED",
+            ownerId,
+            this.blockedEventMetadata(failure, draft.id, draft.tenant_id, predecessor?.id),
+            draft.tenant_id
+          );
+          try {
+            await renewalTimelineService.registerEvent(prisma, {
+              hostelId: draft.hostel_id,
+              tenantId: draft.tenant_id,
+              agreementId: draft.id,
+              eventType: "RENEWAL_ACTIVATION_BLOCKED",
+              actorType: "SYSTEM",
+              reason: failure.reason,
+              metadata: failure.details,
+            });
+          } catch (timelineErr: any) {
+            console.error("[CRON] Failed to register renewal timeline event:", timelineErr);
+          }
+          continue;
+        }
+        if (err instanceof RenewalChainRaceError) {
+          summary.failed++;
+          summary.errors.push(`Activation failed for draft ${draft.id}: Renewal chain changed during cron activation (${err.target})`);
+          continue;
+        }
         summary.failed++;
         summary.errors.push(`Activation failed for draft ${draft.id}: ${err.message || String(err)}`);
       }
+    }
+  }
+
+  /**
+   * Maps a shared RenewalReadinessEngine failure onto the exact
+   * RENEWAL_ACTIVATION_BLOCKED event-metadata shape this cron has always
+   * written (snake_case fields, flat where the original per-check payload
+   * was flat) — preserves the existing systemEventLog contract rather than
+   * exposing the engine's internal (camelCase) field names to log
+   * consumers.
+   */
+  private blockedEventMetadata(failure: ReadinessFailure, agreementId: string, tenantId: string, predecessorId?: string) {
+    const base = {
+      agreement_id: agreementId,
+      predecessor_id: predecessorId ?? null,
+      tenant_id: tenantId,
+      reason: failure.reason,
+    };
+    switch (failure.code) {
+      case "PREDECESSOR_NOT_RENEWABLE":
+        return { ...base, predecessor_status: failure.details.predecessorStatus };
+      case "INVALID_RENEWAL_CHAIN":
+        return { ...base, predecessor_renewed_to_agreement_id: failure.details.predecessorRenewedToAgreementId };
+      case "MOVE_OUT_IN_PROGRESS":
+        return { ...base, move_out_request_id: failure.details.moveOutRequestId };
+      case "AGREEMENT_LIFECYCLE_INCOMPLETE":
+        return { ...base, details: failure.details };
+      case "SECURITY_DEPOSIT_UNPAID":
+        return { ...base, obligation_id: failure.details.obligationId, amount: failure.details.amount };
+      default:
+        return base;
     }
   }
 

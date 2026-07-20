@@ -116,6 +116,14 @@ The owner picks only a **Category** when logging an expense. `operational_type` 
 - **Manual one-tap reminder** (owner-triggered): always targets the tenant's single oldest unpaid+overdue obligation, always sends type `WARNING` regardless of actual overdue-day count.
 - **Tenant-side WhatsApp bot commands** (exact match, trimmed+uppercased): `BAL`/`BALANCE`, `SWITCH`, `DUES`, `PAY`, `STATUS`, `HELP`. Owner-side assistant uses a separate, richer ID-based interactive-menu system (`owner-whatsapp-assistant.ts`, 7180 lines) rather than flat keywords — full command enumeration for the owner side was not completed; treat as **Unknown/partially explored** beyond `HELP`/`DUES`.
 
+## Agreement renewal expiry reminders
+
+**Files:** `src/services/tenants/renewal-status-service.ts` (`determineRenewalStage`), `src/services/tenants/agreement-renewal-notification-service.ts` (`processRenewalNotifications`), called per-agreement from `AgreementLifecycleService.processDailyLifecycle`'s daily walk.
+
+- **A successor agreement suppresses all further reminders on the predecessor.** Once a renewal offer has been accepted or a manual renewal draft created (`decision.has_successor` — i.e. `renewed_to_agreement_id` set, or a non-`VOID`/`TERMINATED` row in `renewed_agreements`), `determineRenewalStage` returns `null` unconditionally — the predecessor is waiting on its successor's own activation, not on the tenant to renew, so "please renew" nudges would be actively wrong. Fixed 2026-07-19; see [[Bugs]], [[Decisions]] ADR-013.
+- **Stages are threshold bands, not exact-day matches** (fixed 2026-07-19; see [[Bugs]], [[Decisions]] ADR-014): `30_DAY_REMINDER` fires for `16 ≤ daysUntilExpiry ≤ 30`, `15_DAY_REMINDER` for `1 ≤ daysUntilExpiry ≤ 15`, `7_DAY_OVERDUE` for `daysOverdue ≥ 7`, `30_DAY_CRITICAL` for `daysOverdue ≥ grace_period_days` (checked before `7_DAY_OVERDUE`, so the two don't double-fire) — a stage that would have been missed by a single skipped cron run now still fires on the next run instead of being silently skipped forever. `EXPIRY_DAY_ALERT` (`daysUntilExpiry === 0`) intentionally stays an exact match — there's no meaningful catch-up for it, and broadening it would collide with `EXPIRED_RENT_OVERDUE`'s rent-overdue-state fallback.
+- **Idempotency is enforced at the delivery layer, not by day-exactness.** `whatsAppTemplateDeliveryService.send()` keys on `idempotencyKey` (`agreement_renewal_<stage>:<agreementId>` / `owner_renewal_alert_<stage>:<agreementId>`) against a DB unique constraint (`whatsapp_logs.idempotency_key`, `ON CONFLICT DO NOTHING`) — a stage matching on several consecutive cron runs still only ever sends once.
+
 ## Multi-hostel / `hostelId` invariants
 
 **File:** `backend-next/scripts/architectural-invariants-check.ts` — a static regex-based scanner (not runtime), 9 checks, exit-1 on violation:

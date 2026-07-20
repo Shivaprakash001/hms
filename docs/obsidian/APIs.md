@@ -49,6 +49,12 @@ All endpoints live under `backend-next/app/api/` (Next.js 14 App Router). This i
 
 `/api/change-requests` (GET list), `/api/change-requests/[id]` (GET detail + event timeline), `/api/change-requests/[id]/approve` (**TENANT only**), `/api/change-requests/[id]/reject` (**TENANT only**), `/api/change-requests/[id]/cancel` (**OWNER/ADMIN only**). Backs the `change_requests`/`change_request_events` tables — see [[Database]].
 
+## Owner Action Registry (catalog only)
+
+| Path | Methods | Summary | Auth |
+|---|---|---|---|
+| `/api/owner-actions?entity=<entity>&tenantId=<id>` | GET | Read-only catalog of which owner-facing actions are available for an entity — returns `{ success: true, data: OwnerActionSummary[] }`, each item `{ actionId, entity, category, label, available }` (`available` pre-evaluated server-side from `tenant.status` + `session.role` via `ownerActionRegistry.listForEntity`). Currently only `entity=tenant` has a frontend caller (`features/owner-actions/api`, from `TenantProfilePage.tsx`). 400 if `entity`/`tenantId` missing; 404/403 propagated from the `tenantService.getTenantById` lookup. Catalog-only — no action execution routes through this endpoint. See [[Features]] (Owner Action Registry). | Session (OWNER) |
+
 ## Hostels & Property Config
 
 `/api/owner/hostels` (GET list w/ occupancy stats / POST create), `/api/hostels/[id]` (GET/PATCH/DELETE — archive is soft-delete), `/api/hostels/[id]/preferences` (+`/inspector`, `/metadata`, `/simulate` — reminder-decision debugging/preview tools), `/api/hostels/[id]/automation-config`, `/billing-config`, `/billing-defaults`, `/invite-defaults`, `/notification-config`, `/payment-config`, `/receipt-config`, `/security-config`, `/system-config` (each PATCHes one policy sub-object), `/api/hostels/[id]/logo` (POST/DELETE). Legacy compat: `/api/owner/me/hostel`, `/api/owner/me/preferences` (**only resolves an implicit hostel if the owner has exactly one active hostel**, else requires explicit `hostelId`), `/api/owner/me/profile`. Agreement templates: `/api/owner/hostels/[id]/agreement-template` (GET/POST — save_draft/publish/reset_section/reset_all, version-bumps on publish), `/preview`, `/signature`. `/api/owner/logo` — **always 410**, redirects callers to the hostel-scoped path. `/api/floors` (GET/POST), `/api/floors/[id]` (PATCH/DELETE).

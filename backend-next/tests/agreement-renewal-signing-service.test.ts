@@ -10,6 +10,11 @@ vi.mock("@/src/services/payments/agreement-rent-schedule-service", () => ({
   },
 }));
 
+const { registerEvent } = vi.hoisted(() => ({ registerEvent: vi.fn().mockResolvedValue({ id: "event-1" }) }));
+vi.mock("@/src/services/tenants/renewal-timeline-service", () => ({
+  renewalTimelineService: { registerEvent },
+}));
+
 const predecessorBase = {
   id: "agreement-1",
   tenant_id: "tenant-1",
@@ -64,6 +69,7 @@ function createDb(options: {
   renewal?: Partial<typeof renewalBase> | null;
   predecessor?: Partial<typeof predecessorBase> | null;
   activeMoveOut?: any;
+  unpaidDeposit?: any;
 } = {}) {
   const predecessor = options.predecessor === null ? null : { ...predecessorBase, ...options.predecessor };
   const renewal = options.renewal === null
@@ -170,6 +176,7 @@ function createDb(options: {
       updateMany: vi.fn(),
     },
     rent_obligations: {
+      findFirst: vi.fn().mockResolvedValue(options.unpaidDeposit ?? null),
       create: vi.fn(),
       createMany: vi.fn(),
       update: vi.fn(),
@@ -262,6 +269,10 @@ describe("AgreementRenewalSigningService", () => {
       }),
       "tenant-1"
     );
+    expect(registerEvent).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ eventType: "RENEWAL_ACTIVATED", actorType: "TENANT" })
+    );
     expect(result.pdfGenerated).toBe(true);
     expect(tx.agreement.updateMany).toHaveBeenCalledTimes(2);
   });
@@ -351,6 +362,31 @@ describe("AgreementRenewalSigningService", () => {
     expect(tx.agreement.updateMany).not.toHaveBeenCalled();
   });
 
+  it("blocks signing when an unpaid security deposit obligation exists for the renewal agreement", async () => {
+    const { db, tx, records } = createDb({
+      unpaidDeposit: { id: "deposit-ob-1", agreement_id: "agreement-2", amount: 4000, status: "PENDING" },
+    });
+    const { service } = createService(db);
+
+    await expect(service.signRenewalAgreement(validInput)).rejects.toMatchObject({
+      code: "SECURITY_DEPOSIT_UNPAID",
+      status: 409,
+      details: expect.objectContaining({ obligationId: "deposit-ob-1", amount: 4000 }),
+    });
+    expect(records.get("agreement-1").status).toBe("SIGNED");
+    expect(records.get("agreement-2").status).toBe("DRAFT");
+    expect(tx.agreement.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("allows signing when there is no unpaid security deposit obligation", async () => {
+    const { db, records } = createDb({ unpaidDeposit: null });
+    const { service } = createService(db);
+
+    await service.signRenewalAgreement(validInput);
+
+    expect(records.get("agreement-2").status).toBe("SIGNED");
+  });
+
   it("keeps signing committed when PDF generation fails", async () => {
     const { db, records } = createDb();
     const pdfGenerator = { generateAndUploadPdf: vi.fn().mockRejectedValue(new Error("storage down")) };
@@ -395,20 +431,48 @@ describe("AgreementRenewalSigningService", () => {
     expect(tx.tenant_billing_plans.updateMany).not.toHaveBeenCalled();
   });
 
-  it("does not touch occupancy or move-out records", async () => {
+  it("does not touch room allocation or move-out records", async () => {
     const { db, tx } = createDb();
     const { service } = createService(db);
 
     await service.signRenewalAgreement(validInput);
 
-    expect(tx.tenants.update).not.toHaveBeenCalled();
-    expect(tx.tenants.updateMany).not.toHaveBeenCalled();
     expect(tx.roomAllocation.create).not.toHaveBeenCalled();
     expect(tx.roomAllocation.update).not.toHaveBeenCalled();
     expect(tx.roomAllocation.updateMany).not.toHaveBeenCalled();
     expect(tx.move_out_requests.create).not.toHaveBeenCalled();
     expect(tx.move_out_requests.update).not.toHaveBeenCalled();
     expect(tx.move_out_requests.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("syncs the tenant's active contract fields, matching what cron activation already does", async () => {
+    const { db, tx } = createDb();
+    const { service } = createService(db);
+
+    await service.signRenewalAgreement(validInput);
+
+    expect(tx.tenants.update).toHaveBeenCalledWith({
+      where: { id: "tenant-1" },
+      data: {
+        monthly_rent: 8500,
+        security_deposit: 10000,
+        maintenance_charge: 1400,
+        maintenance_type: "ONE_TIME",
+      },
+    });
+    expect(tx.tenants.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("records the timeline actor as OWNER when signedBy is not TENANT", async () => {
+    const { db, tx } = createDb();
+    const { service } = createService(db);
+
+    await service.signRenewalAgreement({ ...validInput, signedBy: "OWNER" });
+
+    expect(registerEvent).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ eventType: "RENEWAL_ACTIVATED", actorType: "OWNER" })
+    );
   });
 
   it("uses structured signing errors", () => {

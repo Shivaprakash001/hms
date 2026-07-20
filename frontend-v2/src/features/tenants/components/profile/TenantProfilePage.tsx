@@ -11,6 +11,7 @@ import { tenantService } from '@features/tenants/api';
 import { paymentService } from '@features/payments/api';
 import { ownerService } from '@features/owners/api';
 import { useTenantProfile } from '@features/tenants/hooks/useTenantProfile';
+import { useOwnerActions } from '@features/owner-actions/hooks/useOwnerActions';
 import { TenantStatusBadge } from '@features/tenants/components/badges/TenantStatusBadge';
 import { RentObligationList } from '@features/tenants/components/financial/RentObligationList';
 import { WaiveObligationModal } from '@features/tenants/components/financial/WaiveObligationModal';
@@ -121,6 +122,9 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
 
   const { overview, allocations, dues, advance, full, financialTimeline, isLoading, isError, refetch } =
     useTenantProfile(hostelId, tenantId);
+
+  const { findAction } = useOwnerActions(hostelId, tenantId);
+  const personalInfoAction = findAction('TENANT_EDIT_PERSONAL_INFO');
 
   // Change Management: fetch pending requests for this tenant
   const {
@@ -512,7 +516,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
                   className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 px-4.5 py-3 rounded-xl bg-secondary text-foreground text-xs font-semibold hover:bg-secondary/80 active:scale-95 transition-all border border-border"
                 >
                   <FileCheck2 className="w-4 h-4 text-accent" />
-                  <span>Request Change</span>
+                  <span>{personalInfoAction?.label ?? 'Request Change'}</span>
                 </button>
               ) : (
                 <button
@@ -678,6 +682,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
         onCreateCharge={() => setObligationModal({ mode: 'create' })}
         onCreateRent={() => setObligationModal({ mode: 'create', initialValues: { obligationType: 'RENT' } })}
         onViewReceipts={() => handleNavigate('fin-documents')}
+        receiveLabel={findAction('PAYMENT_RECEIVE')?.label}
       />
 
       {/* §3 Obligations + §4 Financial Activity */}

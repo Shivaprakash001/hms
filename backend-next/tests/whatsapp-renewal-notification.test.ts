@@ -103,6 +103,22 @@ describe("AgreementRenewalNotificationService integration", () => {
     },
   };
 
+  it("does not send any expiry reminder once a successor agreement already exists", async () => {
+    const now = new Date("2026-06-29T00:00:00.000Z"); // would be exactly 15 days remaining
+    const agreementWithSuccessor = {
+      ...baseAgreement,
+      renewed_to_agreement_id: "successor-1",
+      renewed_to_agreement: { id: "successor-1", status: "DRAFT" },
+    };
+
+    const result = await agreementRenewalNotificationService.processRenewalNotifications(agreementWithSuccessor, now);
+
+    expect(result.skipped).toBe(true);
+    expect(result.tenantSent).toBe(false);
+    expect(result.ownerSent).toBe(false);
+    expect(mockDeliverySend).not.toHaveBeenCalled();
+  });
+
   it("sends 30-day reminder when exactly 30 days remain", async () => {
     const now = new Date("2026-06-14T00:00:00.000Z"); // 30 days before July 14
     mockDeliverySend.mockResolvedValue({ sent: true, skipped: false, providerMessageId: "wamid.1" });
@@ -326,6 +342,44 @@ describe("AgreementRenewalNotificationService integration", () => {
         idempotencyKey: "agreement_renewal_7_day_overdue:agreement-123",
         bodyParameters: ["Arjun Dev", "14 Jul 2026", "Overdue by 7 days"],
       })
+    );
+  });
+
+  it("catches up a missed 30-day reminder when cron resumes at 25 days remaining", async () => {
+    const now = new Date("2026-06-19T00:00:00.000Z"); // 25 days before July 14 — cron missed day 30
+    mockDeliverySend.mockResolvedValue({ sent: true, skipped: false, providerMessageId: "wamid.catchup1" });
+
+    const result = await agreementRenewalNotificationService.processRenewalNotifications(baseAgreement, now);
+
+    expect(result.tenantSent).toBe(true);
+    expect(mockDeliverySend).toHaveBeenCalledWith(
+      expect.objectContaining({ idempotencyKey: "agreement_renewal_30_day_reminder:agreement-123" })
+    );
+  });
+
+  it("prefers the 15-day reminder over the 30-day reminder once inside the 15-day window", async () => {
+    const now = new Date("2026-07-02T00:00:00.000Z"); // 12 days before July 14
+    mockDeliverySend.mockResolvedValue({ sent: true, skipped: false, providerMessageId: "wamid.catchup2" });
+
+    await agreementRenewalNotificationService.processRenewalNotifications(baseAgreement, now);
+
+    expect(mockDeliverySend).toHaveBeenCalledWith(
+      expect.objectContaining({ idempotencyKey: "agreement_renewal_15_day_reminder:agreement-123" })
+    );
+    expect(mockDeliverySend).not.toHaveBeenCalledWith(
+      expect.objectContaining({ idempotencyKey: "agreement_renewal_30_day_reminder:agreement-123" })
+    );
+  });
+
+  it("catches up a missed 7-day-overdue alert before the grace-period critical threshold", async () => {
+    const now = new Date("2026-07-30T00:00:00.000Z"); // 16 days overdue, grace period 30 — cron missed day 7
+    mockDeliverySend.mockResolvedValue({ sent: true, skipped: false, providerMessageId: "wamid.catchup3" });
+    const expiredAgreement = { ...baseAgreement, status: "AGREEMENT_EXPIRED" };
+
+    await agreementRenewalNotificationService.processRenewalNotifications(expiredAgreement, now);
+
+    expect(mockDeliverySend).toHaveBeenCalledWith(
+      expect.objectContaining({ idempotencyKey: "agreement_renewal_7_day_overdue:agreement-123" })
     );
   });
 

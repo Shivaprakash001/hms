@@ -1,11 +1,14 @@
 import { prisma } from "@/lib/db";
 import { eventLog } from "@/lib/services/event-log-service";
 import { AgreementGenerationService, DEFAULT_RULE_CONTENT } from "./agreement-generation-service";
-import { AGREEMENT_ACTIVITY_EVENTS, isCurrentAgreementStatus } from "./agreement-status";
-import { assertAgreementLifecycleComplete } from "./agreement-lifecycle-completeness";
+import { AGREEMENT_ACTIVITY_EVENTS } from "./agreement-status";
 import { getActiveTemplateAndSyncRuleVersion, DEFAULT_AGREEMENT_TEMPLATE, DEFAULT_TERMS_AND_CONDITIONS, interpolateRulesContent } from "../../utils/default-rules";
-import { agreementRentScheduleService } from "../payments/agreement-rent-schedule-service";
 import { financialLifecycleService } from "../payments/financial-lifecycle-service";
+import {
+  activateRenewal,
+  RenewalActivationBlockedError,
+  RenewalChainRaceError,
+} from "./renewal-activation-engine";
 
 type AgreementRenewalSigningErrorCode =
   | "RENEWAL_AGREEMENT_NOT_FOUND"
@@ -14,6 +17,7 @@ type AgreementRenewalSigningErrorCode =
   | "PREDECESSOR_NOT_RENEWABLE"
   | "INVALID_RENEWAL_CHAIN"
   | "MOVE_OUT_IN_PROGRESS"
+  | "SECURITY_DEPOSIT_UNPAID"
   | "SIGNATURE_REQUIRED"
   | "AGREEMENT_LIFECYCLE_INCOMPLETE";
 
@@ -139,76 +143,12 @@ export class AgreementRenewalSigningService {
       }
 
       const predecessor = renewalAgreement.renewed_from_agreement;
-      await tx.$queryRaw`SELECT id FROM "Agreement" WHERE id = ${predecessor.id}::uuid FOR UPDATE`;
 
-      if (!isCurrentAgreementStatus(predecessor.status)) {
-        throw new AgreementRenewalSigningError(
-          "PREDECESSOR_NOT_RENEWABLE",
-          "Predecessor agreement is not eligible for renewal signing",
-          {
-            predecessorAgreementId: predecessor.id,
-            predecessorStatus: predecessor.status,
-          }
-        );
-      }
-
-      if (predecessor.renewed_to_agreement_id !== renewalAgreement.id) {
-        throw new AgreementRenewalSigningError("INVALID_RENEWAL_CHAIN", "Renewal chain is invalid", {
-          predecessorAgreementId: predecessor.id,
-          predecessorRenewedToAgreementId: predecessor.renewed_to_agreement_id,
-          renewalAgreementId: renewalAgreement.id,
-        });
-      }
-
-      try {
-        assertAgreementLifecycleComplete(renewalAgreement, { agreementId: renewalAgreement.id });
-      } catch (error: any) {
-        throw new AgreementRenewalSigningError(
-          "AGREEMENT_LIFECYCLE_INCOMPLETE",
-          error?.message || "Agreement lifecycle metadata is incomplete",
-          error?.details || { renewalAgreementId: renewalAgreement.id }
-        );
-      }
-
-      const activeMoveOut = await tx.move_out_requests.findFirst({
-        where: {
-          tenant_id: renewalAgreement.tenant_id,
-          status: { notIn: ["COMPLETED", "REJECTED"] },
-        },
-        select: { id: true, status: true },
-        orderBy: { created_at: "desc" },
-      });
-      if (activeMoveOut) {
-        throw new AgreementRenewalSigningError(
-          "MOVE_OUT_IN_PROGRESS",
-          "Move-out already in progress. Cancel move-out before renewing.",
-          {
-            tenantId: renewalAgreement.tenant_id,
-            moveOutRequestId: activeMoveOut.id,
-            moveOutStatus: activeMoveOut.status,
-          }
-        );
-      }
-
-      const predecessorUpdate = await tx.agreement.updateMany({
-        where: {
-          id: predecessor.id,
-          status: { in: ["SIGNED", "EXPIRING_SOON", "AGREEMENT_EXPIRED"] },
-          renewed_to_agreement_id: renewalAgreement.id,
-        },
-        data: {
-          status: "RENEWED",
-          renewed_at: now,
-        },
-      });
-      if (predecessorUpdate.count !== 1) {
-        throw new AgreementRenewalSigningError("INVALID_RENEWAL_CHAIN", "Renewal chain changed during signing", {
-          predecessorAgreementId: predecessor.id,
-          renewalAgreementId: renewalAgreement.id,
-        });
-      }
-
-      // Fetch active template and sync rule version
+      // Fetch active template and sync rule version — read-only and
+      // independent of the predecessor's row state, so it's safe to
+      // resolve before activation (unlike cron activation, manual signing
+      // always captures a fresh signature and re-resolves the current
+      // active template rather than carrying the predecessor's forward).
       const template = await getActiveTemplateAndSyncRuleVersion(tx, renewalAgreement.tenant.hostel_id, "RESIDENCY");
       const ruleVersion = await tx.ruleVersion.findUnique({
         where: { id: template.id },
@@ -238,53 +178,73 @@ export class AgreementRenewalSigningService {
       const ruleVersionId = ruleVersion?.id || template.id;
       const ruleVersionNumber = ruleVersion?.version || `v${template.version_number}`;
 
-      const renewalUpdate = await tx.agreement.updateMany({
-        where: {
-          id: renewalAgreement.id,
-          status: "DRAFT",
-          renewed_from_agreement_id: predecessor.id,
-        },
-        data: {
-          status: "SIGNED",
-          signed_at: now,
-          tenant_signature_url: tenantSignatureUrl,
-          tenant_signature_name: tenantSignatureName,
-          tenant_signed_at: now,
-          tenant_ip: input.metadata?.ip || null,
-          tenant_user_agent: input.metadata?.userAgent || null,
-          guardian_signature_url: hasGuardianSignature ? guardianSignatureUrl : null,
-          guardian_signature_name: hasGuardianSignature ? guardianSignatureName : null,
-          guardian_relation: hasGuardianSignature ? guardianRelation : null,
-          guardian_signed_at: hasGuardianSignature ? now : null,
-          guardian_ip: hasGuardianSignature ? input.metadata?.ip || null : null,
-          guardian_user_agent: hasGuardianSignature ? input.metadata?.userAgent || null : null,
-          owner_signature_url: template.owner_signature_url || renewalAgreement.template?.owner_signature_url || null,
-          owner_signature_name: template.owner_name || renewalAgreement.template?.owner_name || null,
-          owner_signed_at: now,
-          rules_snapshot: rulesSnapshot,
-          rule_version_id: ruleVersionId,
-          rule_version_number: ruleVersionNumber,
-          content_snapshot: {
-            ...(renewalAgreement.content_snapshot as any || {}),
-            template_id: template.id,
-            template_version_number: template.version_number,
-            template_published_at: template.published_at,
-            template_name: template.title,
-            template_type: template.type,
-            raw_rules: rawRules,
-            interpolated_rules: interpolatedRules,
-            hostel_rules: interpolatedRules,
-            terms_and_conditions: (template.rules_content as any)?.terms_and_conditions || DEFAULT_TERMS_AND_CONDITIONS,
+      try {
+        await activateRenewal({
+          tx,
+          predecessor,
+          successor: renewalAgreement,
+          now,
+          buildSuccessorUpdateData: () => ({
+            status: "SIGNED",
+            signed_at: now,
+            tenant_signature_url: tenantSignatureUrl,
+            tenant_signature_name: tenantSignatureName,
+            tenant_signed_at: now,
+            tenant_ip: input.metadata?.ip || null,
+            tenant_user_agent: input.metadata?.userAgent || null,
+            guardian_signature_url: hasGuardianSignature ? guardianSignatureUrl : null,
+            guardian_signature_name: hasGuardianSignature ? guardianSignatureName : null,
+            guardian_relation: hasGuardianSignature ? guardianRelation : null,
+            guardian_signed_at: hasGuardianSignature ? now : null,
+            guardian_ip: hasGuardianSignature ? input.metadata?.ip || null : null,
+            guardian_user_agent: hasGuardianSignature ? input.metadata?.userAgent || null : null,
+            owner_signature_url: template.owner_signature_url || renewalAgreement.template?.owner_signature_url || null,
+            owner_signature_name: template.owner_name || renewalAgreement.template?.owner_name || null,
+            owner_signed_at: now,
+            rules_snapshot: rulesSnapshot,
+            rule_version_id: ruleVersionId,
+            rule_version_number: ruleVersionNumber,
+            content_snapshot: {
+              ...(renewalAgreement.content_snapshot as any || {}),
+              template_id: template.id,
+              template_version_number: template.version_number,
+              template_published_at: template.published_at,
+              template_name: template.title,
+              template_type: template.type,
+              raw_rules: rawRules,
+              interpolated_rules: interpolatedRules,
+              hostel_rules: interpolatedRules,
+              terms_and_conditions: (template.rules_content as any)?.terms_and_conditions || DEFAULT_TERMS_AND_CONDITIONS,
+            },
+          }),
+          tenantContractSync: {
+            monthly_rent: renewalAgreement.contract_rent,
+            security_deposit: renewalAgreement.contract_security_deposit,
+            maintenance_charge: renewalAgreement.contract_maintenance,
+            maintenance_type: renewalAgreement.contract_maintenance_type || "MONTHLY",
           },
-        },
-      });
-      if (renewalUpdate.count !== 1) {
-        throw new AgreementRenewalSigningError("RENEWAL_DRAFT_REQUIRED", "Renewal agreement changed during signing", {
-          renewalAgreementId: renewalAgreement.id,
+          timelineActor: {
+            type: (input.signedBy || "TENANT") === "TENANT" ? "TENANT" : "OWNER",
+          },
         });
+      } catch (err: any) {
+        if (err instanceof RenewalActivationBlockedError) {
+          const failure = err.failures[0];
+          throw new AgreementRenewalSigningError(failure.code as AgreementRenewalSigningErrorCode, failure.reason, failure.details);
+        }
+        if (err instanceof RenewalChainRaceError) {
+          if (err.target === "predecessor") {
+            throw new AgreementRenewalSigningError("INVALID_RENEWAL_CHAIN", "Renewal chain changed during signing", {
+              predecessorAgreementId: predecessor.id,
+              renewalAgreementId: renewalAgreement.id,
+            });
+          }
+          throw new AgreementRenewalSigningError("RENEWAL_DRAFT_REQUIRED", "Renewal agreement changed during signing", {
+            renewalAgreementId: renewalAgreement.id,
+          });
+        }
+        throw err;
       }
-
-      await agreementRentScheduleService.generateForAgreementInTx(tx, renewalAgreement.id);
 
       const signedRenewal = await tx.agreement.findUnique({
         where: { id: renewalAgreement.id },

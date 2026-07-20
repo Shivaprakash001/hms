@@ -45,6 +45,12 @@ vi.mock("@/lib/db", () => {
     move_out_requests: {
       findFirst: vi.fn().mockResolvedValue(null),
     },
+    rent_obligations: {
+      findFirst: vi.fn().mockResolvedValue(null),
+    },
+    renewalTimelineEvent: {
+      create: vi.fn().mockResolvedValue({ id: "timeline-event-1" }),
+    },
     roomAllocation: {
       count: vi.fn().mockResolvedValue(0),
     },

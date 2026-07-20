@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AgreementRenewalError, AgreementRenewalService } from "@/src/services/tenants/agreement-renewal-service";
 
+const { registerEvent } = vi.hoisted(() => ({ registerEvent: vi.fn().mockResolvedValue({ id: "event-1" }) }));
+vi.mock("@/src/services/tenants/renewal-timeline-service", () => ({
+  renewalTimelineService: { registerEvent },
+}));
+
 const sourceAgreement = {
   id: "agreement-1",
   tenant_id: "tenant-1",
@@ -138,6 +143,13 @@ describe("AgreementRenewalService", () => {
       data: {
         renewed_to_agreement_id: result.renewalDraft.id,
       },
+    });
+    expect(registerEvent).toHaveBeenCalledWith(tx, {
+      hostelId: "hostel-1",
+      tenantId: "tenant-1",
+      agreementId: result.renewalDraft.id,
+      eventType: "DRAFT_CREATED",
+      actorType: "SYSTEM",
     });
   });
 
