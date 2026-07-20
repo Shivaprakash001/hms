@@ -45,6 +45,20 @@ The tenant-contract subsystem — **entirely undocumented in `docs/data-models/s
 ### `change_requests` / `change_request_events`
 The newest subsystem in the schema (migration `20260707170000_change_management_system`), also undocumented in `docs/data-models/schema.md`. A generic, governed wrapper for approval-gated modifications to `tenant`/`profile`/`agreement`/`obligation`/`room_allocation` data — captures `before` (full prior state, JSON) and `diff` (changed fields only, JSON), a mandatory `reason`, and a multi-level approval model (`ChangeCategory` A–D, `ChangeApprovalLevel` L0–L3). See [[Business-Rules]] and [[Features]] for the tenant-approval workflow this powers.
 
+### `correction_cases` / `correction_case_events`
+The foundation of the Business Recovery Platform (migration `20260720120000_business_recovery_platform`), a new Correction Case lifecycle engine for owner-facing undo/correction workflows — currently schema-only (Task 1 of a 17-task phased build, services/API/UI follow in later tasks). See `docs/business-logic/business-recovery-platform-architecture.md` for full design rationale.
+
+**Enums:**
+- `RecoveryTier`: OPERATIONAL_UNDO, FINANCIAL_CORRECTION, ADMINISTRATIVE_REVERSAL (classifies the severity/type of correction)
+- `CorrectionDomain`: PAYMENTS, ROOMS, AGREEMENTS, EXPENSES, ADMISSIONS, RENEWALS, SETTINGS, DOCUMENTS, KYC, RESERVATIONS (scope of what's being corrected)
+- `CaseStatus`: DRAFT, PREVIEW, VALIDATED, EXECUTING, COMPLETED, FAILED, EXPIRED, CANCELLED (lifecycle state)
+
+**`correction_cases` table:**
+One row per correction case — a request to undo or correct an owner action. Key fields: `hostel_id` (non-nullable, scoped per-hostel per the repo's invariant), `domain` + `case_type` (what's being corrected), `tier` + `status` (severity and lifecycle), `entity_refs` (JSON array of entity IDs affected), `reason` (mandatory), `actor_id` + `actor_role` (who initiated), `before_snapshot` (full state of affected entity before correction), `preview_impact` (simulated outcome, populated in PREVIEW status), `execution_result` (actual outcome after execution), `case_detail` (domain-specific correction parameters, JSON), `idempotency_key` (unique, enables safe replay), `depends_on` (array of case IDs that must complete first), `undo_expires_at` (optional deadline for undo-window cutoff), `correlation_id` (tracing across related cases), `created_at`/`updated_at` (audit timestamps). Four indexes: (hostel_id), (hostel_id, status), (status, undo_expires_at), (case_type).
+
+**`correction_case_events` table:**
+Append-only audit trail for each correction case. One row per state change/event — `correction_case_id` (FK to correction_cases), `event_type` (e.g. CREATED, PREVIEW_GENERATED, VALIDATED, EXECUTION_STARTED, COMPLETED/FAILED), `actor_id` + `actor_role` (who triggered the event), `reason` (optional rationale), `snapshot` (optional JSON snapshot at event time), `ip_address` + `user_agent` (request metadata), `created_at` (event timestamp). One index: (correction_case_id) for efficient event history retrieval.
+
 ## Other domain groupings (model names only — see `schema.prisma` for full fields)
 
 | Domain | Models |
