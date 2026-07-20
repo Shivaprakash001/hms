@@ -273,6 +273,7 @@ model hostels {
   renewal_offers      RenewalOffer[]
   bulk_renewal_batches BulkRenewalBatch[]
   change_requests      change_requests[]
+  correction_cases     correction_cases[]
 }
 
 model identity_tokens {
@@ -2423,4 +2424,80 @@ model change_request_events {
   change_request      change_requests     @relation(fields: [change_request_id], references: [id], onDelete: Cascade)
 
   @@index([change_request_id])
+}
+
+enum RecoveryTier {
+  OPERATIONAL_UNDO
+  FINANCIAL_CORRECTION
+  ADMINISTRATIVE_REVERSAL
+}
+
+enum CorrectionDomain {
+  PAYMENTS
+  ROOMS
+  AGREEMENTS
+  EXPENSES
+  ADMISSIONS
+  RENEWALS
+  SETTINGS
+  DOCUMENTS
+  KYC
+  RESERVATIONS
+}
+
+enum CaseStatus {
+  DRAFT
+  PREVIEW
+  VALIDATED
+  EXECUTING
+  COMPLETED
+  FAILED
+  EXPIRED
+  CANCELLED
+}
+
+model correction_cases {
+  id               String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  hostel_id        String                   @db.Uuid
+  domain           CorrectionDomain
+  case_type        String
+  tier             RecoveryTier
+  status           CaseStatus               @default(DRAFT)
+  entity_refs      Json
+  reason           String
+  actor_id         String                   @db.Uuid
+  actor_role       String
+  before_snapshot  Json
+  preview_impact   Json?
+  execution_result Json?
+  case_detail      Json
+  idempotency_key  String                   @unique
+  depends_on       String[]                 @default([])
+  undo_expires_at  DateTime?                @db.Timestamptz(6)
+  correlation_id   String?                  @db.Uuid
+  created_at       DateTime                 @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime?                @db.Timestamptz(6)
+  hostels          hostels                  @relation(fields: [hostel_id], references: [id])
+  events           correction_case_events[]
+
+  @@index([hostel_id])
+  @@index([hostel_id, status])
+  @@index([status, undo_expires_at])
+  @@index([case_type])
+}
+
+model correction_case_events {
+  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  correction_case_id String           @db.Uuid
+  event_type         String
+  actor_id           String           @db.Uuid
+  actor_role         String
+  reason             String?
+  snapshot           Json?
+  ip_address         String?
+  user_agent         String?
+  created_at         DateTime         @default(now()) @db.Timestamptz(6)
+  correction_case    correction_cases @relation(fields: [correction_case_id], references: [id])
+
+  @@index([correction_case_id])
 }
