@@ -49,7 +49,7 @@ Entry: `app/Router.tsx` → `app/router/AppRouter.tsx`, composing four route-gro
 | `admissions` | Yes | Plus a visitor-facing component (`components/visitor/`). |
 | `activity` | Yes | Activity/audit log listing. |
 | `settings` | **No** `api/` folder — only `settingsHooks.ts`. Where its data access goes through was not traced — **Unknown**. |
-| `recovery` | Yes | Thin wrapper (`recoveryService.createCase/validate/execute/getById`) over the Business Recovery Platform's `/api/recovery/cases/*` routes. No components of its own — consumed by `app/components/modals/CorrectPaymentModal.tsx` (Reverse-only correction flow wired into `TenantProfilePage`'s Financial Activity feed). See [[Features]] (Correct Payment (Reverse only)). |
+| `recovery` | Yes | Thin wrapper (`recoveryService.createCase/validate/execute/getById`) over the Business Recovery Platform's `/api/recovery/cases/*` routes. No components of its own — consumed by `app/components/modals/CorrectPaymentModal.tsx` (Reverse + Transfer correction flow wired into `TenantProfilePage`'s Financial Activity feed; Transfer mode also uses `features/payments/api`'s `paymentService.quickCollectSearch` for the destination-tenant picker). See [[Features]] (Correct Payment (Reverse / Transfer)). |
 
 All `features/*/api` files are enforced (`check-architecture.mjs`) to never call raw `fetch()`/`axios` directly — only through `@lib/api-client`.
 
