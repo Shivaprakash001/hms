@@ -586,6 +586,20 @@ export function TenantFinancialsPage() {
     const overdueDays = Number(readModel?.overdue_days ?? 0);
     const currentPayable = Number(readModel?.current_payable_amount ?? 0);
 
+    // Earliest due_date among the obligations that actually make up
+    // currentPayable (same readModel.items the amount above is summed from).
+    // Must NOT fall back to `currentInstallment` (a period-based "today falls
+    // within this cycle" match) — that can resolve to an already-fully-paid
+    // cycle while currentPayable reflects a different, later obligation,
+    // producing a date/amount mismatch (e.g. "Amount Due ₹X / Due <past date
+    // of a paid cycle>").
+    const earliestPayableDueDate = (readModel?.items ?? [])
+      .filter((i: any) => i.legacy_status !== 'UPCOMING' && Number(i.outstanding ?? 0) > 0 && i.due_date)
+      .reduce((earliest: string | null, i: any) => {
+        if (!earliest) return i.due_date;
+        return new Date(i.due_date).getTime() < new Date(earliest).getTime() ? i.due_date : earliest;
+      }, null as string | null);
+
     // 1. Red State: overdue per the canonical read model
     if (paymentStatus === 'OVERDUE') {
       return {
@@ -606,8 +620,8 @@ export function TenantFinancialsPage() {
         title: 'Payment Due Soon',
         amountLabel: 'Amount Due',
         amount: currentPayable,
-        subtext: currentInstallment?.due_date
-          ? `Due ${fmtDate(currentInstallment.due_date)}. Please complete your payment.`
+        subtext: earliestPayableDueDate
+          ? `Due ${fmtDate(earliestPayableDueDate)}. Please complete your payment.`
           : 'Please complete your payment.',
         bgClass: 'bg-gradient-to-br from-amber-500 via-orange-500 to-amber-600 text-white shadow-lg shadow-amber-500/20',
         icon: Clock,
@@ -651,7 +665,7 @@ export function TenantFinancialsPage() {
       icon: ShieldCheck,
       nextDays: nextInstallmentDays,
     };
-  }, [readModel, installments, currentInstallment]);
+  }, [readModel, installments]);
 
   // Financial Forecast Section
   const forecastInstallments = useMemo(() => {
