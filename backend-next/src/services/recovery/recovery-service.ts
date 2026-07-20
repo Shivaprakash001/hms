@@ -33,13 +33,14 @@ function toCaseRecord(row: any): CorrectionCaseRecord {
 }
 
 async function writeEvent(
+  tx: any,
   caseId: string,
   eventType: string,
   actor: Actor,
   reason?: string,
   snapshot?: unknown
 ) {
-  await prisma.correction_case_events.create({
+  await tx.correction_case_events.create({
     data: {
       correction_case_id: caseId,
       event_type: eventType,
@@ -64,28 +65,41 @@ class RecoveryService {
     });
     if (existing) return toCaseRecord(existing);
 
-    const row = await prisma.correction_cases.create({
-      data: {
-        hostel_id: ctx.hostelId,
-        domain: draft.domain as any,
-        case_type: caseType,
-        tier: draft.tier as any,
-        status: "DRAFT",
-        entity_refs: draft.entityRefs as any,
-        reason: ctx.reason,
-        actor_id: ctx.actor.actorId,
-        actor_role: ctx.actor.actorRole,
-        before_snapshot: draft.beforeSnapshot as any,
-        case_detail: draft.caseDetail as any,
-        idempotency_key: draft.idempotencyKey,
-        depends_on: draft.dependsOn ?? [],
-        undo_expires_at: draft.undoExpiresAt ?? null,
-        correlation_id: draft.correlationId ?? null,
-      },
-    });
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const row = await tx.correction_cases.create({
+          data: {
+            hostel_id: ctx.hostelId,
+            domain: draft.domain as any,
+            case_type: caseType,
+            tier: draft.tier as any,
+            status: "DRAFT",
+            entity_refs: draft.entityRefs as any,
+            reason: ctx.reason,
+            actor_id: ctx.actor.actorId,
+            actor_role: ctx.actor.actorRole,
+            before_snapshot: draft.beforeSnapshot as any,
+            case_detail: draft.caseDetail as any,
+            idempotency_key: draft.idempotencyKey,
+            depends_on: draft.dependsOn ?? [],
+            undo_expires_at: draft.undoExpiresAt ?? null,
+            correlation_id: draft.correlationId ?? null,
+          },
+        });
 
-    await writeEvent(row.id, "CREATED", ctx.actor, ctx.reason);
-    return toCaseRecord(row);
+        await writeEvent(tx, row.id, "CREATED", ctx.actor, ctx.reason);
+        return toCaseRecord(row);
+      });
+    } catch (err: any) {
+      if (err?.code === "P2002") {
+        // Concurrent insert race — transaction is aborted, re-fetch outside it
+        const existing = await prisma.correction_cases.findUniqueOrThrow({
+          where: { idempotency_key: draft.idempotencyKey },
+        });
+        return toCaseRecord(existing);
+      }
+      throw err;
+    }
   }
 
   async getCase(caseId: string): Promise<CorrectionCaseRecord> {
@@ -114,16 +128,18 @@ class RecoveryService {
 
     const impact = await handler.computeImpact(kase);
 
-    await prisma.correction_cases.update({
-      where: { id: caseId },
-      data: {
-        preview_impact: impact as any,
-        status: kase.status === "DRAFT" ? "PREVIEW" : kase.status,
-      },
-    });
+    return await prisma.$transaction(async (tx) => {
+      await tx.correction_cases.update({
+        where: { id: caseId },
+        data: {
+          preview_impact: impact as any,
+          status: kase.status === "DRAFT" ? "PREVIEW" : kase.status,
+        },
+      });
 
-    await writeEvent(caseId, "PREVIEWED", { actorId: kase.actorId, actorRole: kase.actorRole });
-    return impact;
+      await writeEvent(tx, caseId, "PREVIEWED", { actorId: kase.actorId, actorRole: kase.actorRole });
+      return impact;
+    });
   }
 }
 

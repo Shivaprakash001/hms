@@ -143,4 +143,24 @@ describe('recoveryService.createCase + preview', () => {
     const second = await recoveryService.createCase('SERVICE_TEST_TYPE', ctx);
     expect(second.id).toBe(first.id);
   });
+
+  it('handles concurrent double-submit gracefully (P2002 race handling)', async () => {
+    const owner = await createTestOwner();
+    const hostel = await createTestHostel(owner.id);
+
+    const ctx = {
+      hostelId: hostel.id,
+      actor: { actorId: owner.id, actorRole: 'OWNER' },
+      reason: 'concurrent submit test',
+      input: { marker: 'concurrent' },
+    };
+
+    const [first, second] = await Promise.all([
+      recoveryService.createCase('SERVICE_TEST_TYPE', ctx),
+      recoveryService.createCase('SERVICE_TEST_TYPE', ctx),
+    ]);
+
+    expect(first.id).toBe(second.id);
+    expect(first.status).toBe('DRAFT');
+  });
 });
