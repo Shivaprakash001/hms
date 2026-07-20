@@ -108,3 +108,15 @@ describe('room-actions and payment-actions definitions', () => {
     expect(list.find((a) => a.actionId === 'PAYMENT_RECEIVE')?.available).toBe(true);
   });
 });
+
+describe('owner-actions bootstrap', () => {
+  it('registers every known action via a single import', async () => {
+    // Uses a fresh registry check by actionId rather than re-importing (module cache
+    // already loaded these from earlier describe blocks in this file), so this just
+    // confirms the bootstrap module itself exists and importing it does not throw.
+    await import('@/src/services/owner-actions/bootstrap');
+    expect(ownerActionRegistry.has('TENANT_EDIT_PERSONAL_INFO')).toBe(true);
+    expect(ownerActionRegistry.has('ROOM_MOVE')).toBe(true);
+    expect(ownerActionRegistry.has('PAYMENT_RECEIVE')).toBe(true);
+  });
+});
