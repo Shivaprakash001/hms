@@ -121,6 +121,14 @@ export const paymentTransferHandler: CorrectionHandler<PaymentTransferDetail> = 
     const payment = await loadPayment(kase.caseDetail.paymentId);
     const plan = await buildForwardPlan(prisma, kase.caseDetail.toTenantId, Number(payment.amount_paid));
 
+    // Mirror reverseObligationPayment's ledger-debit condition for the
+    // source-side reversal: only ADVANCE/SECURITY_DEPOSIT obligations had a
+    // matching original ledger credit to undo (see settlement-engine.ts), so
+    // the preview should only promise a ledger entry when execute will
+    // actually create one.
+    const obligationHadLedgerCredit =
+      payment.obligation.obligation_type === "ADVANCE" || payment.obligation.obligation_type === "SECURITY_DEPOSIT";
+
     return {
       balanceChanges: [
         { entityType: "obligation", entityId: payment.obligation_id, before: { restored: false }, after: { restored: true } },
@@ -129,9 +137,11 @@ export const paymentTransferHandler: CorrectionHandler<PaymentTransferDetail> = 
           .map((a) => ({ entityType: "obligation", entityId: a.obligation_id, before: { allocated: 0 }, after: { allocated: a.allocated } })),
       ],
       obligationChanges: [],
-      ledgerEntries: [
-        { direction: "DEBIT", reason: "LEDGER_CORRECTION", amount: Number(payment.amount_paid), tenantId: payment.tenant_id },
-      ],
+      ledgerEntries: obligationHadLedgerCredit
+        ? [
+            { direction: "DEBIT", reason: "LEDGER_CORRECTION", amount: Number(payment.amount_paid), tenantId: payment.tenant_id },
+          ]
+        : [],
       affectedReports: ["Owner Dashboard", "Tenant Statement"],
       notifications: [],
       warnings: plan.payment_accepted ? [] : [String(plan.rejection_reason)],

@@ -28,7 +28,10 @@ describe('paymentTransferHandler (end to end via recoveryService)', () => {
     });
 
     const impact = await recoveryService.preview(kase.id);
-    expect(impact.ledgerEntries[0].tenantId).toBe(tenantA.id);
+    // obligationA is RENT-type: per settlement-engine.ts, a RENT allocation's
+    // payment produces no ledger credit, so its reversal must not promise a
+    // ledger correction debit either (see payment-correction-shared.ts).
+    expect(impact.ledgerEntries).toHaveLength(0);
 
     await recoveryService.validate(kase.id);
     const executed = await recoveryService.execute(kase.id, { actorId: owner.id, actorRole: 'OWNER' });

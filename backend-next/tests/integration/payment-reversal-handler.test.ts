@@ -4,12 +4,13 @@ import { createTestOwner, createTestHostel } from '../factories/owner-factory';
 import { createTestTenant } from '../factories/tenant-factory';
 import { createTestObligation, createTestPayment } from '../factories/payment-factory';
 import { reverseObligationPayment } from '@/src/services/payments/corrections/payment-correction-shared';
+import { tenantFinancialLedgerService } from '@/src/services/payments/tenant-financial-ledger-service';
 import { recoveryService } from '@/src/services/recovery/recovery-service';
 import { correctionRegistry } from '@/src/services/recovery/correction-registry';
 import '@/src/services/payments/corrections/payment-reversal-handler'; // registers itself
 
 describe('reverseObligationPayment', () => {
-  it('writes a negative reversal payment row and restores obligation outstanding, without mutating the original payment', async () => {
+  it('writes a negative reversal payment row and restores obligation outstanding, without mutating the original payment (RENT obligation: no ledger entry)', async () => {
     const owner = await createTestOwner();
     const hostel = await createTestHostel(owner.id);
     const tenant = await createTestTenant(owner.id, hostel.id);
@@ -38,9 +39,78 @@ describe('reverseObligationPayment', () => {
     const updatedObligation = await prisma.rent_obligations.findUniqueOrThrow({ where: { id: obligation.id } });
     expect(updatedObligation.settlement_status).toBe('UNPAID');
 
+    // RENT is not ADVANCE/SECURITY_DEPOSIT, so the original payment's allocation
+    // never wrote a ledger credit (see settlement-engine.ts) — there is nothing
+    // for a reversal to undo, so no LEDGER_CORRECTION debit should be written.
+    expect(result.ledgerEntryId).toBeNull();
+    const ledgerRows = await prisma.tenant_financial_ledger.findMany({ where: { tenant_id: tenant.id } });
+    expect(ledgerRows).toHaveLength(0);
+  });
+
+  it('writes a LEDGER_CORRECTION debit when reversing a payment on a SECURITY_DEPOSIT obligation', async () => {
+    const owner = await createTestOwner();
+    const hostel = await createTestHostel(owner.id);
+    const tenant = await createTestTenant(owner.id, hostel.id);
+    const obligation = await createTestObligation(tenant.id, owner.id, hostel.id, {
+      amount: 10000,
+      obligation_type: 'SECURITY_DEPOSIT',
+    });
+    const payment = await createTestPayment(obligation.id, 10000);
+
+    const result = await prisma.$transaction(async (tx) => {
+      return reverseObligationPayment(tx, {
+        hostelId: hostel.id,
+        payment,
+        correctionCaseId: '33333333-3333-4333-8333-333333333333',
+        actorId: owner.id,
+        reason: 'wrong tenant',
+      });
+    });
+
+    expect(result.newSettlementStatus).toBe('UNPAID');
+
+    // SECURITY_DEPOSIT/ADVANCE obligations DO get a ledger credit when paid
+    // (settlement-engine.ts), so reversing must still undo it with a debit.
+    expect(result.ledgerEntryId).not.toBeNull();
     const ledgerEntry = await prisma.tenant_financial_ledger.findUniqueOrThrow({ where: { id: result.ledgerEntryId! } });
     expect(ledgerEntry.reason).toBe('LEDGER_CORRECTION');
     expect(Number(ledgerEntry.amount)).toBe(10000);
+  });
+
+  it('does not reduce a tenant\'s unrelated future-rent-credit balance when a RENT payment is reversed', async () => {
+    const owner = await createTestOwner();
+    const hostel = await createTestHostel(owner.id);
+    const tenant = await createTestTenant(owner.id, hostel.id);
+    const obligation = await createTestObligation(tenant.id, owner.id, hostel.id, { amount: 10000 });
+    const payment = await createTestPayment(obligation.id, 10000);
+
+    // Tenant separately holds real future-rent-credit from an unrelated,
+    // legitimate ledger CREDIT (e.g. a TOPUP unconnected to this obligation).
+    await tenantFinancialLedgerService.credit({
+      tenantId: tenant.id,
+      ownerId: owner.id,
+      createdBy: owner.id,
+      reason: 'TOPUP',
+      amount: 5000,
+      notes: 'Unrelated future rent credit top-up',
+    });
+
+    const balanceBefore = await tenantFinancialLedgerService.getBalance(tenant.id, owner.id);
+    expect(balanceBefore.future_rent_credit).toBe(5000);
+
+    await prisma.$transaction(async (tx) => {
+      return reverseObligationPayment(tx, {
+        hostelId: hostel.id,
+        payment,
+        correctionCaseId: '44444444-4444-4444-8444-444444444444',
+        actorId: owner.id,
+        reason: 'wrong tenant',
+      });
+    });
+
+    const balanceAfter = await tenantFinancialLedgerService.getBalance(tenant.id, owner.id);
+    expect(balanceAfter.future_rent_credit).toBe(5000);
+    expect(balanceAfter.balance).toBe(balanceBefore.balance);
   });
 
   it('is safe to call twice with the same correctionCaseId (idempotent retry)', async () => {
@@ -80,9 +150,11 @@ describe('paymentReversalHandler (end to end via recoveryService)', () => {
     });
     expect(kase.status).toBe('DRAFT');
 
+    // obligation here is RENT-type (factory default), so per the fix in
+    // payment-correction-shared.ts the preview must not promise a ledger
+    // correction entry that execute will not actually create.
     const impact = await recoveryService.preview(kase.id);
-    expect(impact.ledgerEntries).toHaveLength(1);
-    expect(impact.ledgerEntries[0].amount).toBe(8000);
+    expect(impact.ledgerEntries).toHaveLength(0);
 
     const validation = await recoveryService.validate(kase.id);
     expect(validation.allowed).toBe(true);

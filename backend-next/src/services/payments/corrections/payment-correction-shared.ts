@@ -84,8 +84,17 @@ export async function reverseObligationPayment(
     },
   });
 
+  // A ledger correction debit is only needed when the original payment's
+  // allocation itself produced a ledger credit. Per settlement-engine.ts,
+  // that only happens for ADVANCE/SECURITY_DEPOSIT obligations — an ordinary
+  // RENT (or other) obligation's per-allocation write has no ledger entry to
+  // undo, so writing a debit here would incorrectly eat into unrelated
+  // future-rent-credit balance the tenant may separately hold.
+  const obligationHadLedgerCredit =
+    obligation.obligation_type === "ADVANCE" || obligation.obligation_type === "SECURITY_DEPOSIT";
+
   let ledgerEntryId: string | null = null;
-  if (!existingReversal) {
+  if (!existingReversal && obligationHadLedgerCredit) {
     const debitResult = await tenantFinancialLedgerService.debitInTx(tx, {
       tenantId: payment.tenant_id,
       ownerId: payment.owner_id ?? "",

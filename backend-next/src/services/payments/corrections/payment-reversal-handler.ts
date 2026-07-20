@@ -73,6 +73,13 @@ export const paymentReversalHandler: CorrectionHandler<PaymentReversalDetail> = 
     const outstandingBefore = Math.max(Number(payment.obligation.amount) - totalPaid, 0);
     const outstandingAfter = outstandingBefore + Number(payment.amount_paid);
 
+    // Mirror reverseObligationPayment's ledger-debit condition: only
+    // ADVANCE/SECURITY_DEPOSIT obligations had a matching original ledger
+    // credit to undo (see settlement-engine.ts), so the preview should only
+    // promise a ledger entry when execute will actually create one.
+    const obligationHadLedgerCredit =
+      payment.obligation.obligation_type === "ADVANCE" || payment.obligation.obligation_type === "SECURITY_DEPOSIT";
+
     return {
       balanceChanges: [
         { entityType: "obligation", entityId: payment.obligation_id, before: { outstanding: outstandingBefore }, after: { outstanding: outstandingAfter } },
@@ -80,9 +87,11 @@ export const paymentReversalHandler: CorrectionHandler<PaymentReversalDetail> = 
       obligationChanges: [
         { obligationId: payment.obligation_id, before: { outstanding: outstandingBefore }, after: { outstanding: outstandingAfter } },
       ],
-      ledgerEntries: [
-        { direction: "DEBIT", reason: "LEDGER_CORRECTION", amount: Number(payment.amount_paid), tenantId: payment.tenant_id },
-      ],
+      ledgerEntries: obligationHadLedgerCredit
+        ? [
+            { direction: "DEBIT", reason: "LEDGER_CORRECTION", amount: Number(payment.amount_paid), tenantId: payment.tenant_id },
+          ]
+        : [],
       affectedReports: ["Owner Dashboard", "Tenant Statement"],
       notifications: [],
       warnings: [],
