@@ -422,20 +422,36 @@ describe("AgreementRenewalSigningService", () => {
     expect(tx.tenant_billing_plans.updateMany).not.toHaveBeenCalled();
   });
 
-  it("does not touch occupancy or move-out records", async () => {
+  it("does not touch room allocation or move-out records", async () => {
     const { db, tx } = createDb();
     const { service } = createService(db);
 
     await service.signRenewalAgreement(validInput);
 
-    expect(tx.tenants.update).not.toHaveBeenCalled();
-    expect(tx.tenants.updateMany).not.toHaveBeenCalled();
     expect(tx.roomAllocation.create).not.toHaveBeenCalled();
     expect(tx.roomAllocation.update).not.toHaveBeenCalled();
     expect(tx.roomAllocation.updateMany).not.toHaveBeenCalled();
     expect(tx.move_out_requests.create).not.toHaveBeenCalled();
     expect(tx.move_out_requests.update).not.toHaveBeenCalled();
     expect(tx.move_out_requests.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("syncs the tenant's active contract fields, matching what cron activation already does", async () => {
+    const { db, tx } = createDb();
+    const { service } = createService(db);
+
+    await service.signRenewalAgreement(validInput);
+
+    expect(tx.tenants.update).toHaveBeenCalledWith({
+      where: { id: "tenant-1" },
+      data: {
+        monthly_rent: 8500,
+        security_deposit: 10000,
+        maintenance_charge: 1400,
+        maintenance_type: "ONE_TIME",
+      },
+    });
+    expect(tx.tenants.updateMany).not.toHaveBeenCalled();
   });
 
   it("uses structured signing errors", () => {

@@ -1,12 +1,12 @@
 import { prisma } from "@/lib/db";
 import { randomUUID } from "crypto";
 import {
-  assertAgreementLifecycleComplete,
   buildRenewalAgreementLifecycle,
   toAgreementDate,
   addAgreementMonths,
 } from "./agreement-lifecycle-completeness";
 import type { RenewalLifecycleInput } from "./agreement-lifecycle-completeness";
+import { evaluateCreationReadiness } from "./renewal-readiness-engine";
 
 const RENEWABLE_AGREEMENT_STATUSES = ["SIGNED", "EXPIRING_SOON", "AGREEMENT_EXPIRED"] as const;
 const BLOCKED_RENEWAL_STATUSES = ["RENEWED", "TERMINATED", "VOID"] as const;
@@ -137,43 +137,6 @@ export class AgreementRenewalService {
         throw new AgreementRenewalError("AGREEMENT_NOT_FOUND", "Agreement not found", { sourceAgreementId });
       }
 
-      this.assertRenewableStatus(sourceAgreement.status, sourceAgreement.id);
-
-      const existingSuccessor = sourceAgreement.renewed_to_agreement || sourceAgreement.renewed_agreements?.[0] || null;
-      if (existingSuccessor) {
-        throw new AgreementRenewalError(
-          "AGREEMENT_SUCCESSOR_EXISTS",
-          "A renewal agreement already exists for this agreement",
-          {
-            sourceAgreementId: sourceAgreement.id,
-            successorAgreementId: existingSuccessor.id,
-            successorStatus: existingSuccessor.status,
-          }
-        );
-      }
-
-      const activeMoveOut = await tx.move_out_requests.findFirst({
-        where: {
-          tenant_id: sourceAgreement.tenant_id,
-          status: { notIn: ["COMPLETED", "REJECTED"] },
-        },
-        select: { id: true, status: true },
-        orderBy: { created_at: "desc" },
-      });
-
-      if (activeMoveOut) {
-        throw new AgreementRenewalError(
-          "MOVE_OUT_IN_PROGRESS",
-          "Move-out already in progress. Cancel move-out before renewing.",
-          {
-            sourceAgreementId: sourceAgreement.id,
-            tenantId: sourceAgreement.tenant_id,
-            moveOutRequestId: activeMoveOut.id,
-            moveOutStatus: activeMoveOut.status,
-          }
-        );
-      }
-
       const contract = resolveContractSnapshot(sourceAgreement);
       const sourceLifecycle = resolveSourceLifecycle(sourceAgreement);
 
@@ -204,14 +167,30 @@ export class AgreementRenewalService {
         contract_payment_frequency: contract.contractPaymentFrequency,
       };
 
-      try {
-        assertAgreementLifecycleComplete(renewalLifecycleCandidate, { agreementId: sourceAgreement.id });
-      } catch (error: any) {
-        throw new AgreementRenewalError(
-          "AGREEMENT_LIFECYCLE_INCOMPLETE",
-          error?.message || "Agreement lifecycle metadata is incomplete",
-          error?.details || { sourceAgreementId: sourceAgreement.id }
-        );
+      const readiness = await evaluateCreationReadiness(tx, {
+        sourceAgreement,
+        lifecycleCandidate: renewalLifecycleCandidate,
+      });
+      if (!readiness.ready) {
+        const failure = readiness.failures[0];
+        if (failure.code === "PREDECESSOR_NOT_RENEWABLE") {
+          this.assertRenewableStatus(sourceAgreement.status, sourceAgreement.id);
+        }
+        if (failure.code === "AGREEMENT_SUCCESSOR_EXISTS") {
+          throw new AgreementRenewalError("AGREEMENT_SUCCESSOR_EXISTS", failure.reason, {
+            sourceAgreementId: sourceAgreement.id,
+            ...failure.details,
+          });
+        }
+        if (failure.code === "MOVE_OUT_IN_PROGRESS") {
+          throw new AgreementRenewalError(
+            "MOVE_OUT_IN_PROGRESS",
+            "Move-out already in progress. Cancel move-out before renewing.",
+            { sourceAgreementId: sourceAgreement.id, ...failure.details }
+          );
+        }
+        // AGREEMENT_LIFECYCLE_INCOMPLETE
+        throw new AgreementRenewalError("AGREEMENT_LIFECYCLE_INCOMPLETE", failure.reason, failure.details);
       }
 
       const activeTemplate = await tx.agreementTemplate.findFirst({

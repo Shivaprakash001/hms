@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   eventLogLog: vi.fn(),
   queryRaw: vi.fn(),
   moveOutFindFirst: vi.fn().mockResolvedValue(null),
+  depositFindFirst: vi.fn().mockResolvedValue(null),
   generateForAgreementInTx: vi.fn().mockResolvedValue({ created: 12, updated: 0, skipped: 0, months: [] }),
   notifyActivated: vi.fn(),
   expireStaleOffers: vi.fn().mockResolvedValue({ expiredCount: 0 }),
@@ -15,6 +16,8 @@ const mocks = vi.hoisted(() => ({
     $queryRaw: mocks.queryRaw,
     agreement: { update: mocks.agreementUpdate, updateMany: mocks.agreementUpdateMany },
     tenants: { update: mocks.tenantsUpdate },
+    move_out_requests: { findFirst: mocks.moveOutFindFirst },
+    rent_obligations: { findFirst: mocks.depositFindFirst },
   })),
 }));
 
@@ -112,6 +115,7 @@ describe("AgreementRenewalActivation", () => {
       renewed_from_agreement: {
         id: "predecessor-agreement-id",
         status: "SIGNED",
+        renewed_to_agreement_id: "draft-agreement-id",
         tenant_signature_url: "tenant-signature-predecessor",
         tenant_signature_name: "Tenant Name",
         tenant_signed_at: new Date("2026-01-01T00:00:00.000Z"),
@@ -239,23 +243,16 @@ describe("AgreementRenewalActivation", () => {
       tenant: {
         owner_id: "owner-id",
         profiles: { name: "Adithya" },
-        rent_obligations: [
-          {
-            id: "ob-1",
-            agreement_id: "draft-agreement-id",
-            obligation_type: "SECURITY_DEPOSIT",
-            status: "PENDING",
-            amount: 1000,
-          },
-        ],
       },
       renewed_from_agreement: {
         id: "predecessor-agreement-id",
         status: "SIGNED",
+        renewed_to_agreement_id: "draft-agreement-id",
       },
     };
 
     mocks.agreementFindMany.mockResolvedValue([mockDraft]);
+    mocks.depositFindFirst.mockResolvedValueOnce({ id: "ob-1", amount: 1000 });
 
     const summary = {
       checked: 0,
@@ -329,6 +326,7 @@ describe("AgreementRenewalActivation", () => {
       renewed_from_agreement: {
         id: "predecessor-agreement-id",
         status: "SIGNED",
+        renewed_to_agreement_id: "draft-agreement-id",
         tenant_signature_url: "tenant-signature-predecessor",
         tenant_signature_name: "Tenant Name",
         tenant_signed_at: new Date("2026-01-01T00:00:00.000Z"),
@@ -427,8 +425,15 @@ describe("AgreementRenewalActivation", () => {
       hostel_id: "hostel-id",
       status: "DRAFT",
       agreement_start_date: today,
+      agreement_end_date: new Date("2027-06-30T00:00:00.000Z"),
+      agreement_duration_months: 12,
+      contract_rent: 8500,
+      contract_security_deposit: 6000,
+      contract_maintenance: 1000,
+      contract_maintenance_type: "MONTHLY",
+      contract_payment_frequency: "MONTHLY",
       tenant: { owner_id: "owner-id", profiles: { name: "Adithya" }, rent_obligations: [] },
-      renewed_from_agreement: { id: "predecessor-agreement-id", status: "SIGNED" },
+      renewed_from_agreement: { id: "predecessor-agreement-id", status: "SIGNED", renewed_to_agreement_id: "draft-agreement-id" },
     };
     mocks.agreementFindMany.mockResolvedValue([mockDraft]);
 
@@ -476,6 +481,7 @@ describe("AgreementRenewalActivation", () => {
       renewed_from_agreement: {
         id: "predecessor-agreement-id",
         status: "SIGNED",
+        renewed_to_agreement_id: "draft-agreement-id",
         tenant_signature_url: "s", tenant_signature_name: "n", tenant_signed_at: today,
         tenant_ip: "127.0.0.1", tenant_user_agent: "UA",
         guardian_signature_url: null, guardian_signature_name: null, guardian_relation: null,
