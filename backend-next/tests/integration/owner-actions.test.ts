@@ -104,7 +104,7 @@ describe('room-actions and payment-actions definitions', () => {
 
   it('registers PAYMENT_RECEIVE, always available', () => {
     expect(ownerActionRegistry.has('PAYMENT_RECEIVE')).toBe(true);
-    const list = ownerActionRegistry.listForEntity('payment', { tenantStatus: 'INVITED', actorRole: 'OWNER' });
+    const list = ownerActionRegistry.listForEntity('tenant', { tenantStatus: 'INVITED', actorRole: 'OWNER' });
     expect(list.find((a) => a.actionId === 'PAYMENT_RECEIVE')?.available).toBe(true);
   });
 });
@@ -158,6 +158,15 @@ describe('GET /api/owner-actions', () => {
       entity: 'tenant',
       category: 'EDIT',
       label: 'Request Change',
+      available: true,
+    });
+
+    const paymentAction = body.data.find((a: any) => a.actionId === 'PAYMENT_RECEIVE');
+    expect(paymentAction).toEqual({
+      actionId: 'PAYMENT_RECEIVE',
+      entity: 'tenant',
+      category: 'WORKFLOW',
+      label: 'Receive Payment',
       available: true,
     });
   });
