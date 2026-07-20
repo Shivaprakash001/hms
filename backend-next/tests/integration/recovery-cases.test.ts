@@ -81,3 +81,66 @@ describe('correctionRegistry', () => {
     expect(() => correctionRegistry.resolve('NOT_REGISTERED')).toThrow(/no handler registered/i);
   });
 });
+
+import { recoveryService } from '@/src/services/recovery/recovery-service';
+
+describe('recoveryService.createCase + preview', () => {
+  it('creates a DRAFT case via the registered handler, then previews it to PREVIEW', async () => {
+    const owner = await createTestOwner();
+    const hostel = await createTestHostel(owner.id);
+
+    correctionRegistry.register({
+      caseType: 'SERVICE_TEST_TYPE',
+      domain: 'PAYMENTS',
+      tier: 'FINANCIAL_CORRECTION',
+      policy: { canPreview: async () => true, canExecute: async () => ({ allowed: true }) },
+      createCase: async (ctx) => ({
+        domain: 'PAYMENTS',
+        tier: 'FINANCIAL_CORRECTION',
+        entityRefs: [{ type: 'test', id: 'x' }],
+        beforeSnapshot: { note: 'before' },
+        caseDetail: { input: ctx.input },
+        idempotencyKey: `SERVICE_TEST_TYPE:${hostel.id}:${ctx.input.marker}`,
+      }),
+      computeImpact: async () => ({
+        balanceChanges: [], obligationChanges: [], ledgerEntries: [],
+        affectedReports: ['Test Report'], notifications: [], warnings: ['test warning'],
+      }),
+      execute: async () => ({}),
+      affectedEntities: () => [],
+    });
+
+    const created = await recoveryService.createCase('SERVICE_TEST_TYPE', {
+      hostelId: hostel.id,
+      actor: { actorId: owner.id, actorRole: 'OWNER' },
+      reason: 'testing',
+      input: { marker: 'abc' },
+    });
+
+    expect(created.status).toBe('DRAFT');
+    expect(created.hostelId).toBe(hostel.id);
+
+    const previewed = await recoveryService.preview(created.id);
+    expect(previewed.affectedReports).toEqual(['Test Report']);
+
+    const reloaded = await recoveryService.getCase(created.id);
+    expect(reloaded.status).toBe('PREVIEW');
+    expect(reloaded.previewImpact?.warnings).toEqual(['test warning']);
+  });
+
+  it('is idempotent on double-submit — same idempotency key returns the same case', async () => {
+    const owner = await createTestOwner();
+    const hostel = await createTestHostel(owner.id);
+
+    const ctx = {
+      hostelId: hostel.id,
+      actor: { actorId: owner.id, actorRole: 'OWNER' },
+      reason: 'double submit test',
+      input: { marker: 'dup' },
+    };
+
+    const first = await recoveryService.createCase('SERVICE_TEST_TYPE', ctx);
+    const second = await recoveryService.createCase('SERVICE_TEST_TYPE', ctx);
+    expect(second.id).toBe(first.id);
+  });
+});
