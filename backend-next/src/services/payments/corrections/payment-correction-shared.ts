@@ -35,6 +35,12 @@ export async function reverseObligationPayment(
   const { hostelId, payment, correctionCaseId, actorId, reason } = params;
   const reversalIdempotencyKey = `correction:${correctionCaseId}:reversal`;
 
+  // Lock the obligation row before any read-modify-write on it. This must run
+  // on both the create-new-reversal path and the idempotent-retry path,
+  // since both paths read `obligation` and write settlement_status/status
+  // based on a fresh summation of payments below.
+  await tx.$queryRaw`SELECT id FROM rent_obligations WHERE id = ${payment.obligation_id}::uuid FOR UPDATE`;
+
   const existingReversal = await tx.payments.findUnique({
     where: { idempotency_key: reversalIdempotencyKey },
   });
@@ -43,8 +49,6 @@ export async function reverseObligationPayment(
   if (existingReversal) {
     reversalPaymentId = existingReversal.id;
   } else {
-    await tx.$queryRaw`SELECT id FROM rent_obligations WHERE id = ${payment.obligation_id}::uuid FOR UPDATE`;
-
     const reversal = await tx.payments.create({
       data: {
         obligation_id: payment.obligation_id,
