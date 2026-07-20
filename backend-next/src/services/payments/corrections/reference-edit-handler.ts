@@ -49,8 +49,11 @@ export const referenceEditHandler: CorrectionHandler<ReferenceEditDetail> = {
         notes: ctx.input.notes as string | undefined,
       },
       // Each edit is its own case (unlike Reverse/Transfer, edits aren't one-shot-per-entity),
-      // so the idempotency key includes a random component generated once per request —
-      // it only dedupes a literal double-submit of the SAME request, not repeat edits over time.
+      // so the idempotency key includes a random component. Note this UUID is generated fresh
+      // on every call to createCase(), so it does NOT dedupe a literal double-submit — two calls
+      // for the same request produce two different keys and two independent correction_cases rows.
+      // This is safe only because execute() is a harmless idempotent overwrite (re-applying the
+      // same reference_number/notes twice has no adverse effect), not because of this key.
       idempotencyKey: `PAYMENT_REFERENCE_EDIT:${group.id}:${crypto.randomUUID()}`,
     };
   },
