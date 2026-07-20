@@ -156,6 +156,16 @@ Architecture Decision Records — each entry below was **inferred from code evid
 - **Consequences:** Any future renewal-adjacent notification path (in-app, email, SMS) that fires based on days-until-expiry should apply the same `has_successor` guard, or it will reintroduce this exact bug independently.
 - **Related:** [[Bugs]], [[Business-Rules]]
 
+## ADR-014: Renewal reminder stages use threshold bands, relying on delivery-layer idempotency, instead of exact-day matching
+
+- **Date:** 2026-07-19
+- **Status:** accepted
+- **Context:** `RenewalStatusService.determineRenewalStage` matched reminder stages with exact equality (`daysUntilExpiry === 30`, `=== 15`; `daysOverdue === 7`, `=== gracePeriodDays`). If the daily lifecycle cron missed a single run — an outage, a deploy window, a transient failure — the day counter moved past the exact trigger value before the next run, and that stage was silently skipped forever; the tenant/owner never got that reminder for that agreement.
+- **Decision:** Reminder/overdue-milestone stages now use inclusive threshold bands instead of exact equality: `30_DAY_REMINDER` for `16–30` days remaining, `15_DAY_REMINDER` for `1–15`, `7_DAY_OVERDUE` for `≥7` days overdue, `30_DAY_CRITICAL` for `≥grace_period_days` days overdue (checked first, so it takes priority over `7_DAY_OVERDUE` rather than double-matching). This is safe *because* `whatsAppTemplateDeliveryService.send()` already enforces per-`(stage, agreementId)` idempotency via a DB unique constraint (`whatsapp_logs.idempotency_key`, `ON CONFLICT DO NOTHING`) — a stage matching on several consecutive cron runs (because the tenant's day-count sits inside its band for more than one day) still only ever sends once. `EXPIRY_DAY_ALERT` (`daysUntilExpiry === 0`) and `EXPIRED_RENT_OVERDUE` (a rent-overdue *state* check, not a day-count) were deliberately left unchanged — see the "Alternatives considered" note.
+- **Alternatives considered:** Also broadening `EXPIRY_DAY_ALERT` into a multi-day catch-up band, e.g. `1 ≤ daysOverdue < 7` (rejected — verified by hand against the existing test suite that this collides with `EXPIRED_RENT_OVERDUE`'s fallback: an agreement 6 days overdue with actual overdue rent would incorrectly report "Expires Today" instead of "Rent Overdue," breaking `tests/whatsapp-renewal-notification.test.ts`'s pre-existing `"sends EXPIRED_RENT_OVERDUE alert..."` case). Adding a persisted "last reminder stage sent" column to `Agreement` to drive catch-up logic explicitly (rejected as unnecessary — the existing idempotency-key mechanism already provides exactly-once delivery per stage without a schema change).
+- **Consequences:** A tenant/owner may now receive a given reminder stage on a later day than the "ideal" one if cron was down on the ideal day, but they will always receive it exactly once rather than potentially never. Verified by hand that all 6 existing exact-day test cases in `whatsapp-renewal-notification.test.ts` still resolve to the same stage under the new bands (each exact value is the boundary of exactly one band).
+- **Related:** [[Bugs]], [[Business-Rules]]
+
 ## See also
 - [[Changelog]] for the chronological record of what shipped
 - [[Architecture]] for the system these decisions govern
