@@ -88,3 +88,23 @@ describe('tenant-actions definitions', () => {
     expect(invitedAction?.available).toBe(false);
   });
 });
+
+import '@/src/services/owner-actions/definitions/room-actions';
+import '@/src/services/owner-actions/definitions/payment-actions';
+
+describe('room-actions and payment-actions definitions', () => {
+  it('registers ROOM_MOVE, available only for ACTIVE tenants', () => {
+    expect(ownerActionRegistry.has('ROOM_MOVE')).toBe(true);
+    const list = ownerActionRegistry.listForEntity('room', { tenantStatus: 'ACTIVE', actorRole: 'OWNER' });
+    expect(list.find((a) => a.actionId === 'ROOM_MOVE')?.available).toBe(true);
+
+    const invitedList = ownerActionRegistry.listForEntity('room', { tenantStatus: 'INVITED', actorRole: 'OWNER' });
+    expect(invitedList.find((a) => a.actionId === 'ROOM_MOVE')?.available).toBe(false);
+  });
+
+  it('registers PAYMENT_RECEIVE, always available', () => {
+    expect(ownerActionRegistry.has('PAYMENT_RECEIVE')).toBe(true);
+    const list = ownerActionRegistry.listForEntity('payment', { tenantStatus: 'INVITED', actorRole: 'OWNER' });
+    expect(list.find((a) => a.actionId === 'PAYMENT_RECEIVE')?.available).toBe(true);
+  });
+});
