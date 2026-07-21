@@ -508,14 +508,11 @@ describe("PaymentLinkService", () => {
     });
   });
 
-  it("resolves tenantId to oldest unpaid obligation and creates a new token", async () => {
+  it("creates a tenant-scoped token (null obligation hint) without resolving an obligation", async () => {
     mocks.prisma.payment_link_tokens.findFirst.mockResolvedValueOnce(null);
-    mocks.prisma.rent_obligations.findFirst.mockResolvedValueOnce({ id: "ob-1" });
-    mocks.prisma.rent_obligations.findUnique.mockResolvedValueOnce({
-      id: "ob-1",
+    mocks.prisma.tenants.findUnique.mockResolvedValueOnce({
       hostel_id: "hostel-1",
       owner_id: "owner-1",
-      tenants: { owner_id: "owner-1" },
     });
     mocks.prisma.payment_link_tokens.create.mockResolvedValueOnce({
       token: "new-token-456",
@@ -524,14 +521,20 @@ describe("PaymentLinkService", () => {
 
     const result = await PaymentLinkService.getOrCreateToken({ tenantId: "tenant-1" });
     expect(result.token).toBe("new-token-456");
-    expect(mocks.prisma.rent_obligations.findFirst).toHaveBeenCalledWith({
-      where: {
-        tenant_id: "tenant-1",
-        status: { in: ["PENDING", "PARTIAL"] },
-        is_superseded: false,
-      },
-      orderBy: { billing_period_start: "asc" },
-    });
+    // Per ADR-017, tenantId is no longer auto-resolved to an obligation: the
+    // token is tenant-scoped with a null obligation hint, and the amount is
+    // decided at payment time via buildSettlementPlan.
+    expect(mocks.prisma.rent_obligations.findFirst).not.toHaveBeenCalled();
+    expect(mocks.prisma.payment_link_tokens.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          tenant_id: "tenant-1",
+          hostel_id: "hostel-1",
+          owner_id: "owner-1",
+          obligation_id: null,
+        }),
+      })
+    );
   });
 });
 
@@ -578,17 +581,12 @@ describe("POST /api/payments/pay-link", () => {
   it("returns canonical pay-link URL on success", async () => {
     mocks.getSession.mockResolvedValueOnce({ role: "OWNER" });
     mocks.resolveOwnerScope.mockReturnValueOnce({ owner_id: "owner-1" });
-    mocks.prisma.tenants.findUnique.mockResolvedValueOnce({ owner_id: "owner-1" });
+    // tenants.findUnique is called twice: once by the route's owner-auth check
+    // (selects owner_id), once by PaymentLinkService (selects hostel_id/owner_id).
+    mocks.prisma.tenants.findUnique.mockResolvedValue({ owner_id: "owner-1", hostel_id: "hostel-1" });
 
-    // PaymentLinkService mock bypass
+    // PaymentLinkService token creation (tenant-scoped, null obligation hint)
     mocks.prisma.payment_link_tokens.findFirst.mockResolvedValueOnce(null);
-    mocks.prisma.rent_obligations.findFirst.mockResolvedValueOnce({ id: "ob-1" });
-    mocks.prisma.rent_obligations.findUnique.mockResolvedValueOnce({
-      id: "ob-1",
-      hostel_id: "hostel-1",
-      owner_id: "owner-1",
-      tenants: { owner_id: "owner-1" },
-    });
     mocks.prisma.payment_link_tokens.create.mockResolvedValueOnce({
       token: "mock-token-uuid-xyz",
       expires_at: new Date(),
