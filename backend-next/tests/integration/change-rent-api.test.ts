@@ -92,6 +92,63 @@ describe('POST /api/tenants/[id]/change-rent', () => {
     expect(res.status).toBe(401);
   });
 
+  it('rejects a missing identity token with a distinct IDENTITY_REQUIRED code', async () => {
+    const owner = await createTestOwner();
+    const hostel = await createTestHostel(owner.id);
+    const tenant = await createTestTenant(owner.id, hostel.id);
+    await createTestAgreement(tenant.id, hostel.id, { contract_rent: 8000 });
+
+    vi.mocked(getSession).mockResolvedValue({
+      sub: owner.id, email: owner.email, role: 'OWNER', owner_id: owner.id,
+    } as any);
+
+    const req = new Request(`http://localhost/api/tenants/${tenant.id}/change-rent`, {
+      method: 'POST',
+      body: JSON.stringify({
+        hostelId: hostel.id,
+        newRentAmount: 9000,
+        effectiveFromMonth: new Date(Date.UTC(2027, 1, 1)).toISOString(),
+        reason: 'annual increment',
+        // identityToken omitted
+      }),
+    }) as any;
+
+    const res = await POST(req, { params: { id: tenant.id } });
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error.code).toBe('IDENTITY_REQUIRED');
+    expect(body.error.message).not.toMatch(/^IDENTITY_REQUIRED:/);
+  });
+
+  it('rejects an invalid/expired identity token with a distinct IDENTITY_EXPIRED code', async () => {
+    const owner = await createTestOwner();
+    const hostel = await createTestHostel(owner.id);
+    const tenant = await createTestTenant(owner.id, hostel.id);
+    await createTestAgreement(tenant.id, hostel.id, { contract_rent: 8000 });
+
+    vi.mocked(getSession).mockResolvedValue({
+      sub: owner.id, email: owner.email, role: 'OWNER', owner_id: owner.id,
+    } as any);
+    vi.mocked(verifyIdentityToken).mockResolvedValue(null);
+
+    const req = new Request(`http://localhost/api/tenants/${tenant.id}/change-rent`, {
+      method: 'POST',
+      body: JSON.stringify({
+        hostelId: hostel.id,
+        newRentAmount: 9000,
+        effectiveFromMonth: new Date(Date.UTC(2027, 1, 1)).toISOString(),
+        reason: 'annual increment',
+        identityToken: 'stale-token',
+      }),
+    }) as any;
+
+    const res = await POST(req, { params: { id: tenant.id } });
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error.code).toBe('IDENTITY_EXPIRED');
+    expect(body.error.message).not.toMatch(/^IDENTITY_EXPIRED:/);
+  });
+
   it('rejects a hostel the caller does not own', async () => {
     const owner = await createTestOwner();
     const otherOwner = await createTestOwner();
