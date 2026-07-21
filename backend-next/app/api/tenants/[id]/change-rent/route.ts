@@ -80,8 +80,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   } catch (error: any) {
     console.error("Error in POST [tenants.change-rent]:", error);
     const msg = typeof error?.message === "string" ? error.message : String(error);
-    if (msg.startsWith("IDENTITY_REQUIRED") || msg.startsWith("IDENTITY_EXPIRED")) {
-      return ApiResponse.error(ApiError.forbidden(msg));
+    if (msg.startsWith("IDENTITY_REQUIRED")) {
+      return ApiResponse.error(new ApiError(msg.replace(/^IDENTITY_REQUIRED:\s*/, ""), 403, "IDENTITY_REQUIRED"));
+    }
+    if (msg.startsWith("IDENTITY_EXPIRED")) {
+      return ApiResponse.error(new ApiError(msg.replace(/^IDENTITY_EXPIRED:\s*/, ""), 403, "IDENTITY_EXPIRED"));
     }
     if (msg.startsWith("FORBIDDEN") || msg.includes("does not belong to hostel")) {
       return ApiResponse.error(ApiError.forbidden(msg));
