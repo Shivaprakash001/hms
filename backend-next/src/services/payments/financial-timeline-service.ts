@@ -67,6 +67,32 @@ export interface TimelineEvent {
   metadata: Record<string, any>;
 }
 
+// A payment reversal is written as a negative-amount `payments` row whose
+// `reference_number` is `REVERSAL:<originalPaymentId>` (see
+// payment-correction-shared.ts::reverseObligationPayment). Classify such rows so
+// the timeline can tag them distinctly instead of showing them as an incoming
+// "Payment Received". The `REVERSAL:` prefix is the explicit signal; a negative
+// amount is a defensive fallback (reversals are the only source of negative
+// `amount_paid` in this system).
+const REVERSAL_PREFIX = "REVERSAL:";
+
+function describePaymentReversal(payment: {
+  amount_paid: unknown;
+  payment_method: string;
+  reference_number?: string | null;
+}): { isReversal: boolean; reversesPaymentId: string | undefined; summary: string } {
+  const amount = Number(payment.amount_paid);
+  const hasReversalRef = payment.reference_number?.startsWith(REVERSAL_PREFIX) ?? false;
+  const isReversal = hasReversalRef || amount < 0;
+  const reversesPaymentId = hasReversalRef
+    ? payment.reference_number!.slice(REVERSAL_PREFIX.length)
+    : undefined;
+  const summary = isReversal
+    ? `Reversal of ₹${Math.abs(amount).toLocaleString("en-IN")} payment`
+    : `₹${amount.toLocaleString("en-IN")} paid via ${payment.payment_method}`;
+  return { isReversal, reversesPaymentId, summary };
+}
+
 // ── Service ──────────────────────────────────────────────────────────────────
 
 class FinancialTimelineService {
@@ -159,6 +185,7 @@ class FinancialTimelineService {
           created_at: true,
           offline_recorded_by: true,
           payment_group_id: true,
+          reference_number: true,
           hostel_id: true,
         },
       }),
@@ -187,11 +214,12 @@ class FinancialTimelineService {
 
     // 2. PAYMENT events
     for (const payment of payments) {
+      const reversal = describePaymentReversal(payment);
       events.push({
         id: `payment:${payment.id}`,
         timestamp: payment.created_at,
         type: "PAYMENT_RECORDED",
-        summary: `₹${Number(payment.amount_paid).toLocaleString("en-IN")} paid via ${payment.payment_method}`,
+        summary: reversal.summary,
         amount: Number(payment.amount_paid),
         source: { table: "payments", id: payment.id },
         references: {
@@ -203,6 +231,8 @@ class FinancialTimelineService {
         metadata: {
           payment_method: payment.payment_method,
           payment_date: payment.payment_date,
+          is_reversal: reversal.isReversal,
+          reverses_payment_id: reversal.reversesPaymentId,
         },
       });
     }
@@ -361,25 +391,34 @@ class FinancialTimelineService {
         created_at: true,
         offline_recorded_by: true,
         payment_group_id: true,
+        reference_number: true,
       },
       orderBy: { created_at: "desc" },
     });
 
-    return payments.map((p: any) => ({
-      id: `payment:${p.id}`,
-      timestamp: p.created_at,
-      type: "PAYMENT_RECORDED" as TimelineEventType,
-      summary: `₹${Number(p.amount_paid).toLocaleString("en-IN")} paid via ${p.payment_method}`,
-      amount: Number(p.amount_paid),
-      source: { table: "payments", id: p.id },
-      references: {
-        obligation_id: p.obligation_id,
-        payment_id: p.id,
-        payment_group_id: p.payment_group_id || undefined,
-      },
-      actor_id: p.offline_recorded_by,
-      metadata: { payment_method: p.payment_method, payment_date: p.payment_date },
-    }));
+    return payments.map((p: any) => {
+      const reversal = describePaymentReversal(p);
+      return {
+        id: `payment:${p.id}`,
+        timestamp: p.created_at,
+        type: "PAYMENT_RECORDED" as TimelineEventType,
+        summary: reversal.summary,
+        amount: Number(p.amount_paid),
+        source: { table: "payments", id: p.id },
+        references: {
+          obligation_id: p.obligation_id,
+          payment_id: p.id,
+          payment_group_id: p.payment_group_id || undefined,
+        },
+        actor_id: p.offline_recorded_by,
+        metadata: {
+          payment_method: p.payment_method,
+          payment_date: p.payment_date,
+          is_reversal: reversal.isReversal,
+          reverses_payment_id: reversal.reversesPaymentId,
+        },
+      };
+    });
   }
 
   private async fetchLedgerEvents(

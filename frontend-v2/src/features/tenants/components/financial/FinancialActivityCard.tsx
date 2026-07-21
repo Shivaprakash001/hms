@@ -25,6 +25,7 @@ export function FinancialActivityCard({
 }: FinancialActivityCardProps) {
   const { primary, payments, credits, receiptPaymentId } = entry;
   const { label, icon: Icon, tone } = getEventDisplay(primary);
+  const isReversal = !!primary.metadata?.is_reversal;
   const amount = primary.amount != null ? Math.abs(primary.amount) : null;
   const isGrouped = payments.length > 0 || credits.length > 0;
   const obligationId = primary.references.obligation_id;
@@ -65,7 +66,11 @@ export function FinancialActivityCard({
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {amount != null && <span className="text-sm font-extrabold text-foreground">{fmt(amount)}</span>}
+          {amount != null && (
+            <span className={`text-sm font-extrabold ${isReversal ? 'text-rose-600 dark:text-rose-400' : 'text-foreground'}`}>
+              {isReversal ? `-${fmt(amount)}` : fmt(amount)}
+            </span>
+          )}
           {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
         </div>
       </div>

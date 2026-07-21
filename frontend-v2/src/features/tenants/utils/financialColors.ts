@@ -10,6 +10,7 @@ import {
   SlidersHorizontal,
   FileCheck2,
   Wallet,
+  RotateCcw,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -98,6 +99,11 @@ export function getEventDisplay(event: Pick<TimelineEvent, 'type' | 'metadata'>)
       }
       return { label: 'Charge Created', icon: ReceiptText, tone: 'orange' };
     case 'PAYMENT_RECORDED':
+      // A reversal is a negative-amount payment row (see financial-timeline-service.ts);
+      // it must read as its own event, not as an incoming payment.
+      if (event.metadata?.is_reversal) {
+        return { label: 'Payment Reversed', icon: RotateCcw, tone: 'red' };
+      }
       return { label: 'Payment Received', icon: Banknote, tone: 'green' };
     case 'PAYMENT_GROUP_SETTLED':
       return { label: 'Payment Received & Settled', icon: SplitSquareHorizontal, tone: 'green' };
