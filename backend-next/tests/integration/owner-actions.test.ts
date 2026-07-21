@@ -121,6 +121,23 @@ describe('owner-actions bootstrap', () => {
   });
 });
 
+import '@/src/services/owner-actions/definitions/agreement-actions';
+
+describe('agreement-actions definitions', () => {
+  it('registers TENANT_CHANGE_RENT, available only for ACTIVE tenants', () => {
+    expect(ownerActionRegistry.has('TENANT_CHANGE_RENT')).toBe(true);
+
+    const activeList = ownerActionRegistry.listForEntity('tenant', { tenantStatus: 'ACTIVE', actorRole: 'OWNER' });
+    const action = activeList.find((a) => a.actionId === 'TENANT_CHANGE_RENT');
+    expect(action?.available).toBe(true);
+    expect(action?.label).toBe('Change Rent');
+    expect(action?.category).toBe('WORKFLOW');
+
+    const invitedList = ownerActionRegistry.listForEntity('tenant', { tenantStatus: 'INVITED', actorRole: 'OWNER' });
+    expect(invitedList.find((a) => a.actionId === 'TENANT_CHANGE_RENT')?.available).toBe(false);
+  });
+});
+
 vi.mock('@/lib/auth', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/auth')>();
   return { ...actual, getSession: vi.fn() };
