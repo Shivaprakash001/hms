@@ -131,7 +131,7 @@ export function DocumentsHub({ tenantId, hasAgreement, agreementUrl, recentPayme
         </TabsContent>
 
         <TabsContent value="links" className="pt-3 space-y-3">
-          <p className="text-xs text-muted-foreground">Generate a payment link the tenant can use to pay outstanding dues directly.</p>
+          <p className="text-xs text-muted-foreground">Generate a payment link the tenant can use to pay any amount — current dues, upcoming rent, or in advance.</p>
           <button
             type="button"
             onClick={handleGenerateLink}

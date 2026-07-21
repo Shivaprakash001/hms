@@ -109,21 +109,19 @@ export function TenantCardMoreSheet({
             <span>Copy Phone Number</span>
           </button>
 
-          {/* Share Payment Link if outstanding */}
-          {tenant.outstandingAmount > 0 && (
-            <button
-              type="button"
-              onClick={() =>
-                handleAction(() =>
-                  actions.sharePaymentLink(tenant.id, tenant.phone, tenant.outstandingAmount)
-                )
-              }
-              className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl hover:bg-secondary text-foreground transition-colors font-medium text-left"
-            >
-              <Share2 className="w-5 h-5 text-indigo-500 shrink-0" />
-              <span>Share Payment Link</span>
-            </button>
-          )}
+          {/* Share Payment Link — available regardless of outstanding dues */}
+          <button
+            type="button"
+            onClick={() =>
+              handleAction(() =>
+                actions.sharePaymentLink(tenant.id, tenant.phone, tenant.outstandingAmount)
+              )
+            }
+            className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl hover:bg-secondary text-foreground transition-colors font-medium text-left"
+          >
+            <Share2 className="w-5 h-5 text-indigo-500 shrink-0" />
+            <span>Share Payment Link</span>
+          </button>
 
           {/* Remind / Resend Invite */}
           {onReminder && tenant.status === 'ACTIVE' && (
