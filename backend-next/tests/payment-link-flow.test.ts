@@ -101,12 +101,14 @@ describe("Payment Link Token Public Flow", () => {
       expect(text).toContain("Payment Link Expired");
     });
 
-    it("returns 200 with PAID status if obligation is already paid", async () => {
+    it("returns 200 with a pre-filled amount even if the hinted obligation is already paid (pay-ahead)", async () => {
       mocks.prisma.payment_link_tokens.findUnique.mockResolvedValueOnce({
         token: mockToken,
+        tenant_id: "tenant-1",
+        hostel_id: "hostel-1",
         expires_at: new Date(Date.now() + 100000),
         rent_obligations: { status: "PAID", amount: 5000, rent_month: new Date(), payments: [] },
-        tenants: { profiles: { name: "John Doe" } },
+        tenants: { profiles: { name: "John Doe" }, monthly_rent: 5000 },
         hostels: {
           name: "Adithya Hostel",
           phone: "1234567890",
@@ -118,12 +120,33 @@ describe("Payment Link Token Public Flow", () => {
         },
       });
 
+      vi.mocked(financialPaymentFacade.previewSettlement).mockResolvedValueOnce({
+        allocations: [],
+        future_credit: 0,
+        total_outstanding: 0,
+        total_to_settle: 0,
+        remaining_outstanding: 0,
+        minimum_allowed: 1,
+        first_tier_label: "",
+        payment_accepted: true,
+        rejection_reason: null,
+        payment_policy: "PARTIAL_ALLOWED",
+        warnings: [],
+        summary: "",
+        explanation: [],
+        skipped_obligations: [],
+        recommendation_score: 100,
+      } as any);
+
       const request = new NextRequest(`http://localhost/api/payments/pay/${mockToken}`);
       const response = await GET(request, { params: Promise.resolve({ token: mockToken }) });
 
       expect(response.status).toBe(200);
       const text = await response.text();
-      expect(text).toContain("Payment Completed");
+      expect(text).toContain('id="amount-input"');
+      // No other obligations outstanding, so it falls back to prefilling monthly rent (5000).
+      expect(text).toContain('value="5000"');
+      expect(text).toContain("Proceed to Secure Payment");
     });
 
     it("returns 200 with DUE status and payment button if obligation is pending", async () => {
@@ -131,7 +154,7 @@ describe("Payment Link Token Public Flow", () => {
         token: mockToken,
         expires_at: new Date(Date.now() + 100000),
         rent_obligations: { status: "PENDING", amount: 5000, rent_month: new Date(), payments: [] },
-        tenants: { profiles: { name: "John Doe" } },
+        tenants: { profiles: { name: "John Doe" }, monthly_rent: 5000 },
         hostels: {
           name: "Adithya Hostel",
           phone: "1234567890",
@@ -148,7 +171,8 @@ describe("Payment Link Token Public Flow", () => {
 
       expect(response.status).toBe(200);
       const text = await response.text();
-      expect(text).toContain("Amount Due");
+      expect(text).toContain('id="amount-input"');
+      expect(text).toContain('value="5000"');
       expect(text).toContain("Proceed to Secure Payment");
     });
 
@@ -157,7 +181,7 @@ describe("Payment Link Token Public Flow", () => {
         token: mockToken,
         expires_at: new Date(Date.now() + 100000),
         rent_obligations: { status: "PENDING", amount: 5000, rent_month: new Date(), payments: [] },
-        tenants: { profiles: { name: "John Doe" } },
+        tenants: { profiles: { name: "John Doe" }, monthly_rent: 5000 },
         hostels: {
           name: "Adithya Hostel",
           phone: "1234567890",
@@ -182,7 +206,7 @@ describe("Payment Link Token Public Flow", () => {
 
         expect(response.status).toBe(200);
         const text = await response.text();
-        expect(text).toContain("Amount Due");
+        expect(text).toContain('id="amount-input"');
       }
     });
 

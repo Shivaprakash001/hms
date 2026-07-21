@@ -46,6 +46,7 @@ function renderPage(content: {
   openedFromWhatsApp?: boolean;
   hostelAddress?: string;
   logoUrl?: string;
+  monthlyRent?: number;
 }): string {
   const {
     title,
@@ -63,6 +64,7 @@ function renderPage(content: {
     openedFromWhatsApp = false,
     hostelAddress = "",
     logoUrl = "",
+    monthlyRent = 0,
   } = content;
 
   const statusBlock = (() => {
@@ -70,29 +72,18 @@ function renderPage(content: {
       case "DUE":
         return `
           <div class="amount-card">
-            <p class="label">Amount Due</p>
-            <p class="amount">${formatCurrency(amount || 0)}</p>
-            <p class="due-month">Due Date: ${dueDate || "N/A"}</p>
+            <p class="label">Amount to Pay</p>
+            <div class="amount-input-row">
+              <span class="amount-currency">₹</span>
+              <input type="number" id="amount-input" class="amount-input" min="1" step="1" inputmode="numeric" value="${Math.round(amount || 0)}" />
+            </div>
           </div>
 
           <div class="breakdown-box">
             <p class="breakdown-title">Payment Breakdown</p>
-            <table class="breakdown-table">
-              ${breakdown
-                .map(
-                  (item) => `
-                <tr class="breakdown-row">
-                  <td>${item.label}</td>
-                  <td>${formatCurrency(item.value)}</td>
-                </tr>
-              `
-                )
-                .join("")}
-              <tr class="breakdown-row total">
-                <td>Total Amount</td>
-                <td>${formatCurrency(amount || 0)}</td>
-              </tr>
-            </table>
+            <div id="breakdown-content">
+              <p class="breakdown-loading">Calculating...</p>
+            </div>
           </div>
 
           <button type="button" id="pay-btn" class="pay-btn">
@@ -158,11 +149,78 @@ function renderPage(content: {
         const errorMsg = document.getElementById('error-message');
         const logoUrl = "${logoUrl}";
 
+        const amountInput = document.getElementById('amount-input');
+        const breakdownContent = document.getElementById('breakdown-content');
+        const monthlyRent = ${Number(monthlyRent || 0)};
+        let previewDebounceTimer = null;
+
+        function renderBreakdown(plan) {
+          if (!breakdownContent) return;
+          if (!plan.payment_accepted) {
+            breakdownContent.innerHTML = '<p class="breakdown-error">' + escapeHtml(plan.rejection_reason || 'This amount cannot be accepted.') + '</p>';
+            return;
+          }
+          const rows = plan.allocations
+            .filter(function(a) { return a.allocated > 0; })
+            .map(function(a) {
+              return '<div class="breakdown-row"><span>' + escapeHtml(a.label) + '</span><span>₹' + Number(a.allocated).toLocaleString('en-IN') + '</span></div>';
+            })
+            .join('');
+          const creditRow = plan.future_credit > 0
+            ? '<div class="breakdown-row"><span>Advance / Future Rent Credit</span><span>₹' + Number(plan.future_credit).toLocaleString('en-IN') + '</span></div>'
+            : '';
+          breakdownContent.innerHTML = (rows + creditRow) || '<p class="breakdown-loading">Enter an amount above.</p>';
+        }
+
+        async function fetchPreview(amount) {
+          if (!amount || amount <= 0) {
+            if (breakdownContent) breakdownContent.innerHTML = '<p class="breakdown-loading">Enter an amount above.</p>';
+            return;
+          }
+          try {
+            const res = await fetch(window.location.pathname, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'preview', amount: amount })
+            });
+            const data = await res.json();
+            if (data.success) renderBreakdown(data.plan);
+          } catch (e) {
+            console.error('preview fetch failed', e);
+          }
+        }
+
+        if (amountInput) {
+          fetchPreview(Number(amountInput.value));
+          amountInput.addEventListener('input', function() {
+            clearTimeout(previewDebounceTimer);
+            previewDebounceTimer = setTimeout(function() {
+              fetchPreview(Number(amountInput.value));
+            }, 400);
+          });
+        }
+
         if (payBtn) {
           payBtn.addEventListener('click', async () => {
             payBtn.disabled = true;
             payBtn.innerText = 'Initializing...';
             if (errorMsg) errorMsg.style.display = 'none';
+
+            const enteredAmount = Number(amountInput ? amountInput.value : 0);
+            if (!enteredAmount || enteredAmount <= 0) {
+              payBtn.disabled = false;
+              payBtn.innerText = 'Proceed to Secure Payment';
+              if (errorMsg) { errorMsg.textContent = 'Please enter an amount before proceeding.'; errorMsg.style.display = 'block'; }
+              return;
+            }
+            if (monthlyRent > 0 && enteredAmount > monthlyRent * 3) {
+              const confirmed = window.confirm('That is a large amount (₹' + enteredAmount.toLocaleString('en-IN') + '). Are you sure you want to proceed?');
+              if (!confirmed) {
+                payBtn.disabled = false;
+                payBtn.innerText = 'Proceed to Secure Payment';
+                return;
+              }
+            }
 
             try {
               const response = await fetch(window.location.pathname, {
@@ -170,7 +228,7 @@ function renderPage(content: {
                 headers: {
                   'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ action: 'initiate' })
+                body: JSON.stringify({ action: 'initiate', amount: enteredAmount })
               });
 
               const data = await response.json();
@@ -528,6 +586,39 @@ function renderPage(content: {
       margin-top: 6px;
       font-weight: 500;
     }
+    .amount-input-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: #ffffff;
+      border: 1.5px solid #FED7AA;
+      border-radius: 12px;
+      padding: 10px 14px;
+    }
+    .amount-currency {
+      font-size: 28px;
+      font-weight: 800;
+      color: #F97316;
+      line-height: 1;
+    }
+    .amount-input {
+      flex: 1;
+      min-width: 0;
+      border: none;
+      outline: none;
+      background: transparent;
+      font-family: inherit;
+      font-size: 28px;
+      font-weight: 800;
+      color: #0f172a;
+      letter-spacing: -0.5px;
+      -moz-appearance: textfield;
+    }
+    .amount-input::-webkit-outer-spin-button,
+    .amount-input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
     .breakdown-box {
       margin-bottom: 24px;
       text-align: left;
@@ -549,29 +640,46 @@ function renderPage(content: {
       border-collapse: collapse;
     }
     .breakdown-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
       font-size: 13px;
       color: #475569;
-    }
-    .breakdown-row td {
       padding: 8px 0;
       border-bottom: 1px dashed #F1F5F9;
     }
-    .breakdown-row td:last-child {
+    .breakdown-row:last-child {
+      border-bottom: none;
+    }
+    .breakdown-row span:last-child {
       text-align: right;
       font-weight: 600;
       color: #0f172a;
+      white-space: nowrap;
     }
-    .breakdown-row.total td {
+    .breakdown-row.total {
       border-bottom: none;
       padding-top: 12px;
       font-weight: 800;
       color: #0f172a;
       font-size: 15px;
     }
-    .breakdown-row.total td:last-child {
+    .breakdown-row.total span:last-child {
       font-size: 16px;
       color: #F97316;
       font-weight: 800;
+    }
+    .breakdown-loading {
+      font-size: 13px;
+      color: #94A3B8;
+      padding: 4px 0;
+    }
+    .breakdown-error {
+      font-size: 13px;
+      color: #DC2626;
+      font-weight: 500;
+      padding: 4px 0;
     }
     .pay-btn {
       display: flex;
@@ -918,7 +1026,7 @@ export async function GET(
       const sourceParam = url.searchParams.get("source");
       if (sourceParam === "wa" || sourceParam === "whatsapp") {
         openedFromWhatsApp = true;
-      } else {
+      } else if (obligation) {
         const hasWaLog = await prisma.whatsapp_logs.findFirst({
           where: { obligation_id: obligation.id }
         });
@@ -946,70 +1054,29 @@ export async function GET(
       );
     }
 
-    // 3. Obligation status check
-    if (obligation.status === "PAID") {
-      return new NextResponse(
-        renderPage({
-          title: "Payment Complete",
-          hostelName,
-          tenantName,
-          status: "PAID",
-          supportPhone,
-          hostelAddress,
-          logoUrl,
-        }),
-        { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } }
+    // 3. Compute the default amount to pre-fill.
+    // Priority: (a) the hinted obligation's remaining balance, if any and
+    // still unpaid; (b) the tenant's current total outstanding across all
+    // payable obligations; (c) the tenant's monthly rent, so a fully-paid-up
+    // tenant can still pay ahead.
+    let defaultAmount = 0;
+    if (obligation && obligation.status !== "PAID") {
+      const paidAmount = obligation.payments.reduce(
+        (sum: number, p: any) => sum + Number(p.amount_paid),
+        0
       );
+      defaultAmount = Math.max(0, Number(obligation.amount) - paidAmount);
     }
 
-    // 4. Calculate outstanding amount
-    const paidAmount = obligation.payments.reduce(
-      (sum: number, p: any) => sum + Number(p.amount_paid),
-      0
-    );
-    const totalDue = Number(obligation.amount);
-    const outstanding = Math.max(0, totalDue - paidAmount);
-
-    if (outstanding <= 0) {
-      return new NextResponse(
-        renderPage({
-          title: "Payment Complete",
-          hostelName,
-          tenantName,
-          status: "PAID",
-          supportPhone,
-          hostelAddress,
-          logoUrl,
-        }),
-        { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } }
-      );
-    }
-
-    // Breakdown generation
-    const monthlyRent = Number(linkToken.tenants.monthly_rent || 0);
-    const maintenance = Number(linkToken.tenants.maintenance_charge || 0);
-    const breakdown: { label: string; value: number }[] = [];
-    const obligationType = obligation?.obligation_type || "RENT";
-
-    if (obligationType === "RENT") {
-      if (monthlyRent > 0) {
-        breakdown.push({ label: "Monthly Rent", value: monthlyRent });
-      }
-      if (maintenance > 0) {
-        breakdown.push({ label: "Maintenance Charges", value: maintenance });
-      }
-      const structuredTotal = monthlyRent + maintenance;
-      if (outstanding > structuredTotal) {
-        breakdown.push({ label: "Other Dues / Late Fee", value: outstanding - structuredTotal });
-      } else if (outstanding < structuredTotal) {
-        // If the outstanding is less, adjust the items proportionally or just show as Rent Portion
-        breakdown.length = 0;
-        breakdown.push({ label: `${formatMonth(obligation.rent_month)} Rent (Partial)`, value: outstanding });
-      }
-    } else if (obligationType === "SECURITY_DEPOSIT") {
-      breakdown.push({ label: "Security Deposit", value: outstanding });
-    } else {
-      breakdown.push({ label: `${obligationType.replace(/_/g, " ")}`, value: outstanding });
+    if (defaultAmount <= 0) {
+      const probePlan = await financialPaymentFacade.previewSettlement({
+        tenantId: linkToken.tenant_id,
+        hostelId: linkToken.hostel_id,
+        amountRupees: 0,
+      });
+      defaultAmount = probePlan.total_outstanding > 0
+        ? probePlan.total_outstanding
+        : Number(linkToken.tenants.monthly_rent || 0);
     }
 
     const formatDate = (date: Date | string | null): string => {
@@ -1018,23 +1085,23 @@ export async function GET(
       return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
     };
 
-    // 5. Render summary page with Proceed to Secure Payment button
+    // 4. Render summary page with the editable amount + Proceed button
     return new NextResponse(
       renderPage({
-        title: `Pay ${formatCurrency(outstanding)} — ${hostelName}`,
+        title: `Pay ${hostelName}`,
         hostelName,
         tenantName,
         status: "DUE",
-        dueMonth: formatMonth(obligation.rent_month),
-        dueDate: formatDate(obligation.due_date),
-        amount: outstanding,
+        dueMonth: obligation ? formatMonth(obligation.rent_month) : undefined,
+        dueDate: obligation ? formatDate(obligation.due_date) : undefined,
+        amount: defaultAmount,
         supportPhone,
         token,
         roomNo,
-        breakdown,
         openedFromWhatsApp,
         hostelAddress,
         logoUrl,
+        monthlyRent: Number(linkToken.tenants.monthly_rent || 0),
       }),
       { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } }
     );
