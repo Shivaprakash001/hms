@@ -53,6 +53,8 @@ const mockAgreement = {
         room: {
           room_no: "101",
           room_type: "G1",
+          floor: 1,
+          floor_ref: { name: "Floor 1" },
         }
       }
     ]
@@ -304,6 +306,128 @@ describe("RenewalOfferService", () => {
         expect.objectContaining({
           data: expect.objectContaining({
             proposed_rent: 9500, // Matching G1
+          }),
+        })
+      );
+    });
+
+    it("generates FLOOR_WISE strategy bulk offers correctly", async () => {
+      const { dbMock, txMock } = createDbMock();
+      const service = new RenewalOfferService(dbMock as any);
+
+      const result = await service.generateBulkOffers({
+        ownerId: "owner-1",
+        hostelId: "hostel-1",
+        renewal_strategy: "FLOOR_WISE",
+        proposed_duration_months: 12,
+        floor_rents: {
+          "Floor 1": 8700,
+          "Floor 2": 9200,
+        },
+      });
+
+      expect(result.offersGenerated).toBe(1);
+      expect(txMock.renewalOffer.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            proposed_rent: 8700, // Matching "Floor 1"
+          }),
+        })
+      );
+    });
+
+    it("falls back to the legacy floor integer as 'Floor <n>' when a room has no floor_ref", async () => {
+      const { dbMock, txMock } = createDbMock({
+        tenant: {
+          ...mockAgreement.tenant,
+          room_allocations: [
+            {
+              is_active: true,
+              end_date: null,
+              room: { room_no: "205", room_type: "G1", floor: 2, floor_ref: null },
+            },
+          ],
+        } as any,
+      });
+      const service = new RenewalOfferService(dbMock as any);
+
+      await service.generateBulkOffers({
+        ownerId: "owner-1",
+        hostelId: "hostel-1",
+        renewal_strategy: "FLOOR_WISE",
+        proposed_duration_months: 12,
+        floor_rents: { "Floor 2": 8900 },
+      });
+
+      expect(txMock.renewalOffer.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ proposed_rent: 8900 }),
+        })
+      );
+    });
+
+    it("generates ROOM_WISE strategy bulk offers correctly", async () => {
+      const { dbMock, txMock } = createDbMock();
+      const service = new RenewalOfferService(dbMock as any);
+
+      const result = await service.generateBulkOffers({
+        ownerId: "owner-1",
+        hostelId: "hostel-1",
+        renewal_strategy: "ROOM_WISE",
+        proposed_duration_months: 12,
+        room_rents: {
+          "101": 8600,
+          "102": 9100,
+        },
+      });
+
+      expect(result.offersGenerated).toBe(1);
+      expect(txMock.renewalOffer.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            proposed_rent: 8600, // Matching room 101
+          }),
+        })
+      );
+    });
+
+    it("falls back to the template rent for a room not listed in room_rents", async () => {
+      const { dbMock, txMock } = createDbMock();
+      const service = new RenewalOfferService(dbMock as any);
+
+      await service.generateBulkOffers({
+        ownerId: "owner-1",
+        hostelId: "hostel-1",
+        renewal_strategy: "ROOM_WISE",
+        proposed_duration_months: 12,
+        room_rents: { "999": 15000 }, // does not match mock's room 101
+      });
+
+      expect(txMock.renewalOffer.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ proposed_rent: 8500 }), // template default_rent
+        })
+      );
+    });
+
+    it("scopes the bulk query to explicit agreementIds when the owner selects specific rows", async () => {
+      const { dbMock } = createDbMock();
+      const service = new RenewalOfferService(dbMock as any);
+
+      await service.generateBulkOffers({
+        ownerId: "owner-1",
+        hostelId: "hostel-1",
+        renewal_strategy: "FLAT",
+        proposed_duration_months: 6,
+        proposed_rent: 9000,
+        filterCriteria: { agreementIds: ["agreement-1", "agreement-2"] },
+      });
+
+      expect(dbMock.agreement.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: { in: ["agreement-1", "agreement-2"] },
+            hostel_id: "hostel-1",
           }),
         })
       );

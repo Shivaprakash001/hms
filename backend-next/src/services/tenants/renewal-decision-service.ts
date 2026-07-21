@@ -102,6 +102,9 @@ function tenantPayload(tenant: any) {
     room: tenant.room_allocations?.[0]?.room ? {
       id: tenant.room_allocations[0].room.id,
       room_no: tenant.room_allocations[0].room.room_no,
+      room_type: tenant.room_allocations[0].room.room_type,
+      floor_name: tenant.room_allocations[0].room.floor_ref?.name
+        ?? (tenant.room_allocations[0].room.floor != null ? `Floor ${tenant.room_allocations[0].room.floor}` : null),
     } : null,
   };
 }
@@ -350,7 +353,17 @@ export class RenewalDecisionService {
           profiles: { select: { name: true, phone: true } },
           room_allocations: {
             where: { is_active: true, end_date: null },
-            include: { room: { select: { id: true, room_no: true } } },
+            include: {
+              room: {
+                select: {
+                  id: true,
+                  room_no: true,
+                  room_type: true,
+                  floor: true,
+                  floor_ref: { select: { name: true } },
+                },
+              },
+            },
             take: 1,
           },
           move_out_requests: {

@@ -9,6 +9,7 @@ const TenantPaymentReturnPage = lazy(() => import('@/portal/pages/TenantPaymentR
 const TenantPaymentsPage = lazy(() => import('@/portal/pages/TenantPaymentsPage').then((m) => ({ default: m.TenantPaymentsPage })));
 const TenantProfilePortalPage = lazy(() => import('@/portal/pages/TenantProfilePortalPage').then((m) => ({ default: m.TenantProfilePortalPage })));
 const TenantRoomPage = lazy(() => import('@/portal/pages/TenantRoomPage').then((m) => ({ default: m.TenantRoomPage })));
+const TenantRenewalPage = lazy(() => import('@/platforms/tenant/pages/TenantRenewalPage').then((m) => ({ default: m.TenantRenewalPage })));
 const TenantProviderShell = lazy(() => import('./TenantProviderShell').then((m) => ({ default: m.TenantProviderShell })));
 
 function TenantRouteFallback() {
@@ -42,6 +43,7 @@ export function TenantRoutes() {
         <Route path="/tenant/room" element={<TenantRoomPage />} />
         <Route path="/tenant/profile" element={<TenantProfilePortalPage />} />
         <Route path="/tenant/move-out" element={<TenantMoveOutPage />} />
+        <Route path="/tenant/renewal" element={<TenantRenewalPage />} />
       </Route>
     </Route>
   );

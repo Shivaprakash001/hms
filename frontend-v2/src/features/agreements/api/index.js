@@ -6,6 +6,7 @@ const unwrap = (response) => {
 };
 
 export const agreementService = {
+  /** @param {{ hostelId?: string; filter?: string }} [params] */
   getRenewalQueue: async ({ hostelId, filter = 'all' } = {}) => {
     const response = await api.get('/agreements/renewals', { params: { hostelId, filter } });
     return unwrap(response);
@@ -45,6 +46,7 @@ export const agreementService = {
     const response = await api.post(`/agreements/${agreementId}/sign-renewal`, data);
     return unwrap(response);
   },
+  /** @param {{ hostelId?: string; status?: string }} [params] */
   getRenewalOffers: async ({ hostelId, status } = {}) => {
     const response = await api.get('/agreements/renewal-offers', { params: { hostelId, status } });
     return unwrap(response);
@@ -65,6 +67,10 @@ export const agreementService = {
     const response = await api.patch(`/agreements/renewal-offers/${offerId}`, data);
     return unwrap(response);
   },
+  getRenewalWorkspace: async (agreementId) => {
+    const response = await api.get(`/agreements/renewals/${agreementId}`);
+    return unwrap(response);
+  },
   getTenantRenewalOffer: async () => {
     const response = await api.get('/tenant/renewal-offer');
     const unwrapped = unwrap(response);
@@ -80,6 +86,19 @@ export const agreementService = {
   },
   discussRenewalOffer: async (offerId, message) => {
     const response = await api.post(`/tenant/renewal-offer/${offerId}/discuss`, { message });
+    return unwrap(response);
+  },
+  uploadRenewalSignature: async (file, type = 'tenant') => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('type', type);
+    const response = await api.post('/tenants/me/renewal-signature', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return unwrap(response);
+  },
+  signRenewalAgreement: async (agreementId, data) => {
+    const response = await api.post(`/agreements/${agreementId}/sign-renewal`, data);
     return unwrap(response);
   },
 };

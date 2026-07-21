@@ -38,6 +38,26 @@ Copy this block for each new entry:
 - **Fix:** An **unlayered** `@media (max-width: 639.98px)` rule in `globals.css` forces `input`/`select`/`textarea` (except checkbox/radio/range) to 16px below the `sm` breakpoint. Being unlayered, it outranks Tailwind's layered `text-sm`/`text-xs` utilities without `!important`. Fixes every form app-wide; desktop keeps its denser 14px.
 - **Related:** [[Frontend]], [[Changelog]]
 
+### Tenant had no way to actually finalize an accepted renewal
+
+- **Status:** fixed
+- **Found:** 2026-07-22
+- **Area:** [[Frontend]] — `TenantDashboardPage.tsx` / [[Backend]] — `agreement-renewal-signing-service.ts`
+- **Symptom:** After a tenant tapped "Accept Offer" on a renewal, nothing further happened in the UI. The tenant dashboard's two renewal cards both `return null` once a successor agreement exists (`TenantRenewalOfferCard` because the offer's status is no longer `SENT`/`DRAFT`; `TenantRenewalCard` because `evaluateAgreement()` resolves `decision_state` back to `"CURRENT"` once a successor exists) — so the tenant saw no indication a signature was still needed, and had no way to provide one. Backend support (`agreement-renewal-signing-service.ts`, `POST /api/agreements/[id]/sign-renewal`, already accepts `session.role === "TENANT"`) existed with zero frontend consumer.
+- **Root cause:** The renewal UI was built around "offer accepted ⇒ done," but accept only creates a `DRAFT` successor agreement (`createRenewalDraft`) — activation still requires an explicit signature (`signRenewalAgreement`), which nothing in the frontend ever called for a tenant.
+- **Fix:** New dedicated page `src/platforms/tenant/pages/TenantRenewalPage.tsx` (route `/tenant/renewal`) adds a "Sign Your Renewed Agreement" stage using the existing `SignaturePad` component plus a new session-authenticated upload route (`POST /api/tenants/me/renewal-signature`, mirrors the activation-token-based signature upload but resolves the tenant from session) and `agreementService.signRenewalAgreement()`. The dashboard's two large inline cards were replaced with one slim `TenantRenewalBanner` that correctly surfaces the previously-invisible "awaiting signature" and "signed" states. See [[Decisions]] ADR-019.
+- **Related:** [[Backend]], [[Frontend]], [[Changelog]]
+
+### Renewal queue always showed room type as "N/A"
+
+- **Status:** fixed
+- **Found:** 2026-07-21
+- **Area:** [[Backend]] — `renewal-decision-service.ts`
+- **Symptom:** Every row on the Renewal Pipeline queue showed `Room 401 (N/A)` — the room number was correct but the category in parentheses was always "N/A", visible in real device screenshots of the mobile rebuild.
+- **Root cause:** `agreementDecisionInclude()`'s Prisma `room_allocations.room` select only listed `{ id: true, room_no: true }`, and `tenantPayload()`'s returned `room` object only echoed `id`/`room_no` — `room_type` was never fetched from the database in the first place, so the frontend's `tenant.room?.room_type` was always `undefined`. This was already flagged as a known gap in this session's earlier UX audit (it also blocks the Renewal Campaigns Wizard's per-category pricing strategy from auto-populating categories) but not yet fixed until real screenshots made the impact concrete.
+- **Fix:** Added `room_type: true` to the Prisma select and to `tenantPayload()`'s returned shape. `tests/renewal-decision-service.test.ts` (10/10) still passes unchanged.
+- **Related:** [[Backend]], [[Changelog]]
+
 ### Payment reversals were tagged "Payment Received" in the activity feed
 
 - **Status:** fixed

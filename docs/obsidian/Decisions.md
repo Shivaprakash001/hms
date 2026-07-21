@@ -23,6 +23,26 @@ Architecture Decision Records — each entry below was **inferred from code evid
 
 ---
 
+## ADR-019: Tenant renewal signing is a dedicated page under `src/platforms/tenant`, not another `src/portal` card
+
+- **Date:** 2026-07-22
+- **Status:** accepted
+- **Context:** The tenant dashboard's renewal UI (`TenantRenewalCard`/`TenantRenewalOfferCard` in the frozen-allowlisted `src/portal/pages/TenantDashboardPage.tsx`) had no state for "offer accepted, successor agreement drafted, signature still required" — both cards `return null` once a successor exists, so tenants had no visible next step and no way to actually sign (the backend's `sign-renewal` endpoint already accepted a `TENANT` session but had zero frontend consumer). Fixing this needed real estate for a signature pad, terms comparison, and a confirmation state — more than an inline dashboard card should carry, and `src/portal` is a closed allowlist (`scripts/check-architecture.mjs`) that blocks new files.
+- **Decision:** Built a new dedicated page, `src/platforms/tenant/pages/TenantRenewalPage.tsx` (route `/tenant/renewal`), covering the full renewal lifecycle as one state machine (awaiting offer → offer pending decision → awaiting signature → signed) fed by a new lean hook (`useTenantRenewal`, only the 2 queries this feature needs, not the dashboard's full 10-query bundle). `TenantDashboardPage.tsx` was edited in place (permitted — it's already on the allowlist) to replace its ~265-line inline cards with one ~55-line `TenantRenewalBanner` that links out to the new page, matching the same "dashboard = entry point, dedicated page = full experience" pattern already used for Financials/Room/Move-out.
+- **Alternatives considered:** Adding the sign step as a third inline dashboard card — rejected, since a signature pad plus optional guardian signature plus a confirmation state would make the already-busy dashboard worse, and CLAUDE.md's own frozen-portal rule means new files couldn't go there anyway.
+- **Consequences:** New tenant-portal features now have an established pattern to follow (`src/platforms/tenant/pages/`), and the dashboard stays scannable. The tenant signature upload needed one new backend route (`POST /api/tenants/me/renewal-signature`) rather than reusing the activation-token-based one, since a renewal happens well after the tenant has a real session.
+- **Related:** [[Bugs]] (Tenant had no way to actually finalize an accepted renewal), [[Frontend]], [[APIs]]
+
+## ADR-018: The Individual Renewal Workspace is a composed read model, not a new source of truth
+
+- **Date:** 2026-07-21
+- **Status:** accepted
+- **Context:** The redesigned Owner Renewal Workspace needed a single-fetch detail page for one renewal (current agreement, offer history, timeline, financial summary, documents, activation readiness), but no existing endpoint bundled these — each lived behind a separate narrow route/service.
+- **Decision:** `renewal-workspace-read-model.ts` composes existing services exactly per the [[ADR-001]] pattern — `financialReadModelService.getFinancialReadModel()` for dues/deposit, `renewalTimelineService.getTimeline()` for the audit trail, `evaluateActivationReadiness()` from the [[ADR-015]] readiness engine for blocking-issue checks — plus two direct, read-only Prisma queries (offer history, documents) that don't yet have a dedicated service. Activation readiness is only evaluated when a successor draft agreement actually exists (`agreement.renewed_to_agreement`); before that there is nothing for the engine to check readiness *for*, so the field is `null` rather than misusing `evaluateActivationReadiness`'s precondition shape.
+- **Alternatives considered:** A GraphQL-style resolver-per-field approach — rejected as unnecessary complexity for one owner-facing page. Recomputing financial/readiness figures inline in the new service — rejected outright per ADR-001's precedent (the exact bug class ADR-001 exists to prevent).
+- **Consequences:** New backend code was needed only for two things not yet owned by any service (offer-history-by-agreement, tenant-documents-by-agreement); every other figure on the page is guaranteed consistent with wherever else in the app already shows it, by construction. `GET /api/agreements/renewals/[agreementId]` — see [[APIs]].
+- **Related:** [[APIs]], [[Frontend]], [[Backend]]
+
 ## ADR-017: Payment links are amount-flexible and tenant-scoped, not obligation-locked
 
 - **Date:** 2026-07-21

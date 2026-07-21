@@ -22,7 +22,7 @@ export type ProposedTerms = {
   offer_expires_at?: string | Date;
 };
 
-export type RenewalStrategy = "FLAT" | "PERCENTAGE" | "ROOM_CATEGORY";
+export type RenewalStrategy = "FLAT" | "PERCENTAGE" | "ROOM_CATEGORY" | "FLOOR_WISE" | "ROOM_WISE";
 
 export type BulkOfferInput = {
   ownerId: string;
@@ -36,7 +36,13 @@ export type BulkOfferInput = {
   rent_increase_percent?: number;
   // ROOM_CATEGORY strategy
   category_rents?: Record<string, number>; // { "G1": 8500, "G2": 7500, "AC": 12000 }
-  filterCriteria?: { roomCategory?: string; expiringWithinDays?: number };
+  // FLOOR_WISE strategy — keyed by the floor's display name (`floors.name`),
+  // falling back to "Floor <n>" for rooms with only the legacy `floor` int.
+  floor_rents?: Record<string, number>;
+  // ROOM_WISE strategy — keyed by exact room_no, for owners who want to set
+  // a bespoke rent per room in one bulk pass instead of the single-offer flow.
+  room_rents?: Record<string, number>;
+  filterCriteria?: { roomCategory?: string; expiringWithinDays?: number; agreementIds?: string[] };
   title?: string;
   deposit_refund_policy?: DepositRefundPolicy;
   notification_target?: RenewalNotificationTarget;
@@ -215,6 +221,8 @@ export class RenewalOfferService {
    * FLAT — same proposed_rent for all
    * PERCENTAGE — increase current rent by X%
    * ROOM_CATEGORY — different rent per room type
+   * FLOOR_WISE — different rent per floor (`floors.name`, or "Floor <n>" for rooms with only the legacy `floor` int)
+   * ROOM_WISE — different rent per exact room number, for bespoke per-room bulk pricing
    */
   async generateBulkOffers(input: BulkOfferInput) {
     const { ownerId, hostelId, renewal_strategy, filterCriteria = {} } = input;
@@ -234,6 +242,12 @@ export class RenewalOfferService {
     if (filterCriteria.expiringWithinDays) {
       agreementWhere.agreement_end_date = { not: null, lte: addDays(new Date(), filterCriteria.expiringWithinDays) };
     }
+    // Owner selected specific tenants in the queue rather than "everyone
+    // matching a filter" — ANDed onto the existing hostel/status scoping
+    // above, so a bogus/foreign id just yields fewer rows, never a leak.
+    if (filterCriteria.agreementIds?.length) {
+      agreementWhere.id = { in: filterCriteria.agreementIds };
+    }
 
     const agreements = await this.db.agreement.findMany({
       where: agreementWhere,
@@ -247,7 +261,16 @@ export class RenewalOfferService {
             },
             room_allocations: {
               where: { is_active: true, end_date: null },
-              include: { room: { select: { room_no: true, room_type: true } } },
+              include: {
+                room: {
+                  select: {
+                    room_no: true,
+                    room_type: true,
+                    floor: true,
+                    floor_ref: { select: { name: true } },
+                  },
+                },
+              },
               take: 1,
             },
           },
@@ -286,7 +309,10 @@ export class RenewalOfferService {
       for (const agreement of filtered) {
         const activeContract = getAgreementContract(agreement);
         const currentRent = Number(activeContract.rent || 0);
-        const roomType = agreement.tenant?.room_allocations?.[0]?.room?.room_type || null;
+        const room = agreement.tenant?.room_allocations?.[0]?.room;
+        const roomType = room?.room_type || null;
+        const floorKey = room?.floor_ref?.name || (room?.floor != null ? `Floor ${room.floor}` : null);
+        const roomNo = room?.room_no || null;
 
         const effectiveFrom = agreement.agreement_end_date || new Date();
 
@@ -303,6 +329,10 @@ export class RenewalOfferService {
           proposedRent = Math.round(currentRent * (1 + input.rent_increase_percent / 100));
         } else if (renewal_strategy === "ROOM_CATEGORY" && input.category_rents && roomType) {
           proposedRent = input.category_rents[roomType] ?? templateRent;
+        } else if (renewal_strategy === "FLOOR_WISE" && input.floor_rents && floorKey) {
+          proposedRent = input.floor_rents[floorKey] ?? templateRent;
+        } else if (renewal_strategy === "ROOM_WISE" && input.room_rents && roomNo) {
+          proposedRent = input.room_rents[roomNo] ?? templateRent;
         } else {
           proposedRent = input.proposed_rent ?? templateRent;
         }

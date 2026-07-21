@@ -34,7 +34,11 @@ export function OwnerQuickActions() {
     location.pathname.startsWith('/tenant') ||
     location.pathname.startsWith('/hostels/') ||
     location.pathname.startsWith('/billing') ||
-    location.pathname.startsWith('/alerts');
+    location.pathname.startsWith('/alerts') ||
+    // Agreements pages have their own primary actions (Campaign, Refresh,
+    // Export) — the generic add-tenant/payment/expense FAB just overlaps
+    // queue rows and progress cards here.
+    location.pathname.startsWith('/agreements');
 
   const { data } = useQuery({
     queryKey: queryKeys.owner.hostels(),

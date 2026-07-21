@@ -1,5 +1,7 @@
 ---
-tags: [homepage, hms]
+tags:
+  - homepage
+  - hms
 ---
 
 # HMS Documentation Home

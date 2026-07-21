@@ -64,4 +64,10 @@ export const tenantPortalApi = {
   getMoveOutTimeline: () => moveOutService.getTimeline(),
   getAgreementRenewal: () => agreementService.getTenantRenewal(),
   getTenantRenewalOffer: () => agreementService.getTenantRenewalOffer(),
+  acceptRenewalOffer: (offerId) => agreementService.acceptRenewalOffer(offerId),
+  declineRenewalOffer: (offerId, reason) => agreementService.declineRenewalOffer(offerId, reason),
+  discussRenewalOffer: (offerId, message) => agreementService.discussRenewalOffer(offerId, message),
+  createRenewalDraft: (agreementId) => agreementService.createRenewalDraft(agreementId),
+  uploadRenewalSignature: (file, type) => agreementService.uploadRenewalSignature(file, type),
+  signRenewalAgreement: (agreementId, data) => agreementService.signRenewalAgreement(agreementId, data),
 };

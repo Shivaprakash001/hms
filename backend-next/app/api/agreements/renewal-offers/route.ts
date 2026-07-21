@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const { hostelId, renewal_strategy, proposed_duration_months, proposed_rent, proposed_deposit,
-      rent_increase_percent, category_rents, filterCriteria, title } = body;
+      rent_increase_percent, category_rents, floor_rents, room_rents, filterCriteria, title } = body;
 
     if (!hostelId || !proposed_duration_months) {
       return NextResponse.json({ error: "hostelId and proposed_duration_months are required" }, { status: 400 });
@@ -48,6 +48,12 @@ export async function POST(req: NextRequest) {
     if (strategy === "ROOM_CATEGORY" && !category_rents) {
       return NextResponse.json({ error: "category_rents is required for ROOM_CATEGORY strategy" }, { status: 400 });
     }
+    if (strategy === "FLOOR_WISE" && !floor_rents) {
+      return NextResponse.json({ error: "floor_rents is required for FLOOR_WISE strategy" }, { status: 400 });
+    }
+    if (strategy === "ROOM_WISE" && !room_rents) {
+      return NextResponse.json({ error: "room_rents is required for ROOM_WISE strategy" }, { status: 400 });
+    }
 
     const result = await renewalOfferService.generateBulkOffers({
       ownerId: session.sub,
@@ -58,6 +64,8 @@ export async function POST(req: NextRequest) {
       proposed_deposit: proposed_deposit ? Number(proposed_deposit) : undefined,
       rent_increase_percent: rent_increase_percent ? Number(rent_increase_percent) : undefined,
       category_rents,
+      floor_rents,
+      room_rents,
       filterCriteria,
       title,
     });

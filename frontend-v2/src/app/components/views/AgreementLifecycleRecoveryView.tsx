@@ -4,14 +4,21 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle,
+  ChevronDown,
   CheckCircle2,
   FileText,
   Loader2,
   RefreshCw,
-  ShieldCheck,
-  X,
 } from 'lucide-react';
 import { agreementService } from '@features/agreements/api';
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogBody,
+  ResponsiveDialogFooter,
+} from '@shared/ui';
 
 type RecoveryAgreement = {
   id: string;
@@ -64,6 +71,14 @@ function statusText(status: string) {
   return String(status || '').replace(/_/g, ' ');
 }
 
+function initials(name: unknown) {
+  const str = String(name || '').trim();
+  if (!str) return '?';
+  const parts = str.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 export function AgreementLifecycleRecoveryView() {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<RecoveryAgreement | null>(null);
@@ -73,6 +88,7 @@ export function AgreementLifecycleRecoveryView() {
   const [sortMode, setSortMode] = useState<'missing_fields' | 'tenant' | 'hostel' | 'status'>('missing_fields');
   const [exportError, setExportError] = useState('');
   const [isExporting, setIsExporting] = useState(false);
+  const [detailsOverride, setDetailsOverride] = useState<boolean | null>(null);
   const [form, setForm] = useState({
     agreement_start_date: '',
     agreement_end_date: '',
@@ -107,9 +123,6 @@ export function AgreementLifecycleRecoveryView() {
   const endCoverage = percent(endCovered, reportTotal);
   const durationCoverage = percent(durationCovered, reportTotal);
   const r4Ready = Boolean(completionData?.r4Ready ?? (reportTotal > 0 && startCoverage === 100 && endCoverage === 100 && durationCoverage === 100));
-  const missingCount = agreements.filter((item) =>
-    !item.agreement_start_date || !item.agreement_end_date || !item.agreement_duration_months
-  ).length;
   const hostels = useMemo(
     () => {
       const entries = agreements
@@ -212,245 +225,214 @@ export function AgreementLifecycleRecoveryView() {
   }
 
   const banner = r4Ready
-    ? { tone: 'green', title: '100% recovered', text: 'Agreement lifecycle data is ready for R4 validation.' }
+    ? { tone: 'green' as const, title: 'All agreements recovered', text: 'Lifecycle data is complete and ready for R4 validation.' }
     : pending > 0
-      ? { tone: 'red', title: 'Recovery required', text: `${pending} agreement${pending === 1 ? '' : 's'} pending lifecycle completion.` }
-      : { tone: 'yellow', title: 'Recovery in progress', text: 'Review coverage before R4 validation.' };
+      ? { tone: 'red' as const, title: 'Recovery required', text: `${pending} agreement${pending === 1 ? '' : 's'} pending lifecycle completion.` }
+      : { tone: 'yellow' as const, title: 'Recovery in progress', text: 'Review coverage before R4 validation.' };
+
+  // Once fully recovered there's nothing actionable left, so the detail
+  // sections (stats, coverage, worklist) default to collapsed — a user can
+  // still expand them, but they're no longer the first thing on the page.
+  const showDetails = detailsOverride ?? (isLoading || !r4Ready);
 
   return (
-    <div className="space-y-5 px-4 py-5 md:px-0">
+    <div className="space-y-4 px-4 py-4 sm:px-0 sm:py-0">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Agreement Lifecycle</p>
           <h1 className="text-2xl font-bold text-foreground">Lifecycle Recovery</h1>
-          <p className="text-sm text-muted-foreground">Complete legacy agreement dates before renewal automation begins.</p>
+          <p className="text-sm text-muted-foreground">One-time cleanup of legacy agreement dates before renewal automation runs.</p>
         </div>
         <button
           type="button"
           onClick={() => refetch()}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-border bg-card px-3 text-sm font-bold text-foreground"
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-border bg-card px-3 text-sm font-bold text-foreground sm:h-10"
         >
           <RefreshCw className="h-4 w-4" />
           Refresh
         </button>
       </header>
 
-      <section className={`rounded-xl border p-4 ${
-        banner.tone === 'green'
-          ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-          : banner.tone === 'yellow'
-            ? 'border-amber-200 bg-amber-50 text-amber-900'
-            : 'border-rose-200 bg-rose-50 text-rose-900'
-      }`}>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          {banner.tone === 'green' ? <CheckCircle2 className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
-          <div>
+      <button
+        type="button"
+        onClick={() => setDetailsOverride(!showDetails)}
+        className={`w-full rounded-xl border p-4 text-left transition-all ${
+          banner.tone === 'green'
+            ? 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300'
+            : banner.tone === 'yellow'
+              ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300'
+              : 'border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-300'
+        }`}
+      >
+        <div className="flex items-center gap-3">
+          {banner.tone === 'green' ? <CheckCircle2 className="h-5 w-5 shrink-0" /> : <AlertCircle className="h-5 w-5 shrink-0" />}
+          <div className="min-w-0 flex-1">
             <p className="font-bold">{banner.title}</p>
-            <p className="text-sm opacity-80">{banner.text}</p>
+            <p className="text-xs opacity-80">{banner.text}</p>
           </div>
-          <p className="rounded-lg bg-white/60 px-3 py-2 text-sm font-black sm:ml-auto">
-            {pending} agreement{pending === 1 ? '' : 's'} remaining
-          </p>
+          {pending > 0 && (
+            <span className="shrink-0 rounded-lg bg-white/60 px-3 py-1.5 text-xs font-black dark:bg-black/20">
+              {pending} left
+            </span>
+          )}
+          <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${showDetails ? 'rotate-180' : ''}`} />
         </div>
-      </section>
+      </button>
 
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Metric label="Total Agreements" value={total} />
-        <Metric label="Completed" value={completed} />
-        <Metric label="Pending" value={pending} />
-        <Metric label="Completion" value={`${completion}%`} />
-      </section>
+      {showDetails && (
+        <>
+          <section className="rounded-xl border border-border bg-card p-4">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+              <StatInline label="Total" value={total} />
+              <StatInline label="Completed" value={completed} />
+              <StatInline label="Pending" value={pending} />
+              <StatInline label="Completion" value={`${completion}%`} />
+            </div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+              <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${completion}%` }} />
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <MiniCoverage label="Start Date" value={startCoverage} covered={startCovered} total={total} />
+              <MiniCoverage label="End Date" value={endCoverage} covered={endCovered} total={total} />
+              <MiniCoverage label="Duration" value={durationCoverage} covered={durationCovered} total={total} />
+            </div>
+          </section>
 
-      <section className="grid gap-3 sm:grid-cols-3">
-        <Coverage label="Start Date Coverage" value={startCoverage} covered={startCovered} total={total} />
-        <Coverage label="End Date Coverage" value={endCoverage} covered={endCovered} total={total} />
-        <Coverage label="Duration Coverage" value={durationCoverage} covered={durationCovered} total={total} />
-      </section>
-
-      <section className="rounded-xl border border-border bg-card p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Completion Progress</p>
-            <p className="mt-1 text-lg font-bold text-foreground">
-              {pending} pending · {completed} completed · {completion}% complete
-            </p>
-          </div>
-          <div className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold ${
-            r4Ready ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
-          }`}>
-            <ShieldCheck className="h-4 w-4" />
-            R4 Readiness: {r4Ready ? 'READY' : 'NOT READY'}
-          </div>
-        </div>
-        {!r4Ready && (
-          <p className="mt-2 text-xs text-muted-foreground">{missingCount} agreement{missingCount === 1 ? '' : 's'} still missing lifecycle data.</p>
-        )}
-        <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
-          <div className="h-full rounded-full bg-accent" style={{ width: `${completion}%` }} />
-        </div>
-      </section>
-
-      <section className="rounded-xl border border-border bg-card p-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Recovery Worklist</p>
-            <p className="mt-1 text-sm text-muted-foreground">Filter the table for owner review and export hostel-specific CSVs.</p>
-          </div>
-          <button
-            type="button"
-            onClick={downloadExport}
-            disabled={isExporting}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 text-sm font-bold text-foreground disabled:opacity-60"
-          >
-            {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-            Export CSV
-          </button>
-        </div>
-
-        <div className="mt-4 grid gap-3 md:grid-cols-4">
-          <Field label="Bulk Filter">
-            <select
-              value={recoveryFilter}
-              onChange={(event) => setRecoveryFilter(event.target.value as 'all' | 'needs_recovery')}
-              className="h-11 rounded-lg border border-border bg-background px-3 text-sm text-foreground"
-            >
-              <option value="all">All Agreements</option>
-              <option value="needs_recovery">Needs Recovery</option>
-            </select>
-          </Field>
-          <Field label="Hostel">
-            <select
-              value={hostelFilter}
-              onChange={(event) => setHostelFilter(event.target.value)}
-              className="h-11 rounded-lg border border-border bg-background px-3 text-sm text-foreground"
-            >
-              <option value="all">All Hostels</option>
-              {hostels.map(([id, name]) => (
-                <option key={id} value={id}>{name}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Status">
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-              className="h-11 rounded-lg border border-border bg-background px-3 text-sm text-foreground"
-            >
-              <option value="all">All Statuses</option>
-              {statuses.map((status) => (
-                <option key={status} value={status}>{statusText(status)}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Sort By">
-            <select
-              value={sortMode}
-              onChange={(event) => setSortMode(event.target.value as 'missing_fields' | 'tenant' | 'hostel' | 'status')}
-              className="h-11 rounded-lg border border-border bg-background px-3 text-sm text-foreground"
-            >
-              <option value="missing_fields">Missing Fields</option>
-              <option value="tenant">Tenant</option>
-              <option value="hostel">Hostel</option>
-              <option value="status">Status</option>
-            </select>
-          </Field>
-        </div>
-
-        {exportError && <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">{exportError}</p>}
-      </section>
-
-      <section className="overflow-hidden rounded-xl border border-border bg-card">
-        {isLoading ? (
-          <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Loading recovery data
-          </div>
-        ) : isError ? (
-          <div className="py-12 text-center">
-            <p className="text-sm font-semibold text-foreground">Could not load lifecycle recovery</p>
-            <button type="button" onClick={() => refetch()} className="mt-2 text-xs font-bold text-accent">Retry</button>
-          </div>
-        ) : rows.length === 0 ? (
-          <div className="py-12 text-center text-sm text-muted-foreground">No agreements match these filters.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-[980px] w-full text-left text-sm">
-              <thead className="border-b border-border bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-3">Tenant</th>
-                  <th className="px-4 py-3">Room</th>
-                  <th className="px-4 py-3">Hostel</th>
-                  <th className="px-4 py-3">Agreement Status</th>
-                  <th className="px-4 py-3">Recommended Start</th>
-                  <th className="px-4 py-3">Start Date</th>
-                  <th className="px-4 py-3">End Date</th>
-                  <th className="px-4 py-3">Duration</th>
-                  <th className="px-4 py-3">Recovery Status</th>
-                  <th className="px-4 py-3">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {rows.map((agreement) => {
-                  const complete = Boolean(agreement.lifecycle_complete);
-                  return (
-                    <tr key={agreement.id} className="align-top">
-                      <td className="px-4 py-3 font-semibold text-foreground">{agreement.tenant?.name || 'Tenant'}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{agreement.tenant?.room?.room_no || 'N/A'}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{agreement.hostel?.name || 'Hostel'}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{statusText(agreement.current_status || agreement.status || '')}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{fmtDate(agreement.recommended_start_date)}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{fmtDate(agreement.agreement_start_date)}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{fmtDate(agreement.agreement_end_date)}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{agreement.agreement_duration_months || 'Not set'}</td>
-                      <td className="px-4 py-3">
-                        <span className={`rounded-full px-2 py-1 text-xs font-bold ${complete ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                          {complete ? 'Completed' : 'Pending'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          {complete ? (
-                            <button type="button" disabled className="rounded-lg bg-muted px-3 py-2 text-xs font-bold text-muted-foreground">Completed</button>
-                          ) : (
-                            <button type="button" onClick={() => openRecovery(agreement)} className="rounded-lg bg-accent px-3 py-2 text-xs font-bold text-accent-foreground">Recover</button>
-                          )}
-                          {agreement.tenant?.id && agreement.hostel?.id && (
-                            <Link to={`/hostels/${agreement.hostel.id}/tenants/${agreement.tenant.id}`} className="rounded-lg border border-border px-3 py-2 text-xs font-bold text-foreground">
-                              View Agreement
-                            </Link>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      {selected && (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/40 p-0 sm:items-center sm:justify-center sm:p-4">
-          <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl border border-border bg-card p-4 shadow-xl sm:max-w-xl sm:rounded-2xl">
-            <div className="flex items-start justify-between gap-3">
+          <section className="rounded-xl border border-border bg-card p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Recover Agreement</p>
-                <h2 className="text-lg font-bold text-foreground">{selected.tenant?.name || 'Tenant'}</h2>
+                <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Recovery Worklist</p>
+                <p className="mt-1 text-xs text-muted-foreground">Filter for review and export hostel-specific CSVs.</p>
               </div>
-              <button type="button" onClick={() => setSelected(null)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted">
-                <X className="h-5 w-5" />
+              <button
+                type="button"
+                onClick={downloadExport}
+                disabled={isExporting}
+                className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 text-sm font-bold text-foreground disabled:opacity-60 sm:h-9"
+              >
+                {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                Export CSV
               </button>
             </div>
 
-            <div className="mt-4 grid gap-3 rounded-xl border border-border bg-muted/30 p-3 sm:grid-cols-2">
-              <ReadOnly label="Rent" value={money(selected.snapshot_values?.monthly_rent)} />
-              <ReadOnly label="Deposit" value={money(selected.snapshot_values?.advance_deposit)} />
-              <ReadOnly label="Maintenance" value={money(selected.snapshot_values?.maintenance_charge)} />
-              <ReadOnly label="Payment Frequency" value={String(selected.snapshot_values?.payment_frequency || 'Not set')} />
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <select
+                value={recoveryFilter}
+                onChange={(event) => setRecoveryFilter(event.target.value as 'all' | 'needs_recovery')}
+                className="h-10 rounded-lg border border-border bg-background px-2 text-xs font-semibold text-foreground"
+              >
+                <option value="all">All Agreements</option>
+                <option value="needs_recovery">Needs Recovery</option>
+              </select>
+              <select
+                value={hostelFilter}
+                onChange={(event) => setHostelFilter(event.target.value)}
+                className="h-10 rounded-lg border border-border bg-background px-2 text-xs font-semibold text-foreground"
+              >
+                <option value="all">All Hostels</option>
+                {hostels.map(([id, name]) => (
+                  <option key={id} value={id}>{name}</option>
+                ))}
+              </select>
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+                className="h-10 rounded-lg border border-border bg-background px-2 text-xs font-semibold text-foreground"
+              >
+                <option value="all">All Statuses</option>
+                {statuses.map((status) => (
+                  <option key={status} value={status}>{statusText(status)}</option>
+                ))}
+              </select>
+              <select
+                value={sortMode}
+                onChange={(event) => setSortMode(event.target.value as 'missing_fields' | 'tenant' | 'hostel' | 'status')}
+                className="h-10 rounded-lg border border-border bg-background px-2 text-xs font-semibold text-foreground"
+              >
+                <option value="missing_fields">Sort: Missing Fields</option>
+                <option value="tenant">Sort: Tenant</option>
+                <option value="hostel">Sort: Hostel</option>
+                <option value="status">Sort: Status</option>
+              </select>
             </div>
 
-            <div className="mt-4 grid gap-3">
+            {exportError && <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">{exportError}</p>}
+          </section>
+
+          {isLoading ? (
+            <div className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card py-12 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading recovery data
+            </div>
+          ) : isError ? (
+            <div className="rounded-xl border border-border bg-card py-12 text-center">
+              <p className="text-sm font-semibold text-foreground">Could not load lifecycle recovery</p>
+              <button type="button" onClick={() => refetch()} className="mt-2 text-xs font-bold text-accent">Retry</button>
+            </div>
+          ) : rows.length === 0 ? (
+            <div className="rounded-xl border border-border bg-card py-12 text-center text-sm text-muted-foreground">No agreements match these filters.</div>
+          ) : (
+            <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+              {rows.map((agreement) => {
+                const complete = Boolean(agreement.lifecycle_complete);
+                return (
+                  <article key={agreement.id} className="p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-extrabold text-primary">
+                        {initials(agreement.tenant?.name)}
+                      </div>
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-bold text-foreground">{agreement.tenant?.name || 'Tenant'}</p>
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${complete ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400'}`}>
+                            {complete ? 'Completed' : 'Pending'}
+                          </span>
+                        </div>
+                        <p className="text-xs font-semibold text-muted-foreground">
+                          {agreement.hostel?.name || 'Hostel'} · {agreement.tenant?.room?.room_no ? `Room ${agreement.tenant.room.room_no}` : 'No active room'} · {statusText(agreement.current_status || agreement.status || '')}
+                        </p>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px] text-muted-foreground sm:grid-cols-4">
+                          <span>Recommended: <b className="text-foreground">{fmtDate(agreement.recommended_start_date)}</b></span>
+                          <span>Start: <b className="text-foreground">{fmtDate(agreement.agreement_start_date)}</b></span>
+                          <span>End: <b className="text-foreground">{fmtDate(agreement.agreement_end_date)}</b></span>
+                          <span>Duration: <b className="text-foreground">{agreement.agreement_duration_months || 'Not set'}</b></span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex items-center gap-2">
+                      {complete ? (
+                        <span className="flex h-9 flex-1 items-center justify-center rounded-lg bg-muted px-3 text-xs font-bold text-muted-foreground sm:flex-none">Completed</span>
+                      ) : (
+                        <button type="button" onClick={() => openRecovery(agreement)} className="flex h-10 flex-1 items-center justify-center rounded-lg bg-accent px-3 text-xs font-bold text-accent-foreground sm:h-9 sm:flex-none">Recover</button>
+                      )}
+                      {agreement.tenant?.id && agreement.hostel?.id && (
+                        <Link to={`/hostels/${agreement.hostel.id}/tenants/${agreement.tenant.id}`} className="flex h-10 flex-1 items-center justify-center rounded-lg border border-border px-3 text-xs font-bold text-foreground sm:h-9 sm:flex-none">
+                          View Agreement
+                        </Link>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      <ResponsiveDialog open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)}>
+        <ResponsiveDialogContent className="sm:max-w-lg">
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle>Recover Agreement — {selected?.tenant?.name || 'Tenant'}</ResponsiveDialogTitle>
+          </ResponsiveDialogHeader>
+          <ResponsiveDialogBody className="space-y-4">
+            <div className="grid gap-3 rounded-xl border border-border bg-muted/30 p-3 sm:grid-cols-2">
+              <ReadOnly label="Rent" value={money(selected?.snapshot_values?.monthly_rent)} />
+              <ReadOnly label="Deposit" value={money(selected?.snapshot_values?.advance_deposit)} />
+              <ReadOnly label="Maintenance" value={money(selected?.snapshot_values?.maintenance_charge)} />
+              <ReadOnly label="Payment Frequency" value={String(selected?.snapshot_values?.payment_frequency || 'Not set')} />
+            </div>
+
+            <div className="grid gap-3">
               <Field label="Start Date">
                 <input type="date" value={form.agreement_start_date} onChange={(event) => setForm((prev) => ({ ...prev, agreement_start_date: event.target.value }))} className="h-11 rounded-lg border border-border bg-background px-3 text-sm text-foreground" />
               </Field>
@@ -458,44 +440,45 @@ export function AgreementLifecycleRecoveryView() {
                 <input type="date" value={form.agreement_end_date} onChange={(event) => setForm((prev) => ({ ...prev, agreement_end_date: event.target.value }))} className="h-11 rounded-lg border border-border bg-background px-3 text-sm text-foreground" />
               </Field>
               <Field label="Duration Months">
-                <input type="number" min="1" value={form.agreement_duration_months} onChange={(event) => setForm((prev) => ({ ...prev, agreement_duration_months: event.target.value }))} className="h-11 rounded-lg border border-border bg-background px-3 text-sm text-foreground" />
+                <input type="number" inputMode="numeric" min="1" value={form.agreement_duration_months} onChange={(event) => setForm((prev) => ({ ...prev, agreement_duration_months: event.target.value }))} className="h-11 rounded-lg border border-border bg-background px-3 text-sm text-foreground" />
               </Field>
             </div>
 
-            {formError && <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">{formError}</p>}
-
-            <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={() => setSelected(null)} className="rounded-lg border border-border px-4 py-2 text-sm font-bold text-foreground">Cancel</button>
-              <button type="button" onClick={submitRecovery} disabled={recoveryMutation.isPending} className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-bold text-accent-foreground disabled:opacity-60">
-                {recoveryMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                Save Recovery
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            {formError && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">{formError}</p>}
+          </ResponsiveDialogBody>
+          <ResponsiveDialogFooter>
+            <button type="button" onClick={() => setSelected(null)} className="h-11 rounded-lg border border-border px-4 text-sm font-bold text-foreground">Cancel</button>
+            <button type="button" onClick={submitRecovery} disabled={recoveryMutation.isPending} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-accent px-4 text-sm font-bold text-accent-foreground disabled:opacity-60">
+              {recoveryMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Save Recovery
+            </button>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
     </div>
   );
 }
 
-function Metric({ label, value }: { label: string; value: number | string }) {
+function StatInline({ label, value }: { label: string; value: number | string }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-2 text-2xl font-black text-foreground">{value}</p>
+    <div>
+      <p className="text-xl font-black tabular-nums text-foreground">{value}</p>
+      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{label}</p>
     </div>
   );
 }
 
-function Coverage({ label, value, covered, total }: { label: string; value: number; covered: number; total: number }) {
+function MiniCoverage({ label, value, covered, total }: { label: string; value: number; covered: number; total: number }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-2 text-2xl font-black text-foreground">{value}%</p>
-      <p className="mt-1 text-xs text-muted-foreground">{covered} of {total} agreements</p>
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+    <div>
+      <div className="flex items-baseline justify-between">
+        <p className="text-xs font-bold text-foreground">{label}</p>
+        <p className="text-xs font-bold text-muted-foreground">{value}%</p>
+      </div>
+      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
         <div className="h-full rounded-full bg-accent" style={{ width: `${value}%` }} />
       </div>
+      <p className="mt-1 text-[10px] text-muted-foreground">{covered} of {total}</p>
     </div>
   );
 }
