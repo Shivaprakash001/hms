@@ -2148,14 +2148,14 @@ model Agreement {
 
 model payment_link_tokens {
   token            String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  obligation_id    String             @db.Uuid
+  obligation_id    String?            @db.Uuid
   tenant_id        String             @db.Uuid
   hostel_id        String             @db.Uuid
   owner_id         String             @db.Uuid
   expires_at       DateTime           @db.Timestamptz(6)
   created_at       DateTime           @default(now()) @db.Timestamptz(6)
 
-  rent_obligations rent_obligations   @relation(fields: [obligation_id], references: [id])
+  rent_obligations rent_obligations?  @relation(fields: [obligation_id], references: [id])
   tenants          tenants            @relation(fields: [tenant_id], references: [id])
   hostels          hostels            @relation(fields: [hostel_id], references: [id])
 
