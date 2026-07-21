@@ -13,44 +13,58 @@ import { prisma } from "@/lib/db";
 export async function POST(req: NextRequest) {
   try {
     const session = await getSession(req);
-    if (!session || session.role !== "OWNER") {
+    if (!session || (session.role !== "OWNER" && session.role !== "TENANT")) {
       return ApiResponse.error(ApiError.forbidden("Unauthorized"));
     }
 
-    const scope = resolveOwnerScope(session);
-    const ownerId = scope.owner_id;
-
     const data = await req.json().catch(() => ({}));
-    const { tenantId, obligationId } = data;
+    let { tenantId, obligationId } = data;
+
+    if (session.role === "TENANT") {
+      // Tenants may only ever generate a link for their own account.
+      if ((tenantId && tenantId !== session.tenant_id) || obligationId) {
+        return ApiResponse.error(ApiError.forbidden("You can only generate a payment link for your own account"));
+      }
+      tenantId = session.tenant_id;
+      if (!tenantId) {
+        return ApiResponse.error(ApiError.forbidden("No tenant account associated with this session"));
+      }
+    }
 
     if (!tenantId && !obligationId) {
       return ApiResponse.error(ApiError.badRequest("Either tenantId or obligationId must be provided"));
     }
 
-    // 1. Perform authorization checks
-    if (tenantId) {
-      const tenant = await prisma.tenants.findUnique({
-        where: { id: tenantId },
-        select: { owner_id: true },
-      });
-      if (!tenant) {
-        return ApiResponse.error(ApiError.notFound("Tenant not found"));
-      }
-      if (tenant.owner_id !== ownerId) {
-        return ApiResponse.error(ApiError.forbidden("Tenant does not belong to this owner"));
-      }
-    }
+    // 1. Perform authorization checks (owner path only — tenant path is
+    // already scoped to their own tenantId above, with obligationId disallowed)
+    if (session.role === "OWNER") {
+      const scope = resolveOwnerScope(session);
+      const ownerId = scope.owner_id;
 
-    if (obligationId) {
-      const obligation = await prisma.rent_obligations.findUnique({
-        where: { id: obligationId },
-        select: { owner_id: true },
-      });
-      if (!obligation) {
-        return ApiResponse.error(ApiError.notFound("Rent obligation not found"));
+      if (tenantId) {
+        const tenant = await prisma.tenants.findUnique({
+          where: { id: tenantId },
+          select: { owner_id: true },
+        });
+        if (!tenant) {
+          return ApiResponse.error(ApiError.notFound("Tenant not found"));
+        }
+        if (tenant.owner_id !== ownerId) {
+          return ApiResponse.error(ApiError.forbidden("Tenant does not belong to this owner"));
+        }
       }
-      if (obligation.owner_id !== ownerId) {
-        return ApiResponse.error(ApiError.forbidden("Rent obligation does not belong to this owner"));
+
+      if (obligationId) {
+        const obligation = await prisma.rent_obligations.findUnique({
+          where: { id: obligationId },
+          select: { owner_id: true },
+        });
+        if (!obligation) {
+          return ApiResponse.error(ApiError.notFound("Rent obligation not found"));
+        }
+        if (obligation.owner_id !== ownerId) {
+          return ApiResponse.error(ApiError.forbidden("Rent obligation does not belong to this owner"));
+        }
       }
     }
 
