@@ -74,6 +74,17 @@ export async function applyRentChangeInTx(
     data: { contract_rent: newRentAmount },
   });
 
+  // Keep tenants.monthly_rent in sync with the agreement's contract_rent —
+  // the same tenant-contract-sync pattern used by renewal activation (see
+  // renewal-activation-engine.ts's tenantContractSync / tx.tenants.update
+  // call). Without this, the frontend (which sources "current rent" from
+  // tenant.monthly_rent, not agreement.contract_rent) shows the stale rent
+  // after a successful change.
+  await tx.tenants.update({
+    where: { id: agreement.tenant_id },
+    data: { monthly_rent: newRentAmount },
+  });
+
   const updatedObligationIds: string[] = [];
   for (const obligation of safeToReprice) {
     await tx.rent_obligations.update({

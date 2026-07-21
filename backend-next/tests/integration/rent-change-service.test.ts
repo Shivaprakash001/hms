@@ -67,6 +67,9 @@ describe('applyRentChangeInTx', () => {
 
     const updatedAgreement = await prisma.agreement.findUniqueOrThrow({ where: { id: agreement.id } });
     expect(Number(updatedAgreement.contract_rent)).toBe(9000);
+
+    const updatedTenant = await prisma.tenants.findUniqueOrThrow({ where: { id: tenant.id } });
+    expect(Number(updatedTenant.monthly_rent)).toBe(9000);
   });
 
   it('never touches an obligation that already has a payment, even if its rent_month is in scope', async () => {

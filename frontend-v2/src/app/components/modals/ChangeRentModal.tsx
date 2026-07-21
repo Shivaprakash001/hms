@@ -42,6 +42,14 @@ export function ChangeRentModal({ tenantId, hostelId, currentRent, upcomingOblig
   const [succeeded, setSucceeded] = useState(false);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [apiError, setApiError] = useState<unknown>(null);
+  // Real server-reported outcome (obligationsUpdated from RentChangeResult),
+  // captured after a successful submit. The backend's safety guard is
+  // stricter than this modal's client-side affectedCount preview (e.g. an
+  // obligation that has had a payment reversed nets to paid === 0 but still
+  // has payment records, so the backend correctly skips it while the
+  // pre-submit preview still counted it) — showing the real count here makes
+  // any such discrepancy visible instead of silently trusting the preview.
+  const [obligationsUpdated, setObligationsUpdated] = useState<number | null>(null);
 
   const affectedCount = upcomingObligations.filter((o) => o.rent_month >= effectiveFromMonth).length;
 
@@ -77,13 +85,14 @@ export function ChangeRentModal({ tenantId, hostelId, currentRent, upcomingOblig
       if (!identityToken) throw new Error('Identity verification failed. Invalid password.');
 
       // Step 2: execute the rent change.
-      await tenantService.changeRent(tenantId, {
+      const result = await tenantService.changeRent(tenantId, {
         hostelId,
         newRentAmount: Number(newRentAmount),
         effectiveFromMonth,
         reason: reason.trim(),
         identityToken,
       });
+      setObligationsUpdated(typeof result?.obligationsUpdated === 'number' ? result.obligationsUpdated : null);
       setSucceeded(true);
       setTimeout(() => { onSuccess(); onClose(); }, 1200);
     } catch (err) {
@@ -116,7 +125,11 @@ export function ChangeRentModal({ tenantId, hostelId, currentRent, upcomingOblig
               <CheckCircle2 className="w-7 h-7 text-emerald-600 dark:text-emerald-400" />
             </div>
             <p className="text-sm font-bold text-foreground">Rent updated</p>
-            <p className="text-xs text-muted-foreground">Closing…</p>
+            <p className="text-xs text-muted-foreground">
+              {obligationsUpdated !== null
+                ? `${obligationsUpdated} installment${obligationsUpdated === 1 ? '' : 's'} updated.`
+                : 'Closing…'}
+            </p>
           </div>
         ) : step === 'FORM' ? (
           <form onSubmit={handleContinue} className="space-y-4">
