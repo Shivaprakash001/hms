@@ -21,10 +21,8 @@ import { ObligationHistorySheet } from '@features/tenants/components/financial/O
 import { CompactFinancialStrip, type FinancialSectionId } from '@features/tenants/components/financial/CompactFinancialStrip';
 import { FinancialHealthBanner } from '@features/tenants/components/financial/FinancialHealthBanner';
 import { PrimaryActionsBar } from '@features/tenants/components/financial/PrimaryActionsBar';
-import { FinancialActivity } from '@features/tenants/components/financial/FinancialActivity';
-import { LedgerStatement } from '@features/tenants/components/financial/LedgerStatement';
 import { DocumentsHub } from '@features/tenants/components/financial/DocumentsHub';
-import { FinancialWorkspaceNav } from '@features/tenants/components/profile/FinancialWorkspaceNav';
+import { UnifiedActivityTimeline } from '@features/tenants/components/profile/UnifiedActivityTimeline';
 import { AllocationHistoryTimeline } from '@features/tenants/components/allocation/AllocationHistoryTimeline';
 import { VerificationPanel } from '@features/tenants/components/documents/VerificationPanel';
 import { ActivityTimeline } from '@features/tenants/components/profile/ActivityTimeline';
@@ -34,7 +32,6 @@ import { RecordPaymentModal } from '@/app/components/modals/RecordPaymentModal';
 import { CorrectPaymentModal } from '@/app/components/modals/CorrectPaymentModal';
 import { ChangeRentModal } from '@/app/components/modals/ChangeRentModal';
 import { hmsToast } from '@lib/toast';
-import { useIsMobile } from '@/app/components/ui/use-mobile';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/app/components/ui/tabs';
 import api from '@lib/api-client';
 import { queryKeys } from '@lib/queryKeys';
@@ -86,8 +83,6 @@ function listFrom<T = Record<string, unknown>>(value: unknown, keys: string[] = 
   return [];
 }
 
-type MobileTab = 'obligations' | 'activity' | 'ledger' | 'documents';
-
 type ObligationModalState = {
   mode: 'create' | 'duplicate' | 'edit';
   initialValues?: { obligationType?: string; amount?: number; description?: string };
@@ -106,7 +101,6 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   const hostelId = hostelIdProp ?? params.hostelId ?? '';
   const tenantId = tenantIdProp ?? params.tenantId ?? '';
   const navigate = useNavigate();
-  const isMobile = useIsMobile();
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [payObligationId, setPayObligationId] = useState<string | null>(null);
@@ -120,7 +114,8 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   const [cancelObligationTarget, setCancelObligationTarget] = useState<any>(null);
   const [historyObligation, setHistoryObligation] = useState<any>(null);
   const [obligationModal, setObligationModal] = useState<ObligationModalState>(null);
-  const [mobileTab, setMobileTab] = useState<MobileTab>('obligations');
+  type TabId = 'obligations' | 'activity' | 'documents';
+  const [activeTab, setActiveTab] = useState<TabId>('obligations');
   const [correctingPaymentId, setCorrectingPaymentId] = useState<string | null>(null);
   const [showChangeRent, setShowChangeRent] = useState(false);
 
@@ -339,19 +334,16 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
 
   const financialEvents = (financialTimeline as any)?.events ?? [];
 
-  // ── Financial section navigation (desktop scroll, mobile tab switch) ──────
+  // ── Financial section navigation: switches the real tab ────────────────────
   const handleNavigate = (section: FinancialSectionId) => {
-    const tabForSection: Partial<Record<FinancialSectionId, MobileTab>> = {
+    const tabForSection: Partial<Record<FinancialSectionId, TabId>> = {
       'fin-obligations': 'obligations',
       'fin-activity': 'activity',
-      'fin-ledger': 'ledger',
+      'fin-ledger': 'activity',
       'fin-documents': 'documents',
     };
     const tab = tabForSection[section];
-    if (isMobile && tab) setMobileTab(tab);
-    setTimeout(() => {
-      document.getElementById(section)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, isMobile && tab ? 50 : 0);
+    if (tab) setActiveTab(tab);
   };
 
   const handleOpenReceivePayment = (prefillAmount?: number) => {
@@ -435,17 +427,14 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   );
 
   const activitySection = (
-    <FinancialActivity
+    <UnifiedActivityTimeline
       events={financialEvents}
+      ledgerEntries={(advance as any)?.entries ?? []}
       isLoading={(financialTimeline as any) === undefined}
       onDownloadReceipt={handleDownloadReceipt}
-      onViewObligation={() => handleNavigate('fin-obligations')}
+      onViewObligation={() => setActiveTab('obligations')}
       onCorrectPayment={setCorrectingPaymentId}
     />
-  );
-
-  const ledgerSection = (
-    <LedgerStatement entries={(advance as any)?.entries ?? []} balance={futureCredit} />
   );
 
   const documentsSection = (
@@ -639,9 +628,6 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
         </div>
       )}
 
-      {/* ═══════════════════════ FINANCIAL WORKSPACE ═══════════════════════ */}
-      <FinancialWorkspaceNav onNavigate={handleNavigate} />
-
       {/* §1 Summary */}
       <CompactFinancialStrip
         outstandingAmount={outstandingAmount}
@@ -666,30 +652,17 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
         onCollect={(prefillAmount) => handleOpenReceivePayment(prefillAmount)}
       />
 
-      {/* §2 Obligations + §3 Financial Activity */}
-      {isMobile ? (
-        <Tabs value={mobileTab} onValueChange={(v) => setMobileTab(v as MobileTab)}>
-          <TabsList className="w-full overflow-x-auto scrollbar-hide">
-            <TabsTrigger value="obligations">Obligations</TabsTrigger>
-            <TabsTrigger value="activity">Activity</TabsTrigger>
-            <TabsTrigger value="ledger">Ledger</TabsTrigger>
-            <TabsTrigger value="documents">Documents</TabsTrigger>
-          </TabsList>
-          <TabsContent value="obligations">{obligationsSection}</TabsContent>
-          <TabsContent value="activity">{activitySection}</TabsContent>
-          <TabsContent value="ledger">{ledgerSection}</TabsContent>
-          <TabsContent value="documents">{documentsSection}</TabsContent>
-        </Tabs>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            <div className="lg:col-span-5">{obligationsSection}</div>
-            <div className="lg:col-span-7">{activitySection}</div>
-          </div>
-          {ledgerSection}
-          {documentsSection}
-        </>
-      )}
+      {/* Tabbed detail region — Obligations / Activity / Documents (Stay tab added in Task 4) */}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
+        <TabsList className="w-full overflow-x-auto scrollbar-hide">
+          <TabsTrigger value="obligations">Obligations</TabsTrigger>
+          <TabsTrigger value="activity">Activity</TabsTrigger>
+          <TabsTrigger value="documents">Documents</TabsTrigger>
+        </TabsList>
+        <TabsContent value="obligations">{obligationsSection}</TabsContent>
+        <TabsContent value="activity">{activitySection}</TabsContent>
+        <TabsContent value="documents">{documentsSection}</TabsContent>
+      </Tabs>
 
       {/* Collapsible Identity & KYC Documents Card */}
       <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">

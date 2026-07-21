@@ -1,32 +1,36 @@
 import { useMemo, useState } from 'react';
-import { Loader2, ListFilter, Banknote, ReceiptText, HandCoins, Wallet, FileCheck2 } from 'lucide-react';
+import { Loader2, ListFilter, Banknote, ReceiptText, Wallet, FileCheck2 } from 'lucide-react';
 import { groupFinancialActivity } from '@features/tenants/utils/groupFinancialActivity';
 import type { TimelineEvent } from '@features/tenants/utils/financialColors';
-import { FinancialActivityCard } from './FinancialActivityCard';
+import { FinancialActivityCard } from '@features/tenants/components/financial/FinancialActivityCard';
 
-type FilterCategory = 'all' | 'payments' | 'charges' | 'waivers' | 'credit' | 'agreement';
+interface LedgerEntry {
+  id: string;
+  balance_after: number;
+}
+
+type FilterCategory = 'all' | 'payments' | 'ledger' | 'obligations' | 'agreement';
 
 const FILTER_CHIPS: { id: FilterCategory; label: string; icon: typeof ListFilter }[] = [
   { id: 'all', label: 'All', icon: ListFilter },
   { id: 'payments', label: 'Payments', icon: Banknote },
-  { id: 'charges', label: 'Charges', icon: ReceiptText },
-  { id: 'waivers', label: 'Waivers', icon: HandCoins },
-  { id: 'credit', label: 'Credit', icon: Wallet },
+  { id: 'ledger', label: 'Ledger', icon: Wallet },
+  { id: 'obligations', label: 'Obligations', icon: ReceiptText },
   { id: 'agreement', label: 'Agreement', icon: FileCheck2 },
 ];
 
 function matchesFilter(event: TimelineEvent, filter: FilterCategory): boolean {
   if (filter === 'all') return true;
   if (filter === 'payments') return event.type === 'PAYMENT_RECORDED' || event.type === 'PAYMENT_GROUP_SETTLED';
-  if (filter === 'charges') return event.type === 'OBLIGATION_CREATED';
-  if (filter === 'waivers') return event.type === 'OBLIGATION_WAIVED' || event.type === 'OBLIGATION_CANCELLED';
-  if (filter === 'credit') return event.type === 'LEDGER_CREDIT' || event.type === 'LEDGER_DEBIT';
+  if (filter === 'ledger') return event.type === 'LEDGER_CREDIT' || event.type === 'LEDGER_DEBIT';
+  if (filter === 'obligations') return event.type === 'OBLIGATION_CREATED' || event.type === 'OBLIGATION_WAIVED' || event.type === 'OBLIGATION_CANCELLED';
   if (filter === 'agreement') return event.type === 'CHANGE_REQUEST';
   return true;
 }
 
-interface FinancialActivityProps {
+interface UnifiedActivityTimelineProps {
   events: TimelineEvent[];
+  ledgerEntries: LedgerEntry[];
   isLoading?: boolean;
   onDownloadReceipt?: (paymentId: string) => void;
   onViewObligation?: (obligationId: string) => void;
@@ -35,12 +39,32 @@ interface FinancialActivityProps {
 
 const PAGE_SIZE = 8;
 
-export function FinancialActivity({ events, isLoading, onDownloadReceipt, onViewObligation, onCorrectPayment }: FinancialActivityProps) {
+/**
+ * Replaces the former Financial Activity + Ledger & Accounting Statement
+ * sections, which showed overlapping payment/ledger data in two different
+ * formats with two different filter taxonomies. This is the first version
+ * (financial + ledger only) — Task 4 extends it with non-financial
+ * (KYC/room/system) events and Invitation History.
+ */
+export function UnifiedActivityTimeline({
+  events,
+  ledgerEntries,
+  isLoading,
+  onDownloadReceipt,
+  onViewObligation,
+  onCorrectPayment,
+}: UnifiedActivityTimelineProps) {
   const [activeFilter, setActiveFilter] = useState<FilterCategory>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const grouped = useMemo(() => groupFinancialActivity(events), [events]);
+
+  const balanceByLedgerEntryId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const entry of ledgerEntries) map.set(entry.id, entry.balance_after);
+    return map;
+  }, [ledgerEntries]);
 
   const filtered = useMemo(
     () => grouped.filter((entry) => matchesFilter(entry.primary, activeFilter)),
@@ -50,9 +74,9 @@ export function FinancialActivity({ events, isLoading, onDownloadReceipt, onView
   const visible = filtered.slice(0, visibleCount);
 
   return (
-    <div id="fin-activity" className="p-4 rounded-2xl border border-border bg-card shadow-sm space-y-4 scroll-mt-20">
+    <div className="p-4 rounded-2xl border border-border bg-card shadow-sm space-y-4">
       <div className="flex items-center justify-between border-b border-border pb-3">
-        <h3 className="text-sm font-bold text-foreground">Financial Activity</h3>
+        <h3 className="text-sm font-bold text-foreground">Activity</h3>
       </div>
 
       <div className="flex gap-1.5 overflow-x-auto scrollbar-hide pb-1">
@@ -85,20 +109,27 @@ export function FinancialActivity({ events, isLoading, onDownloadReceipt, onView
           <Loader2 className="w-6 h-6 animate-spin text-accent" />
         </div>
       ) : visible.length === 0 ? (
-        <p className="text-xs text-muted-foreground text-center py-10">No financial activity recorded yet.</p>
+        <p className="text-xs text-muted-foreground text-center py-10">No activity recorded yet.</p>
       ) : (
         <div className="space-y-2 max-h-[560px] overflow-y-auto pr-1 scrollbar-hide">
-          {visible.map((entry) => (
-            <FinancialActivityCard
-              key={entry.id}
-              entry={entry}
-              isExpanded={expandedId === entry.id}
-              onToggle={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
-              onDownloadReceipt={onDownloadReceipt}
-              onViewObligation={onViewObligation}
-              onCorrectPayment={onCorrectPayment}
-            />
-          ))}
+          {visible.map((entry) => {
+            const isLedger = entry.primary.type === 'LEDGER_CREDIT' || entry.primary.type === 'LEDGER_DEBIT';
+            const balanceAfter = isLedger
+              ? balanceByLedgerEntryId.get(entry.primary.references.ledger_entry_id ?? '') ?? null
+              : null;
+            return (
+              <FinancialActivityCard
+                key={entry.id}
+                entry={entry}
+                balanceAfter={balanceAfter}
+                isExpanded={expandedId === entry.id}
+                onToggle={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
+                onDownloadReceipt={onDownloadReceipt}
+                onViewObligation={onViewObligation}
+                onCorrectPayment={onCorrectPayment}
+              />
+            );
+          })}
           {filtered.length > visibleCount && (
             <button
               type="button"
