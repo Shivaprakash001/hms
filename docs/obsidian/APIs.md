@@ -22,7 +22,7 @@ All endpoints live under `backend-next/app/api/` (Next.js 14 App Router). This i
 | `/api/auth/me` | GET | Current profile + tenant context if role=TENANT | Session |
 | `/api/auth/activity` | POST | Extends session liveness | Session |
 | `/api/auth/change-password` | POST | | Session |
-| `/api/auth/confirm-identity` | POST | Issues a 2-minute single-use signed "identity token" (re-verifies password) gating offline-payment/waive/cancel actions; DB rate-limited | Session (OWNER) |
+| `/api/auth/confirm-identity` | POST | Issues a 2-minute single-use signed "identity token" (re-verifies password) gating offline-payment/waive/cancel/change-rent actions (`ALLOWED_PURPOSES`); DB rate-limited | Session (OWNER) |
 | `/api/auth/forgot-password` / `/reset-password` | POST | Password reset flow, rate-limited | Public |
 | `/api/auth/reset-onboarding-password` | POST | First-login reset for bulk-imported tenants | Public (rate-limited) |
 | `/api/auth/google-callback` | POST | Google OAuth exchange | Public |
@@ -82,6 +82,8 @@ Payment-correction cases (Reverse, Transfer, Edit Reference/Notes — see [[Busi
 ## Payment Obligations
 
 `/api/payments/obligations` (POST create — **no PATCH/PUT anywhere in this tree; confirmed no in-place edit endpoint exists**), `/api/payments/obligations/[id]/cancel` (identity-token gated, only if zero payments exist), `/api/payments/obligations/[id]/waive` (identity-token gated, writes a ledger correction), `/api/payments/obligations/[id]/history`, `/api/rent/generate` (GET preview / POST generate, gated behind an automation plan feature).
+
+`/api/tenants/[id]/change-rent` (POST) — changes a tenant's rent and reprices future obligations in place; see [[Business-Rules]] for the repricing rule and `rent-change-service.ts::applyRentChangeInTx`. Body: `{ hostelId, newRentAmount, effectiveFromMonth, reason, identityToken }`. Auth: Session (OWNER/ADMIN), `resolveOwnerScope` + `requireHostelBelongsToOwner(scope.owner_id, hostelId)`, plus identity-token confirmation (`verifyIdentityConfirmation`/`consumeIdentityTokenInTx`, purpose `CHANGE_RENT`/action `change_rent` — registered in `/api/auth/confirm-identity`'s `ALLOWED_PURPOSES`, same pattern as `CANCEL_OBLIGATION`/`WAIVE_OBLIGATION`). Looks up the tenant's most recent `SIGNED`/`EXPIRING_SOON`/`AGREEMENT_EXPIRED` agreement for the given hostel (404 if none). Response: `{ success: true, data: RentChangeResult }` where `RentChangeResult` is `{ agreementId, tenantId, oldRentAmount, newRentAmount, effectiveFromMonth, obligationsUpdated, updatedObligationIds }`. 401 no session, 403 hostel/identity mismatch, 400 missing/invalid body fields or missing hostel context, 404 no matching agreement. Route is thin — all repricing logic lives in the service, per this codebase's route/service split.
 
 ## Move-Out & Settlement
 

@@ -19,6 +19,7 @@ const ALLOWED_PURPOSES: Record<string, { action: string }> = {
   OFFLINE_PAYMENT: { action: "record_offline_payment" },
   WAIVE_OBLIGATION: { action: "waive_obligation" },
   CANCEL_OBLIGATION: { action: "cancel_obligation" },
+  CHANGE_RENT: { action: "change_rent" },
 };
 const DEFAULT_PURPOSE = "OFFLINE_PAYMENT";
 const TOKEN_TTL_MS    = 2 * 60 * 1000; // 2 minutes
