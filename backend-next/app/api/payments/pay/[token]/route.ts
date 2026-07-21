@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { paymentService } from "@/src/services/payments/payment-service";
+import { financialPaymentFacade } from "@/src/services/payments/financial-payment-facade";
 import { getProviderContext } from "@/src/services/payments/merchant-context";
 import { getLogger } from "@/lib/logger";
 
@@ -1091,11 +1092,6 @@ export async function POST(
       return NextResponse.json({ success: false, error: "This payment link has expired." }, { status: 410 });
     }
 
-    // 3. Obligation status check
-    if (linkToken.rent_obligations.status === "PAID") {
-      return NextResponse.json({ success: false, error: "This payment obligation has already been paid." }, { status: 400 });
-    }
-
     // Read request body to determine action
     let body: any = {};
     try {
@@ -1112,6 +1108,21 @@ export async function POST(
         ...body.diagnostic,
       });
       return NextResponse.json({ success: true, action: "diagnostic_received" });
+    }
+
+    if (body.action === "preview") {
+      const amount = Number(body.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return NextResponse.json({ success: false, error: "Enter a valid amount." }, { status: 400 });
+      }
+
+      const plan = await financialPaymentFacade.previewSettlement({
+        tenantId: linkToken.tenant_id,
+        hostelId: linkToken.hostel_id,
+        amountRupees: amount,
+      });
+
+      return NextResponse.json({ success: true, plan });
     }
 
     if (body.action === "verify") {

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { GET, POST } from "../app/api/payments/pay/[token]/route";
 import { NextRequest } from "next/server";
+import { financialPaymentFacade } from "../src/services/payments/financial-payment-facade";
 
 const mocks = vi.hoisted(() => {
   return {
@@ -21,6 +22,9 @@ const mocks = vi.hoisted(() => {
     paymentService: {
       createMultiObligationPaymentIntent: vi.fn(),
     },
+    financialPaymentFacade: {
+      previewSettlement: vi.fn(),
+    },
     getSession: vi.fn(),
     resolveOwnerScope: vi.fn(),
   };
@@ -29,6 +33,9 @@ const mocks = vi.hoisted(() => {
 vi.mock("@/lib/db", () => ({ prisma: mocks.prisma }));
 vi.mock("@/src/services/payments/payment-service", () => ({
   paymentService: mocks.paymentService,
+}));
+vi.mock("@/src/services/payments/financial-payment-facade", () => ({
+  financialPaymentFacade: mocks.financialPaymentFacade,
 }));
 vi.mock("@/src/services/payments/merchant-context", () => ({
   getProviderContext: vi.fn().mockResolvedValue({
@@ -290,6 +297,71 @@ describe("Payment Link Token Public Flow", () => {
         razorpay_order_id: "order-1",
         razorpay_signature: "sig-1"
       });
+    });
+
+    it("returns a settlement preview for a valid token and amount", async () => {
+      mocks.prisma.payment_link_tokens.findUnique.mockResolvedValueOnce({
+        token: mockToken,
+        tenant_id: "tenant-1",
+        hostel_id: "hostel-1",
+        owner_id: "owner-1",
+        obligation_id: null,
+        expires_at: new Date(Date.now() + 1000 * 60 * 60),
+        rent_obligations: null,
+        hostels: { name: "Adithya Hostel", phone: "1234567890" },
+        tenants: { profiles: { name: "John Doe" } },
+      });
+
+      vi.mocked(financialPaymentFacade.previewSettlement).mockResolvedValueOnce({
+        allocations: [],
+        future_credit: 5000,
+        total_outstanding: 0,
+        total_to_settle: 0,
+        remaining_outstanding: 0,
+        minimum_allowed: 1,
+        first_tier_label: "Future Rent Credit",
+        payment_accepted: true,
+        rejection_reason: null,
+        payment_policy: "PARTIAL_ALLOWED",
+        warnings: [],
+        summary: "₹5,000 → credited as future rent",
+        explanation: [],
+        skipped_obligations: [],
+        recommendation_score: 100,
+      } as any);
+
+      const request = new NextRequest(`http://localhost/api/payments/pay/${mockToken}`, {
+        method: "POST",
+        body: JSON.stringify({ action: "preview", amount: 5000 }),
+      });
+      const response = await POST(request, { params: Promise.resolve({ token: mockToken }) });
+      const json = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(json.success).toBe(true);
+      expect(json.plan.future_credit).toBe(5000);
+    });
+
+    it("rejects a preview request with a non-positive amount", async () => {
+      mocks.prisma.payment_link_tokens.findUnique.mockResolvedValueOnce({
+        token: mockToken,
+        tenant_id: "tenant-1",
+        hostel_id: "hostel-1",
+        owner_id: "owner-1",
+        obligation_id: null,
+        expires_at: new Date(Date.now() + 1000 * 60 * 60),
+        rent_obligations: null,
+        hostels: { name: "Adithya Hostel", phone: "1234567890" },
+        tenants: { profiles: { name: "John Doe" } },
+      });
+
+      const request = new NextRequest(`http://localhost/api/payments/pay/${mockToken}`, {
+        method: "POST",
+        body: JSON.stringify({ action: "preview", amount: 0 }),
+      });
+      const response = await POST(request, { params: Promise.resolve({ token: mockToken }) });
+
+      expect(response.status).toBe(400);
     });
 
     it("returns 400 and does not query Prisma for unrecoverable/garbage tokens on POST", async () => {
