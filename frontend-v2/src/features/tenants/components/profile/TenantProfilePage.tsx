@@ -45,8 +45,7 @@ import {
   useTenantChangeRequests,
 } from '@/features/change-management';
 
-import { TenantHealthCard } from '@features/tenants/components/score/TenantHealthCard';
-import { OwnerInsights } from '@features/tenants/components/profile/OwnerInsights';
+import { RiskComplianceCard } from '@features/tenants/components/profile/RiskComplianceCard';
 import { PrivateNotes } from '@features/tenants/components/profile/PrivateNotes';
 import { CommunicationCenter } from '@features/tenants/components/profile/CommunicationCenter';
 
@@ -589,23 +588,13 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
       </div>
 
       {/* Row 2: Insights Grid & Private Notes */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        <TenantHealthCard
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <RiskComplianceCard
           score={tenantScore?.score ?? 80}
-          grade={tenantScore?.grade ?? 'GOOD'}
-          trend={tenantScore?.trend ?? 'STABLE'}
           hasAgreement={Boolean(allocations?.length > 0)}
           documentStatus={String(compliance.document_verification_status ?? 'MISSING').toUpperCase()}
-        />
-
-        <OwnerInsights
-          score={tenantScore?.score ?? null}
           overdueDays={overdueDays}
-          outstandingAmount={outstandingAmount}
           depositStatus={securityDepositAmount === 0 ? 'WAIVED' : 'PAID'}
-          hasAgreement={Boolean(allocations?.length > 0)}
-          documentStatus={String(compliance.document_verification_status ?? 'MISSING').toUpperCase()}
-          joinedDate={date(tenant.joined_on ?? overview.joined_at)}
         />
 
         <PrivateNotes tenantId={tenantId} />
