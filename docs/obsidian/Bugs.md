@@ -28,6 +28,16 @@ Copy this block for each new entry:
 
 ## Fixed
 
+### iPhone Safari auto-zoomed into every form field (Add Expense / Add Tenant / others)
+
+- **Status:** fixed
+- **Found:** 2026-07-21
+- **Area:** [[Frontend]] — `src/styles/globals.css`
+- **Symptom:** On an iPhone, tapping any input in Add Expense / Add Tenant (and other forms) zoomed the page in and would not zoom back out, so every field entry left the owner pinch-zooming out repeatedly and the mobile layout felt broken.
+- **Root cause:** iOS Safari auto-zooms into any focused `input`/`select`/`textarea` whose *computed* font-size is below 16px, and does not restore the zoom afterward. Our form fields default to Tailwind `text-sm` (14px), so every field triggered it. (The modal being a bottom-sheet vs full-screen is unrelated — the trigger is font-size, not modal size.)
+- **Fix:** An **unlayered** `@media (max-width: 639.98px)` rule in `globals.css` forces `input`/`select`/`textarea` (except checkbox/radio/range) to 16px below the `sm` breakpoint. Being unlayered, it outranks Tailwind's layered `text-sm`/`text-xs` utilities without `!important`. Fixes every form app-wide; desktop keeps its denser 14px.
+- **Related:** [[Frontend]], [[Changelog]]
+
 ### Payment reversals were tagged "Payment Received" in the activity feed
 
 - **Status:** fixed
