@@ -742,6 +742,18 @@ export function TenantFinancialsPage() {
     dispatch({ type: 'TRIGGER_DIRECT_PAYMENT', payload: { ids: allPayableIds, amount: totalAmount } });
   };
 
+  const handleSharePaymentLink = async () => {
+    const tenantId = profile?.tenant?.id;
+    if (!tenantId) return;
+    try {
+      const res = await paymentService.generatePayLink({ tenantId });
+      await navigator.clipboard?.writeText(res.url).catch(() => {});
+      toast.success('Payment link copied to clipboard');
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error?.message || 'Could not generate payment link');
+    }
+  };
+
   const handlePaymentSuccess = () => {
     dispatch({ type: 'RECORD_PAYMENT_SUCCESS' });
     queryClient.invalidateQueries({ queryKey: ['tenant'] });
@@ -826,15 +838,25 @@ export function TenantFinancialsPage() {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={handleOpenPaymentModal}
-            className="px-5 py-2.5 rounded-xl bg-white text-slate-900 font-bold text-sm shadow-md hover:bg-slate-50 transition-colors flex items-center justify-center gap-2 cursor-pointer self-start sm:self-center"
-            style={{ color: financialHealth.state === 'GREEN' ? '#1B2D5B' : financialHealth.state === 'RED' ? '#C62828' : '#F07B1D' }}
-          >
-            <CreditCard className="w-4 h-4" />
-            Make Payment
-          </button>
+          <div className="flex flex-wrap items-center gap-3 self-start sm:self-center">
+            <button
+              type="button"
+              onClick={handleOpenPaymentModal}
+              className="px-5 py-2.5 rounded-xl bg-white text-slate-900 font-bold text-sm shadow-md hover:bg-slate-50 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+              style={{ color: financialHealth.state === 'GREEN' ? '#1B2D5B' : financialHealth.state === 'RED' ? '#C62828' : '#F07B1D' }}
+            >
+              <CreditCard className="w-4 h-4" />
+              Make Payment
+            </button>
+            <button
+              type="button"
+              onClick={handleSharePaymentLink}
+              className="px-5 py-2.5 rounded-xl bg-white/10 text-white font-bold text-sm border border-white/30 hover:bg-white/20 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Send className="w-4 h-4" />
+              Share Payment Link
+            </button>
+          </div>
         </div>
       </div>
 
