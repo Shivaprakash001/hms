@@ -978,6 +978,12 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
             queryClient.invalidateQueries({ queryKey: queryKeys.tenants.overview(hostelId, tenantId) });
             refetch();
           }}
+          onSuccessReverse={() => {
+            // Give the reversal's own success state (1.2s) time to display before
+            // stacking a second modal — small deliberate delay, not a race condition
+            // fix, since onClose() already runs on its own timer independently.
+            setTimeout(() => setShowPaymentModal(true), 1300);
+          }}
         />
       )}
 

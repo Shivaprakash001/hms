@@ -11,6 +11,7 @@ interface CorrectPaymentModalProps {
   hostelId: string;
   tenantId: string;
   onClose: () => void;
+  onSuccessReverse?: (tenantId: string) => void;
 }
 
 const fmt = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
@@ -24,7 +25,7 @@ const fmt = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
  * platform. Edit Reference/Notes corrections are out of scope for this
  * modal — see docs/business-logic for the follow-up plan.
  */
-export function CorrectPaymentModal({ paymentId, hostelId, tenantId, onClose }: CorrectPaymentModalProps) {
+export function CorrectPaymentModal({ paymentId, hostelId, tenantId, onClose, onSuccessReverse }: CorrectPaymentModalProps) {
   const [reason, setReason] = useState('');
   const [correctionType, setCorrectionType] = useState<'REVERSE' | 'TRANSFER'>('REVERSE');
   const [toTenantQuery, setToTenantQuery] = useState('');
@@ -97,6 +98,9 @@ export function CorrectPaymentModal({ paymentId, hostelId, tenantId, onClose }: 
       await recoveryService.validate(kase.id);
       await recoveryService.execute(kase.id);
       setSucceeded(true);
+      if (correctionType === 'REVERSE') {
+        onSuccessReverse?.(tenantId);
+      }
       setTimeout(() => onClose(), 1200);
     } catch (err) {
       setApiError(err);
