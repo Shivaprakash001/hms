@@ -1,9 +1,9 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, FileCheck2, Send,
-  BedDouble, Settings, LogOut, AlertTriangle, AlertCircle,
-  History, ChevronDown, ChevronUp, TrendingUp,
+  ArrowLeft, FileCheck2,
+  BedDouble, LogOut, AlertTriangle, AlertCircle,
+  History, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -527,47 +527,24 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
       {/* Row 1: Sticky Operations & Communication Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <div className="lg:col-span-2">
-          <div className="p-4 rounded-2xl border border-border bg-card shadow-sm space-y-3">
-            <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1.5">
-              <Settings className="w-4 h-4 text-accent" />
-              Core Action Dashboard
-            </span>
-            <div className="flex flex-wrap gap-2">
-              {status.toUpperCase() === 'ACTIVE' ? (
-                <button
-                  type="button"
-                  onClick={() => setShowChangeDrawer(true)}
-                  className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 px-4.5 py-3 rounded-xl bg-secondary text-foreground text-xs font-semibold hover:bg-secondary/80 active:scale-95 transition-all border border-border"
-                >
-                  <FileCheck2 className="w-4 h-4 text-accent" />
-                  <span>{personalInfoAction?.label ?? 'Request Change'}</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowEditInvite(true)}
-                  className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 px-4.5 py-3 rounded-xl bg-secondary text-foreground text-xs font-semibold hover:bg-secondary/80 active:scale-95 transition-all border border-border"
-                >
-                  <Send className="w-4 h-4 text-muted-foreground" />
-                  <span>Edit Details</span>
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => {
-                  setIsStayExpanded(true);
-                  setTimeout(() => {
-                    document.getElementById('stay-details-section')?.scrollIntoView({ behavior: 'smooth' });
-                  }, 100);
-                }}
-                className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 px-4.5 py-3 rounded-xl bg-rose-50/50 hover:bg-rose-50 text-rose-600 dark:bg-rose-950/10 dark:hover:bg-rose-950/20 dark:text-rose-400 text-xs font-semibold active:scale-95 transition-all border border-rose-500/20"
-              >
-                <LogOut className="w-4 h-4" />
-                <span>Check-out / Exit</span>
-              </button>
-            </div>
-          </div>
+          <PrimaryActionsBar
+            tenantId={tenantId}
+            onReceivePayment={() => handleOpenReceivePayment()}
+            onCreateCharge={() => setObligationModal({ mode: 'create' })}
+            onCreateRent={() => setObligationModal({ mode: 'create', initialValues: { obligationType: 'RENT' } })}
+            onViewReceipts={() => handleNavigate('fin-documents')}
+            receiveLabel={findAction('PAYMENT_RECEIVE')?.label}
+            requestChangeLabel={status.toUpperCase() === 'ACTIVE' ? (personalInfoAction?.label ?? 'Request Change') : 'Edit Details'}
+            onRequestChange={() => (status.toUpperCase() === 'ACTIVE' ? setShowChangeDrawer(true) : setShowEditInvite(true))}
+            canChangeRent={status.toUpperCase() === 'ACTIVE'}
+            onChangeRent={() => setShowChangeRent(true)}
+            onCheckout={() => {
+              setIsStayExpanded(true);
+              setTimeout(() => {
+                document.getElementById('stay-details-section')?.scrollIntoView({ behavior: 'smooth' });
+              }, 100);
+            }}
+          />
         </div>
 
         <div>
@@ -689,31 +666,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
         onCollect={(prefillAmount) => handleOpenReceivePayment(prefillAmount)}
       />
 
-      {/* §2 Primary Actions */}
-      <PrimaryActionsBar
-        tenantId={tenantId}
-        onReceivePayment={() => handleOpenReceivePayment()}
-        onCreateCharge={() => setObligationModal({ mode: 'create' })}
-        onCreateRent={() => setObligationModal({ mode: 'create', initialValues: { obligationType: 'RENT' } })}
-        onViewReceipts={() => handleNavigate('fin-documents')}
-        receiveLabel={findAction('PAYMENT_RECEIVE')?.label}
-      />
-
-      {/* Change Rent entry point — owner-only, identity-confirmed, month-scoped repricing (see Business-Rules.md) */}
-      {status.toUpperCase() === 'ACTIVE' && (
-        <div className="flex justify-end -mt-2">
-          <button
-            type="button"
-            onClick={() => setShowChangeRent(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-secondary text-foreground text-xs font-semibold border border-border hover:bg-secondary/80 active:scale-95 transition-all"
-          >
-            <TrendingUp className="w-3.5 h-3.5 text-accent" />
-            <span>Change Rent</span>
-          </button>
-        </div>
-      )}
-
-      {/* §3 Obligations + §4 Financial Activity */}
+      {/* §2 Obligations + §3 Financial Activity */}
       {isMobile ? (
         <Tabs value={mobileTab} onValueChange={(v) => setMobileTab(v as MobileTab)}>
           <TabsList className="w-full overflow-x-auto scrollbar-hide">
