@@ -80,4 +80,14 @@ describe('PaymentLinkService.getOrCreateToken', () => {
 
     expect(second.token).toBe(first.token);
   });
+
+  it('throws a clear error when tenant has no associated owner', async () => {
+    const owner = await createTestOwner();
+    const hostel = await createTestHostel(owner.id);
+    const tenant = await createTestTenant(owner.id, hostel.id, { owner_id: null });
+
+    await expect(
+      PaymentLinkService.getOrCreateToken({ tenantId: tenant.id })
+    ).rejects.toThrow(/owner/i);
+  });
 });

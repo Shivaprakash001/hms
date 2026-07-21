@@ -61,6 +61,10 @@ export class PaymentLinkService {
       throw new Error("Tenant not found");
     }
 
+    if (!tenant.owner_id) {
+      throw new Error("Tenant has no associated owner");
+    }
+
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
     const created = await prisma.payment_link_tokens.create({
