@@ -23,7 +23,7 @@ describe('PaymentLinkService.getOrCreateToken', () => {
     expect(row.hostel_id).toBe(hostel.id);
   });
 
-  it('resolves tenantId to their oldest unpaid obligation and creates a token', async () => {
+  it('creates a tenant-scoped token (obligation_id stays null) even when tenant has outstanding obligations', async () => {
     const owner = await createTestOwner();
     const hostel = await createTestHostel(owner.id);
     const tenant = await createTestTenant(owner.id, hostel.id);
@@ -38,6 +38,7 @@ describe('PaymentLinkService.getOrCreateToken', () => {
     const row = await prisma.payment_link_tokens.findUniqueOrThrow({ where: { token: result.token } });
     expect(row.tenant_id).toBe(tenant.id);
     expect(row.hostel_id).toBe(hostel.id);
+    expect(row.obligation_id).toBeNull();
   });
 
   it('reuses an existing non-expired token instead of creating a duplicate', async () => {
@@ -53,5 +54,30 @@ describe('PaymentLinkService.getOrCreateToken', () => {
 
     const count = await prisma.payment_link_tokens.count({ where: { obligation_id: obligation.id } });
     expect(count).toBe(1);
+  });
+
+  it('creates a tenant-scoped token even when the tenant has no outstanding obligations', async () => {
+    const owner = await createTestOwner();
+    const hostel = await createTestHostel(owner.id);
+    const tenant = await createTestTenant(owner.id, hostel.id);
+    // Deliberately no createTestObligation call — tenant has zero obligations.
+
+    const result = await PaymentLinkService.getOrCreateToken({ tenantId: tenant.id });
+
+    const row = await prisma.payment_link_tokens.findUniqueOrThrow({ where: { token: result.token } });
+    expect(row.tenant_id).toBe(tenant.id);
+    expect(row.hostel_id).toBe(hostel.id);
+    expect(row.obligation_id).toBeNull();
+  });
+
+  it('reuses an existing non-expired tenant-scoped token instead of creating a new one', async () => {
+    const owner = await createTestOwner();
+    const hostel = await createTestHostel(owner.id);
+    const tenant = await createTestTenant(owner.id, hostel.id);
+
+    const first = await PaymentLinkService.getOrCreateToken({ tenantId: tenant.id });
+    const second = await PaymentLinkService.getOrCreateToken({ tenantId: tenant.id });
+
+    expect(second.token).toBe(first.token);
   });
 });
