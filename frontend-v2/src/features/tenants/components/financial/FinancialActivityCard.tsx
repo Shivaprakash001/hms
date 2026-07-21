@@ -11,6 +11,7 @@ interface FinancialActivityCardProps {
   onDownloadReceipt?: (paymentId: string) => void;
   onViewObligation?: (obligationId: string) => void;
   onCorrectPayment?: (paymentId: string) => void;
+  balanceAfter?: number | null;
 }
 
 export function FinancialActivityCard({
@@ -20,6 +21,7 @@ export function FinancialActivityCard({
   onDownloadReceipt,
   onViewObligation,
   onCorrectPayment,
+  balanceAfter,
 }: FinancialActivityCardProps) {
   const { primary, payments, credits, receiptPaymentId } = entry;
   const { label, icon: Icon, tone } = getEventDisplay(primary);
@@ -71,6 +73,13 @@ export function FinancialActivityCard({
       {isExpanded && (
         <div className="px-3.5 pb-3.5 pt-1.5 border-t border-border/60 space-y-3 text-xs animate-in slide-in-from-top-1 duration-150">
           <p className="text-muted-foreground">{primary.summary}</p>
+
+          {balanceAfter != null && (
+            <div className="flex justify-between text-[11px]">
+              <span className="text-muted-foreground">Balance after this entry</span>
+              <span className="font-semibold text-foreground">{fmt(balanceAfter)}</span>
+            </div>
+          )}
 
           {isGrouped && payments.length > 0 && (
             <div className="space-y-1">

@@ -1,9 +1,8 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, FileCheck2, Send,
-  BedDouble, Settings, LogOut, AlertTriangle, AlertCircle,
-  History, ChevronDown, ChevronUp, TrendingUp,
+  ArrowLeft,
+  LogOut, AlertTriangle, AlertCircle,
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -21,20 +20,15 @@ import { ObligationHistorySheet } from '@features/tenants/components/financial/O
 import { CompactFinancialStrip, type FinancialSectionId } from '@features/tenants/components/financial/CompactFinancialStrip';
 import { FinancialHealthBanner } from '@features/tenants/components/financial/FinancialHealthBanner';
 import { PrimaryActionsBar } from '@features/tenants/components/financial/PrimaryActionsBar';
-import { FinancialActivity } from '@features/tenants/components/financial/FinancialActivity';
-import { LedgerStatement } from '@features/tenants/components/financial/LedgerStatement';
-import { DocumentsHub } from '@features/tenants/components/financial/DocumentsHub';
-import { FinancialWorkspaceNav } from '@features/tenants/components/profile/FinancialWorkspaceNav';
+import { UnifiedActivityTimeline } from '@features/tenants/components/profile/UnifiedActivityTimeline';
+import { DocumentsTab } from '@features/tenants/components/profile/DocumentsTab';
 import { AllocationHistoryTimeline } from '@features/tenants/components/allocation/AllocationHistoryTimeline';
-import { VerificationPanel } from '@features/tenants/components/documents/VerificationPanel';
-import { ActivityTimeline } from '@features/tenants/components/profile/ActivityTimeline';
 import { ExitWorkflowSection } from '@features/tenants/components/profile/ExitWorkflowSection';
 import { getInitials } from '@features/tenants/utils/normalize';
 import { RecordPaymentModal } from '@/app/components/modals/RecordPaymentModal';
 import { CorrectPaymentModal } from '@/app/components/modals/CorrectPaymentModal';
 import { ChangeRentModal } from '@/app/components/modals/ChangeRentModal';
 import { hmsToast } from '@lib/toast';
-import { useIsMobile } from '@/app/components/ui/use-mobile';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/app/components/ui/tabs';
 import api from '@lib/api-client';
 import { queryKeys } from '@lib/queryKeys';
@@ -45,12 +39,10 @@ import {
   useTenantChangeRequests,
 } from '@/features/change-management';
 
-import { TenantHealthCard } from '@features/tenants/components/score/TenantHealthCard';
-import { OwnerInsights } from '@features/tenants/components/profile/OwnerInsights';
+import { RiskComplianceCard } from '@features/tenants/components/profile/RiskComplianceCard';
 import { PrivateNotes } from '@features/tenants/components/profile/PrivateNotes';
 import { CommunicationCenter } from '@features/tenants/components/profile/CommunicationCenter';
 
-const money = (value: unknown) => `₹${Number(value ?? 0).toLocaleString('en-IN')}`;
 const date = (value: unknown) => (value ? new Date(String(value)).toLocaleDateString('en-IN') : '—');
 
 const positiveAmount = (value: unknown) => {
@@ -87,8 +79,6 @@ function listFrom<T = Record<string, unknown>>(value: unknown, keys: string[] = 
   return [];
 }
 
-type MobileTab = 'obligations' | 'activity' | 'ledger' | 'documents';
-
 type ObligationModalState = {
   mode: 'create' | 'duplicate' | 'edit';
   initialValues?: { obligationType?: string; amount?: number; description?: string };
@@ -107,21 +97,19 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   const hostelId = hostelIdProp ?? params.hostelId ?? '';
   const tenantId = tenantIdProp ?? params.tenantId ?? '';
   const navigate = useNavigate();
-  const isMobile = useIsMobile();
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [payObligationId, setPayObligationId] = useState<string | null>(null);
   const [paymentPrefillAmount, setPaymentPrefillAmount] = useState<number | undefined>(undefined);
   const [showEditInvite, setShowEditInvite] = useState(false);
   const [showChangeDrawer, setShowChangeDrawer] = useState(false);
-  const [isKycExpanded, setIsKycExpanded] = useState(false);
-  const [isStayExpanded, setIsStayExpanded] = useState(false);
   const [showCreateObligationModal, setShowCreateObligationModal] = useState(false);
   const [waiveObligation, setWaiveObligation] = useState<any>(null);
   const [cancelObligationTarget, setCancelObligationTarget] = useState<any>(null);
   const [historyObligation, setHistoryObligation] = useState<any>(null);
   const [obligationModal, setObligationModal] = useState<ObligationModalState>(null);
-  const [mobileTab, setMobileTab] = useState<MobileTab>('obligations');
+  type TabId = 'obligations' | 'activity' | 'documents' | 'stay';
+  const [activeTab, setActiveTab] = useState<TabId>('obligations');
   const [correctingPaymentId, setCorrectingPaymentId] = useState<string | null>(null);
   const [showChangeRent, setShowChangeRent] = useState(false);
 
@@ -340,19 +328,16 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
 
   const financialEvents = (financialTimeline as any)?.events ?? [];
 
-  // ── Financial section navigation (desktop scroll, mobile tab switch) ──────
+  // ── Financial section navigation: switches the real tab ────────────────────
   const handleNavigate = (section: FinancialSectionId) => {
-    const tabForSection: Partial<Record<FinancialSectionId, MobileTab>> = {
+    const tabForSection: Partial<Record<FinancialSectionId, TabId>> = {
       'fin-obligations': 'obligations',
       'fin-activity': 'activity',
-      'fin-ledger': 'ledger',
+      'fin-ledger': 'activity',
       'fin-documents': 'documents',
     };
     const tab = tabForSection[section];
-    if (isMobile && tab) setMobileTab(tab);
-    setTimeout(() => {
-      document.getElementById(section)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, isMobile && tab ? 50 : 0);
+    if (tab) setActiveTab(tab);
   };
 
   const handleOpenReceivePayment = (prefillAmount?: number) => {
@@ -436,28 +421,61 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   );
 
   const activitySection = (
-    <FinancialActivity
+    <UnifiedActivityTimeline
       events={financialEvents}
+      ledgerEntries={(advance as any)?.entries ?? []}
       isLoading={(financialTimeline as any) === undefined}
       onDownloadReceipt={handleDownloadReceipt}
-      onViewObligation={() => handleNavigate('fin-obligations')}
+      onViewObligation={() => setActiveTab('obligations')}
       onCorrectPayment={setCorrectingPaymentId}
+      hostelId={hostelId}
+      tenantId={tenantId}
+      tenantName={name}
+      tenantStatus={status}
+      joinedOn={String(tenant.joined_on ?? overview.joined_at ?? '')}
+      documents={(full?.identification_documents ?? full?.documents ?? [])}
+      allocations={allocations}
+      moveOutRequest={overview.move_out ?? overview.move_out_request}
+      invitations={(tenant?.tenant_invitations ?? overview?.tenant_invitations ?? []) as any[]}
     />
   );
 
-  const ledgerSection = (
-    <LedgerStatement entries={(advance as any)?.entries ?? []} balance={futureCredit} />
-  );
-
   const documentsSection = (
-    <DocumentsHub
+    <DocumentsTab
+      hostelId={hostelId}
       tenantId={tenantId}
+      profileType={String(tenant?.profile_type ?? 'STUDENT')}
+      photoUrl={photoUrl}
+      documents={(full?.identification_documents ?? full?.documents ?? []) as Record<string, unknown>[]}
+      documentVerificationStatus={String(compliance.document_verification_status ?? 'MISSING').toUpperCase()}
+      onDocumentsUpdated={refetch}
+      onRemindDocuments={() => runComplianceAction('REMIND_DOCUMENTS', 'Document reminder sent')}
+      onResendRules={() => runComplianceAction('RESEND_RULES', 'Rules reminder sent')}
+      onDownloadAcceptanceRecord={downloadAcceptanceRecord}
       hasAgreement={Boolean(allocations?.length > 0)}
-      agreementUrl={null}
       recentPayments={recentPayments as any}
       recentChanges={recentChanges as any}
       onViewAllChanges={() => navigate(`/changes?tenantId=${tenantId}`)}
     />
+  );
+
+  const staySection = (
+    <div className="space-y-6">
+      <AllocationHistoryTimeline
+        hostelId={hostelId}
+        tenantId={tenantId}
+        allocations={allocations}
+        currentRoom={currentRoom}
+        onChanged={refetch}
+      />
+      <div className="border-t border-border/60 pt-5">
+        <h4 className="text-xs font-bold text-foreground mb-3 flex items-center gap-1.5 uppercase tracking-wider text-muted-foreground">
+          <LogOut className="w-4 h-4 text-rose-500" />
+          Move-Out Settlement Workflow
+        </h4>
+        <ExitWorkflowSection hostelId={hostelId} tenantId={tenantId} status={status} />
+      </div>
+    </div>
   );
 
   return (
@@ -528,47 +546,19 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
       {/* Row 1: Sticky Operations & Communication Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <div className="lg:col-span-2">
-          <div className="p-4 rounded-2xl border border-border bg-card shadow-sm space-y-3">
-            <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider flex items-center gap-1.5">
-              <Settings className="w-4 h-4 text-accent" />
-              Core Action Dashboard
-            </span>
-            <div className="flex flex-wrap gap-2">
-              {status.toUpperCase() === 'ACTIVE' ? (
-                <button
-                  type="button"
-                  onClick={() => setShowChangeDrawer(true)}
-                  className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 px-4.5 py-3 rounded-xl bg-secondary text-foreground text-xs font-semibold hover:bg-secondary/80 active:scale-95 transition-all border border-border"
-                >
-                  <FileCheck2 className="w-4 h-4 text-accent" />
-                  <span>{personalInfoAction?.label ?? 'Request Change'}</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowEditInvite(true)}
-                  className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 px-4.5 py-3 rounded-xl bg-secondary text-foreground text-xs font-semibold hover:bg-secondary/80 active:scale-95 transition-all border border-border"
-                >
-                  <Send className="w-4 h-4 text-muted-foreground" />
-                  <span>Edit Details</span>
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => {
-                  setIsStayExpanded(true);
-                  setTimeout(() => {
-                    document.getElementById('stay-details-section')?.scrollIntoView({ behavior: 'smooth' });
-                  }, 100);
-                }}
-                className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 px-4.5 py-3 rounded-xl bg-rose-50/50 hover:bg-rose-50 text-rose-600 dark:bg-rose-950/10 dark:hover:bg-rose-950/20 dark:text-rose-400 text-xs font-semibold active:scale-95 transition-all border border-rose-500/20"
-              >
-                <LogOut className="w-4 h-4" />
-                <span>Check-out / Exit</span>
-              </button>
-            </div>
-          </div>
+          <PrimaryActionsBar
+            tenantId={tenantId}
+            onReceivePayment={() => handleOpenReceivePayment()}
+            onCreateCharge={() => setObligationModal({ mode: 'create' })}
+            onCreateRent={() => setObligationModal({ mode: 'create', initialValues: { obligationType: 'RENT' } })}
+            onViewReceipts={() => handleNavigate('fin-documents')}
+            receiveLabel={findAction('PAYMENT_RECEIVE')?.label}
+            requestChangeLabel={status.toUpperCase() === 'ACTIVE' ? (personalInfoAction?.label ?? 'Request Change') : 'Edit Details'}
+            onRequestChange={() => (status.toUpperCase() === 'ACTIVE' ? setShowChangeDrawer(true) : setShowEditInvite(true))}
+            canChangeRent={status.toUpperCase() === 'ACTIVE'}
+            onChangeRent={() => setShowChangeRent(true)}
+            onCheckout={() => setActiveTab('stay')}
+          />
         </div>
 
         <div>
@@ -589,23 +579,13 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
       </div>
 
       {/* Row 2: Insights Grid & Private Notes */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        <TenantHealthCard
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <RiskComplianceCard
           score={tenantScore?.score ?? 80}
-          grade={tenantScore?.grade ?? 'GOOD'}
-          trend={tenantScore?.trend ?? 'STABLE'}
           hasAgreement={Boolean(allocations?.length > 0)}
           documentStatus={String(compliance.document_verification_status ?? 'MISSING').toUpperCase()}
-        />
-
-        <OwnerInsights
-          score={tenantScore?.score ?? null}
           overdueDays={overdueDays}
-          outstandingAmount={outstandingAmount}
           depositStatus={securityDepositAmount === 0 ? 'WAIVED' : 'PAID'}
-          hasAgreement={Boolean(allocations?.length > 0)}
-          documentStatus={String(compliance.document_verification_status ?? 'MISSING').toUpperCase()}
-          joinedDate={date(tenant.joined_on ?? overview.joined_at)}
         />
 
         <PrivateNotes tenantId={tenantId} />
@@ -623,7 +603,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
               </p>
               <button
                 type="button"
-                onClick={() => setIsStayExpanded(true)}
+                onClick={() => setActiveTab('stay')}
                 className="mt-3 rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white hover:bg-amber-700"
               >
                 Assign Room
@@ -673,9 +653,6 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
         </div>
       )}
 
-      {/* ═══════════════════════ FINANCIAL WORKSPACE ═══════════════════════ */}
-      <FinancialWorkspaceNav onNavigate={handleNavigate} />
-
       {/* §1 Summary */}
       <CompactFinancialStrip
         outstandingAmount={outstandingAmount}
@@ -700,228 +677,19 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
         onCollect={(prefillAmount) => handleOpenReceivePayment(prefillAmount)}
       />
 
-      {/* §2 Primary Actions */}
-      <PrimaryActionsBar
-        tenantId={tenantId}
-        onReceivePayment={() => handleOpenReceivePayment()}
-        onCreateCharge={() => setObligationModal({ mode: 'create' })}
-        onCreateRent={() => setObligationModal({ mode: 'create', initialValues: { obligationType: 'RENT' } })}
-        onViewReceipts={() => handleNavigate('fin-documents')}
-        receiveLabel={findAction('PAYMENT_RECEIVE')?.label}
-      />
-
-      {/* Change Rent entry point — owner-only, identity-confirmed, month-scoped repricing (see Business-Rules.md) */}
-      {status.toUpperCase() === 'ACTIVE' && (
-        <div className="flex justify-end -mt-2">
-          <button
-            type="button"
-            onClick={() => setShowChangeRent(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-secondary text-foreground text-xs font-semibold border border-border hover:bg-secondary/80 active:scale-95 transition-all"
-          >
-            <TrendingUp className="w-3.5 h-3.5 text-accent" />
-            <span>Change Rent</span>
-          </button>
-        </div>
-      )}
-
-      {/* §3 Obligations + §4 Financial Activity */}
-      {isMobile ? (
-        <Tabs value={mobileTab} onValueChange={(v) => setMobileTab(v as MobileTab)}>
-          <TabsList className="w-full overflow-x-auto scrollbar-hide">
-            <TabsTrigger value="obligations">Obligations</TabsTrigger>
-            <TabsTrigger value="activity">Activity</TabsTrigger>
-            <TabsTrigger value="ledger">Ledger</TabsTrigger>
-            <TabsTrigger value="documents">Documents</TabsTrigger>
-          </TabsList>
-          <TabsContent value="obligations">{obligationsSection}</TabsContent>
-          <TabsContent value="activity">{activitySection}</TabsContent>
-          <TabsContent value="ledger">{ledgerSection}</TabsContent>
-          <TabsContent value="documents">{documentsSection}</TabsContent>
-        </Tabs>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            <div className="lg:col-span-5">{obligationsSection}</div>
-            <div className="lg:col-span-7">{activitySection}</div>
-          </div>
-          {ledgerSection}
-          {documentsSection}
-        </>
-      )}
-
-      {/* Collapsible Identity & KYC Documents Card */}
-      <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setIsKycExpanded(!isKycExpanded)}
-          className="w-full flex items-center justify-between p-4 font-bold text-foreground text-sm border-none bg-transparent hover:bg-muted/5 transition-colors text-left"
-        >
-          <span className="flex items-center gap-1.5">
-            <FileCheck2 className="w-4.5 h-4.5 text-accent" />
-            KYC Verification &amp; Documents
-          </span>
-          <span className="flex items-center gap-2">
-            <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold uppercase ${
-              compliance.document_verification_status === 'VERIFIED'
-                ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
-                : compliance.document_verification_status === 'PENDING'
-                ? 'bg-amber-500/10 text-amber-600 border-amber-500/20'
-                : 'bg-rose-500/10 text-rose-600 border-rose-500/20'
-            }`}>
-              {String(compliance.document_verification_status ?? 'MISSING')}
-            </span>
-            {isKycExpanded ? <ChevronUp className="w-4.5 h-4.5" /> : <ChevronDown className="w-4.5 h-4.5" />}
-          </span>
-        </button>
-        {isKycExpanded && (
-          <div className="p-4 border-t border-border bg-secondary/5 space-y-4">
-            <div className="flex gap-3 flex-wrap justify-between items-center text-xs">
-              <div className="flex gap-2">
-                <button type="button" onClick={() => runComplianceAction('REMIND_DOCUMENTS', 'Document reminder sent')} className="text-accent font-semibold hover:underline">
-                  Remind documents
-                </button>
-                <span className="text-muted-foreground/30">·</span>
-                <button type="button" onClick={() => runComplianceAction('RESEND_RULES', 'Rules reminder sent')} className="text-muted-foreground hover:text-foreground hover:underline">
-                  Resend rules reminder
-                </button>
-              </div>
-              <button type="button" onClick={downloadAcceptanceRecord} className="text-muted-foreground hover:text-foreground hover:underline">
-                Download rules acceptance JSON
-              </button>
-            </div>
-
-            <VerificationPanel
-              hostelId={hostelId}
-              tenantId={tenantId}
-              profileType={String(tenant?.profile_type ?? 'STUDENT')}
-              documents={(full?.identification_documents ?? full?.documents ?? []) as Record<string, unknown>[]}
-              photoUrl={photoUrl}
-              onUpdated={refetch}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Collapsible Stay History & Move-Out settings */}
-      <div id="stay-details-section" className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setIsStayExpanded(!isStayExpanded)}
-          className="w-full flex items-center justify-between p-4 font-bold text-foreground text-sm border-none bg-transparent hover:bg-muted/5 transition-colors text-left"
-        >
-          <span className="flex items-center gap-1.5">
-            <BedDouble className="w-4.5 h-4.5 text-accent" />
-            Stay Details &amp; Checkout Workflow
-          </span>
-          <span className="flex items-center gap-2">
-            <span className="text-[10px] px-2.5 py-0.5 rounded bg-secondary font-bold text-muted-foreground border border-border">
-              Room {displayedRoomNo ?? 'None'}
-            </span>
-            {isStayExpanded ? <ChevronUp className="w-4.5 h-4.5" /> : <ChevronDown className="w-4.5 h-4.5" />}
-          </span>
-        </button>
-        {isStayExpanded && (
-          <div className="p-4 border-t border-border bg-secondary/5 space-y-6">
-            <AllocationHistoryTimeline
-              hostelId={hostelId}
-              tenantId={tenantId}
-              allocations={allocations}
-              currentRoom={currentRoom}
-              onChanged={refetch}
-            />
-            <div className="border-t border-border/60 pt-5">
-              <h4 className="text-xs font-bold text-foreground mb-3 flex items-center gap-1.5 uppercase tracking-wider text-muted-foreground">
-                <LogOut className="w-4 h-4 text-rose-500" />
-                Move-Out Settlement Workflow
-              </h4>
-              <ExitWorkflowSection hostelId={hostelId} tenantId={tenantId} status={status} />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Non-financial general activity feed (KYC/room/comms) — kept separate from Financial Activity */}
-      <div className="p-4 rounded-2xl border border-border bg-card shadow-sm space-y-4">
-        <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
-          <History className="w-4.5 h-4.5 text-accent" />
-          Recent Activity
-        </h3>
-        <ActivityTimeline
-          hostelId={hostelId}
-          tenantId={tenantId}
-          tenantName={name}
-          joinedOn={String(tenant.joined_on ?? overview.joined_at ?? '')}
-          profileType={String(tenant?.profile_type ?? 'STUDENT')}
-          documents={(full?.identification_documents ?? full?.documents ?? [])}
-          allocations={allocations}
-          timelineItems={[]}
-          recentPayments={recentPayments}
-          moveOutRequest={overview.move_out ?? overview.move_out_request}
-        />
-      </div>
-
-      {/* Invitation history card (only shown if invitations exist) */}
-      {((tenant?.tenant_invitations ?? overview?.tenant_invitations ?? []) as any[]).length > 0 && (
-        <div className="p-4 rounded-2xl border border-border bg-card shadow-sm space-y-4">
-          <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
-            <History className="w-4.5 h-4.5 text-accent" />
-            Invitation History Logs
-          </h3>
-          <div className="relative pl-5 border-l border-border space-y-4 ml-1">
-            {((tenant?.tenant_invitations ?? overview?.tenant_invitations ?? []) as any[]).map((invite: any, index: number, arr: any[]) => {
-              const versionNum = arr.length - index;
-              const isActive = index === 0;
-              let badgeText = 'Superseded';
-              let badgeClass = 'bg-secondary/40 text-muted-foreground border-border/50';
-              if (isActive) {
-                if (status === 'ACTIVE') {
-                  badgeText = 'Accepted';
-                  badgeClass = 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20';
-                } else if (status === 'CANCELLED') {
-                  badgeText = 'Cancelled';
-                  badgeClass = 'bg-rose-500/10 text-rose-600 border-rose-500/20';
-                } else {
-                  badgeText = 'Active';
-                  badgeClass = 'bg-accent/10 text-accent border-accent/20';
-                }
-              }
-              return (
-                <div key={invite.id} className="relative group text-xs">
-                  <span className={`absolute -left-[26px] top-1.5 w-2 h-2 rounded-full border bg-card ${isActive ? 'border-accent animate-pulse' : 'border-muted'}`} />
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-foreground text-xs">Version {versionNum}</span>
-                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider ${badgeClass}`}>{badgeText}</span>
-                      <span className="text-[9px] text-muted-foreground ml-auto font-medium">
-                        {invite.created_at ? new Date(invite.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : ''}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 mt-1.5 text-[11px] text-muted-foreground p-2.5 bg-secondary/20 rounded-xl border border-border/40">
-                      <div>
-                        <span className="block text-[9px] text-muted-foreground/80 uppercase">Room</span>
-                        <span className="font-bold text-foreground">{invite.room?.room_no || 'Unassigned'}</span>
-                      </div>
-                      <div>
-                        <span className="block text-[9px] text-muted-foreground/80 uppercase font-semibold">Monthly Rent</span>
-                        <span className="font-bold text-foreground">{money(invite.monthly_rent)}</span>
-                      </div>
-                      <div>
-                        <span className="block text-[9px] text-muted-foreground/80 uppercase">Agreement</span>
-                        <span className="font-bold text-foreground">
-                          {invite.agreement_duration_months ? `${invite.agreement_duration_months} mo` : '—'}
-                        </span>
-                      </div>
-                    </div>
-                    {invite.notes && (
-                      <div className="mt-1 text-[10px] text-muted-foreground p-2.5 bg-rose-500/5 rounded-xl border border-rose-500/10 font-mono">{invite.notes}</div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {/* Tabbed detail region — Obligations / Activity / Documents / Stay */}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
+        <TabsList className="w-full overflow-x-auto scrollbar-hide">
+          <TabsTrigger value="obligations">Obligations</TabsTrigger>
+          <TabsTrigger value="activity">Activity</TabsTrigger>
+          <TabsTrigger value="documents">Documents</TabsTrigger>
+          <TabsTrigger value="stay">Stay</TabsTrigger>
+        </TabsList>
+        <TabsContent value="obligations">{obligationsSection}</TabsContent>
+        <TabsContent value="activity">{activitySection}</TabsContent>
+        <TabsContent value="documents">{documentsSection}</TabsContent>
+        <TabsContent value="stay">{staySection}</TabsContent>
+      </Tabs>
 
       {/* Change Request Drawer */}
       <ChangeRequestDrawer
