@@ -1147,17 +1147,24 @@ export async function POST(
     }
 
     // Default: initiate payment
+    const amount = Number(body.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return NextResponse.json({ success: false, error: "Enter a valid amount before proceeding." }, { status: 400 });
+    }
+
     logger.info("payment_link.checkout.initiate", {
       token,
+      amount,
       obligation_id: linkToken.obligation_id,
       tenant_id: linkToken.tenant_id,
       hostel_id: linkToken.hostel_id,
     });
 
-    const rawAttempt = await paymentService.createMultiObligationPaymentIntent(
-      [linkToken.obligation_id],
+    const rawAttempt = await paymentService.createAmountPaymentIntent(
+      amount,
       linkToken.owner_id,
       linkToken.tenant_id,
+      linkToken.hostel_id,
       { bypassCollectionPolicy: true, source: "PAYMENT_LINK" }
     );
 

@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => {
     },
     paymentService: {
       createMultiObligationPaymentIntent: vi.fn(),
+      createAmountPaymentIntent: vi.fn(),
     },
     financialPaymentFacade: {
       previewSettlement: vi.fn(),
@@ -218,7 +219,7 @@ describe("Payment Link Token Public Flow", () => {
         hostel_id: "hostel-1",
         owner_id: "owner-1",
         rent_obligations: { status: "PENDING", amount: 5000 },
-        tenants: { profiles: { name: "John Doe" } },
+        tenants: { profiles: { name: "John Doe", email: "j@example.com" } },
         hostels: {
           name: "Adithya Hostel",
           phone: "1234567890",
@@ -230,12 +231,18 @@ describe("Payment Link Token Public Flow", () => {
         },
       });
 
-      mocks.paymentService.createMultiObligationPaymentIntent.mockResolvedValueOnce({
+      mocks.paymentService.createAmountPaymentIntent.mockResolvedValueOnce({
         id: "attempt-123",
+        amount: 5000,
         status: "PENDING",
-      });
+        raw_response: { key_id: "rzp_test", amount: 500000, currency: "INR" },
+        gateway_txn_id: "order_123",
+      } as any);
 
-      const request = new NextRequest(`http://localhost/api/payments/pay/${mockToken}`, { method: "POST" });
+      const request = new NextRequest(`http://localhost/api/payments/pay/${mockToken}`, {
+        method: "POST",
+        body: JSON.stringify({ action: "initiate", amount: 5000 }),
+      });
       const response = await POST(request, { params: Promise.resolve({ token: mockToken }) });
 
       expect(response.status).toBe(200);
@@ -358,6 +365,67 @@ describe("Payment Link Token Public Flow", () => {
       const request = new NextRequest(`http://localhost/api/payments/pay/${mockToken}`, {
         method: "POST",
         body: JSON.stringify({ action: "preview", amount: 0 }),
+      });
+      const response = await POST(request, { params: Promise.resolve({ token: mockToken }) });
+
+      expect(response.status).toBe(400);
+    });
+
+    it("initiates a payment for the payer-entered amount, not a fixed obligation balance", async () => {
+      mocks.prisma.payment_link_tokens.findUnique.mockResolvedValueOnce({
+        token: mockToken,
+        tenant_id: "tenant-1",
+        hostel_id: "hostel-1",
+        owner_id: "owner-1",
+        obligation_id: null,
+        expires_at: new Date(Date.now() + 1000 * 60 * 60),
+        rent_obligations: null,
+        hostels: { name: "Adithya Hostel", phone: "1234567890" },
+        tenants: { profiles: { name: "John Doe", email: "j@example.com", phone: "9999999999" } },
+      });
+
+      vi.mocked(mocks.paymentService.createAmountPaymentIntent).mockResolvedValueOnce({
+        id: "attempt-1",
+        amount: 12000,
+        status: "PENDING",
+        raw_response: { key_id: "rzp_test", amount: 1200000, currency: "INR" },
+        gateway_txn_id: "order_abc",
+      } as any);
+
+      const request = new NextRequest(`http://localhost/api/payments/pay/${mockToken}`, {
+        method: "POST",
+        body: JSON.stringify({ action: "initiate", amount: 12000 }),
+      });
+      const response = await POST(request, { params: Promise.resolve({ token: mockToken }) });
+      const json = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(mocks.paymentService.createAmountPaymentIntent).toHaveBeenCalledWith(
+        12000,
+        "owner-1",
+        "tenant-1",
+        "hostel-1",
+        expect.objectContaining({ source: "PAYMENT_LINK" })
+      );
+      expect(json.attempt.amount).toBe(12000);
+    });
+
+    it("rejects initiate with a missing or non-positive amount", async () => {
+      mocks.prisma.payment_link_tokens.findUnique.mockResolvedValueOnce({
+        token: mockToken,
+        tenant_id: "tenant-1",
+        hostel_id: "hostel-1",
+        owner_id: "owner-1",
+        obligation_id: null,
+        expires_at: new Date(Date.now() + 1000 * 60 * 60),
+        rent_obligations: null,
+        hostels: { name: "Adithya Hostel", phone: "1234567890" },
+        tenants: { profiles: { name: "John Doe" } },
+      });
+
+      const request = new NextRequest(`http://localhost/api/payments/pay/${mockToken}`, {
+        method: "POST",
+        body: JSON.stringify({ action: "initiate" }),
       });
       const response = await POST(request, { params: Promise.resolve({ token: mockToken }) });
 
