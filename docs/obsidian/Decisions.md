@@ -23,6 +23,16 @@ Architecture Decision Records — each entry below was **inferred from code evid
 
 ---
 
+## ADR-017: Payment links are amount-flexible and tenant-scoped, not obligation-locked
+
+- **Date:** 2026-07-21
+- **Status:** accepted
+- **Evidence:** `src/services/payments/payment-link-service.ts::getOrCreateToken` previously required resolving a `tenantId` to exactly one `PENDING`/`PARTIAL` obligation, throwing `"No outstanding rent obligations found for this tenant"` otherwise; `payment_link_tokens.obligation_id` was a required FK with no `amount` column, and the online checkout path (`createMultiObligationPaymentIntent`) always charged that one obligation's full remaining balance.
+- **Decision:** A payment link now maps to a tenant, not an obligation. `obligation_id` became an optional default-amount hint. The payer enters any amount on the link's page; the backend FIFO-allocates it across the tenant's outstanding obligations via `buildSettlementPlan` — the same engine the offline "Receive Payment" flow already used — with any excess credited as future rent, via a new `createAmountPaymentIntent` function that mirrors `createMultiObligationPaymentIntent` but starts from a raw amount instead of a pre-picked obligation list. Both owners and tenants can generate a link.
+- **Alternatives considered:** Synthesizing a placeholder `rent_obligations` row for the entered amount — rejected, since obligations are the audit-first source of truth for money owed and a synthetic row would pollute every dues/report calculation that reads obligations. A separate parallel "flexible link" type that always books as future credit — rejected, since a payer with real current dues would have their payment misfiled as advance credit instead of clearing what they actually owe.
+- **Consequences:** The online (Razorpay) and offline (manual "Receive Payment") payment paths now converge on the same FIFO allocation engine for the first time, rather than diverging (online was previously obligation-first-only, offline was amount-first-only). A payment link generated from a specific obligation card is no longer a hard guarantee that payment will apply to only that obligation — it's a default-amount suggestion. Full design: `docs/superpowers/specs/2026-07-21-flexible-payment-links-design.md`.
+- **Related:** [[Business-Rules]], [[APIs]], [[Database]]
+
 ## ADR-001: Financial read model composes rather than recalculates
 
 - **Date:** 2026-07 (per project memory of the redesign that produced it; exact commit not re-verified in this pass)

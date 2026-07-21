@@ -73,6 +73,12 @@ Everything below was extracted by reading the actual implementation (not types, 
 - **Chronology guard**: when a caller selects specific obligations to pay, the code enforces that no earlier unpaid RENT obligation can be skipped while a later one is selected.
 - **Execution**: locks obligations `FOR UPDATE` in the same priority order via a **hand-duplicated SQL `CASE` clause** in `settlement-engine.ts` — explicitly commented as needing manual sync with the planner's priority constant (a real maintenance risk if one is changed without the other).
 
+## Flexible payment links
+
+**Files:** `src/services/payments/payment-link-service.ts` (`PaymentLinkService.getOrCreateToken`), `app/api/payments/pay-link/route.ts`, `app/api/payments/pay/[token]/route.ts`, reusing the same `buildSettlementPlan` FIFO engine as offline "Receive Payment" (see [[Database]] `payment_link_tokens`, [[Decisions]] ADR-017).
+
+A payment link (`payment_link_tokens`) is tenant-scoped, not obligation-locked. `obligationId`, if supplied when generating the link, is stored only as a default-amount hint on the payer page — it does not restrict what can actually be paid. The payer can enter any amount on the link's page; the backend FIFO-allocates it across the tenant's currently outstanding obligations (`PAYABLE_STATUSES = OVERDUE|PENDING|PARTIAL|UPCOMING`) using the same `buildSettlementPlan` engine the owner's offline "Receive Payment" flow uses — any amount left over after covering everything payable is credited as future rent (`FUTURE_RENT_CREDIT_TOPUP`, see Payment allocation above). A tenant with zero outstanding obligations can still generate and use a link to pay ahead of their next rent — `getOrCreateToken` no longer requires resolving a specific unpaid obligation before it will mint a token. Both owners and tenants can generate a link (`POST /api/payments/pay-link`); a tenant session is force-scoped to `session.tenant_id` and forbidden from passing `obligationId` or a mismatched `tenantId` — only an owner may target an arbitrary tenant/obligation in their own hostel. See [[Decisions]] ADR-017 for why this changed from the prior obligation-locked, dues-only behavior.
+
 ## Settlement (move-out)
 
 **File:** `lib/services/move-out-service.ts::calculateSettlementPreview` (read-only, computed on demand until owner approval).

@@ -59,6 +59,10 @@ One row per correction case — a request to undo or correct an owner action. Ke
 **`correction_case_events` table:**
 Append-only audit trail for each correction case. One row per state change/event — `correction_case_id` (FK to correction_cases), `event_type` (e.g. CREATED, PREVIEW_GENERATED, VALIDATED, EXECUTION_STARTED, COMPLETED/FAILED), `actor_id` + `actor_role` (who triggered the event), `reason` (optional rationale), `snapshot` (optional JSON snapshot at event time), `ip_address` + `user_agent` (request metadata), `created_at` (event timestamp). One index: (correction_case_id) for efficient event history retrieval.
 
+### `payment_link_tokens`
+
+A token maps to a `tenant_id` (required) and an optional `obligation_id` hint (nullable — `String? @db.Uuid`, as of 2026-07-21, see [[Decisions]] ADR-017). The hint, when present, only seeds a default pre-filled amount on the payer-facing page (`/pay/[token]`); it does not restrict what the payer can actually pay. There is no `amount` column on this table — the amount charged is always decided at payment time and FIFO-allocated across whatever the tenant currently owes (`OVERDUE`/`PENDING`/`PARTIAL`/`UPCOMING` obligations) via `buildSettlementPlan` (`src/services/payments/settlement-planner.ts`, called from `paymentService.createAmountPaymentIntent` — see [[Backend]]), with any excess credited as future rent. `PaymentLinkService.getOrCreateToken` reuses an existing non-expired token for the same `(tenant_id, obligation_id-hint)` pair rather than always minting a new one; tokens expire after 7 days (`expires_at`). See [[APIs]] (`/api/payments/pay-link`, `/api/payments/pay/[token]`) for the two routes that create and consume a token, and [[Business-Rules#Flexible payment links]] for the allocation rule.
+
 ## Other domain groupings (model names only — see `schema.prisma` for full fields)
 
 | Domain | Models |
