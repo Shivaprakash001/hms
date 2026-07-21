@@ -28,6 +28,7 @@ import { getActivePaymentProvider, validatePaymentEnvironment } from "./payment-
 import { consumeIdentityTokenInTx } from "./identity-confirmation-guard";
 import { financialPaymentFacade } from "./financial-payment-facade";
 import { obligationEngine } from "./obligation-engine";
+import { financialPolicyEngine } from "./financial-policy-engine";
 
 // Boot-time validation of payment configuration
 validatePaymentEnvironment();
@@ -1123,6 +1124,254 @@ export class PaymentService {
         financialOwnerId: ownerId,
         hostelId,
         data: { raw_create_response: { error: String(error) } as any, settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE }
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Amount-first counterpart to createMultiObligationPaymentIntent: instead of
+   * a pre-picked obligation list, the caller supplies a raw rupee amount. The
+   * FIFO settlement plan (same engine the offline "Receive Payment" flow uses)
+   * decides which obligations absorb it and how much of each; any remainder
+   * becomes future rent credit at finalization — no obligations required.
+   */
+  async createAmountPaymentIntent(
+    amountRupees: number,
+    ownerId: string,
+    tenantId: string,
+    hostelId: string,
+    options: { bypassCollectionPolicy?: boolean; source?: string } = {}
+  ) {
+    if (!(amountRupees > 0)) {
+      throw new Error("BAD_REQUEST: Amount must be greater than zero");
+    }
+
+    const hostelIdSafe = requireFinancialHostelId(hostelId, "amount-based payment intent");
+
+    const providerContext = await getProviderContext({
+      paymentDomain: PAYMENT_DOMAIN.RENT_COLLECTION,
+      flowType: PAYMENT_FLOW.RENT,
+      operationalOwnerId: ownerId,
+      financialOwnerId: ownerId,
+      hostelId: hostelIdSafe,
+      scopeType: PAYMENT_SCOPE.HOSTEL,
+    });
+    const { provider, config } = providerContext;
+    const instance = PaymentProviderFactory.getProvider(provider, config);
+
+    const txResult = await prisma.$transaction(async (tx) => {
+      // Same tenant-scoped advisory lock createMultiObligationPaymentIntent uses,
+      // so the two intent-creation paths mutually exclude each other for one tenant.
+      const advisoryKey = `pay_intent:${tenantId}`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${advisoryKey})::bigint)`;
+
+      await tx.$queryRaw`
+        SELECT id FROM rent_obligations
+        WHERE tenant_id = ${tenantId}::uuid
+          AND hostel_id = ${hostelIdSafe}::uuid
+          AND status::text = ANY(ARRAY['OVERDUE','PENDING','PARTIAL','UPCOMING']::text[])
+          AND is_superseded = false
+        FOR UPDATE
+      `;
+
+      const obligations = await tx.rent_obligations.findMany({
+        where: {
+          tenant_id: tenantId,
+          hostel_id: hostelIdSafe,
+          status: { in: PAYABLE_STATUSES },
+          is_superseded: false,
+        },
+        include: { payments: { select: { amount_paid: true } } },
+      });
+
+      const snapshots = obligations.map((ob: any) => toObligationSnapshot(ob));
+
+      const hostelRecord = await tx.hostels.findUnique({
+        where: { id: hostelIdSafe },
+        select: { preferences_config: true },
+      });
+      const paymentPolicy = financialPolicyEngine.resolvePaymentPolicy(hostelRecord);
+
+      const plan = buildSettlementPlan(snapshots, amountRupees, paymentPolicy);
+
+      if (!plan.payment_accepted && !options.bypassCollectionPolicy) {
+        throw new Error(`BAD_REQUEST: ${plan.rejection_reason}`);
+      }
+
+      const obligationsToLink = plan.allocations.filter((a) => a.allocated > 0);
+
+      // Dedup against an in-flight/valid attempt already covering the same
+      // obligations — mirrors createMultiObligationPaymentIntent. Only
+      // meaningful when there's a real obligation set to check against; the
+      // pure-future-credit case (no obligations) skips this check.
+      if (obligationsToLink.length > 0) {
+        const existingLinks = await tx.payment_attempt_obligations.findMany({
+          where: {
+            obligation_id: { in: obligationsToLink.map((a) => a.obligation_id) },
+            payment_attempts: { hostel_id: hostelIdSafe, status: { in: ["CREATED", "PENDING"] } },
+          },
+          include: { payment_attempts: true },
+          orderBy: { created_at: "desc" },
+        });
+
+        if (existingLinks.length > 0) {
+          const existingAttempt = existingLinks[0].payment_attempts;
+          const checkoutUrl = existingAttempt.checkout_url || "";
+          const twoMinAgo = new Date(Date.now() - 2 * 60 * 1000);
+          const isInFlight = existingAttempt.status === "CREATED" && existingAttempt.created_at > twoMinAgo;
+          const isSandboxCheckout = ["mercury-t2", "api-preprod", "pg-sandbox"].some((m) => checkoutUrl.includes(m));
+          const hasValidCheckout = checkoutUrl.length > 0 && !checkoutUrl.includes("/payment-return") && !isSandboxCheckout;
+
+          if (isInFlight || hasValidCheckout) {
+            return { attempt: this.mapAttemptWithRawResponse(existingAttempt), isReused: true as const };
+          }
+
+          await this.updateAttemptStatus(tx, {
+            attemptId: existingAttempt.id,
+            fromStatus: existingAttempt.status,
+            toStatus: "EXPIRED",
+            source: "CREATE_INTENT",
+            reason: "stale amount-based checkout attempt expired before replacement",
+            operationalOwnerId: existingAttempt.owner_id,
+            financialOwnerId: existingAttempt.owner_id,
+            hostelId: existingAttempt.hostel_id,
+            data: { settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE },
+          });
+        }
+      }
+
+      const merchantTxnId = `hms_amt_${crypto.randomBytes(6).toString("hex")}`;
+
+      const newAttempt = await tx.paymentAttempt.create({
+        data: {
+          id: crypto.randomUUID(),
+          tenant_id: tenantId,
+          owner_id: ownerId,
+          provider,
+          merchant_txn_id: merchantTxnId,
+          merchant_transaction_id: merchantTxnId,
+          amount: amountRupees,
+          status: "CREATED",
+          hostel_id: hostelIdSafe,
+          payment_domain: providerContext.payment_domain,
+          scope_type: providerContext.scope_type,
+          flow_type: providerContext.flow_type,
+          merchant_context_type: providerContext.merchant_context_type,
+          merchant_context_id: providerContext.merchant_context_id,
+          settlement_status: SETTLEMENT_STATUS.NOT_SETTLED,
+          raw_create_response: {
+            source: options.source,
+            bypass_collection_policy: Boolean(options.bypassCollectionPolicy),
+            // Persisted even when non-empty (harmless/ignored once
+            // payment_attempt_obligations rows exist) — but REQUIRED to be a
+            // real empty array (not omitted) when obligationsToLink is empty,
+            // so finalizePaymentAttempt's fallback branch routes the full
+            // amount to future credit instead of re-sweeping all outstanding
+            // obligations. See payment-service.ts's `allowedIds` handling in
+            // finalizePaymentAttempt's `else if (attempt.tenant_id)` branch.
+            allowed_obligation_ids: obligationsToLink.map((a) => a.obligation_id),
+          },
+        },
+      });
+
+      await paymentStatusEventService.append(tx, {
+        attemptId: newAttempt.id,
+        fromStatus: null,
+        toStatus: "CREATED",
+        source: "CREATE_INTENT",
+        reason: "amount-based payment attempt created",
+        operationalOwnerId: ownerId,
+        financialOwnerId: ownerId,
+        hostelId: hostelIdSafe,
+      });
+
+      if (obligationsToLink.length > 0) {
+        await tx.payment_attempt_obligations.createMany({
+          data: obligationsToLink.map((a) => ({
+            id: crypto.randomUUID(),
+            payment_attempt_id: newAttempt.id,
+            obligation_id: a.obligation_id,
+            amount: a.allocated,
+          })),
+        });
+      }
+
+      return {
+        attempt: newAttempt,
+        isReused: false as const,
+        allowedObligationIds: obligationsToLink.map((a) => a.obligation_id),
+      };
+    });
+
+    if (txResult.isReused) return txResult.attempt;
+
+    const { attempt, allowedObligationIds } = txResult;
+
+    const tenantRecord = await prisma.tenants.findUnique({
+      where: { id: tenantId },
+      include: { profiles: true },
+    });
+
+    try {
+      const result = await instance.createIntent({
+        amount: amountRupees,
+        merchant_txn_id: attempt.merchant_txn_id,
+        tenant_name: (tenantRecord as any)?.profiles?.name || "Tenant",
+        tenant_email: (tenantRecord as any)?.profiles?.email || "",
+        tenant_phone: (tenantRecord as any)?.profiles?.phone || "",
+        metadata: {
+          tenant_id: tenantId,
+          attempt_id: attempt.id,
+          is_amount_based: true,
+        },
+      });
+
+      return await this.updateAttemptStatusOutsideTx({
+        attemptId: attempt.id,
+        fromStatus: "CREATED",
+        toStatus: "PENDING",
+        source: "CREATE_INTENT",
+        reason: "provider checkout created",
+        operationalOwnerId: ownerId,
+        financialOwnerId: ownerId,
+        hostelId: hostelIdSafe,
+        data: {
+          gateway_txn_id: result.gateway_txn_id,
+          ...this.attemptIdentityData(attempt.merchant_txn_id, result),
+          upi_intent_url: result.upi_intent_url,
+          qr_payload: result.qr_payload,
+          checkout_url: result.checkout_url,
+          expires_at: result.expires_at,
+          // Preserve allowed_obligation_ids across this overwrite — raw_create_response
+          // is a full replace (not a JSON merge), and finalizePaymentAttempt's tenant-fallback
+          // branch (the `else if (attempt.tenant_id)` case) reads allowed_obligation_ids from
+          // this same field to decide whether to sweep all outstanding obligations or restrict
+          // to (possibly zero) linked ones. Losing it here would silently widen a pure-future-credit
+          // intent into a full FIFO sweep at finalization time.
+          raw_create_response: {
+            ...(result.raw_response as any),
+            allowed_obligation_ids: allowedObligationIds,
+          },
+        },
+      });
+    } catch (error) {
+      logger.error("payments.create_amount_intent.failed", {
+        attemptId: attempt.id,
+        provider,
+        merchantTxnId: attempt.merchant_txn_id,
+        error: String(error),
+      });
+      await this.updateAttemptStatusOutsideTx({
+        attemptId: attempt.id,
+        fromStatus: "CREATED",
+        toStatus: "FAILED",
+        source: "CREATE_INTENT",
+        reason: "provider checkout creation failed",
+        operationalOwnerId: ownerId,
+        financialOwnerId: ownerId,
+        hostelId: hostelIdSafe,
+        data: { raw_create_response: { error: String(error) } as any, settlement_status: SETTLEMENT_STATUS.NOT_APPLICABLE },
       });
       throw error;
     }
