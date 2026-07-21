@@ -249,4 +249,10 @@ export const tenantService = {
         const response = await api.delete(`/tenants/${tenantId}/notes`, { params: { noteId } });
         return unwrap(response);
     },
+    changeRent: async (tenantId, { hostelId, newRentAmount, effectiveFromMonth, reason, identityToken }) => {
+        const response = await api.post(`/tenants/${tenantId}/change-rent`, {
+            hostelId, newRentAmount, effectiveFromMonth, reason, identityToken,
+        });
+        return unwrap(response);
+    },
 };

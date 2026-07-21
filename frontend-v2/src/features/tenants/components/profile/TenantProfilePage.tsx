@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, FileCheck2, Send,
   BedDouble, Settings, LogOut, AlertTriangle, AlertCircle,
-  History, ChevronDown, ChevronUp,
+  History, ChevronDown, ChevronUp, TrendingUp,
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -32,6 +32,7 @@ import { ExitWorkflowSection } from '@features/tenants/components/profile/ExitWo
 import { getInitials } from '@features/tenants/utils/normalize';
 import { RecordPaymentModal } from '@/app/components/modals/RecordPaymentModal';
 import { CorrectPaymentModal } from '@/app/components/modals/CorrectPaymentModal';
+import { ChangeRentModal } from '@/app/components/modals/ChangeRentModal';
 import { hmsToast } from '@lib/toast';
 import { useIsMobile } from '@/app/components/ui/use-mobile';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/app/components/ui/tabs';
@@ -122,6 +123,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   const [obligationModal, setObligationModal] = useState<ObligationModalState>(null);
   const [mobileTab, setMobileTab] = useState<MobileTab>('obligations');
   const [correctingPaymentId, setCorrectingPaymentId] = useState<string | null>(null);
+  const [showChangeRent, setShowChangeRent] = useState(false);
 
   const { overview, allocations, dues, advance, full, financialTimeline, isLoading, isError, refetch } =
     useTenantProfile(hostelId, tenantId);
@@ -186,6 +188,20 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   const needsRoomAssignment = status.toUpperCase() === 'ACTIVE' && !displayedRoomNo;
 
   const obligations = listFrom(dues, ['items', 'obligations']);
+  // Change Rent's month dropdown: RENT obligations with zero recorded
+  // payments (paymentService.getTenantDues() already excludes fully-settled
+  // obligations and computes `paid` as the sum of that obligation's
+  // payments — paid === 0 mirrors the backend's own zero-payments guard in
+  // applyRentChangeInTx, so the preview count the owner sees here can never
+  // diverge from what the backend actually reprices).
+  const upcomingRentObligations = (obligations as Record<string, unknown>[])
+    .filter((o: any) => String(o.obligation_type ?? o.type ?? '').toUpperCase() === 'RENT' && Number(o.paid ?? 0) === 0)
+    .map((o: any) => ({
+      id: String(o.id ?? o.obligation_id),
+      rent_month: String(o.rent_month),
+      amount: Number(o.outstanding ?? o.amount ?? 0),
+    }))
+    .sort((a, b) => a.rent_month.localeCompare(b.rent_month));
   const fullPayments = listFrom(full?.payments);
   const securityDepositAmount = firstPositiveAmount(
     tenant.security_deposit,
@@ -689,6 +705,20 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
         receiveLabel={findAction('PAYMENT_RECEIVE')?.label}
       />
 
+      {/* Change Rent entry point — owner-only, identity-confirmed, month-scoped repricing (see Business-Rules.md) */}
+      {status.toUpperCase() === 'ACTIVE' && (
+        <div className="flex justify-end -mt-2">
+          <button
+            type="button"
+            onClick={() => setShowChangeRent(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-secondary text-foreground text-xs font-semibold border border-border hover:bg-secondary/80 active:scale-95 transition-all"
+          >
+            <TrendingUp className="w-3.5 h-3.5 text-accent" />
+            <span>Change Rent</span>
+          </button>
+        </div>
+      )}
+
       {/* §3 Obligations + §4 Financial Activity */}
       {isMobile ? (
         <Tabs value={mobileTab} onValueChange={(v) => setMobileTab(v as MobileTab)}>
@@ -983,6 +1013,25 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
             // stacking a second modal — small deliberate delay, not a race condition
             // fix, since onClose() already runs on its own timer independently.
             setTimeout(() => setShowPaymentModal(true), 1300);
+          }}
+        />
+      )}
+
+      {/* Change Rent Modal */}
+      {showChangeRent && (
+        <ChangeRentModal
+          tenantId={tenantId}
+          hostelId={hostelId}
+          currentRent={Number(tenant?.monthly_rent ?? overview?.rent ?? 0)}
+          upcomingObligations={upcomingRentObligations}
+          onClose={() => setShowChangeRent(false)}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.tenants.obligations(hostelId, tenantId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.tenants.financialTimeline(hostelId, tenantId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.tenants.advance(hostelId, tenantId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.tenants.full(hostelId, tenantId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.tenants.overview(hostelId, tenantId) });
+            refetch();
           }}
         />
       )}
