@@ -2479,11 +2479,18 @@ export class PaymentService {
         // Unified onto the Settlement Planner/Engine (previously a hand-rolled
         // priority sort + allocation loop duplicating settlement-engine's job).
         //
-        // Safety: attempt.amount is provably always equal to
-        // sum(obligationLinks.amount) — both are computed from the same loop
-        // inside the same transaction at intent-creation time in
-        // createMultiObligationPaymentIntent, and payment_attempt_obligations
-        // rows are never mutated after insert.
+        // Safety: for createMultiObligationPaymentIntent, attempt.amount is
+        // provably always equal to sum(obligationLinks.amount) — both are
+        // computed from the same loop inside the same transaction at
+        // intent-creation time, and payment_attempt_obligations rows are
+        // never mutated after insert. That equality does NOT hold for
+        // createAmountPaymentIntent: there attempt.amount may EXCEED
+        // sum(obligationLinks.amount) when the entered amount is more than
+        // total outstanding — the difference is intentionally routed to
+        // future rent credit. Correctness here does not come from junction-
+        // sum equality; it comes from receivePayment below re-planning
+        // against amountPaid (the full captured amount) each time, with
+        // obligationLinks only supplying which obligations are eligible.
         //
         // obligationIdFilter (not allowedObligationIds) restricts the fetch to
         // exactly the linked set, so the planner's chronology validation is
