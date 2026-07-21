@@ -202,7 +202,16 @@ export async function GET(req: NextRequest) {
       prisma.activity_logs.findMany({
         where: {
           owner_id: scope.owner_id,
-          entity_type: { in: ['HOSTEL_POLICY', 'RENT'] }
+          OR: [
+            // AGREEMENT_TEMPLATE is handled below but was missing from this filter,
+            // so its rows never reached the mapper — same bug class as EXPENSE.
+            { entity_type: { in: ['HOSTEL_POLICY', 'RENT', 'AGREEMENT_TEMPLATE'] } },
+            // CREATE is already reconstructed from the live `expenses` table below
+            // (with cash-position enrichment); only UPDATE/DELETE need the log here,
+            // since a deleted expense's row — and with it its CREATE event — disappears
+            // from that live reconstruction entirely.
+            { entity_type: 'EXPENSE', action_type: { in: ['UPDATE', 'DELETE'] } }
+          ]
         },
         orderBy: { timestamp: 'desc' },
         take: 200
@@ -507,6 +516,28 @@ export async function GET(req: NextRequest) {
             title: meta.title || 'N/A',
             owner_signature_url: meta.owner_signature_url || 'N/A',
             hostel_id: meta.hostel_id || 'N/A'
+          }
+        });
+      } else if (log.entity_type === 'EXPENSE') {
+        // Only UPDATE/DELETE land here (see the query above) — CREATE is already
+        // represented by the live-table reconstruction in "Map Expenses", which
+        // carries the cash-position before/after that this log's metadata doesn't.
+        const isDelete = log.action_type === 'DELETE';
+        events.push({
+          id: `expense-log-${log.id}`,
+          category: 'Expenses',
+          title: `${isDelete ? 'Expense deleted' : 'Expense updated'}: ${meta.title || 'Expense'} — ₹${Number(meta.amount || 0).toLocaleString('en-IN')}`,
+          subtitle: isDelete ? 'Removed from records' : 'Details changed',
+          timestamp: log.timestamp,
+          badgeColor: 'rose',
+          actor: { name: 'Owner', email: '' },
+          metadata: {
+            log_id: log.id,
+            expense_id: log.entity_id,
+            title: meta.title || 'N/A',
+            amount: Number(meta.amount || 0),
+            hostel_id: meta.hostel_id || null,
+            action: log.action_type
           }
         });
       }

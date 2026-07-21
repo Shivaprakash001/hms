@@ -1,9 +1,13 @@
 import { useState } from 'react';
 import { PauseCircle, X } from 'lucide-react';
+import { HostelImpactSummary } from './HostelImpactSummary';
 
 interface PauseHostelModalProps {
   hostelId: string;
   hostelName: string;
+  activeTenants?: number;
+  occupiedBeds?: number;
+  pendingDues?: number;
   onClose: () => void;
   onConfirm: (hostelId: string) => Promise<void>;
 }
@@ -11,6 +15,9 @@ interface PauseHostelModalProps {
 export function PauseHostelModal({
   hostelId,
   hostelName,
+  activeTenants,
+  occupiedBeds,
+  pendingDues,
   onClose,
   onConfirm,
 }: PauseHostelModalProps) {
@@ -68,6 +75,8 @@ export function PauseHostelModal({
           <p className="text-sm text-muted-foreground leading-relaxed">
             You can resume operations at any time.
           </p>
+
+          <HostelImpactSummary activeTenants={activeTenants} occupiedBeds={occupiedBeds} pendingDues={pendingDues} tone="warning" />
 
           {error && (
             <div className="rounded-xl bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive">

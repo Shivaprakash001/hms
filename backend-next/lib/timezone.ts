@@ -36,3 +36,17 @@ export function getDayInTimezone(date: Date, timezone?: string | null): number {
     );
   }
 }
+
+/**
+ * Formats `date` as an Indian-locale date/time string, always evaluated in
+ * IST regardless of the server process's own timezone. `toLocaleString("en-IN")`
+ * alone is not enough server-side — Node's `Intl` resolves to the *process's*
+ * timezone (often UTC on cloud hosts) when none is given, which silently
+ * mislabels a UTC time with Indian formatting instead of actually converting
+ * it. Use this anywhere a server-generated timestamp (exports, PDFs, emails)
+ * is rendered for an Indian owner/tenant to read.
+ */
+export function formatIST(date: Date | string, options: Intl.DateTimeFormatOptions = {}): string {
+  const d = date instanceof Date ? date : new Date(date);
+  return d.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", ...options });
+}

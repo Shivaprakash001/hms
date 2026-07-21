@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Search, SlidersHorizontal, Building2, ArrowRight,
-  CheckCircle, IndianRupee, TrendingUp, Users, Phone, Bell,
+  IndianRupee, TrendingUp, Users,
   LogOut, UserCheck, Settings, X, ChevronRight, Activity, Plus,
   Banknote,
 } from 'lucide-react';
@@ -13,13 +13,11 @@ import { agreementService } from '@features/agreements/api';
 import { ownerService } from '@features/owners/api';
 import { queryKeys } from '@lib/queryKeys';
 import { HostelPerformanceCard } from '@/app/components/portfolio/HostelPerformanceCard';
+import { UniversalSearchBar } from '@/app/components/portfolio/UniversalSearchBar';
 import { HostelFilterChips, computeFilterCounts, applyHostelFilter, type HostelFilter } from '@/app/components/hostel/HostelFilterChips';
 import type { FilterOptions } from '@/app/components/modals/FilterModal';
 import { toast } from 'sonner';
 
-const PortfolioRevenueChart = lazy(() =>
-  import('@/app/components/portfolio/PortfolioRevenueChart').then((m) => ({ default: m.PortfolioRevenueChart }))
-);
 const AddHostelModal = lazy(() =>
   import('@/app/components/modals/AddHostelModal').then((m) => ({ default: m.AddHostelModal }))
 );
@@ -46,11 +44,6 @@ const fmt = (n: number) => {
   const v = Number(n || 0);
   if (v >= 100000) return `₹${(v / 100000).toFixed(1)}L`;
   return `₹${v.toLocaleString('en-IN')}`;
-};
-
-const toTelHref = (phone: unknown) => {
-  const digits = String(phone || '').replace(/[^\d+]/g, '');
-  return digits ? `tel:${digits}` : null;
 };
 
 function Skeleton() {
@@ -82,8 +75,9 @@ export function PortfolioView() {
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
 
   // Lifecycle modal state
-  const [closingHostel, setClosingHostel] = useState<{ id: string; name: string } | null>(null);
-  const [pausingHostel, setPausingHostel] = useState<{ id: string; name: string } | null>(null);
+  type HostelImpact = { id: string; name: string; activeTenants?: number; occupiedBeds?: number; pendingDues?: number };
+  const [closingHostel, setClosingHostel] = useState<HostelImpact | null>(null);
+  const [pausingHostel, setPausingHostel] = useState<HostelImpact | null>(null);
   const [restoringHostel, setRestoringHostel] = useState<{ id: string; name: string; archived_at?: string | null; archive_reason?: string | null } | null>(null);
 
   const userInitials = user?.name
@@ -131,8 +125,6 @@ export function PortfolioView() {
       return h;
     });
   }, [rankings, activeTrend]);
-
-  const topPerformer = resolvedRankings.find((h: { is_top_performer?: boolean }) => h.is_top_performer);
 
   const filteredRankings = useMemo(
     () => {
@@ -199,23 +191,6 @@ export function PortfolioView() {
   // Avg revenue per bed for vacancy loss estimate
   const avgBedRevenue = occupiedBeds > 0 ? totalRevenue / occupiedBeds : 0;
   const vacancyLoss = Math.round(avgBedRevenue * vacantBeds);
-
-  // Operations Queue items — ordered by priority
-  const actionItems = useMemo(() => {
-    const items: { id: string; dot: string; label: string; cta: string; href: string }[] = [];
-    overdueRows.slice(0, 3).forEach((r) =>
-      items.push({ id: r.id, dot: 'bg-destructive', label: `Collect ${fmt(r.amount)} from ${r.tenant}`, cta: 'Collect', href: '/alerts' })
-    );
-    if (overdueRows.length > 3)
-      items.push({ id: 'more-overdue', dot: 'bg-destructive', label: `+${overdueRows.length - 3} more overdue tenant${overdueRows.length - 3 > 1 ? 's' : ''}`, cta: 'View all', href: '/alerts' });
-    if (moveOutOpen > 0)
-      items.push({ id: 'moveout', dot: 'bg-amber-500', label: `Review ${moveOutOpen} move-out request${moveOutOpen > 1 ? 's' : ''}`, cta: 'Review', href: '/move-outs' });
-    if (pendingInvites > 0)
-      items.push({ id: 'invites', dot: 'bg-blue-500', label: `Activate ${pendingInvites} invited tenant${pendingInvites > 1 ? 's' : ''}`, cta: 'Activate', href: '/tenants' });
-    if (vacantBeds > 0)
-      items.push({ id: 'vacant', dot: 'bg-muted-foreground', label: `Fill ${vacantBeds} vacant bed${vacantBeds > 1 ? 's' : ''}${vacancyLoss > 0 ? ` — ${fmt(vacancyLoss)}/mo potential` : ''}`, cta: 'Add tenant', href: '/tenants' });
-    return items;
-  }, [overdueRows, moveOutOpen, pendingInvites, vacantBeds, vacancyLoss]);
 
   const greeting = (() => {
     const h = new Date().getHours();
@@ -301,6 +276,9 @@ export function PortfolioView() {
           )}
         </div>
       </div>
+
+      {/* Universal search — tenant/room/phone across ALL hostels, results shown inline (no navigation until a result is picked) */}
+      <UniversalSearchBar />
 
       {isLoading ? <Skeleton /> : isError ? (
         <div className="text-center py-16">
@@ -419,6 +397,7 @@ export function PortfolioView() {
           )}
 
           {/* KPI Grid */}
+          <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Snapshot</p>
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-card border border-border rounded-2xl p-3 min-w-0">
               <div className="w-7 h-7 rounded-xl bg-accent/10 flex items-center justify-center mb-2">
@@ -448,74 +427,6 @@ export function PortfolioView() {
               </p>
             </div>
           </div>
-
-          {/* Operations Queue — Today's Actions */}
-          {actionItems.length > 0 ? (
-            <section className="rounded-2xl border border-border bg-card p-4">
-              <h2 className="text-sm font-bold text-foreground mb-1">Today's actions</h2>
-              <p className="text-xs text-muted-foreground mb-3">{actionItems.length} item{actionItems.length > 1 ? 's' : ''} need your attention</p>
-              <div className="divide-y divide-border">
-                {actionItems.map((item) => (
-                  <div key={item.id} className="flex items-center gap-3 py-2.5">
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${item.dot}`} />
-                    <p className="flex-1 text-sm text-foreground leading-snug">{item.label}</p>
-                    <button type="button" onClick={() => navigate(item.href)}
-                      className="shrink-0 text-xs font-semibold text-accent hover:underline">
-                      {item.cta} →
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </section>
-          ) : (
-            <div className="flex items-center gap-2 rounded-xl border border-success/20 bg-success/8 px-4 py-3">
-              <CheckCircle className="w-4 h-4 text-success shrink-0" />
-              <p className="text-sm text-success font-medium">All clear — no actions required today</p>
-            </div>
-          )}
-
-          {/* Needs Attention — overdue tenant detail */}
-          {overdueRows.length > 0 && (
-            <section className="rounded-2xl border border-border bg-card p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <div>
-                  <h2 className="text-sm font-bold text-foreground">Needs attention</h2>
-                  <p className="text-xs text-muted-foreground">Highest overdue first</p>
-                </div>
-                <button type="button" onClick={() => navigate('/alerts')} className="text-xs font-semibold text-accent hover:underline">
-                  View all
-                </button>
-              </div>
-              <div className="divide-y divide-border">
-                {overdueRows.slice(0, 4).map((row) => {
-                  const telHref = toTelHref(row.phone);
-                  return (
-                    <div key={row.id} className="flex items-center justify-between gap-3 py-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-foreground">{row.tenant}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {row.days}d overdue{row.room ? ` · Room ${row.room}` : ''}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <span className="text-sm font-bold text-destructive">{fmt(row.amount)}</span>
-                        {telHref && (
-                          <a href={telHref} aria-label={`Call ${row.tenant}`}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700">
-                            <Phone className="h-3.5 w-3.5" />
-                          </a>
-                        )}
-                        <button type="button" onClick={() => navigate('/alerts')}
-                          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 text-xs font-semibold text-amber-700">
-                          <Bell className="h-3.5 w-3.5" /> Remind
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          )}
 
           {/* Collections Bar representation */}
           {(() => {
@@ -624,18 +535,6 @@ export function PortfolioView() {
             );
           })()}
 
-          {/* Business Health Trend — always visible */}
-          <section className="rounded-xl border border-border bg-card p-4">
-            <Suspense fallback={<div className="h-52 rounded-xl bg-muted animate-pulse" />}>
-              <PortfolioRevenueChart
-                monthlyTrends={monthlyTrends}
-                insights={data?.business_health_insights}
-                topPerformerId={data?.top_performer_hostel_id}
-                topPerformerName={topPerformer?.hostel_name}
-              />
-            </Suspense>
-          </section>
-
           {/* Search + Filter */}
           <div className="flex items-center gap-3">
             <div className="flex-1 relative">
@@ -704,8 +603,18 @@ export function PortfolioView() {
                       hostel={hostel}
                       rank={i + 1}
                       onEdit={setEditingHostelId}
-                      onPause={(id, name) => setPausingHostel({ id, name })}
-                      onClose={(id, name) => setClosingHostel({ id, name })}
+                      onPause={(id, name) => setPausingHostel({
+                        id, name,
+                        activeTenants: hostel.active_tenants,
+                        occupiedBeds: hostel.occupied_beds,
+                        pendingDues: hostel.pending_dues,
+                      })}
+                      onClose={(id, name) => setClosingHostel({
+                        id, name,
+                        activeTenants: hostel.active_tenants,
+                        occupiedBeds: hostel.occupied_beds,
+                        pendingDues: hostel.pending_dues,
+                      })}
                       onResume={handleResumeHostel}
                       onRestore={(id, name) => {
                         const h = rankings.find((r: any) => r.hostel_id === id);
@@ -742,6 +651,9 @@ export function PortfolioView() {
           <CloseHostelModal
             hostelId={closingHostel.id}
             hostelName={closingHostel.name}
+            activeTenants={closingHostel.activeTenants}
+            occupiedBeds={closingHostel.occupiedBeds}
+            pendingDues={closingHostel.pendingDues}
             onClose={() => setClosingHostel(null)}
             onConfirm={handleCloseHostel}
           />
@@ -752,6 +664,9 @@ export function PortfolioView() {
           <PauseHostelModal
             hostelId={pausingHostel.id}
             hostelName={pausingHostel.name}
+            activeTenants={pausingHostel.activeTenants}
+            occupiedBeds={pausingHostel.occupiedBeds}
+            pendingDues={pausingHostel.pendingDues}
             onClose={() => setPausingHostel(null)}
             onConfirm={handlePauseHostel}
           />

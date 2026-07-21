@@ -116,6 +116,21 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   const { overview, allocations, dues, advance, full, financialTimeline, isLoading, isError, refetch } =
     useTenantProfile(hostelId, tenantId);
 
+  // The tenant overview response doesn't carry the hostel's name/city, so
+  // resolve it from the owner's hostel list — usually already warm in cache
+  // from Portfolio/Hostels, since that's how an owner gets here.
+  const { data: hostelsRaw } = useQuery({
+    queryKey: queryKeys.owner.hostels(),
+    queryFn: () => ownerService.getHostels(),
+    enabled: Boolean(hostelId),
+    staleTime: 5 * 60_000,
+  });
+  const hostelsList = Array.isArray(hostelsRaw)
+    ? hostelsRaw
+    : ((hostelsRaw as any)?.hostels ?? (hostelsRaw as any)?.data?.hostels ?? []);
+  const currentHostel = (hostelsList as any[]).find((h) => String(h.id) === String(hostelId));
+  const hostelLocationLabel = String(currentHostel?.name || currentHostel?.city || overview?.hostel_name || 'Hostel');
+
   const { findAction } = useOwnerActions(hostelId, tenantId);
   const personalInfoAction = findAction('TENANT_EDIT_PERSONAL_INFO');
 
@@ -220,10 +235,15 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
     return diffDays > 0 ? diffDays : 0;
   }, [obligations]);
 
+  // Whether the tenant has a real current agreement (SIGNED/EXPIRING_SOON/AGREEMENT_EXPIRED
+  // per currentAgreementWhere()) — sourced from the actual Agreement table via
+  // getOwnerTenantOverview, not inferred from room-allocation history.
+  const hasActiveAgreement = Boolean(overview?.has_active_agreement);
+
   // Agreement progress — time-based: months elapsed since agreement start / total duration (§ plan decision)
   const { agreementMonthsElapsed, agreementMonthsTotal } = useMemo(() => {
     const activeAllocation = (allocations || []).find((a: any) => a.is_active) ?? allocations?.[0];
-    const startRaw = activeAllocation?.start_date;
+    const startRaw = tenant?.agreement_start_date ?? overview?.agreement_start_date ?? activeAllocation?.start_date;
     const durationMonths = Number(
       tenant?.agreement_duration_months ?? overview?.agreement_duration_months ?? 0,
     );
@@ -452,7 +472,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
       onRemindDocuments={() => runComplianceAction('REMIND_DOCUMENTS', 'Document reminder sent')}
       onResendRules={() => runComplianceAction('RESEND_RULES', 'Rules reminder sent')}
       onDownloadAcceptanceRecord={downloadAcceptanceRecord}
-      hasAgreement={Boolean(allocations?.length > 0)}
+      hasAgreement={hasActiveAgreement}
       recentPayments={recentPayments as any}
       recentChanges={recentChanges as any}
       onViewAllChanges={() => navigate(`/changes?tenantId=${tenantId}`)}
@@ -523,13 +543,13 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
         <div className="w-full md:w-auto p-3.5 rounded-xl bg-secondary/40 border border-border flex items-center justify-between gap-6 shrink-0 text-xs">
           <div>
             <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider block">Hostel Location</span>
-            <span className="font-bold text-foreground mt-0.5 block">Hostel 2</span>
+            <span className="font-bold text-foreground mt-0.5 block">{hostelLocationLabel}</span>
           </div>
           <div className="border-l border-border h-8 self-center" />
           <div className="text-right">
             <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider block">Rent Agreement</span>
             <span className="font-bold text-foreground mt-0.5 block">
-              {allocations?.length > 0 ? 'Active Contract' : 'No Active Contract'}
+              {hasActiveAgreement ? 'Active Contract' : 'No Active Contract'}
             </span>
           </div>
         </div>
@@ -582,7 +602,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <RiskComplianceCard
           score={tenantScore?.score ?? 80}
-          hasAgreement={Boolean(allocations?.length > 0)}
+          hasAgreement={hasActiveAgreement}
           documentStatus={String(compliance.document_verification_status ?? 'MISSING').toUpperCase()}
           overdueDays={overdueDays}
           depositStatus={securityDepositAmount === 0 ? 'WAIVED' : 'PAID'}

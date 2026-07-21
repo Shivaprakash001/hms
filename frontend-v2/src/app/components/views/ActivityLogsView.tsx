@@ -188,22 +188,26 @@ const formatActorShort = (actor: any) => {
   return actor.name.split(' ')[0];
 };
 
+// IST calendar-day key (not browser-local) — a non-IST viewer must still see
+// the same "Today"/"Yesterday" grouping an owner in India would see.
+const istDayKey = (date: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(date);
+
 const groupLogsByDate = (logsList: any[]) => {
   const groups: { [key: string]: any[] } = {};
-  const todayStr = new Date().toDateString();
+  const todayStr = istDayKey(new Date());
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toDateString();
+  const yesterdayStr = istDayKey(yesterday);
 
   logsList.forEach((log) => {
     const date = new Date(log.timestamp);
     let groupKey = '';
-    if (date.toDateString() === todayStr) {
+    if (istDayKey(date) === todayStr) {
       groupKey = 'Today';
-    } else if (date.toDateString() === yesterdayStr) {
+    } else if (istDayKey(date) === yesterdayStr) {
       groupKey = 'Yesterday';
     } else {
-      groupKey = date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+      groupKey = date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
     }
     if (!groups[groupKey]) {
       groups[groupKey] = [];
@@ -245,7 +249,7 @@ function ActivityLogItem({ log, getEventMeta }: ActivityLogItemProps) {
   const { title, description, IconComponent, iconColor } = getEventMeta(log);
   const severity = getSeverity(log);
   const timestamp = new Date(log.timestamp);
-  const timeFormatted = timestamp.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  const timeFormatted = timestamp.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' });
 
   // Generate dynamic subtitle/description for compact row
   const getCompactInfo = () => {
@@ -355,7 +359,7 @@ function ActivityLogItem({ log, getEventMeta }: ActivityLogItemProps) {
               <div className="flex flex-col gap-0.5">
                 <span className="text-[10px] font-semibold text-muted-foreground uppercase">Date & Time</span>
                 <span className="text-sm font-medium text-foreground">
-                  {timestamp.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                  {timestamp.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' })}
                 </span>
               </div>
 

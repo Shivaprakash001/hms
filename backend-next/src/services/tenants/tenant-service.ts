@@ -11,6 +11,7 @@ import { financialService } from "../../../src/services/payments/financial-servi
 import { financialReadModelService } from "../../../src/services/payments/financial-read-model-service";
 import { obligationEngine } from "../../../src/services/payments/obligation-engine";
 import { getLogger } from "../../../lib/logger";
+import { currentAgreementWhere } from "./agreement-status";
 import { eventLog } from "../../../lib/services/event-log-service";
 import { imagekit } from "../../../lib/imagekit";
 import { tenantRepository } from "../../repositories/tenantRepository";
@@ -868,7 +869,8 @@ export class TenantService {
       reminders,
       allocations,
       moveOuts,
-      notes
+      notes,
+      currentAgreement
     ] = await Promise.all([
       financialReadModelService.getFinancialReadModel(tenantId, ownerId, legacyTenant.hostel_id),
       prisma.payments.aggregate({
@@ -908,6 +910,15 @@ export class TenantService {
         where: { tenant_id: tenantId, owner_id: ownerId },
         orderBy: { created_at: "desc" },
         take: 10
+      }),
+      // The tenant's real current agreement — previously this overview never
+      // queried `agreement` at all, and the frontend's "has agreement" checks
+      // fell back to room-allocation history / a `tenant_invitations` field
+      // that's never actually present on this response, so every tenant
+      // showed "No active agreement" regardless of having a signed one.
+      prisma.agreement.findFirst({
+        where: { tenant_id: tenantId, status: currentAgreementWhere() },
+        orderBy: { generated_at: "desc" },
       })
     ]);
 
@@ -1034,6 +1045,25 @@ export class TenantService {
           }
         : null,
       tenant_invitations: legacyTenant.tenant_invitations || [],
+      has_active_agreement: Boolean(currentAgreement),
+      agreement_duration_months: currentAgreement?.agreement_duration_months
+        ?? legacyTenant.tenant_invitations?.[0]?.agreement_duration_months
+        ?? null,
+      agreement_start_date: currentAgreement?.agreement_start_date
+        ?? legacyTenant.tenant_invitations?.[0]?.agreement_start_date
+        ?? null,
+      current_agreement: currentAgreement
+        ? {
+            id: currentAgreement.id,
+            status: currentAgreement.status,
+            agreement_start_date: currentAgreement.agreement_start_date,
+            agreement_end_date: currentAgreement.agreement_end_date,
+            agreement_duration_months: currentAgreement.agreement_duration_months,
+            contract_rent: currentAgreement.contract_rent,
+            contract_security_deposit: currentAgreement.contract_security_deposit,
+            pdf_url: currentAgreement.pdf_url,
+          }
+        : null,
       payment_summary: {
         total_paid: totalPaid,
         pending_amount: outstanding,

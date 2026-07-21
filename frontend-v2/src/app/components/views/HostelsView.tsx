@@ -26,8 +26,9 @@ export function HostelsView() {
   const [hostelFilter, setHostelFilter] = useState<HostelFilter>('all');
 
   // Lifecycle modal state
-  const [closingHostel, setClosingHostel] = useState<{ id: string; name: string } | null>(null);
-  const [pausingHostel, setPausingHostel] = useState<{ id: string; name: string } | null>(null);
+  type HostelImpact = { id: string; name: string; activeTenants?: number; occupiedBeds?: number; pendingDues?: number };
+  const [closingHostel, setClosingHostel] = useState<HostelImpact | null>(null);
+  const [pausingHostel, setPausingHostel] = useState<HostelImpact | null>(null);
   const [restoringHostel, setRestoringHostel] = useState<{ id: string; name: string; archived_at?: string | null; archive_reason?: string | null } | null>(null);
 
   const { data: hostelsData, isLoading } = useQuery({
@@ -213,8 +214,8 @@ export function HostelsView() {
                     status={status}
                     onNavigate={(hid) => navigate(`/hostels/${hid}`)}
                     onEdit={setEditingHostelId}
-                    onPause={(hid, hname) => setPausingHostel({ id: hid, name: hname })}
-                    onClose={(hid, hname) => setClosingHostel({ id: hid, name: hname })}
+                    onPause={(hid, hname) => setPausingHostel({ id: hid, name: hname, activeTenants: hostel.active_tenants, occupiedBeds })}
+                    onClose={(hid, hname) => setClosingHostel({ id: hid, name: hname, activeTenants: hostel.active_tenants, occupiedBeds })}
                     onResume={handleResumeHostel}
                     onRestore={(hid, hname) => {
                       setRestoringHostel({
@@ -325,6 +326,9 @@ export function HostelsView() {
         <CloseHostelModal
           hostelId={closingHostel.id}
           hostelName={closingHostel.name}
+          activeTenants={closingHostel.activeTenants}
+          occupiedBeds={closingHostel.occupiedBeds}
+          pendingDues={closingHostel.pendingDues}
           onClose={() => setClosingHostel(null)}
           onConfirm={handleCloseHostel}
         />
@@ -333,6 +337,9 @@ export function HostelsView() {
         <PauseHostelModal
           hostelId={pausingHostel.id}
           hostelName={pausingHostel.name}
+          activeTenants={pausingHostel.activeTenants}
+          occupiedBeds={pausingHostel.occupiedBeds}
+          pendingDues={pausingHostel.pendingDues}
           onClose={() => setPausingHostel(null)}
           onConfirm={handlePauseHostel}
         />

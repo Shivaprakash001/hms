@@ -23,6 +23,16 @@ Architecture Decision Records — each entry below was **inferred from code evid
 
 ---
 
+## ADR-020: `currentAgreementWhere()` is the one canonical "does this tenant have an agreement" check — every surface must use it, not a proxy
+
+- **Date:** 2026-07-22
+- **Status:** accepted
+- **Context:** `getOwnerTenantOverview` (the data source for the entire owner-facing Tenant Profile page) never queried the `agreement` table. Three UI spots independently invented their own proxy for "has an agreement" — room-allocation history (`allocations.length > 0`) and a `tenant_invitations`-derived duration field that, it turned out, was never actually present on the response at all. Net effect: every tenant's profile showed "No active agreement," including tenants with a real `SIGNED` agreement and an independently-verified signed document — discovered only because a user reported it against a specific tenant.
+- **Decision:** `getOwnerTenantOverview` now queries `prisma.agreement.findFirst({ where: { tenant_id, status: currentAgreementWhere() } })` — the exact same status set (`SIGNED`/`EXPIRING_SOON`/`AGREEMENT_EXPIRED`) the renewal subsystem already treats as "current" (`agreement-status.ts`, used throughout `renewal-decision-service.ts` and the renewal engines) — and returns `has_active_agreement` plus a real `current_agreement` object. Any UI or service that needs to know "does this tenant have an agreement" must use this, not allocation history, not invitation snapshots, not agreement-adjacent documents.
+- **Alternatives considered:** Inferring agreement status from the presence of the synthetic `RENTAL_AGREEMENT` virtual document (`tenants/[id]/documents/route.ts` already does a similar `agreement.findMany` query to build that doc) — rejected as indirect; better to expose the real status directly on the overview response that already powers the whole page, rather than have every consumer re-derive it from a documents list.
+- **Consequences:** One more query per tenant-overview fetch (a single indexed `findFirst`, negligible cost). Any future "does this tenant have an agreement" need on this page has an obvious, correct place to read from instead of re-inventing a proxy. Onboarding itself needed no changes — `activation-workflow-service.ts` already wrote the real agreement correctly; this closes a read-side gap only.
+- **Related:** [[Bugs]] (Owner Tenant Profile contradicted itself...), [[Backend]], [[Business-Rules]]
+
 ## ADR-019: Tenant renewal signing is a dedicated page under `src/platforms/tenant`, not another `src/portal` card
 
 - **Date:** 2026-07-22

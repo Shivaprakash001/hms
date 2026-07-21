@@ -1,9 +1,13 @@
 import { useState } from 'react';
 import { AlertTriangle, Check, X } from 'lucide-react';
+import { HostelImpactSummary } from './HostelImpactSummary';
 
 interface CloseHostelModalProps {
   hostelId: string;
   hostelName: string;
+  activeTenants?: number;
+  occupiedBeds?: number;
+  pendingDues?: number;
   onClose: () => void;
   onConfirm: (hostelId: string, reason: string) => Promise<void>;
 }
@@ -27,6 +31,9 @@ const STOPPED = [
 export function CloseHostelModal({
   hostelId,
   hostelName,
+  activeTenants,
+  occupiedBeds,
+  pendingDues,
   onClose,
   onConfirm,
 }: CloseHostelModalProps) {
@@ -34,7 +41,8 @@ export function CloseHostelModal({
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
 
-  const canSubmit = reason.trim().length >= 3 && !isPending;
+  const hasActiveTenants = Number(activeTenants ?? occupiedBeds ?? 0) > 0;
+  const canSubmit = reason.trim().length >= 3 && !isPending && !hasActiveTenants;
 
   const handleConfirm = async () => {
     if (!canSubmit) return;
@@ -89,6 +97,17 @@ export function CloseHostelModal({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
+          {Number(activeTenants ?? occupiedBeds ?? 0) > 0 ? (
+            <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              <p className="font-semibold">This hostel still has active tenants — closing will be blocked.</p>
+              <p className="mt-1 text-destructive/90">
+                Move all {activeTenants ?? occupiedBeds} tenant{Number(activeTenants ?? occupiedBeds) === 1 ? '' : 's'} out first, then close. If you just need a break, use "Temporarily Close" instead — it keeps tenants in place.
+              </p>
+            </div>
+          ) : (
+            <HostelImpactSummary activeTenants={activeTenants} occupiedBeds={occupiedBeds} pendingDues={pendingDues} tone="destructive" />
+          )}
+
           {/* Preserved */}
           <div className="rounded-xl border border-emerald-200 dark:border-emerald-800/40 bg-emerald-50/50 dark:bg-emerald-900/15 p-4">
             <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 mb-2.5">
@@ -165,7 +184,7 @@ export function CloseHostelModal({
             disabled={!canSubmit}
             className="flex-1 py-3 bg-destructive text-destructive-foreground text-sm font-semibold rounded-xl disabled:opacity-50 transition-opacity active:scale-[0.98] touch-manipulation"
           >
-            {isPending ? 'Closing…' : 'Close this hostel'}
+            {isPending ? 'Closing…' : hasActiveTenants ? 'Move tenants out first' : 'Close this hostel'}
           </button>
         </div>
       </div>

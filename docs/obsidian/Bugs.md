@@ -28,6 +28,37 @@ Copy this block for each new entry:
 
 ## Fixed
 
+### Owner Tenant Profile contradicted itself: "Agreement: Signed" next to "No active agreement", plus a hardcoded hostel name
+
+- **Status:** fixed
+- **Found:** 2026-07-22
+- **Area:** [[Frontend]] — `TenantProfilePage.tsx`
+- **Symptom:** On the owner-facing Tenant Profile page, the Risk & Compliance card's "Agreement" field said "Signed" while the page's own "Rent Agreement" summary chip (right next to "Hostel Location") said "No Active Contract" and the Financial Strip's Agreement card said "No active agreement" — three places on the *same page* disagreeing about the same fact. Separately, "Hostel Location" showed the literal hardcoded string "Hostel 2" for every tenant, regardless of which hostel they actually belonged to.
+- **Root cause (initial pass):** Three different UI spots computed "does this tenant have an agreement" from `Boolean(allocations?.length > 0)` — i.e. "has this tenant ever been allocated a room" — a different fact from "does this tenant have a current signed agreement." The "Hostel Location" chip was never wired to real data at all — literally `<span>Hostel 2</span>`.
+- **Root cause (real, found via a second live report — tenant BOJJA KAPIL, an independently-verified "Hostel Residency Agreement" document, still showed "Missing"/"No Active Contract"):** The first-pass fix unified all three spots onto `Boolean(agreementMonthsTotal)`, itself computed from `tenant?.agreement_duration_months ?? overview?.agreement_duration_months`. Neither field was ever actually present on `getOwnerTenantOverview`'s response — the function never queried the `agreement` table at all, only `tenant_invitations` (nested, not flattened) and `room_allocations`. So the "consistent" fix was consistently wrong: **every** tenant showed "no agreement," even ones with a real `SIGNED` agreement and a verified document, because the underlying field the whole page relied on genuinely didn't exist in the payload. Confirmed onboarding itself is not at fault — `activation-workflow-service.ts` correctly creates the `DRAFT` agreement and transitions it to `SIGNED` with real duration/start-date/contract terms on activation (`tests/activation-workflow.test.ts`, 6/6 passing); this was purely a read-side gap.
+- **Fix:** `getOwnerTenantOverview` (`tenant-service.ts`) now queries the tenant's real current agreement (`prisma.agreement.findFirst({ status: currentAgreementWhere() })`, the same `SIGNED`/`EXPIRING_SOON`/`AGREEMENT_EXPIRED` set the renewal system already uses) and returns `has_active_agreement`, `current_agreement` (id/status/dates/contract terms/pdf_url), plus top-level `agreement_duration_months`/`agreement_start_date` sourced from it (falling back to the invitation snapshot only if no agreement exists). The frontend's three "has agreement" checks now read the new `has_active_agreement` boolean directly instead of inferring from duration presence. New tests: `tests/tenant-overview-agreement.test.ts` (3/3 — signed agreement reports true with real contract terms, no agreement reports false, a `TERMINATED` historical agreement correctly does not count as current). "Hostel Location" now resolves the real hostel name via the owner's hostels list (`ownerService.getHostels()`, matched by the route's `hostelId`).
+- **Related:** [[Frontend]], [[Backend]], [[Changelog]]
+
+### Expense/activity-log timestamps could silently show the wrong time on a non-IST server or browser
+
+- **Status:** fixed
+- **Found:** 2026-07-22
+- **Area:** [[Backend]] — `expense-export-service.ts`, `activity-logs/route.ts` / [[Frontend]] — `ActivityLogsView.tsx`, expense components
+- **Symptom:** Expense export "Generated at" timestamps (CSV/XLSX/PDF) and Activity Log entries were formatted with `.toLocaleString("en-IN")`/`.toLocaleDateString("en-IN")` but no explicit timezone. On the backend this resolves to the *server process's* timezone (commonly UTC on cloud hosts) — an export generated at 1:00 AM IST could show "Generated at: 7:30 PM" the previous day, correctly Indian-*formatted* (commas, DD/MM order) but not actually IST-*converted*. On the frontend the same issue depends on the viewer's device clock/timezone rather than true IST. Separately, editing or deleting an expense produced no visible trail in the Activity Log at all — the log only ever showed a live reconstruction of *current* expense rows, so an update silently changed the entry in place and a delete made it disappear entirely.
+- **Root cause:** (1) `Intl`/`toLocaleString` defaults to the runtime's own timezone when none is passed — true both in Node (export service) and in a browser set to a non-IST timezone (activity log view). (2) The Activity Logs route's `activity_logs` query filtered `entity_type: { in: ['HOSTEL_POLICY', 'RENT'] }`, silently excluding `EXPENSE` rows (written correctly by `activityService.log()` on update/delete) and `AGREEMENT_TEMPLATE` rows (despite the mapper below already handling that type) — logs were being written but never read back.
+- **Fix:** New `formatIST()` helper (`lib/timezone.ts`) used throughout `expense-export-service.ts`; `reportDateLabel()`'s month-range check switched from server-local to UTC date getters (matching the underlying `@db.Date` UTC-midnight encoding). `ActivityLogsView.tsx`'s three formatters gained explicit `timeZone: 'Asia/Kolkata'`, and "Today"/"Yesterday" grouping now compares IST calendar-day keys rather than the browser's local `toDateString()`. The activity-logs route's query was broadened to include `EXPENSE` (scoped to `UPDATE`/`DELETE` only — `CREATE` is already covered by the richer live-table reconstruction) and `AGREEMENT_TEMPLATE`. `ExpenseDetailsModal.tsx` gained a new "Added on" row (`created_at`, IST-formatted) alongside the existing expense-date row.
+- **Related:** [[Backend]], [[Frontend]], [[Changelog]]
+
+### Pausing a hostel gave no warning it stops rent generation for active tenants
+
+- **Status:** fixed
+- **Found:** 2026-07-22
+- **Area:** [[Frontend]] — `PauseHostelModal.tsx`, `CloseHostelModal.tsx`
+- **Symptom:** The "Temporarily Close" confirmation modal's own copy says "No new rent will be generated" once paused, but showed no indication of *how many* active tenants that affects, or their outstanding dues — an owner could pause a hostel with dozens of paying tenants with zero visibility into the impact. Separately, "Close Hostel" would let the owner fill in a reason and submit, only to be told by a backend trigger (`prevent_archive_with_active_allocations`) that active tenants block the close — a wasted round trip the frontend could have prevented from the start.
+- **Root cause:** Both modals only ever received `{id, name}` for the hostel being acted on, even though the exact stats (`active_tenants`, `occupied_beds`, `pending_dues`) were already fetched and displayed on the hostel's own portfolio/list card one component up — they just weren't threaded through the click handlers into modal state.
+- **Fix:** New shared `HostelImpactSummary.tsx` renders the real tenant/dues numbers in both modals, threaded through from the existing card data (no new fetch). `CloseHostelModal` now disables its submit button and shows "Move tenants out first" up front whenever active tenants exist, pointing the owner at "Temporarily Close" as the non-destructive alternative, instead of waiting for the backend to reject the request.
+- **Related:** [[Frontend]], [[Changelog]]
+
 ### iPhone Safari auto-zoomed into every form field (Add Expense / Add Tenant / others)
 
 - **Status:** fixed

@@ -44,7 +44,7 @@ export function ExpenseCard({
   const tone = categoryTone(String(expense.category || 'Miscellaneous'));
   const status = String(expense.status || 'paid').toUpperCase();
   const date = expense.date
-    ? new Date(String(expense.date)).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+    ? new Date(String(expense.date)).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' })
     : 'No date';
 
   return (

@@ -100,12 +100,20 @@ export function ExpenseDetailsModal({
               label="Date"
               value={
                 expense.date
-                  ? new Date(String(expense.date)).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                  ? new Date(String(expense.date)).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })
                   : 'No date'
               }
             />
             <DetailRow label="Vendor" value={String(expense.vendor_name || 'Not set')} />
             <DetailRow label="Recorded by" value={String(expense.added_by || 'Owner')} />
+            <DetailRow
+              label="Added on"
+              value={
+                expense.created_at
+                  ? new Date(String(expense.created_at)).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' })
+                  : 'Unknown'
+              }
+            />
           </div>
 
           {/* Decision support: category trend */}
