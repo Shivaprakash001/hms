@@ -23,6 +23,18 @@ interface ChangeRentModalProps {
 const fmt = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
 const monthLabel = (iso: string) => new Date(iso).toLocaleDateString('en-IN', { month: 'short', year: 'numeric', timeZone: 'UTC' });
 
+// First day of next calendar month (UTC), as an ISO date string. Used as the
+// effectiveFromMonth default when there are no upcoming obligations to derive
+// it from — the backend (applyRentChangeInTx) still requires a real month and
+// will happily update agreement.contract_rent/tenants.monthly_rent even with
+// zero obligations in scope, so this keeps the modal submittable rather than
+// leaving effectiveFromMonth stuck at ''.
+function nextMonthStartIso(): string {
+  const now = new Date();
+  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  return next.toISOString().slice(0, 10);
+}
+
 /**
  * "Change Rent" flow: owner picks a new rent amount, the month it should
  * take effect from, and a reason → identity confirmation (password re-entry,
@@ -34,7 +46,7 @@ const monthLabel = (iso: string) => new Date(iso).toLocaleDateString('en-IN', { 
  */
 export function ChangeRentModal({ tenantId, hostelId, currentRent, upcomingObligations, onClose, onSuccess }: ChangeRentModalProps) {
   const [newRentAmount, setNewRentAmount] = useState(String(currentRent));
-  const [effectiveFromMonth, setEffectiveFromMonth] = useState(upcomingObligations[0]?.rent_month ?? '');
+  const [effectiveFromMonth, setEffectiveFromMonth] = useState(upcomingObligations[0]?.rent_month ?? nextMonthStartIso());
   const [reason, setReason] = useState('');
   const [password, setPassword] = useState('');
   const [step, setStep] = useState<'FORM' | 'CONFIRM'>('FORM');
@@ -51,7 +63,9 @@ export function ChangeRentModal({ tenantId, hostelId, currentRent, upcomingOblig
   // any such discrepancy visible instead of silently trusting the preview.
   const [obligationsUpdated, setObligationsUpdated] = useState<number | null>(null);
 
-  const affectedCount = upcomingObligations.filter((o) => o.rent_month >= effectiveFromMonth).length;
+  const affectedCount = upcomingObligations.filter(
+    (o) => new Date(o.rent_month).getTime() >= new Date(effectiveFromMonth).getTime()
+  ).length;
 
   const handleContinue = (e: React.FormEvent) => {
     e.preventDefault();
@@ -149,7 +163,8 @@ export function ChangeRentModal({ tenantId, hostelId, currentRent, upcomingOblig
               <label className="text-xs font-semibold text-foreground">Apply starting from <span className="text-rose-500">*</span></label>
               {upcomingObligations.length === 0 ? (
                 <p className="text-xs text-muted-foreground px-1">
-                  No upcoming, unpaid rent installments found to reprice. Rent will still be updated on the agreement.
+                  No upcoming, unpaid rent installments found — the new rent will still apply to the agreement starting
+                  from {monthLabel(effectiveFromMonth)}, and will be used for any rent generated from then on.
                 </p>
               ) : (
                 <select

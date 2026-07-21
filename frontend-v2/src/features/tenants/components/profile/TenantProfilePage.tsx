@@ -191,9 +191,14 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   // Change Rent's month dropdown: RENT obligations with zero recorded
   // payments (paymentService.getTenantDues() already excludes fully-settled
   // obligations and computes `paid` as the sum of that obligation's
-  // payments — paid === 0 mirrors the backend's own zero-payments guard in
-  // applyRentChangeInTx, so the preview count the owner sees here can never
-  // diverge from what the backend actually reprices).
+  // payments. Note: this is a *preview* filter using net paid amount
+  // (paid === 0), which is not identical to the backend's real guard (zero
+  // payment *records*, payments.length === 0, in applyRentChangeInTx) —
+  // after a Payment Reversal correction, an obligation can net to paid === 0
+  // while carrying 2 payment rows, so this count can diverge from what the
+  // backend actually reprices. ChangeRentModal.tsx surfaces the real
+  // obligationsUpdated count from the API response after submit specifically
+  // to catch this — don't remove that as "redundant".
   const upcomingRentObligations = (obligations as Record<string, unknown>[])
     .filter((o: any) => String(o.obligation_type ?? o.type ?? '').toUpperCase() === 'RENT' && Number(o.paid ?? 0) === 0)
     .map((o: any) => ({
@@ -993,7 +998,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
         />
       )}
 
-      {/* Correct Payment Modal (Reverse only — Transfer/Edit Reference are a future task) */}
+      {/* Correct Payment Modal (Reverse and Transfer are shipped — Edit Reference/Notes is a future task) */}
       {correctingPaymentId && (
         <CorrectPaymentModal
           paymentId={correctingPaymentId}
