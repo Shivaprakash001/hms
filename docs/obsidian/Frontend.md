@@ -49,7 +49,7 @@ Entry: `app/Router.tsx` → `app/router/AppRouter.tsx`, composing four route-gro
 | `admissions` | Yes | Plus a visitor-facing component (`components/visitor/`). |
 | `activity` | Yes | Activity/audit log listing. |
 | `settings` | **No** `api/` folder — only `settingsHooks.ts`. Where its data access goes through was not traced — **Unknown**. |
-| `recovery` | Yes | Thin wrapper (`recoveryService.createCase/validate/execute/getById`) over the Business Recovery Platform's `/api/recovery/cases/*` routes. No components of its own — consumed by `app/components/modals/CorrectPaymentModal.tsx` (Reverse + Transfer correction flow wired into `TenantProfilePage`'s Financial Activity feed; Transfer mode also uses `features/payments/api`'s `paymentService.quickCollectSearch` for the destination-tenant picker). See [[Features]] (Correct Payment (Reverse / Transfer)). |
+| `recovery` | Yes | Thin wrapper (`recoveryService.createCase/validate/execute/getById`) over the Business Recovery Platform's `/api/recovery/cases/*` routes. No components of its own — consumed by `app/components/modals/CorrectPaymentModal.tsx` (Reverse + Transfer correction flow wired into `TenantProfilePage`'s Activity tab unified timeline; Transfer mode also uses `features/payments/api`'s `paymentService.quickCollectSearch` for the destination-tenant picker). See [[Features]] (Correct Payment (Reverse / Transfer)). |
 
 All `features/*/api` files are enforced (`check-architecture.mjs`) to never call raw `fetch()`/`axios` directly — only through `@lib/api-client`.
 
@@ -62,6 +62,15 @@ Within `BillingView`'s `Expenses Workspace` tab, `app/components/hostel-detail/t
 `app/components/ui/responsive-dialog.tsx` (`ResponsiveDialog`/`ResponsiveDialogContent`/`Header`/`Title`/`Description`/`Body`/`Footer`) is a shared primitive that renders a wide desktop shadcn `Dialog` or a mobile bottom-sheet shadcn `Drawer` from one JSX tree, switching on the pre-existing (previously-unused) `useIsMobile()` hook — introduced for the Expenses redesign but intended as the general pattern for any future modal needing this split, replacing hand-rolled `sm:` breakpoint classes per modal.
 
 Same pattern for `platforms/tenant/` — routing/shell only (`components/OnboardingProgressTracker.tsx`, `components/TenantReservationCard.tsx` are the only real components there); actual pages are in `src/portal/pages/*`.
+
+### `TenantProfilePage.tsx` — owner-facing tenant profile
+
+Reached via `/hostels/:hostelId/tenants/:tenantId` (`app/components/views/*` → `TenantProfileRoute`), rendered by `frontend-v2/src/features/tenants/components/profile/TenantProfilePage.tsx`. After a 2026-07-21 consolidation (see [[Features]] and [[Changelog]]) the page is now a compact **always-visible zone** followed by **4 real tabs**:
+
+- Always-visible zone (top to bottom): header banner (photo/name/status/room/joined), a Change-Management pending banner, the Communication Center + consolidated `PrimaryActionsBar` action-bar row, a Risk & Compliance (`RiskComplianceCard`) + Private Notes row, a room-assignment warning bar and pending-billing-request banner (conditional), then the `CompactFinancialStrip` stat strip + `FinancialHealthBanner`.
+- Tabs (`Tabs`/`TabsList`/`TabsTrigger`/`TabsContent` from `app/components/ui/tabs.tsx`, `TabId = 'obligations' | 'activity' | 'documents' | 'stay'`, single `activeTab` state): **Obligations** (`RentObligationList`), **Activity** (`UnifiedActivityTimeline` — payments/obligations events, ledger entries, invitation history, all in one filterable timeline), **Documents** (`DocumentsTab` — KYC verification + document uploads merged into one), **Stay** (`AllocationHistoryTimeline` + the move-out settlement workflow, `ExitWorkflowSection`).
+
+Deleted in the consolidation: `TenantHealthCard.tsx`, `OwnerInsights.tsx` (merged into `RiskComplianceCard.tsx`), `FinancialActivity.tsx`, `LedgerStatement.tsx`, `ActivityTimeline.tsx` (merged into `UnifiedActivityTimeline.tsx`), `FinancialWorkspaceNav.tsx` (the fake scroll-into-view nav, replaced by real tabs). Added: `RiskComplianceCard.tsx`, `UnifiedActivityTimeline.tsx`, `DocumentsTab.tsx`. `PrimaryActionsBar.tsx` was extended in place (not replaced) to hold all 8 actions across 1 primary + 3 secondary + a 4-item "More" overflow menu, rather than 3 separate button groups. This was a pure frontend recomposition — no backend/business-logic changes. See [[Features]] for the full before/after file mapping.
 
 ## `src/portal/` — frozen legacy tenant portal
 
