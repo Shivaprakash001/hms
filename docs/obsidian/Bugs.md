@@ -28,6 +28,56 @@ Copy this block for each new entry:
 
 ## Fixed
 
+### Repeated frequency switches crashed with a unique-constraint error, and (once fixed) could leave a mixed-cadence schedule live
+
+- **Status:** fixed
+- **Found:** 2026-07-22 (direct user report, live testing on tenant "shiva": switching Quarterly → Monthly → Quarterly again crashed with `Unique constraint failed on the fields: (agreement_id, rent_month, obligation_type)`)
+- **Area:** [[Backend]] — `billing-transition-service.ts::ownerInitiateChange`
+- **Symptom:** A third frequency switch on the same tenant, landing back on a `rent_month` already used by an earlier (now superseded) switch, threw a raw Prisma constraint error instead of succeeding.
+- **Root cause:** `(agreement_id, rent_month, obligation_type)` is a hard unique index with no `is_superseded` filter — a dead, already-superseded row still permanently blocks a fresh `create()` for that same month. Once fixed by reviving the stale row instead of inserting a new one, a second latent bug surfaced: the supersede step only cleared obligations with `due_date >= effectiveFrom`, so a prior switch to a shorter cadence (with an earlier `effectiveFrom`) could leave its earliest rows un-superseded when switching to a longer cadence — live obligations ended up mixing two different cadences' amounts.
+- **Fix:** See ADR-027 — check for and revive (not blindly insert over) an existing row at each target `rent_month`; and supersede every live `UPCOMING` `RENT` row unconditionally (not filtered by `due_date`) before regenerating, since `UPCOMING` rows can never have real payments against them. New regression test exercises the exact reported 3-switch sequence.
+- **Related:** [[Backend]], [[Changelog]], ADR-027
+
+### Switching a tenant's billing frequency back to a shorter cadence failed with UNCLEAN_BILLING_PERIOD even when a later period was clean
+
+- **Status:** fixed
+- **Found:** 2026-07-22 (direct user report: switching tenant "shiva" (Sri Adithya Boys Hostel-1) from Quarterly back to Monthly failed — DevTools showed `UNCLEAN_BILLING_PERIOD` from `POST /tenants/:id/change-frequency`)
+- **Area:** [[Backend]] — `billing-transition-service.ts::ownerInitiateChange`
+- **Symptom:** The frequency change failed outright with no way to retry successfully, even though the underlying conflict (this month's rent already activated) would resolve itself the following month.
+- **Root cause:** `getNextCleanBillingPeriodDate` computes exactly one candidate effective date — the next calendar boundary aligned to the requested frequency — with zero awareness of the tenant's actual obligations. `ownerInitiateChange` checked only that single candidate for overlap (ADR-023) and gave up immediately if it collided, even though later candidates might easily be clean.
+- **Fix:** New `findCleanEffectiveFrom()` walks forward (same 36-month horizon as the existing date-picker) and actually tests each candidate period start against the real overlap check, returning the first one that's genuinely clean instead of just the first one chronologically. See ADR-026. New test confirms a colliding first candidate no longer fails the whole operation — it resolves to a later period instead.
+- **Related:** [[Backend]], [[Changelog]], ADR-026
+
+### Owner changed a tenant's billing frequency to Quarterly but the Charges tab kept showing unchanged monthly obligations
+
+- **Status:** fixed
+- **Found:** 2026-07-22 (direct user report with a screenshot: owner Tenant Profile Charges tab still listing "Jul 2026 rent (2)", "Aug 2026 rent (3)", "Sept 2026 rent (4)"... individually, ₹8,500 each, after the billing frequency had been changed to Quarterly)
+- **Area:** [[Backend]] — `billing-transition-service.ts::ownerInitiateChange`
+- **Symptom:** ADR-021 shipped owner-direct frequency changes with a disclosed limitation for agreement-based tenants (the change updates a setting but the already-generated monthly `rent_obligations` don't regroup). This report is that limitation actually being hit in practice — confusing, since the modal reported success.
+- **Root cause:** `agreement-rent-schedule-service.ts::generateForAgreementInTx` pre-generates one `RENT` obligation per month for the tenant's full agreement duration, all at once, at signing time — `ownerInitiateChange` only updated `tenants.payment_frequency`/`tenant_billing_plans`, never touching those already-created rows.
+- **Fix:** `ownerInitiateChange` now checks for an active agreement; if found, computes enough of the new frequency's periods to cover the remaining agreement term (`agreement.agreement_end_date`), and in the same transaction supersedes the not-yet-due `UPCOMING` `RENT` obligations and creates the new grouped ones — see ADR-024 for why this is safe (the generator it bypasses never re-runs for an already-signed agreement). New tests in `tests/billing-frequency-owner-initiate.test.ts` cover both the regrouping (6 monthly rows → grouped quarterly rows, old ones superseded) and the non-agreement no-op case (rolling generator already handles it, nothing to supersede).
+- **Related:** [[Backend]], [[Changelog]], ADR-024
+
+### Waive button silently disappeared (and Cancel wrongly appeared) for partially-paid obligations on the owner Tenant Profile
+
+- **Status:** fixed
+- **Found:** 2026-07-22 (direct user report with a screenshot: clicking Cancel on a `PARTIAL` ₹8,500 obligation with ₹5,000 remaining failed with "Cannot cancel an obligation that has payments. Use waiver instead" — but no Waive button was visible to use instead)
+- **Area:** [[Frontend]] — `ObligationCard.tsx`
+- **Symptom:** A regression introduced by the same-day Cancel/Waive dedup fix (see the changelog entry "stop showing both Cancel and Waive on the same obligation"). That fix made `canCancel`/`canWaive` mutually exclusive based on a computed `hasPayments` flag. On the owner Tenant Profile's Charges tab specifically, `hasPayments` always evaluated `false` regardless of the obligation's real payment history — so every `PARTIAL` obligation showed Cancel (wrong — it has payments, the backend correctly rejects it) and hid Waive (wrong — Waive was exactly the right, and only, valid action).
+- **Root cause:** `hasPayments` was computed purely from `Boolean(o.payments && o.payments.length > 0)`. That's correct wherever the obligation object carries a full `payments[]` array — but the Charges tab's obligations come from `financial-service.ts::getTenantDues()`'s `TenantDueItem`, which only ever exposed an aggregate `paid: number`, never a raw `payments` array. `o.payments` was `undefined` on this data path from the start, silently defaulting `hasPayments` to `false` regardless of the obligation's actual state.
+- **Fix:** `hasPayments` now falls back to `Number(o.paid_amount ?? o.paid ?? 0) > 0` when no `payments[]` array is present — the same signal the backend itself effectively uses (a `PARTIAL` obligation is definitionally one with `paid > 0`). No backend change needed; this was purely a frontend data-shape assumption that didn't hold across all of `ObligationCard`'s call sites.
+- **Related:** [[Frontend]], [[Changelog]]
+
+### Settlement allocation could pay a superseded (dead) obligation — real money, not just a display glitch
+
+- **Status:** fixed
+- **Found:** 2026-07-22 (direct user report: tenant "Harsha" at Sri Adithya Boys Hostel-1 showed two separate "Jun 2026 Rent" line items — ₹5,000 and ₹8,500 — in the Collect Now settlement preview; confirmed via psql against `rent_obligations`)
+- **Area:** [[Backend]] — `financial-payment-facade.ts` (`receivePayment`, `applyAvailableCredits`, `previewSettlement`)
+- **Symptom:** The settlement preview for a real payment showed two "Jun 2026 Rent" rows for the same tenant/month with different outstanding amounts, both being allocated toward and marked "Fully Paid." Only one of these represented real, current debt.
+- **Root cause:** The tenant's June obligation had previously been corrected via the "Edit" flow (create replacement, mark original `is_superseded: true` — see [[Business-Rules]], Obligation Lifecycle). The replacement (`ee55a30e…`, ₹8,500, partially paid down to ₹5,000 outstanding) is the real, current obligation. The superseded original (`0dc30b10…`, ₹8,500, zero payments, `is_superseded: true`) should be permanently inert. Every other obligation-fetching query in the codebase filters `is_superseded: false` (13+ call sites across `billingRepository.ts`, `financial-service.ts`, `payment-service.ts`, `rent-change-service.ts`, `agreement-rent-schedule-service.ts`, `onboarding-financials-service.ts`, `onboarding-maintenance-repair-service.ts`) — but `financial-payment-facade.ts`'s three `rent_obligations.findMany` calls never did. Owner-facing totals (Outstanding/Overdue on the profile header) were unaffected — those go through `financialService.getTenantDues`, which does filter correctly — but **`receivePayment`, the function that actually executes a real payment allocation inside the transaction, did not**, meaning a real collected payment could be split across the live obligation and the dead superseded one, or the superseded one could independently be marked "PAID" for money that was never truly owed against it.
+- **Fix:** Added `is_superseded: false` to all three `financial-payment-facade.ts` obligation queries, matching the established invariant everywhere else. New regression test in `tests/financial-engine-stabilization.test.ts` ("never allocates to a superseded obligation") creates exactly this fixture (a superseded PENDING obligation alongside a live one, both outstanding) and asserts a credit application allocates only to the live obligation. Ran `check:invariants` and `check:payment-production` (both clean) plus the full backend suite given this touches the core payment-allocation path.
+- **Related:** [[Backend]], [[Business-Rules]], [[Changelog]]
+
 ### Public payment link pre-filled the entire remaining lease total (₹93,500 for 11 months) instead of what's actually due
 
 - **Status:** fixed
@@ -303,6 +353,8 @@ Copy this block for each new entry:
 
 > See also `docs/known-issues.md` for the maintained list of known drift/gaps in `docs/`.
 
+- **The 90-day frequency-change cooldown and minimum-commitment checks are currently disabled for the owner-direct path.** `ownerInitiateChange` no longer calls `validateCooldown()` or `validateCommitment()`; `ownerSetCustomSchedule` no longer calls `validateCooldown()` — all commented out per explicit request during testing (see ADR-025). An owner can currently thrash a tenant's billing frequency with no throttling or minimum-commitment enforcement at all. Re-enable (uncomment, one line each) once done testing, and reconsider whether the current defaults / global constants are still the right shape.
+- **The pre-existing tenant-request→owner-`approve()` billing frequency flow still has no real effect on obligation generation for agreement-based tenants.** Fixed for the owner-*direct* path (`ownerInitiateChange`, ADR-024) and for Custom Dates (ADR-022, which never had this gap) — both now correctly supersede and regroup an agreement tenant's future rent. `BillingTransitionService.approve()` (the older flow: tenant submits a request, owner approves it) still only calls `writeBillingPlanTransition` — it updates `tenant_billing_plans`/`tenants.payment_frequency` but never touches `rent_obligations`, so a tenant with a signed agreement approved through *that specific flow* still keeps getting unchanged monthly obligations. Given `ownerInitiateChange` supersedes the entire need to wait for a tenant request, this legacy path may see little real use going forward, but it hasn't been fixed or removed — worth revisiting if it's still reachable from the UI.
 - **Manual ledger POST route validates against the wrong enum values.** `/api/tenants/[id]/financial-ledger` only accepts `DEPOSIT/TOPUP/DEDUCTION/REFUND/CORRECTION`, none of which exist in the real `FinancialLedgerReason` Prisma enum. Left untouched as out-of-scope during the 2026-07 financial workspace redesign — worth fixing if that route is ever actually exercised.
 - **No live-database audit done** for tenants with simultaneous Outstanding + Future Credit predating the future-credit-auto-consumption fix (`cf88ce94`). Needs an explicit user-run query.
 

@@ -102,6 +102,14 @@ export const ownerService = {
         const response = await api.post(`/owner/billing/frequency-requests/${requestId}/decision`, { action, rejection_reason });
         return response.data?.data ?? response.data;
     },
+    changeFrequency: async (tenantId, { requested_frequency, reason, identityToken }) => {
+        const response = await api.post(`/tenants/${tenantId}/change-frequency`, { requested_frequency, reason, identityToken });
+        return response.data?.data ?? response.data;
+    },
+    setCustomInstallments: async (tenantId, { installments, reason, identityToken }) => {
+        const response = await api.post(`/tenants/${tenantId}/change-frequency/custom`, { installments, reason, identityToken });
+        return response.data?.data ?? response.data;
+    },
     getAgreementTemplate: async (hostelId, type = "RESIDENCY") => {
         const response = await api.get(`/owner/hostels/${hostelId}/agreement-template`, { params: { type } });
         return response.data;

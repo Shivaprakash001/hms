@@ -2,6 +2,7 @@ import { Download, Share2, Info, History, CircleDollarSign, ChevronDown, Chevron
 import { toast } from 'sonner';
 import { paymentService } from '@features/payments/api';
 import { hmsToast } from '@lib/toast';
+import { sharePaymentLink } from '@lib/share';
 import { TONE_CLASSES, obligationStatusTone } from '@features/tenants/utils/financialColors';
 
 const fmt = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
@@ -36,6 +37,7 @@ export interface Obligation {
 
 interface ObligationCardProps {
   obligation: Obligation;
+  tenantPhone?: string;
   isExpanded: boolean;
   onToggle: () => void;
   onRecordPayment?: (obligationId: string) => void;
@@ -51,6 +53,7 @@ const ACTIONABLE_STATUSES = ['PENDING', 'PARTIAL', 'OVERDUE'];
 
 export function ObligationCard({
   obligation: o,
+  tenantPhone,
   isExpanded,
   onToggle,
   onRecordPayment,
@@ -67,8 +70,17 @@ export function ObligationCard({
   const isEditable = status === 'PENDING' || status === 'UPCOMING';
   // Cancel (void, no ledger trace) and Waive (write-off, ledger-corrected) are mutually
   // exclusive by the same "has money moved?" test the backend enforces — never show both.
-  const hasPayments = Boolean(o.payments && o.payments.length > 0);
-  const canCancel = isActionable && !hasPayments;
+  // Not every surface that renders this card fetches the full `payments[]` array (e.g. the
+  // owner Tenant Profile's Charges tab sources from getTenantDues()'s TenantDueItem, which
+  // only carries an aggregate `paid` amount) — fall back to that so `hasPayments` doesn't
+  // silently read false (and wrongly offer Cancel on a PARTIAL/already-paid obligation)
+  // just because this particular list didn't include the raw payments array.
+  const hasPayments = Boolean(o.payments && o.payments.length > 0) || Number(o.paid_amount ?? o.paid ?? 0) > 0;
+  // UPCOMING charges can't have payments yet (they haven't activated), but the
+  // frontend's own isActionable list excludes UPCOMING — without this, an
+  // owner had no way to remove a charge created by mistake before it's due.
+  // The backend guard (cancelObligationInTx) already allows UPCOMING.
+  const canCancel = (isActionable || status === 'UPCOMING') && !hasPayments;
   const canWaive = isActionable && hasPayments;
 
   const billedAmount = Number(o.total_payable ?? o.amount ?? 0);
@@ -84,8 +96,8 @@ export function ObligationCard({
       const amount = Number(o.outstanding ?? o.amount ?? 0);
       const monthLabel = fmtMonth(o.billing_period_start ?? o.rent_month);
       const message = `Hi, your rent of ${fmt(amount)} for ${monthLabel} is due. Please make payment via this link: ${paymentLink}`;
-      window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
-      toast.success('Payment link composed in WhatsApp');
+      const copied = await sharePaymentLink(message, paymentLink, tenantPhone);
+      toast.success(copied ? 'Link copied — opening WhatsApp' : 'Opening WhatsApp');
     } catch (e: any) {
       hmsToast.error(e, 'Generate payment link');
     }

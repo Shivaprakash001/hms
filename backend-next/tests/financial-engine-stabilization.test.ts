@@ -163,6 +163,60 @@ describe("Financial Engine Stabilization — targeted regression coverage", () =
       expect(ledgerEntry).not.toBeNull();
       expect(Number(ledgerEntry!.amount)).toBe(3000);
     });
+
+    it("never allocates to a superseded obligation (an 'Edit' replacement leaves the original behind with is_superseded=true and zero payments)", async () => {
+      const { owner, hostel, tenant } = await createFixture();
+
+      // Simulates the "Edit = create replacement, supersede original" pattern:
+      // the superseded row is dead — it must never receive real money again,
+      // even though it still has an outstanding balance and a payable status.
+      const superseded = await createTestObligation(tenant.id, owner.id, hostel.id, {
+        amount: 8500,
+        total_amount: 8500,
+        due_date: new Date("2026-06-01"),
+        rent_month: new Date("2026-06-01"),
+        status: "PENDING",
+        is_superseded: true,
+      });
+      const live = await createTestObligation(tenant.id, owner.id, hostel.id, {
+        amount: 8500,
+        total_amount: 8500,
+        due_date: new Date("2026-06-05"),
+        rent_month: new Date("2026-06-01"),
+        status: "PENDING",
+        is_superseded: false,
+      });
+
+      await prisma.$transaction(async (tx: any) => {
+        await tenantFinancialLedgerService.creditIdempotentInTx(tx, {
+          tenantId: tenant.id,
+          ownerId: owner.id,
+          createdBy: owner.id,
+          amount: 8500,
+          referenceId: crypto.randomUUID(),
+          referenceType: "PAYMENT_GROUP_REMAINDER",
+          reason: "FUTURE_RENT_CREDIT_TOPUP",
+        });
+      });
+
+      const result = await prisma.$transaction(async (tx: any) => {
+        return financialPaymentFacade.applyAvailableCredits(tx, {
+          tenantId: tenant.id,
+          hostelId: hostel.id,
+          ownerId: owner.id,
+          actorId: owner.id,
+        });
+      });
+
+      expect(result).not.toBeNull();
+      expect(result!.allocations).toHaveLength(1);
+      expect(result!.allocations[0].obligation_id).toBe(live.id);
+
+      const supersededRow = await prisma.rent_obligations.findUniqueOrThrow({ where: { id: superseded.id } });
+      const liveRow = await prisma.rent_obligations.findUniqueOrThrow({ where: { id: live.id } });
+      expect(supersededRow.status).toBe("PENDING");
+      expect(liveRow.status).toBe("PAID");
+    });
   });
 
   describe("ObligationEngine.bulkWaiveInTx", () => {

@@ -1,6 +1,4 @@
-import { useState } from 'react';
-import { CheckCircle, AlertCircle, ArrowRight, ArrowDown, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
-import { useIsMobile } from '@/app/components/ui/use-mobile';
+import { CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 
 const fmt = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
 
@@ -60,76 +58,59 @@ const RESULT_STYLES: Record<string, { bg: string; text: string; label: string }>
 };
 
 export function SettlementPreview({ plan, amount, onConfirm, onBack, isRecording }: SettlementPreviewProps) {
-  const isMobile = useIsMobile();
-  const [breakdownOpen, setBreakdownOpen] = useState(false);
-
   const activeAllocations = plan.allocations.filter((a) => a.allocated > 0);
   const skipped = plan.skipped_obligations ?? [];
-  const allocatedTotal = plan.total_to_settle;
-  const hiddenCount = activeAllocations.length + skipped.length;
-
-  const nodes = [
-    { label: 'Received', value: amount, tone: 'text-foreground' },
-    { label: 'Allocated', value: allocatedTotal, tone: 'text-emerald-600', subtext: activeAllocations.length > 0 ? `${activeAllocations.length} charge${activeAllocations.length === 1 ? '' : 's'}` : undefined },
-    { label: 'Future Credit', value: plan.future_credit, tone: 'text-blue-600' },
-    { label: 'Remaining Due', value: plan.remaining_outstanding, tone: plan.remaining_outstanding > 0 ? 'text-rose-600' : 'text-foreground' },
-  ];
-
-  const Connector = isMobile ? ArrowDown : ArrowRight;
 
   return (
-    <div className="space-y-4">
-      {/* Money-flow visualization: Received -> Allocated -> Future Credit -> Remaining Due */}
-      <div className={`flex ${isMobile ? 'flex-col' : 'flex-row'} items-stretch gap-2`}>
-        {nodes.map((node, i) => (
-          <div key={node.label} className={`flex ${isMobile ? 'flex-col' : 'flex-row'} items-center gap-2 flex-1`}>
-            <div className="flex-1 w-full rounded-xl border border-border bg-card p-3 text-center">
-              <p className={`text-base font-extrabold ${node.tone}`}>{fmt(node.value)}</p>
-              <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mt-0.5">{node.label}</p>
-              {node.subtext && <p className="text-[10px] text-muted-foreground mt-0.5">{node.subtext}</p>}
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">
+        Allocating <span className="font-semibold text-foreground">{fmt(amount)}</span> across this tenant's charges, oldest priority first:
+      </p>
+
+      {/* Allocation breakdown — the actual useful part, always visible */}
+      <div className="rounded-2xl border border-border bg-card overflow-hidden divide-y divide-border/50">
+        {activeAllocations.map((alloc) => {
+          const style = RESULT_STYLES[alloc.result] || RESULT_STYLES.UNCHANGED;
+          return (
+            <div key={alloc.obligation_id} className="flex items-center justify-between gap-2 px-3.5 py-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-foreground truncate">{alloc.label}</p>
+                <p className="text-[11px] text-muted-foreground">Outstanding: {fmt(alloc.outstanding)}</p>
+              </div>
+              <div className="flex flex-col items-end gap-0.5 shrink-0">
+                <span className="text-sm font-bold text-foreground">{fmt(alloc.allocated)}</span>
+                <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${style.bg} ${style.text}`}>{style.label}</span>
+              </div>
             </div>
-            {i < nodes.length - 1 && <Connector className="w-4 h-4 text-muted-foreground shrink-0" />}
+          );
+        })}
+        {skipped.map((s) => (
+          <div key={s.obligation_id} className="flex items-center justify-between gap-2 px-3.5 py-3 opacity-70">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground truncate">{s.label}</p>
+              <p className="text-[11px] text-muted-foreground">Skipped: {s.reason.replace(/_/g, ' ').toLowerCase()}</p>
+            </div>
+            <span className="text-sm font-semibold text-muted-foreground shrink-0">{fmt(s.outstanding)}</span>
           </div>
         ))}
+        {activeAllocations.length === 0 && skipped.length === 0 && (
+          <p className="px-3.5 py-4 text-sm text-muted-foreground text-center">Nothing to allocate.</p>
+        )}
       </div>
 
-      {/* Allocation breakdown — everything visible, nothing hidden */}
-      {hiddenCount > 0 && (
-        <div className="rounded-2xl border border-border bg-card overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setBreakdownOpen((v) => !v)}
-            className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-bold text-muted-foreground uppercase tracking-wider hover:bg-secondary/40 transition-colors"
-          >
-            <span>View allocation breakdown</span>
-            {breakdownOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-          </button>
-          {breakdownOpen && (
-            <div className="divide-y divide-border/50 border-t border-border">
-              {activeAllocations.map((alloc) => {
-                const style = RESULT_STYLES[alloc.result] || RESULT_STYLES.UNCHANGED;
-                return (
-                  <div key={alloc.obligation_id} className="flex items-center justify-between px-4 py-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-foreground">{alloc.label}</p>
-                      <p className="text-[11px] text-muted-foreground">Outstanding: {fmt(alloc.outstanding)}</p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-sm font-bold text-foreground">{fmt(alloc.allocated)}</span>
-                      <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${style.bg} ${style.text}`}>{style.label}</span>
-                    </div>
-                  </div>
-                );
-              })}
-              {skipped.map((s) => (
-                <div key={s.obligation_id} className="flex items-center justify-between px-4 py-3 opacity-70">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground">{s.label}</p>
-                    <p className="text-[11px] text-muted-foreground">Skipped: {s.reason.replace(/_/g, ' ').toLowerCase()}</p>
-                  </div>
-                  <span className="text-sm font-semibold text-muted-foreground shrink-0">{fmt(s.outstanding)}</span>
-                </div>
-              ))}
+      {/* Outcome summary — only the two numbers the owner actually needs after this */}
+      {(plan.future_credit > 0 || plan.remaining_outstanding > 0) && (
+        <div className="flex gap-2">
+          {plan.future_credit > 0 && (
+            <div className="flex-1 rounded-xl border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-center">
+              <p className="text-sm font-extrabold text-blue-600">{fmt(plan.future_credit)}</p>
+              <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mt-0.5">Future Credit</p>
+            </div>
+          )}
+          {plan.remaining_outstanding > 0 && (
+            <div className="flex-1 rounded-xl border border-rose-500/20 bg-rose-500/5 px-3 py-2 text-center">
+              <p className="text-sm font-extrabold text-rose-600">{fmt(plan.remaining_outstanding)}</p>
+              <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mt-0.5">Remaining Due</p>
             </div>
           )}
         </div>

@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { IndianRupee, ReceiptText, Share2, FileStack, ChevronDown, X, MoreHorizontal, FileCheck2, TrendingUp, LogOut } from 'lucide-react';
+import { IndianRupee, ReceiptText, Share2, FileStack, ChevronDown, X, MoreHorizontal, FileCheck2, TrendingUp, CalendarRange, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 import { paymentService } from '@features/payments/api';
 import { hmsToast } from '@lib/toast';
+import { sharePaymentLink } from '@lib/share';
 import { useIsMobile } from '@/app/components/ui/use-mobile';
 import {
   DropdownMenu,
@@ -22,6 +23,7 @@ interface PrimaryAction {
 
 interface PrimaryActionsBarProps {
   tenantId: string;
+  tenantPhone?: string;
   onReceivePayment: () => void;
   onCreateCharge: () => void;
   onViewReceipts: () => void;
@@ -29,12 +31,15 @@ interface PrimaryActionsBarProps {
   requestChangeLabel: string;
   onChangeRent: () => void;
   canChangeRent: boolean;
+  onChangeFrequency: () => void;
+  canChangeFrequency: boolean;
   onCheckout: () => void;
   receiveLabel?: string;
 }
 
 export function PrimaryActionsBar({
   tenantId,
+  tenantPhone,
   onReceivePayment,
   onCreateCharge,
   onViewReceipts,
@@ -42,6 +47,8 @@ export function PrimaryActionsBar({
   requestChangeLabel,
   onChangeRent,
   canChangeRent,
+  onChangeFrequency,
+  canChangeFrequency,
   onCheckout,
   receiveLabel = 'Receive Payment',
 }: PrimaryActionsBarProps) {
@@ -52,8 +59,8 @@ export function PrimaryActionsBar({
     try {
       const res = await paymentService.generatePayLink({ tenantId });
       const paymentLink = res.url;
-      window.open(`https://wa.me/?text=${encodeURIComponent(`Here is your payment link: ${paymentLink}`)}`, '_blank');
-      toast.success('Payment link composed in WhatsApp');
+      const copied = await sharePaymentLink(`Here is your payment link: ${paymentLink}`, paymentLink, tenantPhone);
+      toast.success(copied ? 'Link copied — opening WhatsApp' : 'Opening WhatsApp');
     } catch (e: any) {
       hmsToast.error(e, 'Generate payment link');
     }
@@ -70,6 +77,7 @@ export function PrimaryActionsBar({
   const agreementActions: PrimaryAction[] = [
     { key: 'request-change', label: requestChangeLabel, icon: FileCheck2, onClick: onRequestChange },
     ...(canChangeRent ? [{ key: 'change-rent', label: 'Change Rent', icon: TrendingUp, onClick: onChangeRent }] : []),
+    ...(canChangeFrequency ? [{ key: 'change-frequency', label: 'Change Billing Frequency', icon: CalendarRange, onClick: onChangeFrequency }] : []),
   ];
 
   const lifecycleActions: PrimaryAction[] = [

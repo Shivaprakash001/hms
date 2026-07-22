@@ -118,6 +118,7 @@ export class FinancialPaymentFacade {
         tenant_id: data.tenantId,
         hostel_id: data.hostelId,
         status: { in: OUTSTANDING_STATUSES },
+        is_superseded: false,
         ...(data.obligationIdFilter ? { id: { in: data.obligationIdFilter } } : {}),
       },
       include: {
@@ -223,6 +224,7 @@ export class FinancialPaymentFacade {
         tenant_id: input.tenantId,
         hostel_id: input.hostelId,
         status: { in: OUTSTANDING_STATUSES },
+        is_superseded: false,
         ...(input.obligationIdFilter ? { id: { in: input.obligationIdFilter } } : {}),
       },
       include: { payments: { select: { amount_paid: true } } },
@@ -307,6 +309,7 @@ export class FinancialPaymentFacade {
         tenant_id: params.tenantId,
         hostel_id: params.hostelId,
         status: { in: OUTSTANDING_STATUSES },
+        is_superseded: false,
         ...(params.obligationIdFilter && params.obligationIdFilter.length > 0
           ? { id: { in: params.obligationIdFilter } }
           : {}),

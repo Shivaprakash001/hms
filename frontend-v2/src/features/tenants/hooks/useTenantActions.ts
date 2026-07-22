@@ -4,6 +4,7 @@ import { hmsToast } from '@lib/toast';
 import { tenantService } from '@features/tenants/api';
 import { paymentService } from '@features/payments/api';
 import { queryKeys } from '@lib/queryKeys';
+import { sharePaymentLink as sharePaymentLinkViaWhatsApp } from '@lib/share';
 
 export function useTenantActions(hostelId: string) {
   const qc = useQueryClient();
@@ -139,20 +140,9 @@ export function useTenantActions(hostelId: string) {
     try {
       const res = await paymentService.generatePayLink({ tenantId });
       const paymentLink = res.url;
-      
-      try {
-        await navigator.clipboard.writeText(paymentLink);
-        toast.success('Payment link copied to clipboard');
-      } catch {
-        /* ignore */
-      }
-
-      if (phone) {
-        const message = `Hi, please use this link to make your outstanding payment${amount ? ` of ₹${Number(amount).toLocaleString('en-IN')}` : ''}: ${paymentLink}`;
-        const cleanPhone = phone.replace(/\D/g, '');
-        const formattedPhone = cleanPhone.startsWith('91') && cleanPhone.length === 12 ? cleanPhone : `91${cleanPhone}`;
-        window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
-      }
+      const message = `Hi, please use this link to make your outstanding payment${amount ? ` of ₹${Number(amount).toLocaleString('en-IN')}` : ''}: ${paymentLink}`;
+      const copied = await sharePaymentLinkViaWhatsApp(message, paymentLink, phone);
+      toast.success(copied ? 'Link copied — opening WhatsApp' : 'Opening WhatsApp');
     } catch (e: any) {
       hmsToast.error(e, 'Generate payment link');
     }

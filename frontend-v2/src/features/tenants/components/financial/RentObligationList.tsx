@@ -25,6 +25,7 @@ const isHistorical = (priority: number) => priority >= 4;
 
 interface Props {
   obligations: Obligation[];
+  tenantPhone?: string;
   onRecordPayment?: (obligationId: string) => void;
   onSetupBilling?: () => void;
   onDownloadReceipt?: (paymentId: string) => void;
@@ -39,6 +40,7 @@ interface Props {
 
 export function RentObligationList({
   obligations,
+  tenantPhone,
   onRecordPayment,
   onSetupBilling,
   onDownloadReceipt,
@@ -124,6 +126,7 @@ export function RentObligationList({
                 <ObligationCard
                   key={id}
                   obligation={o}
+                  tenantPhone={tenantPhone}
                   isExpanded={expandedId === id}
                   onToggle={() => {
                     toggleExpand(id);

@@ -1045,6 +1045,7 @@ export class TenantService {
           }
         : null,
       tenant_invitations: legacyTenant.tenant_invitations || [],
+      payment_frequency: legacyTenant.payment_frequency || "MONTHLY",
       has_active_agreement: Boolean(currentAgreement),
       agreement_duration_months: currentAgreement?.agreement_duration_months
         ?? legacyTenant.tenant_invitations?.[0]?.agreement_duration_months

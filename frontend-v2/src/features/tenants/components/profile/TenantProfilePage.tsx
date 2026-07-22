@@ -28,6 +28,7 @@ import { getInitials } from '@features/tenants/utils/normalize';
 import { RecordPaymentModal } from '@/app/components/modals/RecordPaymentModal';
 import { CorrectPaymentModal } from '@/app/components/modals/CorrectPaymentModal';
 import { ChangeRentModal } from '@/app/components/modals/ChangeRentModal';
+import { ChangeFrequencyModal } from '@/app/components/modals/ChangeFrequencyModal';
 import { hmsToast } from '@lib/toast';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/app/components/ui/tabs';
 import api from '@lib/api-client';
@@ -112,6 +113,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   const [activeTab, setActiveTab] = useState<TabId>('obligations');
   const [correctingPaymentId, setCorrectingPaymentId] = useState<string | null>(null);
   const [showChangeRent, setShowChangeRent] = useState(false);
+  const [showChangeFrequency, setShowChangeFrequency] = useState(false);
 
   const { overview, allocations, dues, advance, full, financialTimeline, isLoading, isError, refetch } =
     useTenantProfile(hostelId, tenantId);
@@ -406,6 +408,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
       </div>
       <RentObligationList
         obligations={obligations as never[]}
+        tenantPhone={primaryPhone}
         onRecordPayment={(id) => {
           setPayObligationId(id);
           setPaymentPrefillAmount(undefined);
@@ -568,6 +571,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
         <div className="lg:col-span-2">
           <PrimaryActionsBar
             tenantId={tenantId}
+            tenantPhone={primaryPhone}
             onReceivePayment={() => handleOpenReceivePayment()}
             onCreateCharge={() => setObligationModal({ mode: 'create' })}
             onViewReceipts={() => handleNavigate('fin-documents')}
@@ -576,6 +580,8 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
             onRequestChange={() => (status.toUpperCase() === 'ACTIVE' ? setShowChangeDrawer(true) : setShowEditInvite(true))}
             canChangeRent={status.toUpperCase() === 'ACTIVE'}
             onChangeRent={() => setShowChangeRent(true)}
+            canChangeFrequency={status.toUpperCase() === 'ACTIVE'}
+            onChangeFrequency={() => setShowChangeFrequency(true)}
             onCheckout={() => setActiveTab('stay')}
           />
         </div>
@@ -823,6 +829,21 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
             queryClient.invalidateQueries({ queryKey: queryKeys.tenants.advance(hostelId, tenantId) });
             queryClient.invalidateQueries({ queryKey: queryKeys.tenants.full(hostelId, tenantId) });
             queryClient.invalidateQueries({ queryKey: queryKeys.tenants.overview(hostelId, tenantId) });
+            refetch();
+          }}
+        />
+      )}
+
+      {/* Change Billing Frequency Modal */}
+      {showChangeFrequency && (
+        <ChangeFrequencyModal
+          tenantId={tenantId}
+          currentFrequency={String((overview as any)?.payment_frequency || 'MONTHLY')}
+          onClose={() => setShowChangeFrequency(false)}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.tenants.obligations(hostelId, tenantId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.tenants.overview(hostelId, tenantId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.tenants.full(hostelId, tenantId) });
             refetch();
           }}
         />
