@@ -65,6 +65,11 @@ export function ObligationCard({
   const id = (o.id ?? o.obligation_id ?? '') as string;
   const isActionable = ACTIONABLE_STATUSES.includes(status);
   const isEditable = status === 'PENDING' || status === 'UPCOMING';
+  // Cancel (void, no ledger trace) and Waive (write-off, ledger-corrected) are mutually
+  // exclusive by the same "has money moved?" test the backend enforces — never show both.
+  const hasPayments = Boolean(o.payments && o.payments.length > 0);
+  const canCancel = isActionable && !hasPayments;
+  const canWaive = isActionable && hasPayments;
 
   const billedAmount = Number(o.total_payable ?? o.amount ?? 0);
   const rawPaidAmount = Number(o.paid_amount ?? o.paid ?? 0);
@@ -165,24 +170,26 @@ export function ObligationCard({
                 <span>Duplicate</span>
               </button>
             )}
-            {onWaiveObligation && isActionable && (
+            {onWaiveObligation && canWaive && (
               <button
                 type="button"
                 onClick={() => onWaiveObligation(o)}
+                title="Write off the remaining balance. A payment has already been made, so this records a ledger correction."
                 className="flex-1 min-w-[110px] py-1.5 rounded-xl bg-rose-50 text-rose-700 dark:bg-rose-950/20 dark:text-rose-400 text-xs font-semibold hover:bg-rose-100 dark:hover:bg-rose-950/30 active:scale-95 transition-transform flex items-center justify-center gap-1"
               >
                 <Ban className="w-3.5 h-3.5" />
-                <span>Waive</span>
+                <span>Waive Balance</span>
               </button>
             )}
-            {onCancelObligation && isEditable && (
+            {onCancelObligation && canCancel && (
               <button
                 type="button"
                 onClick={() => onCancelObligation(o)}
+                title="Void this charge. No payment has been made against it, so nothing needs correcting."
                 className="flex-1 min-w-[110px] py-1.5 rounded-xl bg-rose-50 text-rose-700 dark:bg-rose-950/20 dark:text-rose-400 text-xs font-semibold hover:bg-rose-100 dark:hover:bg-rose-950/30 active:scale-95 transition-transform flex items-center justify-center gap-1"
               >
                 <XCircle className="w-3.5 h-3.5" />
-                <span>Cancel</span>
+                <span>Cancel Charge</span>
               </button>
             )}
             {onViewHistory && (

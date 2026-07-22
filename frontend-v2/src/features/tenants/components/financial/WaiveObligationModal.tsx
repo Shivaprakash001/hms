@@ -156,7 +156,7 @@ export function WaiveObligationModal({
               disabled={isSubmitting}
               className="px-4 h-10 rounded-xl border border-input bg-background text-sm font-semibold hover:bg-accent hover:text-accent-foreground active:scale-98 transition-transform disabled:opacity-50"
             >
-              Cancel
+              Back
             </button>
             <button
               type="submit"
