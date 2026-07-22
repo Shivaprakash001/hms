@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => {
       rent_obligations: {
         findFirst: vi.fn(),
         findUnique: vi.fn(),
+        findMany: vi.fn(),
       },
       tenants: {
         findUnique: vi.fn(),
@@ -120,23 +121,8 @@ describe("Payment Link Token Public Flow", () => {
         },
       });
 
-      vi.mocked(financialPaymentFacade.previewSettlement).mockResolvedValueOnce({
-        allocations: [],
-        future_credit: 0,
-        total_outstanding: 0,
-        total_to_settle: 0,
-        remaining_outstanding: 0,
-        minimum_allowed: 1,
-        first_tier_label: "",
-        payment_accepted: true,
-        rejection_reason: null,
-        payment_policy: "PARTIAL_ALLOWED",
-        warnings: [],
-        summary: "",
-        explanation: [],
-        skipped_obligations: [],
-        recommendation_score: 100,
-      } as any);
+      // No other obligations due — getTenantDues() sees nothing outstanding.
+      mocks.prisma.rent_obligations.findMany.mockResolvedValueOnce([]);
 
       const request = new NextRequest(`http://localhost/api/payments/pay/${mockToken}`);
       const response = await GET(request, { params: Promise.resolve({ token: mockToken }) });
@@ -144,9 +130,57 @@ describe("Payment Link Token Public Flow", () => {
       expect(response.status).toBe(200);
       const text = await response.text();
       expect(text).toContain('id="amount-input"');
-      // No other obligations outstanding, so it falls back to prefilling monthly rent (5000).
-      expect(text).toContain('value="5000"');
+      // Nothing due — leave the field at 0 rather than pre-filling monthly
+      // rent, so the payer types whatever they actually want to pay ahead.
+      expect(text).toContain('value="0"');
       expect(text).toContain("Proceed to Secure Payment");
+    });
+
+    it("pre-fills only what's actually due today or overdue, not the full remaining-lease total", async () => {
+      mocks.prisma.payment_link_tokens.findUnique.mockResolvedValueOnce({
+        token: mockToken,
+        tenant_id: "tenant-1",
+        hostel_id: "hostel-1",
+        expires_at: new Date(Date.now() + 100000),
+        rent_obligations: null, // generic tenant-scoped link, no specific obligation hinted
+        tenants: { profiles: { name: "John Doe" }, monthly_rent: 8500 },
+        hostels: {
+          name: "Adithya Hostel",
+          phone: "1234567890",
+          address: "123 Main St",
+          city: "Hyderabad",
+          state: "Telangana",
+          pincode: "500081",
+          logo_url: "https://example.com/logo.png"
+        },
+      });
+
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const nextMonth = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      // Overdue current-cycle rent, plus next month's rent already activated
+      // early (status PENDING despite a future due_date) so the tenant *can*
+      // prepay it — the pre-filled amount must only reflect the overdue one.
+      mocks.prisma.rent_obligations.findMany.mockResolvedValueOnce([
+        {
+          id: "ob-overdue", tenant_id: "tenant-1", obligation_type: "RENT",
+          rent_month: yesterday, due_date: yesterday, amount: 8500, total_amount: 8500,
+          late_fee: 0, status: "PENDING", payments: [], room_allocations: null,
+        },
+        {
+          id: "ob-future", tenant_id: "tenant-1", obligation_type: "RENT",
+          rent_month: nextMonth, due_date: nextMonth, amount: 8500, total_amount: 8500,
+          late_fee: 0, status: "PENDING", payments: [], room_allocations: null,
+        },
+      ]);
+
+      const request = new NextRequest(`http://localhost/api/payments/pay/${mockToken}`);
+      const response = await GET(request, { params: Promise.resolve({ token: mockToken }) });
+
+      expect(response.status).toBe(200);
+      const text = await response.text();
+      // Must be 8500 (the overdue installment only), never 17000 (both installments).
+      expect(text).toContain('value="8500"');
+      expect(text).not.toContain('value="17000"');
     });
 
     it("returns 200 with DUE status and payment button if obligation is pending", async () => {

@@ -28,6 +28,16 @@ Copy this block for each new entry:
 
 ## Fixed
 
+### Public payment link pre-filled the entire remaining lease total (₹93,500 for 11 months) instead of what's actually due
+
+- **Status:** fixed
+- **Found:** 2026-07-22 (direct user report with a live screenshot of `sriadithyahostels.in/pay/<token>` showing "AMOUNT TO PAY ₹93500" with a breakdown listing all 11 remaining months of rent, Jul 2026 through May 2027)
+- **Area:** [[Backend]] — `app/api/payments/pay/[token]/route.ts`
+- **Symptom:** Opening a generic (not obligation-specific) payment link pre-filled the amount field with the tenant's entire remaining-lease rent total rather than what they actually owed right now, and the live "Payment Breakdown" preview then dutifully allocated that huge number across every future month, making the link look like it was demanding the whole lease paid upfront.
+- **Root cause:** When the link wasn't hinted to one specific obligation (or that obligation was already `PAID`), the route fell back to `financialPaymentFacade.previewSettlement({..., amountRupees: 0}).total_outstanding` — which sums every obligation in `settlement-planner.ts`'s `PAYABLE_STATUSES` (`OVERDUE, PENDING, PARTIAL, UPCOMING`), i.e. literally every future month of rent through lease end, not just what's currently owed. This is the correct meaning for planner-internal use (settlement allocation needs to see everything payable) but wrong to pre-fill as "the amount you owe" on a payer-facing page.
+- **Fix:** Replaced the fallback with `financialService.getTenantDues()`'s `items`, summing only obligations that are non-`UPCOMING` **and** due today or earlier — the same due-date-aware pattern used for the tenant portal's own "amount due now" fixes (see the two entries above). When nothing is actually due, the field now defaults to 0 instead of falling back to monthly rent, letting the payer type in whatever amount they intend to pay ahead. Added a regression test (`tests/payment-link-flow.test.ts`) asserting a tenant with one overdue and one early-activated-future obligation pre-fills only the overdue amount.
+- **Related:** [[Backend]], [[Changelog]]
+
 ### Tenant Home page showed "Total to pay ₹17,000" while only one ₹8,500 rent installment was actually due
 
 - **Status:** fixed

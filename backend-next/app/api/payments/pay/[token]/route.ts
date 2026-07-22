@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { paymentService } from "@/src/services/payments/payment-service";
 import { financialPaymentFacade } from "@/src/services/payments/financial-payment-facade";
+import { financialService } from "@/src/services/payments/financial-service";
 import { getProviderContext } from "@/src/services/payments/merchant-context";
 import { getLogger } from "@/lib/logger";
 
@@ -1056,9 +1057,12 @@ export async function GET(
 
     // 3. Compute the default amount to pre-fill.
     // Priority: (a) the hinted obligation's remaining balance, if any and
-    // still unpaid; (b) the tenant's current total outstanding across all
-    // payable obligations; (c) the tenant's monthly rent, so a fully-paid-up
-    // tenant can still pay ahead.
+    // still unpaid; (b) what's actually due today or overdue across the
+    // tenant's obligations. Deliberately NOT the full remaining-lease total
+    // (settlement-planner's total_outstanding sums every UPCOMING obligation
+    // all the way to lease end) — a tenant with 11 months left would otherwise
+    // see a pre-filled amount worth 11 months' rent. If nothing is due yet,
+    // leave the field at 0 so the payer types whatever they want to pay.
     let defaultAmount = 0;
     if (obligation && obligation.status !== "PAID") {
       const paidAmount = obligation.payments.reduce(
@@ -1069,14 +1073,15 @@ export async function GET(
     }
 
     if (defaultAmount <= 0) {
-      const probePlan = await financialPaymentFacade.previewSettlement({
-        tenantId: linkToken.tenant_id,
-        hostelId: linkToken.hostel_id,
-        amountRupees: 0,
-      });
-      defaultAmount = probePlan.total_outstanding > 0
-        ? probePlan.total_outstanding
-        : Number(linkToken.tenants.monthly_rent || 0);
+      const dues = await financialService.getTenantDues(
+        linkToken.tenant_id,
+        undefined,
+        linkToken.hostel_id
+      );
+      const todayKey = new Date().toISOString().slice(0, 10);
+      defaultAmount = dues.items
+        .filter((i) => i.status !== "UPCOMING" && new Date(i.due_date).toISOString().slice(0, 10) <= todayKey)
+        .reduce((sum, i) => sum + Number(i.outstanding ?? 0), 0);
     }
 
     const formatDate = (date: Date | string | null): string => {
