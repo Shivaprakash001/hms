@@ -570,7 +570,6 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
             tenantId={tenantId}
             onReceivePayment={() => handleOpenReceivePayment()}
             onCreateCharge={() => setObligationModal({ mode: 'create' })}
-            onCreateRent={() => setObligationModal({ mode: 'create', initialValues: { obligationType: 'RENT' } })}
             onViewReceipts={() => handleNavigate('fin-documents')}
             receiveLabel={findAction('PAYMENT_RECEIVE')?.label}
             requestChangeLabel={status.toUpperCase() === 'ACTIVE' ? (personalInfoAction?.label ?? 'Request Change') : 'Edit Details'}

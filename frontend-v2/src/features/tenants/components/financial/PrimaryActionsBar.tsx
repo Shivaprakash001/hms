@@ -1,10 +1,16 @@
 import { useState } from 'react';
-import { IndianRupee, ReceiptText, CalendarPlus, Share2, FileStack, ChevronDown, X, MoreHorizontal, FileCheck2, TrendingUp, LogOut } from 'lucide-react';
+import { IndianRupee, ReceiptText, Share2, FileStack, ChevronDown, X, MoreHorizontal, FileCheck2, TrendingUp, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 import { paymentService } from '@features/payments/api';
 import { hmsToast } from '@lib/toast';
 import { useIsMobile } from '@/app/components/ui/use-mobile';
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/app/components/ui/dropdown-menu';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from '@/app/components/ui/dropdown-menu';
 
 interface PrimaryAction {
   key: string;
@@ -18,7 +24,6 @@ interface PrimaryActionsBarProps {
   tenantId: string;
   onReceivePayment: () => void;
   onCreateCharge: () => void;
-  onCreateRent: () => void;
   onViewReceipts: () => void;
   onRequestChange: () => void;
   requestChangeLabel: string;
@@ -32,7 +37,6 @@ export function PrimaryActionsBar({
   tenantId,
   onReceivePayment,
   onCreateCharge,
-  onCreateRent,
   onViewReceipts,
   onRequestChange,
   requestChangeLabel,
@@ -55,23 +59,31 @@ export function PrimaryActionsBar({
     }
   };
 
+  const receiveAction: PrimaryAction = { key: 'receive', label: receiveLabel, icon: IndianRupee, onClick: onReceivePayment, emphasis: true };
+  const shareLinkAction: PrimaryAction = { key: 'link', label: 'Share Payment Link', icon: Share2, onClick: handleSharePaymentLink };
+
   const secondaryActions: PrimaryAction[] = [
     { key: 'charge', label: 'Create Charge', icon: ReceiptText, onClick: onCreateCharge },
-    { key: 'rent', label: 'Create Rent', icon: CalendarPlus, onClick: onCreateRent },
     { key: 'receipts', label: 'View Receipts', icon: FileStack, onClick: onViewReceipts },
   ];
 
-  const overflowActions: PrimaryAction[] = [
-    { key: 'link', label: 'Share Payment Link', icon: Share2, onClick: handleSharePaymentLink },
+  const agreementActions: PrimaryAction[] = [
     { key: 'request-change', label: requestChangeLabel, icon: FileCheck2, onClick: onRequestChange },
     ...(canChangeRent ? [{ key: 'change-rent', label: 'Change Rent', icon: TrendingUp, onClick: onChangeRent }] : []),
+  ];
+
+  const lifecycleActions: PrimaryAction[] = [
     { key: 'checkout', label: 'Check-out / Exit', icon: LogOut, onClick: onCheckout },
   ];
 
-  const allActionsForSheet: PrimaryAction[] = [
-    { key: 'receive', label: receiveLabel, icon: IndianRupee, onClick: onReceivePayment, emphasis: true },
-    ...secondaryActions,
-    ...overflowActions,
+  // Desktop "More" dropdown keeps all non-primary, non-secondary actions in one flat menu.
+  const overflowActions: PrimaryAction[] = [shareLinkAction, ...agreementActions];
+
+  const sheetGroups: { label: string; actions: PrimaryAction[] }[] = [
+    { label: 'Collect', actions: [receiveAction, shareLinkAction] },
+    { label: 'Charges & Receipts', actions: secondaryActions },
+    { label: 'Agreement', actions: agreementActions },
+    { label: 'Tenancy', actions: lifecycleActions },
   ];
 
   if (isMobile) {
@@ -96,22 +108,27 @@ export function PrimaryActionsBar({
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              <div className="space-y-2">
-                {allActionsForSheet.map((action) => (
-                  <button
-                    key={action.key}
-                    type="button"
-                    onClick={() => {
-                      setSheetOpen(false);
-                      action.onClick();
-                    }}
-                    className={`w-full flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm font-semibold active:scale-98 transition-transform ${
-                      action.emphasis ? 'bg-accent text-accent-foreground' : 'bg-secondary text-foreground border border-border'
-                    }`}
-                  >
-                    <action.icon className="w-4 h-4" />
-                    <span>{action.label}</span>
-                  </button>
+              <div className="space-y-4">
+                {sheetGroups.map((group) => (
+                  <div key={group.label} className="space-y-2">
+                    <p className="px-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{group.label}</p>
+                    {group.actions.map((action) => (
+                      <button
+                        key={action.key}
+                        type="button"
+                        onClick={() => {
+                          setSheetOpen(false);
+                          action.onClick();
+                        }}
+                        className={`w-full flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm font-semibold active:scale-98 transition-transform ${
+                          action.emphasis ? 'bg-accent text-accent-foreground' : 'bg-secondary text-foreground border border-border'
+                        }`}
+                      >
+                        <action.icon className="w-4 h-4" />
+                        <span>{action.label}</span>
+                      </button>
+                    ))}
+                  </div>
                 ))}
               </div>
             </div>
@@ -156,6 +173,13 @@ export function PrimaryActionsBar({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
           {overflowActions.map((action) => (
+            <DropdownMenuItem key={action.key} onSelect={action.onClick} className="gap-2 cursor-pointer">
+              <action.icon className="w-4 h-4" />
+              <span>{action.label}</span>
+            </DropdownMenuItem>
+          ))}
+          <DropdownMenuSeparator />
+          {lifecycleActions.map((action) => (
             <DropdownMenuItem key={action.key} onSelect={action.onClick} className="gap-2 cursor-pointer">
               <action.icon className="w-4 h-4" />
               <span>{action.label}</span>
