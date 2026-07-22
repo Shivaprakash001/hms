@@ -99,7 +99,7 @@ export function FinancialActivityCard({
 
           {allocations.length > 0 && (
             <div className="space-y-1">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Affected obligations</p>
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Affected charges</p>
               {allocations.map((a) => (
                 <button
                   key={a.obligation_id}
@@ -140,7 +140,7 @@ export function FinancialActivityCard({
               className="flex items-center gap-1.5 text-[11px] font-semibold text-accent hover:underline"
             >
               <FileCheck2 className="w-3.5 h-3.5" />
-              View Obligation
+              View Charge
             </button>
           )}
 

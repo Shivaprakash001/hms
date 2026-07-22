@@ -395,7 +395,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
   const obligationsSection = (
     <div id="fin-obligations" className="p-4 rounded-2xl border border-border bg-card shadow-sm space-y-4 scroll-mt-20">
       <div className="flex justify-between items-center border-b border-border pb-3">
-        <h3 className="text-sm font-bold text-foreground">Obligations</h3>
+        <h3 className="text-sm font-bold text-foreground">Charges</h3>
         <button
           type="button"
           onClick={() => setObligationModal({ mode: 'create' })}
@@ -699,7 +699,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
       {/* Tabbed detail region — Obligations / Activity / Documents / Stay */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
         <TabsList className="w-full overflow-x-auto scrollbar-hide">
-          <TabsTrigger value="obligations">Obligations</TabsTrigger>
+          <TabsTrigger value="obligations">Charges</TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="stay">Stay</TabsTrigger>
@@ -831,7 +831,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
       {/* Obligation History Sheet */}
       <ObligationHistorySheet
         obligationId={historyObligation ? (historyObligation.id || historyObligation.obligation_id) : null}
-        label={historyObligation ? String(historyObligation.obligation_type || historyObligation.type || 'Obligation').replace(/_/g, ' ') : ''}
+        label={historyObligation ? String(historyObligation.obligation_type || historyObligation.type || 'Charge').replace(/_/g, ' ') : ''}
         onClose={() => setHistoryObligation(null)}
       />
 

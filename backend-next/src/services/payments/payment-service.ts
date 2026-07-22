@@ -18,6 +18,8 @@ import { assertSameFinancialHostel, assertScopedEntityHostel, requireFinancialHo
 import { getProviderContext } from "./merchant-context";
 import { PAYMENT_DOMAIN, PAYMENT_FLOW, PAYMENT_SCOPE, SETTLEMENT_STATUS, MERCHANT_CONTEXT } from "./financial-domain";
 import { paymentStatusEventService } from "@/lib/services/payment-status-event-service";
+import { describePaymentReversal } from "./financial-timeline-service";
+import { paymentMethodLabel } from "@/lib/payment-method-labels";
 import { paymentRepository } from "@/src/repositories/paymentRepository";
 import { paymentOperationalAnomalyService } from "@/lib/services/payment-operational-anomaly-service";
 import { paymentWebhookEventService } from "@/lib/services/payment-webhook-event-service";
@@ -3608,12 +3610,15 @@ export class PaymentService {
       totalPaid += obligationPaid;
       o.payments.forEach((p: any) => {
         const transactionId = p.reference_number || p.payment_attempt_id || p.id;
+        const reversal = describePaymentReversal(p);
         allPayments.push({
           id: p.id,
           obligation_id: p.obligation_id,
           amount_paid: Number(p.amount_paid),
           payment_date: p.payment_date,
           payment_method: p.payment_method,
+          payment_method_label: paymentMethodLabel(p.payment_method),
+          is_reversal: reversal.isReversal,
           reference_number: p.reference_number,
           transaction_id: transactionId,
           rent_month: o.rent_month
@@ -3633,6 +3638,8 @@ export class PaymentService {
           amount_paid: Number(p.amount_paid),
           payment_date: p.payment_date,
           method: p.payment_method,
+          method_label: paymentMethodLabel(p.payment_method),
+          is_reversal: describePaymentReversal(p).isReversal,
           transaction_id: p.reference_number || p.payment_attempt_id || p.id
         }))
       };

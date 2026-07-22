@@ -24,6 +24,7 @@ interface PaymentDetail {
   amount: number;
   date: string;
   method: string;
+  isReversal?: boolean;
   receipt_payment_id?: string | null;
   reference_number?: string;
   rent_month?: string;
@@ -45,6 +46,7 @@ export function TenantPaymentDetailModal({
   if (!payment) return null;
 
   const hasReceipt = !!payment.receipt_payment_id;
+  const isReversal = Boolean(payment.isReversal);
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -58,13 +60,13 @@ export function TenantPaymentDetailModal({
 
         <div className="p-6 space-y-5">
           {/* Status & Amount Hero */}
-          <div className="text-center bg-emerald-500/5 dark:bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-5">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold mb-2">
+          <div className={`text-center rounded-2xl p-5 border ${isReversal ? 'bg-rose-500/5 dark:bg-rose-500/10 border-rose-500/20' : 'bg-emerald-500/5 dark:bg-emerald-500/10 border-emerald-500/20'}`}>
+            <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold mb-2 ${isReversal ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'}`}>
               <CheckCircle2 className="w-3.5 h-3.5" />
-              PAID SUCCESS
+              {isReversal ? 'PAYMENT REVERSED' : 'PAID SUCCESS'}
             </div>
             <div className="text-3xl font-extrabold text-foreground tracking-tight">
-              {fmt(payment.amount)}
+              {isReversal ? '−' : ''}{fmt(payment.amount)}
             </div>
             {payment.rent_month && (
               <div className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 mt-1.5">
@@ -100,7 +102,7 @@ export function TenantPaymentDetailModal({
                   <CreditCard className="w-4 h-4 text-muted-foreground/80" />
                   Payment Method
                 </span>
-                <span className="font-semibold text-foreground capitalize">{payment.method?.toLowerCase() || 'Payment'}</span>
+                <span className="font-semibold text-foreground">{payment.method || 'Payment'}</span>
               </div>
 
               {payment.reference_number && (

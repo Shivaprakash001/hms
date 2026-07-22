@@ -194,7 +194,10 @@ export function TenantDashboardPage() {
 
       {/* Render Reservation Card here if NOT PAYMENT_PENDING */}
       {resStatus !== 'PAYMENT_PENDING' && profile?.reservation_status && (
-        <TenantReservationCard reservationStatus={profile.reservation_status} />
+        <TenantReservationCard
+          reservationStatus={profile.reservation_status}
+          hasOngoingRentDue={readModel?.payment_status === 'OVERDUE' || readModel?.payment_status === 'PARTIAL' || readModel?.payment_status === 'PENDING'}
+        />
       )}
 
       {Array.isArray(profileDocs) && !hasRequiredDocuments(profileDocs as never[], profileType) && (

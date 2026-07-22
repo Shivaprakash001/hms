@@ -63,12 +63,12 @@ export function CancelObligationModal({
       }
 
       await onConfirm(reason.trim(), identityToken);
-      toast.success('Obligation cancelled');
+      toast.success('Charge cancelled');
       setReason('');
       setPassword('');
       onClose();
     } catch (err: any) {
-      hmsToast.error(err, 'Cancel Obligation');
+      hmsToast.error(err, 'Cancel Charge');
     } finally {
       setIsSubmitting(false);
     }
@@ -95,14 +95,14 @@ export function CancelObligationModal({
             <XCircle className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-foreground">Cancel Obligation</h3>
+            <h3 className="text-base font-bold text-foreground">Cancel Charge</h3>
             <p className="text-xs text-muted-foreground">Voids this charge — only allowed if no payments have been made</p>
           </div>
         </div>
 
         <div className="bg-muted/50 rounded-2xl p-4 border border-border/40 space-y-2 text-sm mb-4">
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Obligation:</span>
+            <span className="text-muted-foreground">Charge:</span>
             <span className="font-semibold text-foreground">{typeLabel} ({label})</span>
           </div>
           <div className="flex justify-between">

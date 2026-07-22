@@ -19,9 +19,9 @@ interface CreateObligationModalProps {
 }
 
 const MODE_COPY: Record<NonNullable<CreateObligationModalProps['mode']>, { title: string; description: string }> = {
-  create: { title: 'Create Financial Obligation', description: 'Add a custom manual charge or obligation for this tenant' },
+  create: { title: 'Create a Charge', description: 'Add a custom manual charge for this tenant' },
   duplicate: { title: 'Duplicate Charge', description: 'Create a new charge based on this one' },
-  edit: { title: 'Edit Obligation', description: 'Obligations are immutable once created — this creates a corrected replacement and cancels the original' },
+  edit: { title: 'Edit Charge', description: 'Charges can\'t be edited directly once created — this creates a corrected replacement and cancels the original' },
 };
 
 const ALLOWED_TYPES = [
@@ -100,7 +100,7 @@ export function CreateObligationModal({
         notes: notes.trim() || undefined,
       });
 
-      toast.success('Financial obligation created successfully');
+      toast.success('Charge created successfully');
       setType('RENT');
       setAmount('');
       setDueDate('');
@@ -111,7 +111,7 @@ export function CreateObligationModal({
       onSuccess();
       onClose();
     } catch (err: any) {
-      hmsToast.error(err, 'Create Obligation');
+      hmsToast.error(err, 'Create Charge');
     } finally {
       setIsSubmitting(false);
     }
@@ -143,7 +143,7 @@ export function CreateObligationModal({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-foreground">
-                Obligation Type <span className="text-rose-500">*</span>
+                Charge Type <span className="text-rose-500">*</span>
               </label>
               <select
                 required
@@ -270,7 +270,7 @@ export function CreateObligationModal({
               ) : (
                 <PlusCircle className="w-4 h-4" />
               )}
-              <span>{mode === 'edit' ? 'Create Replacement' : 'Create Obligation'}</span>
+              <span>{mode === 'edit' ? 'Create Replacement' : 'Create Charge'}</span>
             </button>
           </div>
         </form>

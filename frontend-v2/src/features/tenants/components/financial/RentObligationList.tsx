@@ -9,6 +9,20 @@ const fmtMonth = (value?: string) => {
   return value;
 };
 
+// Lower = more urgent, shown first. Owners need overdue/due-now charges at the
+// top; fully-resolved months are historical reference and belong at the
+// bottom, most-recent-first.
+const STATUS_PRIORITY: Record<string, number> = {
+  OVERDUE: 0,
+  PARTIAL: 1,
+  PENDING: 2,
+  UPCOMING: 3,
+  PAID: 4,
+  WAIVED: 4,
+  CANCELLED: 4,
+};
+const isHistorical = (priority: number) => priority >= 4;
+
 interface Props {
   obligations: Obligation[];
   onRecordPayment?: (obligationId: string) => void;
@@ -39,17 +53,26 @@ export function RentObligationList({
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const byMonth = useMemo(() => {
-    const grouped = obligations.reduce<Record<string, { label: string; sort: number; obligations: Obligation[] }>>((acc, o) => {
+    const grouped = obligations.reduce<Record<string, { label: string; sort: number; priority: number; obligations: Obligation[] }>>((acc, o) => {
       const periodValue = o.billing_period_start ?? o.rent_month;
       const label = o.installment_label ?? fmtMonth(periodValue);
       const sort = periodValue && !Number.isNaN(new Date(periodValue).getTime())
         ? new Date(periodValue).getTime()
         : 0;
-      if (!acc[label]) acc[label] = { label, sort, obligations: [] };
+      const priority = STATUS_PRIORITY[String(o.status ?? '').toUpperCase()] ?? 3;
+      if (!acc[label]) acc[label] = { label, sort, priority, obligations: [] };
+      // A month is as urgent as its most urgent charge (e.g. an overdue rent
+      // installment outranks a paid maintenance fee billed the same month).
+      acc[label].priority = Math.min(acc[label].priority, priority);
       acc[label].obligations.push(o);
       return acc;
     }, {});
-    return Object.values(grouped).sort((a, b) => b.sort - a.sort || b.label.localeCompare(a.label));
+    return Object.values(grouped).sort((a, b) => {
+      if (a.priority !== b.priority) return a.priority - b.priority;
+      // Overdue/due-now/upcoming: soonest due date first. Historical (paid/
+      // waived/cancelled): most recent first, like an activity feed.
+      return isHistorical(a.priority) ? b.sort - a.sort : a.sort - b.sort;
+    });
   }, [obligations]);
 
   const toggleExpand = (id: string) => {

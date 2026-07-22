@@ -3,7 +3,16 @@ import { AlertCircle, BedDouble, CheckCircle, CreditCard } from 'lucide-react';
 
 const fmt = (n: number) => `₹${Number(n ?? 0).toLocaleString('en-IN')}`;
 
-export function TenantReservationCard({ reservationStatus }: { reservationStatus?: any }) {
+interface TenantReservationCardProps {
+  reservationStatus?: any;
+  /** True once the tenant has an active/overdue rent balance — the move-in
+   * congratulations card only talks about the one-time deposit/maintenance,
+   * so it's collapsed to a small badge rather than a full card in that case
+   * to avoid reading as "everything is fine" next to the rent-due banner. */
+  hasOngoingRentDue?: boolean;
+}
+
+export function TenantReservationCard({ reservationStatus, hasOngoingRentDue }: TenantReservationCardProps) {
   if (!reservationStatus) return null;
 
   const {
@@ -18,6 +27,14 @@ export function TenantReservationCard({ reservationStatus }: { reservationStatus
   } = reservationStatus;
 
   if (status === 'MOVE_IN_READY') {
+    if (hasOngoingRentDue) {
+      return (
+        <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/40 px-3.5 py-2">
+          <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+          <p className="text-xs font-semibold text-emerald-800">Move-in deposit fully cleared — room confirmed</p>
+        </div>
+      );
+    }
     return (
       <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 shadow-sm">
         <div className="flex items-start gap-3">
@@ -27,7 +44,7 @@ export function TenantReservationCard({ reservationStatus }: { reservationStatus
           <div className="min-w-0 flex-1">
             <p className="text-sm font-bold text-emerald-900">Bed Reservation: Move-in Ready!</p>
             <p className="mt-1 text-xs text-emerald-700 leading-relaxed">
-              Your room is guaranteed and all onboarding financials are fully cleared. Welcome to your new home!
+              Your room is guaranteed and your move-in deposit is fully cleared. Welcome to your new home!
             </p>
           </div>
         </div>

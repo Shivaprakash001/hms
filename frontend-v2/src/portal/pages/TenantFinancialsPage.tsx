@@ -600,6 +600,19 @@ export function TenantFinancialsPage() {
         return new Date(i.due_date).getTime() < new Date(earliest).getTime() ? i.due_date : earliest;
       }, null as string | null);
 
+    // currentPayable includes obligations already activated ahead of their own
+    // due date (e.g. next month's rent made payable early so a tenant can
+    // prepay it) — due-date-agnostic by design. "Amount Due" here should only
+    // total what's actually due by earliestPayableDueDate, not bundle in a
+    // later obligation that merely happens to already be payable.
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const items = readModel?.items ?? [];
+    const dueSoonAmount = items.length
+      ? items
+          .filter((i: any) => i.legacy_status !== 'UPCOMING' && (!i.due_date || i.due_date.slice(0, 10) <= todayKey))
+          .reduce((sum: number, i: any) => sum + Number(i.outstanding ?? 0), 0)
+      : currentPayable;
+
     // 1. Red State: overdue per the canonical read model
     if (paymentStatus === 'OVERDUE') {
       return {
@@ -614,12 +627,12 @@ export function TenantFinancialsPage() {
     }
 
     // 2. Orange State: something is due (PARTIAL/PENDING), not yet overdue
-    if (currentPayable > 0) {
+    if (dueSoonAmount > 0) {
       return {
         state: 'ORANGE',
         title: 'Payment Due Soon',
         amountLabel: 'Amount Due',
-        amount: currentPayable,
+        amount: dueSoonAmount,
         subtext: earliestPayableDueDate
           ? `Due ${fmtDate(earliestPayableDueDate)}. Please complete your payment.`
           : 'Please complete your payment.',
@@ -687,7 +700,7 @@ export function TenantFinancialsPage() {
         label: 'Future rent credit',
         amount: Number(entry.amount ?? 0),
         date: String(entry.created_at ?? ''),
-        method: entry.reference_type === 'PAYMENT_ATTEMPT' ? 'RAZORPAY' : 'Future rent credit',
+        method: entry.reference_type === 'PAYMENT_ATTEMPT' ? 'Razorpay' : 'Advance Balance',
         receipt_payment_id: `advance-${entry.id}`,
         reference_number: String(entry.reference_id || ''),
         rent_month: '',
@@ -696,16 +709,20 @@ export function TenantFinancialsPage() {
 
   const allPayments = useMemo(() => {
     return [
-      ...paymentList.map((p) => ({
-        id: String(p.id),
-        label: 'Payment received',
-        amount: Number(p.amount_paid ?? p.amount ?? 0),
-        date: String(p.payment_date ?? p.created_at ?? ''),
-        method: String(p.payment_method ?? p.method ?? 'Payment'),
-        receipt_payment_id: p.id ? String(p.id) : null,
-        reference_number: String(p.reference_number || p.transaction_id || ''),
-        rent_month: String(p.rent_month || ''),
-      })),
+      ...paymentList.map((p) => {
+        const isReversal = Boolean(p.is_reversal) || Number(p.amount_paid ?? p.amount ?? 0) < 0;
+        return {
+          id: String(p.id),
+          label: isReversal ? 'Payment Reversed' : 'Payment received',
+          isReversal,
+          amount: Math.abs(Number(p.amount_paid ?? p.amount ?? 0)),
+          date: String(p.payment_date ?? p.created_at ?? ''),
+          method: String(p.payment_method_label ?? p.method_label ?? p.payment_method ?? p.method ?? 'Payment'),
+          receipt_payment_id: p.id ? String(p.id) : null,
+          reference_number: String(p.reference_number || p.transaction_id || ''),
+          rent_month: String(p.rent_month || ''),
+        };
+      }),
       ...advanceCreditHistory,
     ].sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
   }, [paymentList, advanceCreditHistory]);
@@ -1392,8 +1409,10 @@ export function TenantFinancialsPage() {
                 className="flex items-center justify-between p-4 bg-card text-sm cursor-pointer hover:bg-muted/10 transition-colors"
               >
                 <div>
-                  <p style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: '15px', color: '#1A1A1A' }}>{fmt(Number(p.amount ?? 0))}</p>
-                  <p className="flex items-center gap-1 mt-0.5" style={{ fontSize: '13px', color: '#2E7D32', fontWeight: 600 }}>
+                  <p style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 600, fontSize: '15px', color: p.isReversal ? '#C62828' : '#1A1A1A' }}>
+                    {p.isReversal ? '−' : ''}{fmt(Number(p.amount ?? 0))}
+                  </p>
+                  <p className="flex items-center gap-1 mt-0.5" style={{ fontSize: '13px', color: p.isReversal ? '#C62828' : '#2E7D32', fontWeight: 600 }}>
                     <span style={{ fontSize: '8px' }}>●</span> {p.label}
                   </p>
                   <p className="mt-0.5" style={{ fontSize: '12px', color: '#6B6B6B' }}>

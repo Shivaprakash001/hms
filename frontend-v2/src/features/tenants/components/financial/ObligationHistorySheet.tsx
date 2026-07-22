@@ -25,7 +25,7 @@ export function ObligationHistorySheet({ obligationId, label, onClose }: Obligat
     <Sheet open={Boolean(obligationId)} onOpenChange={(open) => !open && onClose()}>
       <SheetContent side="right" className="w-full sm:max-w-md">
         <SheetHeader>
-          <SheetTitle>Obligation History</SheetTitle>
+          <SheetTitle>Charge History</SheetTitle>
           <SheetDescription>{label}</SheetDescription>
         </SheetHeader>
         <div className="px-4 pb-6 overflow-y-auto flex-1">
@@ -34,7 +34,7 @@ export function ObligationHistorySheet({ obligationId, label, onClose }: Obligat
               <Loader2 className="w-5 h-5 animate-spin text-accent" />
             </div>
           ) : events.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-10">No history recorded for this obligation.</p>
+            <p className="text-xs text-muted-foreground text-center py-10">No history recorded for this charge.</p>
           ) : (
             <div className="relative pl-5 border-l border-border space-y-4 ml-1">
               {events.map((event) => {

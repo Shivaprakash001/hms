@@ -76,7 +76,7 @@ export interface TimelineEvent {
 // `amount_paid` in this system).
 const REVERSAL_PREFIX = "REVERSAL:";
 
-function describePaymentReversal(payment: {
+export function describePaymentReversal(payment: {
   amount_paid: unknown;
   payment_method: string;
   reference_number?: string | null;

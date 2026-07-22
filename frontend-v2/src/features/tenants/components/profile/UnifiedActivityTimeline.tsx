@@ -23,7 +23,7 @@ const FILTER_CHIPS: { id: FilterCategory; label: string; icon: LucideIcon }[] = 
   { id: 'all', label: 'All', icon: ListFilter },
   { id: 'payments', label: 'Payments', icon: Banknote },
   { id: 'ledger', label: 'Ledger', icon: Wallet },
-  { id: 'obligations', label: 'Obligations', icon: ReceiptText },
+  { id: 'obligations', label: 'Charges', icon: ReceiptText },
   { id: 'agreement', label: 'Agreement', icon: FileCheck2 },
   { id: 'kyc', label: 'KYC', icon: FileCheck },
   { id: 'room_stay', label: 'Room & Stay', icon: Bed },

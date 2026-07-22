@@ -70,7 +70,7 @@ export function SettlementPreview({ plan, amount, onConfirm, onBack, isRecording
 
   const nodes = [
     { label: 'Received', value: amount, tone: 'text-foreground' },
-    { label: 'Allocated', value: allocatedTotal, tone: 'text-emerald-600', subtext: activeAllocations.length > 0 ? `${activeAllocations.length} obligation${activeAllocations.length === 1 ? '' : 's'}` : undefined },
+    { label: 'Allocated', value: allocatedTotal, tone: 'text-emerald-600', subtext: activeAllocations.length > 0 ? `${activeAllocations.length} charge${activeAllocations.length === 1 ? '' : 's'}` : undefined },
     { label: 'Future Credit', value: plan.future_credit, tone: 'text-blue-600' },
     { label: 'Remaining Due', value: plan.remaining_outstanding, tone: plan.remaining_outstanding > 0 ? 'text-rose-600' : 'text-foreground' },
   ];

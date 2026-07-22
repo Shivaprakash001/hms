@@ -46,7 +46,7 @@ export function WaiveObligationModal({
   const handleWaive = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reason.trim()) {
-      toast.error('Please enter a reason for waiving this obligation');
+      toast.error('Please enter a reason for waiving this charge');
       return;
     }
     if (!password.trim()) {
