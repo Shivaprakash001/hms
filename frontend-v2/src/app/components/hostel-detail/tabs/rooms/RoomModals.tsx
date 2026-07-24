@@ -1,11 +1,12 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { AlertCircle, ChevronDown, ChevronRight, Loader2, Pencil, Phone, Repeat2, Search, Trash2, UserPlus, Users, Wifi, X } from 'lucide-react';
 import api from '@lib/api-client';
 import { queryKeys } from '@lib/queryKeys';
 import { allocationService } from '@features/rooms/api';
-import { normalizeTenants } from '@features/tenants/utils/normalize';
+import { getInitials, normalizeTenants } from '@features/tenants/utils/normalize';
 import { fmt, fmtExact } from '../../shared/format';
 
 export function RoomFormModal({
@@ -448,6 +449,7 @@ interface RoomOverviewModalProps {
 }
 
 export function RoomOverviewModal({ hostelId, roomId, onClose, onEditRoom, onTransferTenant }: RoomOverviewModalProps) {
+  const navigate = useNavigate();
   const { data: overviewRaw, isLoading, error } = useQuery({
     queryKey: ['room', 'overview', roomId],
     queryFn: () => import('@features/rooms/api').then((m) => m.roomService.getOverview(roomId)),
@@ -481,6 +483,13 @@ export function RoomOverviewModal({ hostelId, roomId, onClose, onEditRoom, onTra
   const room = overview.room ?? {};
   const tenants = Array.isArray(overview.tenants) ? overview.tenants : [];
   const payments = Array.isArray(overview.payments) ? overview.payments : [];
+
+  const handleTenantClick = (tenantId: string) => {
+    if (tenantId) {
+      onClose();
+      navigate(`/hostels/${hostelId}/tenants/${tenantId}`);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[70] flex items-end bg-black/40" onClick={onClose}>
@@ -536,17 +545,36 @@ export function RoomOverviewModal({ hostelId, roomId, onClose, onEditRoom, onTra
             ) : (
               <div className="space-y-2">
                 {tenants.map((t: any) => (
-                  <div key={t.tenant_id} className="p-3 rounded-xl border border-border bg-secondary/10 space-y-2">
+                  <div
+                    key={t.tenant_id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleTenantClick(t.tenant_id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleTenantClick(t.tenant_id);
+                      }
+                    }}
+                    className="p-3 rounded-xl border border-border bg-secondary/10 space-y-2 cursor-pointer hover:border-accent/50 hover:bg-secondary/20 transition-all focus:outline-none focus:ring-2 focus:ring-accent/30"
+                  >
                     <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-accent/10 text-accent flex items-center justify-center font-bold text-xs shrink-0">
-                          {t.name ? t.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) : 'T'}
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="w-8 h-8 rounded-full bg-accent/10 text-accent flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden">
+                          {t.photo_url ? (
+                            <img src={t.photo_url} alt={t.name || 'Tenant'} className="w-full h-full object-cover" />
+                          ) : (
+                            getInitials(t.name || 'Tenant')
+                          )}
                         </div>
-                        <div>
-                          <p className="font-semibold text-xs text-foreground">{t.name}</p>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-xs text-foreground hover:text-accent transition-colors flex items-center gap-1 group">
+                            <span className="truncate">{t.name}</span>
+                            <span className="text-[10px] font-normal text-muted-foreground group-hover:translate-x-0.5 transition-transform">→</span>
+                          </p>
                           <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mt-0.5">
-                            <Phone className="w-3 h-3" />
-                            <span>{t.phone || 'No phone'}</span>
+                            <Phone className="w-3 h-3 shrink-0" />
+                            <span className="truncate">{t.phone || 'No phone'}</span>
                           </div>
                           <p className="text-[10px] text-muted-foreground mt-0.5">
                             Rent: <span className="font-semibold text-foreground">{fmtExact(t.rent ?? room.base_rent ?? 0)}/mo</span>
@@ -554,7 +582,7 @@ export function RoomOverviewModal({ hostelId, roomId, onClose, onEditRoom, onTra
                         </div>
                       </div>
 
-                      <div className="text-right">
+                      <div className="text-right shrink-0">
                         <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
                           t.payment_status === 'PAID' ? 'bg-[#10B981]/10 text-[#047857]' : 'bg-[#F59E0B]/10 text-[#B45309]'
                         }`}>
@@ -567,10 +595,15 @@ export function RoomOverviewModal({ hostelId, roomId, onClose, onEditRoom, onTra
                     </div>
 
                     <div className="pt-2 border-t border-border/40 flex items-center justify-between text-[10px]">
-                      <span className="text-muted-foreground">Joined: {new Date(t.joined_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                      <span className="text-muted-foreground">
+                        Joined: {t.joined_date ? new Date(t.joined_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+                      </span>
                       <button
                         type="button"
-                        onClick={() => onTransferTenant(t.tenant_id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onTransferTenant(t.tenant_id);
+                        }}
                         className="flex items-center gap-1 text-accent font-semibold hover:underline"
                       >
                         <Repeat2 className="w-3 h-3" /> Shift / Re-allocate Room
