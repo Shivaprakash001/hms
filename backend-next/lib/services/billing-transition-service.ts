@@ -613,28 +613,50 @@ export class BillingTransitionService {
       const createdObligations: any[] = [];
       for (const inst of normalized) {
         const { lifecycle_status, settlement_status } = fromLegacyStatus("UPCOMING");
-        const row = await tx.rent_obligations.create({
-          data: {
-            tenant_id: tenant.id,
-            owner_id: ownerId,
-            hostel_id: tenant.hostel_id,
-            agreement_id: agreement?.id || null,
-            billing_plan_id: plan.id,
-            obligation_type: "RENT",
-            amount: inst.amount,
-            total_amount: inst.amount,
-            rent_month: firstOfUtcMonth(inst.dueDate),
-            due_date: inst.dueDate,
-            status: "UPCOMING",
-            lifecycle_status,
-            settlement_status,
-            installment_label: inst.label || `Custom installment (${createdObligations.length + 1})`,
-            installment_sequence: createdObligations.length + 1,
-            billing_period_start: inst.dueDate,
-            billing_period_end: inst.dueDate,
-          },
-        });
-        createdObligations.push(row);
+        const rentMonth = startOfUtcDay(inst.dueDate);
+        const rowData = {
+          tenant_id: tenant.id,
+          owner_id: ownerId,
+          hostel_id: tenant.hostel_id,
+          agreement_id: agreement?.id || null,
+          billing_plan_id: plan.id,
+          obligation_type: "RENT",
+          amount: inst.amount,
+          total_amount: inst.amount,
+          rent_month: rentMonth,
+          due_date: inst.dueDate,
+          status: "UPCOMING" as const,
+          lifecycle_status,
+          settlement_status,
+          installment_label: inst.label || `Custom installment (${createdObligations.length + 1})`,
+          installment_sequence: createdObligations.length + 1,
+          billing_period_start: inst.dueDate,
+          billing_period_end: inst.dueDate,
+          is_superseded: false,
+          superseded_at: null,
+          superseded_by_request_id: null,
+          updated_at: new Date(),
+        };
+
+        const existing = agreement?.id
+          ? await tx.rent_obligations.findFirst({
+              where: { agreement_id: agreement.id, rent_month: rentMonth, obligation_type: "RENT" },
+              select: { id: true },
+            })
+          : null;
+
+        if (existing) {
+          const updated = await tx.rent_obligations.update({
+            where: { id: existing.id },
+            data: rowData,
+          });
+          createdObligations.push(updated);
+        } else {
+          const created = await tx.rent_obligations.create({
+            data: rowData,
+          });
+          createdObligations.push(created);
+        }
       }
 
       await tx.tenants.update({

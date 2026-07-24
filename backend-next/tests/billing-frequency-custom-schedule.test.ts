@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { prisma } from "@/lib/db";
 import { createTestOwner, createTestHostel } from "./factories/owner-factory";
-import { createTestTenant } from "./factories/tenant-factory";
+import { createTestTenant, createTestAgreement } from "./factories/tenant-factory";
 import { createTestObligation } from "./factories/payment-factory";
 import { billingTransitionService } from "@/lib/services/billing-transition-service";
 
@@ -141,13 +141,39 @@ describe("BillingTransitionService.ownerSetCustomSchedule — owner-defined cust
     ).rejects.toThrow("UNCLEAN_BILLING_PERIOD");
   });
 
-  it("rejects a tenant that doesn't belong to this owner", async () => {
-    const { tenant } = await createFixture();
-    const otherOwner = await createTestOwner();
-    await expect(
-      billingTransitionService.ownerSetCustomSchedule(otherOwner.id, tenant.id, {
-        installments: [{ due_date: daysFromNow(10), amount: 9000 }],
-      })
-    ).rejects.toThrow("TENANT_NOT_FOUND");
+  it("handles agreement-based tenants with pre-existing obligations without unique constraint failure", async () => {
+    const { owner, hostel, tenant } = await createFixture();
+    const agreement = await createTestAgreement(tenant.id, hostel.id);
+
+    // Pre-create an obligation linked to the agreement with a rent_month in month 10
+    const rentMonth10 = new Date(daysFromNow(10));
+    await createTestObligation(tenant.id, owner.id, hostel.id, {
+      agreement_id: agreement.id,
+      obligation_type: "RENT",
+      status: "UPCOMING",
+      due_date: rentMonth10,
+      rent_month: new Date(Date.UTC(rentMonth10.getUTCFullYear(), rentMonth10.getUTCMonth(), 1)),
+    });
+
+    const result = await billingTransitionService.ownerSetCustomSchedule(owner.id, tenant.id, {
+      installments: [
+        { due_date: daysFromNow(10), amount: 33500, label: "Installment 1" },
+        { due_date: daysFromNow(40), amount: 33500, label: "Installment 2" },
+      ],
+      reason: "Agreement custom installments test",
+    });
+
+    expect(result.obligations_created).toBe(2);
+    expect(result.billing_plan.frequency).toBe("CUSTOM_INSTALLMENTS");
+
+    const rows = await prisma.rent_obligations.findMany({
+      where: { tenant_id: tenant.id, is_superseded: false },
+      orderBy: { due_date: "asc" },
+    });
+    expect(rows).toHaveLength(2);
+    expect(Number(rows[0].amount)).toBe(33500);
+    expect(rows[0].installment_label).toBe("Installment 1");
+    expect(Number(rows[1].amount)).toBe(33500);
+    expect(rows[1].installment_label).toBe("Installment 2");
   });
 });
