@@ -523,7 +523,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
             <div className="flex items-center gap-2.5 flex-wrap">
               <h1 className="text-2xl font-black text-foreground tracking-tight">{name}</h1>
               <TenantStatusBadge status={status} size="md" />
-              {isOverdue && (
+              {isOverdue && status.toUpperCase() !== 'INVITED' && (
                 <span className="inline-flex items-center rounded-full border font-bold px-2.5 py-0.5 text-[10px] uppercase bg-rose-500/15 text-rose-600 border-rose-500/30">
                   Overdue
                 </span>
@@ -607,13 +607,15 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
 
       {/* Row 2: Insights Grid & Private Notes */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <RiskComplianceCard
-          score={tenantScore?.score ?? 80}
-          hasAgreement={hasActiveAgreement}
-          documentStatus={String(compliance.document_verification_status ?? 'MISSING').toUpperCase()}
-          overdueDays={overdueDays}
-          depositStatus={securityDepositAmount === 0 ? 'WAIVED' : 'PAID'}
-        />
+        {status.toUpperCase() !== 'INVITED' && (
+          <RiskComplianceCard
+            score={tenantScore?.score ?? 80}
+            hasAgreement={hasActiveAgreement}
+            documentStatus={String(compliance.document_verification_status ?? 'MISSING').toUpperCase()}
+            overdueDays={overdueDays}
+            depositStatus={securityDepositAmount === 0 ? 'WAIVED' : 'PAID'}
+          />
+        )}
 
         <PrivateNotes tenantId={tenantId} />
       </div>
@@ -680,29 +682,33 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
         </div>
       )}
 
-      {/* §1 Summary */}
-      <CompactFinancialStrip
-        outstandingAmount={outstandingAmount}
-        overdueDays={overdueDays}
-        futureCredit={futureCredit}
-        depositPaid={securityDepositAmount}
-        overdueAmount={overdueAmount}
-        nextRentDate={nextRentDate}
-        nextRentAmount={nextRentAmount}
-        agreementMonthsElapsed={agreementMonthsElapsed}
-        agreementMonthsTotal={agreementMonthsTotal}
-        onNavigate={handleNavigate}
-      />
+      {/* §1 Summary — hidden for INVITED tenants (no meaningful financial data yet) */}
+      {status.toUpperCase() !== 'INVITED' && (
+        <CompactFinancialStrip
+          outstandingAmount={outstandingAmount}
+          overdueDays={overdueDays}
+          futureCredit={futureCredit}
+          depositPaid={securityDepositAmount}
+          overdueAmount={overdueAmount}
+          nextRentDate={nextRentDate}
+          nextRentAmount={nextRentAmount}
+          agreementMonthsElapsed={agreementMonthsElapsed}
+          agreementMonthsTotal={agreementMonthsTotal}
+          onNavigate={handleNavigate}
+        />
+      )}
 
-      {/* §1b Financial Health Banner + Recommended Next Action */}
-      <FinancialHealthBanner
-        overdueAmount={overdueAmount}
-        overdueDays={overdueDays}
-        pendingAmount={outstandingAmount}
-        futureCredit={futureCredit}
-        nextRentLabel={nextRentLabel}
-        onCollect={(prefillAmount) => handleOpenReceivePayment(prefillAmount)}
-      />
+      {/* §1b Financial Health Banner + Recommended Next Action — hidden for INVITED */}
+      {status.toUpperCase() !== 'INVITED' && (
+        <FinancialHealthBanner
+          overdueAmount={overdueAmount}
+          overdueDays={overdueDays}
+          pendingAmount={outstandingAmount}
+          futureCredit={futureCredit}
+          nextRentLabel={nextRentLabel}
+          onCollect={(prefillAmount) => handleOpenReceivePayment(prefillAmount)}
+        />
+      )}
 
       {/* Tabbed detail region — Obligations / Activity / Documents / Stay */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
