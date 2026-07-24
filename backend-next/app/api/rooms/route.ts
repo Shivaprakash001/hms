@@ -70,7 +70,10 @@ export async function GET(req: NextRequest) {
           r.notes,
           r.hostel_id,
           r.is_active,
-          COALESCE(alloc.tenants, '[]'::jsonb) AS tenants
+          COALESCE(alloc.tenants, '[]'::jsonb) AS tenants,
+          COALESCE(dues.pending_dues, 0) AS pending_dues,
+          COALESCE(dues.total_collected, 0) AS total_collected,
+          COALESCE(revenue.room_revenue, 0) AS room_revenue
         FROM rooms r
         JOIN hostel_scope hs ON hs.allowed
         LEFT JOIN floors f ON f.id = r.floor_id
@@ -90,6 +93,30 @@ export async function GET(req: NextRequest) {
             AND ra.is_active = true
             AND ra.end_date IS NULL
         ) alloc ON true
+        LEFT JOIN LATERAL (
+          SELECT
+            COALESCE(SUM(ro.amount - COALESCE(paid.total_paid, 0)), 0) AS pending_dues,
+            COALESCE(SUM(COALESCE(paid.total_paid, 0)), 0) AS total_collected
+          FROM room_allocations ra2
+          JOIN rent_obligations ro ON ro.tenant_id = ra2.tenant_id
+            AND ro.is_superseded = false
+            AND ro.status IN ('PENDING', 'PARTIAL')
+          LEFT JOIN LATERAL (
+            SELECT COALESCE(SUM(pay.amount_paid), 0) AS total_paid
+            FROM payments pay WHERE pay.obligation_id = ro.id
+          ) paid ON true
+          WHERE ra2.room_id = r.id
+            AND ra2.is_active = true
+            AND ra2.end_date IS NULL
+        ) dues ON true
+        LEFT JOIN LATERAL (
+          SELECT COALESCE(SUM(t2.monthly_rent), 0) AS room_revenue
+          FROM room_allocations ra3
+          JOIN tenants t2 ON t2.id = ra3.tenant_id
+          WHERE ra3.room_id = r.id
+            AND ra3.is_active = true
+            AND ra3.end_date IS NULL
+        ) revenue ON true
         WHERE r.hostel_id = ${hostelId}::uuid
           AND r.is_active = true
         ORDER BY r.room_no ASC
@@ -113,6 +140,7 @@ export async function GET(req: NextRequest) {
       const capacity = capacityMap.get(room.id);
       const occupiedCount = capacity?.occupied ?? allocs.length;
       const reservedCount = capacity?.reserved ?? 0;
+      const allocatedCount = allocs.length;
       const firstTenant = allocs[0] ?? null;
       const tenants = allocs.map((allocation: any) => ({
         allocation_id: allocation.allocation_id,
@@ -141,9 +169,13 @@ export async function GET(req: NextRequest) {
         is_active: room.is_active,
         status: derivedStatus,
         occupied_count: occupiedCount,
+        allocated_count: allocatedCount,
         reserved_count: reservedCount,
         used_count: capacity?.used ?? occupiedCount,
         vacant_count: capacity?.available ?? Math.max(0, room.capacity - occupiedCount),
+        pending_dues: Number(room.pending_dues ?? 0),
+        total_collected: Number(room.total_collected ?? 0),
+        room_revenue: Number(room.room_revenue ?? 0),
         tenants,
         tenant_name: firstTenant?.name ?? null,
         tenant_id: firstTenant?.tenant_id ?? null,

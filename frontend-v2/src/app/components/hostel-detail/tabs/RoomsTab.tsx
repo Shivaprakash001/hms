@@ -1,6 +1,6 @@
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Users, BedDouble, Receipt, AlertCircle, Plus, CreditCard, Phone, Wifi, FileText, Eye, EyeOff, Copy, Check, Pencil, Layers, ChevronDown, ChevronRight, X, Trash2, MoreVertical, TrendingUp, TrendingDown, Sparkles, Search, CalendarDays, Repeat2, Upload, Zap, Activity, AlertTriangle, BellRing, ClipboardCheck, Flame, Home, IndianRupee, Megaphone, UserPlus, Send, Loader2 } from 'lucide-react';
+import { Users, BedDouble, Receipt, AlertCircle, Plus, CreditCard, Phone, Wifi, FileText, Eye, EyeOff, Copy, Check, Pencil, Layers, ChevronDown, ChevronRight, X, Trash2, MoreVertical, TrendingUp, TrendingDown, Sparkles, Search, CalendarDays, Repeat2, Upload, Zap, Activity, AlertTriangle, BellRing, ClipboardCheck, Flame, Home, IndianRupee, Megaphone, UserPlus, Send, Loader2, Banknote } from 'lucide-react';
 import { queryKeys } from '@lib/queryKeys';
 import { fmt, fmtExact } from '../shared/format';
 import { TabError, TabSkeleton } from '../shared/TabStates';
@@ -13,23 +13,23 @@ const FloorNameModal = lazy(() => import('./rooms/RoomModals').then((m) => ({ de
 const FloorActionsSheet = lazy(() => import('./rooms/RoomModals').then((m) => ({ default: m.FloorActionsSheet })));
 const RoomOverviewModal = lazy(() => import('./rooms/RoomModals').then((m) => ({ default: m.RoomOverviewModal }))); 
 
-function BedOccupancyBlocks({ occupied, reserved = 0, capacity, hasDues = false }: { occupied: number; reserved?: number; capacity: number; hasDues?: boolean }) {
+function BedOccupancyBlocks({ allocated, reserved = 0, capacity, hasDues = false }: { allocated: number; reserved?: number; capacity: number; hasDues?: boolean }) {
   const beds = Array.from({ length: Math.max(1, capacity || 1) });
   return (
     <div className="flex flex-wrap gap-1.5">
       {beds.map((_, index) => {
-        const isOccupied = index < occupied;
-        const isReserved = !isOccupied && index < occupied + reserved;
+        const isAllocated = index < allocated;
+        const isReserved = !isAllocated && index < allocated + reserved;
         return (
           <span
             key={index}
-            title={isOccupied ? 'Occupied' : isReserved ? 'Reserved' : 'Vacant'}
+            title={isAllocated ? (hasDues ? 'Occupied (dues pending)' : 'Occupied') : isReserved ? 'Reserved' : 'Vacant'}
             className={[
               'h-5 w-4 rounded-[4px] border',
-              isOccupied && hasDues ? 'border-[#F59E0B] bg-[#F59E0B]' : '',
-              isOccupied && !hasDues ? 'border-[#10B981] bg-[#10B981]' : '',
+              isAllocated && hasDues ? 'border-[#F59E0B] bg-[#F59E0B]' : '',
+              isAllocated && !hasDues ? 'border-[#10B981] bg-[#10B981]' : '',
               isReserved ? 'border-[#3B82F6] bg-[#3B82F6]/20' : '',
-              !isOccupied && !isReserved ? 'border-border bg-background' : '',
+              !isAllocated && !isReserved ? 'border-border bg-background' : '',
             ].join(' ')}
           />
         );
@@ -170,16 +170,18 @@ export function RoomsTab({ hostelId }: { hostelId: string }) {
     return {
       groups: Array.from(floorGroups.values()).sort((a, b) => a.sort - b.sort),
       totalBeds: rooms.reduce((s, r) => s + Number(r.capacity ?? 0), 0),
-      totalOccupied: rooms.reduce((s, r) => s + Number(r.occupied_count ?? 0), 0),
+      totalOccupied: rooms.reduce((s, r) => s + (Array.isArray(r.tenants) ? (r.tenants as unknown[]).length : Number(r.allocated_count ?? r.occupied_count ?? 0)), 0),
       totalReserved: rooms.reduce((s, r) => s + Number(r.reserved_count ?? 0), 0),
       totalVacant: rooms.filter((r) => String(r.status) === 'vacant').length,
+      totalDues: rooms.reduce((s, r) => s + Number(r.pending_dues ?? 0), 0),
+      totalRevenue: rooms.reduce((s, r) => s + Number(r.room_revenue ?? 0), 0),
     };
   }, [floors, rooms]);
 
   if (isLoading) return <TabSkeleton />;
   if (isError)   return <TabError onRetry={refetch} />;
 
-  const { groups, totalBeds, totalOccupied, totalReserved, totalVacant } = roomSummary;
+  const { groups, totalBeds, totalOccupied, totalReserved, totalVacant, totalDues, totalRevenue } = roomSummary;
 
   const toggleCollapse = (id: string) =>
     setCollapsed((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -198,7 +200,7 @@ export function RoomsTab({ hostelId }: { hostelId: string }) {
       )}
 
       {/* Summary strip */}
-      <div className={`grid gap-2 ${totalReserved > 0 ? 'grid-cols-4' : 'grid-cols-3'}`}>
+      <div className="grid gap-2 grid-cols-2 sm:grid-cols-4">
         <div className="bg-[#10B981]/8 border border-[#10B981]/20 rounded-xl p-3">
           <div className="text-base font-semibold text-[#10B981]">{totalOccupied}/{totalBeds}</div>
           <div className="text-[10px] text-muted-foreground mt-0.5">Beds occupied</div>
@@ -213,11 +215,19 @@ export function RoomsTab({ hostelId }: { hostelId: string }) {
           <div className={`text-base font-semibold ${ totalVacant > 0 ? 'text-[#3B82F6]' : 'text-foreground' }`}>{totalVacant}</div>
           <div className="text-[10px] text-muted-foreground mt-0.5">Vacant rooms</div>
         </div>
-        <div className="bg-card border border-border rounded-xl p-3">
-          <div className="text-base font-semibold text-foreground">{groups.length}</div>
-          <div className="text-[10px] text-muted-foreground mt-0.5">Floors</div>
-        </div>
+        {totalRevenue > 0 && (
+          <div className="bg-card border border-border rounded-xl p-3">
+            <div className="text-base font-semibold text-foreground">{fmt(totalRevenue)}</div>
+            <div className="text-[10px] text-muted-foreground mt-0.5">Monthly revenue</div>
+          </div>
+        )}
       </div>
+      {totalDues > 0 && (
+        <div className="flex items-center gap-2 p-2.5 bg-[#F59E0B]/8 border border-[#F59E0B]/20 rounded-xl">
+          <AlertTriangle className="w-3.5 h-3.5 text-[#F59E0B] shrink-0" />
+          <span className="text-xs font-semibold text-[#B45309]">{fmt(totalDues)} total pending dues</span>
+        </div>
+      )}
 
       {/* Floor groups */}
       {groups.length === 0 && rooms.length === 0 ? (
@@ -263,14 +273,14 @@ export function RoomsTab({ hostelId }: { hostelId: string }) {
             {!isCollapsed && (
               <div className="space-y-2">
                 {group.rooms.map((room) => {
-                  const isOccupied = String(room.status) === 'occupied';
-                  const occupied   = Number(room.occupied_count ?? 0);
+                  const tenants = Array.isArray(room.tenants) ? (room.tenants as Record<string, unknown>[]) : [];
+                  const allocated  = tenants.length;
                   const reserved   = Number(room.reserved_count ?? 0);
                   const capacity   = Number(room.capacity ?? 0);
-                  const hasVacantBed = occupied + reserved < capacity;
-                  const roomDues = Number(room.outstanding_dues ?? room.due_amount ?? room.pending_dues ?? 0);
-                  const vacantBeds = Math.max(0, capacity - occupied - reserved);
-                  const tenants = Array.isArray(room.tenants) ? (room.tenants as Record<string, unknown>[]) : [];
+                  const hasVacantBed = allocated + reserved < capacity;
+                  const roomDues = Number(room.pending_dues ?? 0);
+                  const roomRevenue = Number(room.room_revenue ?? 0);
+                  const vacantBeds = Math.max(0, capacity - allocated - reserved);
                   const tenantNames = tenants
                     .map((tenant) => String(tenant.name ?? '').trim())
                     .filter(Boolean);
@@ -279,7 +289,7 @@ export function RoomsTab({ hostelId }: { hostelId: string }) {
                       key={String(room.id)}
                       className={`bg-card border rounded-xl p-3.5 min-w-0 ${
                         roomDues > 0 ? 'border-[#F59E0B]/50'
-                        : !isOccupied ? 'border-[#3B82F6]/15'
+                        : allocated === 0 ? 'border-[#3B82F6]/15'
                         : 'border-border'
                       }`}
                     >
@@ -288,16 +298,16 @@ export function RoomsTab({ hostelId }: { hostelId: string }) {
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-semibold text-foreground">{String(room.room_no)}</span>
                             <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
-                              roomDues > 0          ? 'bg-[#F59E0B]/10 text-[#B45309]'
-                              : occupied === 0      ? 'bg-[#3B82F6]/10 text-[#3B82F6]'
-                              : occupied < capacity ? 'bg-[#F59E0B]/10 text-[#F59E0B]'
+                              roomDues > 0            ? 'bg-[#F59E0B]/10 text-[#B45309]'
+                              : allocated === 0       ? 'bg-[#3B82F6]/10 text-[#3B82F6]'
+                              : allocated < capacity  ? 'bg-[#F59E0B]/10 text-[#F59E0B]'
                               : 'bg-[#10B981]/10 text-[#10B981]'
                             }`}>
-                              {occupied}/{capacity} beds{roomDues > 0 ? ' · dues pending' : ''}
+                              {allocated}/{capacity} beds{roomDues > 0 ? ' · dues pending' : ''}
                             </span>
                           </div>
                           <div className="mt-2">
-                            <BedOccupancyBlocks occupied={occupied} reserved={reserved} capacity={capacity} hasDues={roomDues > 0} />
+                            <BedOccupancyBlocks allocated={allocated} reserved={reserved} capacity={capacity} hasDues={roomDues > 0} />
                           </div>
                           {(vacantBeds > 0 || reserved > 0) && (
                             <div className="text-[11px] text-muted-foreground mt-1">
@@ -306,8 +316,8 @@ export function RoomsTab({ hostelId }: { hostelId: string }) {
                               {vacantBeds > 0 && `${vacantBeds} vacant`}
                             </div>
                           )}
-                          {isOccupied && tenantNames.length > 0 && (
-                            <div className="mt-1 space-y-1">
+                          {allocated > 0 && tenantNames.length > 0 && (
+                            <div className="mt-1.5 space-y-1">
                               {tenants.slice(0, 3).map((tenant, index) => (
                                 <div key={String(tenant.tenant_id ?? tenant.allocation_id ?? index)} className="flex items-center justify-between gap-2 text-xs">
                                   <span className="text-muted-foreground truncate">{String(tenant.name ?? 'Tenant')}</span>
@@ -319,8 +329,24 @@ export function RoomsTab({ hostelId }: { hostelId: string }) {
                               )}
                             </div>
                           )}
-                          {!isOccupied && (
+                          {allocated === 0 && (
                             <div className="text-xs text-muted-foreground mt-0.5">{fmtExact(room.monthly_rent ?? room.base_rent ?? 0)}/mo base rent</div>
+                          )}
+                          {/* Financial summary strip */}
+                          {allocated > 0 && (
+                            <div className="mt-2 flex items-center gap-3 text-[10px]">
+                              <div className="flex items-center gap-1">
+                                <Banknote className="w-3 h-3 text-muted-foreground" />
+                                <span className="text-muted-foreground">Revenue:</span>
+                                <span className="font-semibold text-foreground">{fmt(roomRevenue)}/mo</span>
+                              </div>
+                              {roomDues > 0 && (
+                                <div className="flex items-center gap-1">
+                                  <AlertTriangle className="w-3 h-3 text-[#F59E0B]" />
+                                  <span className="font-semibold text-[#B45309]">{fmt(roomDues)} dues</span>
+                                </div>
+                              )}
+                            </div>
                           )}
                           {room.notes && (
                             <div className="flex items-start gap-1 mt-1.5">
@@ -346,7 +372,7 @@ export function RoomsTab({ hostelId }: { hostelId: string }) {
                           className="mt-2.5 w-full flex items-center justify-center gap-1.5 py-2 bg-card border border-border rounded-lg text-xs font-medium text-accent active:scale-95 transition-transform touch-manipulation"
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          {occupied === 0 ? 'Assign Tenant' : `Assign to ${vacantBeds} vacant bed${vacantBeds === 1 ? '' : 's'}`}
+                          {allocated === 0 ? 'Assign Tenant' : `Assign to ${vacantBeds} vacant bed${vacantBeds === 1 ? '' : 's'}`}
                         </button>
                       )}
                     </div>
