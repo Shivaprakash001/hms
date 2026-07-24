@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { IndianRupee, ReceiptText, Share2, FileStack, ChevronDown, X, MoreHorizontal, FileCheck2, TrendingUp, CalendarRange, LogOut } from 'lucide-react';
+import { IndianRupee, ReceiptText, Share2, FileStack, ChevronDown, X, MoreHorizontal, FileCheck2, TrendingUp, CalendarRange, LogOut, UserX } from 'lucide-react';
 import { toast } from 'sonner';
 import { paymentService } from '@features/payments/api';
 import { hmsToast } from '@lib/toast';
@@ -24,6 +24,7 @@ interface PrimaryAction {
 interface PrimaryActionsBarProps {
   tenantId: string;
   tenantPhone?: string;
+  tenantStatus?: string;
   onReceivePayment: () => void;
   onCreateCharge: () => void;
   onViewReceipts: () => void;
@@ -34,12 +35,14 @@ interface PrimaryActionsBarProps {
   onChangeFrequency: () => void;
   canChangeFrequency: boolean;
   onCheckout: () => void;
+  onCancelInvitation?: () => void;
   receiveLabel?: string;
 }
 
 export function PrimaryActionsBar({
   tenantId,
   tenantPhone,
+  tenantStatus,
   onReceivePayment,
   onCreateCharge,
   onViewReceipts,
@@ -50,6 +53,7 @@ export function PrimaryActionsBar({
   onChangeFrequency,
   canChangeFrequency,
   onCheckout,
+  onCancelInvitation,
   receiveLabel = 'Receive Payment',
 }: PrimaryActionsBarProps) {
   const isMobile = useIsMobile();
@@ -80,9 +84,10 @@ export function PrimaryActionsBar({
     ...(canChangeFrequency ? [{ key: 'change-frequency', label: 'Change Billing Frequency', icon: CalendarRange, onClick: onChangeFrequency }] : []),
   ];
 
-  const lifecycleActions: PrimaryAction[] = [
-    { key: 'checkout', label: 'Check-out / Exit', icon: LogOut, onClick: onCheckout },
-  ];
+  const isInvited = tenantStatus?.toUpperCase() === 'INVITED';
+  const lifecycleActions: PrimaryAction[] = isInvited && onCancelInvitation
+    ? [{ key: 'cancel-invitation', label: 'Cancel Invitation', icon: UserX, onClick: onCancelInvitation }]
+    : [{ key: 'checkout', label: 'Check-out / Exit', icon: LogOut, onClick: onCheckout }];
 
   // Desktop "More" dropdown keeps all non-primary, non-secondary actions in one flat menu.
   const overflowActions: PrimaryAction[] = [shareLinkAction, ...agreementActions];

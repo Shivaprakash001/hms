@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { 
   CalendarDays, 
@@ -11,9 +11,11 @@ import {
   BadgeIndianRupee, 
   Settings, 
   Undo,
-  Plus
+  Plus,
+  UserX
 } from 'lucide-react';
 import { moveOutService } from '@features/move-out/api';
+import { tenantService } from '@features/tenants/api';
 import { MoveOutStepper } from '@features/tenants/components/moveout/MoveOutStepper';
 import { queryKeys } from '@lib/queryKeys';
 import { canonicalMoveOutStatus } from '@/shared/types/moveout';
@@ -24,9 +26,80 @@ interface Props {
   hostelId: string;
   tenantId: string;
   status: string;
+  onCancelled?: () => void;
 }
 
-export function ExitWorkflowSection({ hostelId, tenantId, status }: Props) {
+export function ExitWorkflowSection({ hostelId, tenantId, status, onCancelled }: Props) {
+  const queryClient = useQueryClient();
+
+  // ── Cancel Invitation (for INVITED tenants) ──────────────────
+  const cancelMutation = useMutation({
+    mutationFn: () => tenantService.cancelInvitation(tenantId),
+    onSuccess: () => {
+      toast.success('Invitation cancelled successfully');
+      queryClient.invalidateQueries({ queryKey: queryKeys.tenants.overview(hostelId, tenantId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tenants.full(hostelId, tenantId) });
+      onCancelled?.();
+    },
+    onError: (e: any) => {
+      toast.error(e?.response?.data?.error?.message ?? 'Failed to cancel invitation');
+    },
+  });
+
+  if (status === 'INVITED') {
+    return (
+      <div className="space-y-4">
+        <div className="p-5 rounded-2xl border border-amber-200 bg-amber-50/50 space-y-3">
+          <div className="flex items-start gap-3">
+            <UserX className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-amber-950">Tenant Not Yet Activated</p>
+              <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                This tenant has been invited but hasn't activated their account yet. 
+                You can cancel this invitation to remove them from the room and free up the bed.
+                All pending financial obligations will be waived automatically.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            disabled={cancelMutation.isPending}
+            onClick={() => {
+              if (window.confirm('Are you sure you want to cancel this invitation? This will remove the tenant from the room and waive all pending charges.')) {
+                cancelMutation.mutate();
+              }
+            }}
+            className="w-full py-2.5 rounded-xl bg-red-600 text-white font-semibold text-sm hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {cancelMutation.isPending ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Cancelling...
+              </>
+            ) : (
+              <>
+                <UserX className="w-4 h-4" />
+                Cancel Invitation
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === 'CANCELLED') {
+    return (
+      <div className="p-4 rounded-xl border border-border bg-secondary/20">
+        <p className="text-sm text-muted-foreground flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
+          This invitation has been cancelled.
+        </p>
+      </div>
+    );
+  }
+
   const { data: requests, refetch } = useQuery({
     queryKey: queryKeys.tenants.moveOut(hostelId, tenantId),
     queryFn: () => moveOutService.listRequests(hostelId, {}),

@@ -496,7 +496,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
           <LogOut className="w-4 h-4 text-rose-500" />
           Move-Out Settlement Workflow
         </h4>
-        <ExitWorkflowSection hostelId={hostelId} tenantId={tenantId} status={status} />
+        <ExitWorkflowSection hostelId={hostelId} tenantId={tenantId} status={status} onCancelled={() => refetch()} />
       </div>
     </div>
   );
@@ -572,6 +572,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
           <PrimaryActionsBar
             tenantId={tenantId}
             tenantPhone={primaryPhone}
+            tenantStatus={status}
             onReceivePayment={() => handleOpenReceivePayment()}
             onCreateCharge={() => setObligationModal({ mode: 'create' })}
             onViewReceipts={() => handleNavigate('fin-documents')}
@@ -583,6 +584,7 @@ export function TenantProfilePage({ hostelIdProp, tenantIdProp, onBack }: Tenant
             canChangeFrequency={status.toUpperCase() === 'ACTIVE'}
             onChangeFrequency={() => setShowChangeFrequency(true)}
             onCheckout={() => setActiveTab('stay')}
+            onCancelInvitation={() => setActiveTab('stay')}
           />
         </div>
 
