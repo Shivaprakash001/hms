@@ -22,6 +22,13 @@ const fmt = (n: any) => {
   return `₹${(Number.isFinite(num) ? num : 0).toLocaleString('en-IN')}`;
 };
 
+const fmtDate = (value: unknown) => {
+  if (!value) return null;
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+};
+
 export function TenantDashboardPage() {
   const {
     profile,
@@ -50,6 +57,10 @@ export function TenantDashboardPage() {
   const profileDocs = (profile?.documents ?? documents) as unknown[] | undefined;
   const profileType = String(tenant?.profile_type ?? profile?.profile_type ?? 'STUDENT');
   const advanceBalance = Number(advance?.balance ?? 0);
+  const renewalPrompt = resolveRenewalPrompt(
+    agreementRenewal as Record<string, any> | undefined,
+    renewalOffer as Record<string, any> | undefined
+  );
 
   return (
     <div className="space-y-5">
@@ -192,6 +203,11 @@ export function TenantDashboardPage() {
         <TenantPrioritySkeleton />
       )}
 
+      {/* Directly under the money strip: a renewal the tenant has to answer is
+          as time-critical as rent, and lower down it was being lost among the
+          informational cards. Passive renewal states stay further down. */}
+      {renewalPrompt?.kind === 'action' && <TenantRenewalActionCard prompt={renewalPrompt} />}
+
       {/* Render Reservation Card here if NOT PAYMENT_PENDING */}
       {resStatus !== 'PAYMENT_PENDING' && profile?.reservation_status && (
         <TenantReservationCard
@@ -215,10 +231,7 @@ export function TenantDashboardPage() {
         </Link>
       )}
 
-      <TenantRenewalBanner
-        renewal={agreementRenewal as Record<string, any> | undefined}
-        offer={renewalOffer as Record<string, any> | undefined}
-      />
+      {renewalPrompt?.kind === 'info' && <TenantRenewalInfoBanner prompt={renewalPrompt} />}
 
       {/* My Stay Section */}
       <section className="space-y-3">
@@ -352,61 +365,155 @@ export function TenantDashboardPage() {
   );
 }
 
+type RenewalPrompt = {
+  kind: 'action' | 'info';
+  tone: 'critical' | 'action' | 'info';
+  title: string;
+  body: string;
+  cta: string;
+};
+
 /**
- * Slim status banner + entry point to the dedicated `/tenant/renewal` page
- * (src/platforms/tenant/pages/TenantRenewalPage.tsx), which owns the full
- * review/accept/decline/discuss/sign flow. This banner's only job is to make
- * sure every renewal-relevant state is visible from the dashboard — including
- * "awaiting signature" and "signed", which previously had no UI at all once
- * an offer was accepted (both prior inline cards returned null in that gap).
+ * Resolves the one renewal state worth showing on the dashboard, and whether
+ * it needs the tenant to *do* something. Every renewal-relevant state is
+ * covered — including "awaiting signature" and "signed", which had no UI at
+ * all once an offer was accepted before this existed.
+ *
+ * `kind` drives placement, not just styling: an offer sitting unanswered or an
+ * unsigned agreement is time-boxed work only the tenant can do, so it renders
+ * as a full call-to-action card above the informational cards. Passive states
+ * stay a slim strip further down, where they can't crowd out the rest of the
+ * page. Both link into `/tenant/renewal`
+ * (src/platforms/tenant/pages/TenantRenewalPage.tsx), which owns the actual
+ * review/accept/decline/discuss/sign flow.
  */
-function TenantRenewalBanner({
-  renewal,
-  offer,
-}: {
-  renewal?: Record<string, any>;
-  offer?: Record<string, any>;
-}) {
+function resolveRenewalPrompt(
+  renewal?: Record<string, any>,
+  offer?: Record<string, any>
+): RenewalPrompt | null {
   const draft = renewal?.renewal_draft as Record<string, any> | null | undefined;
   const decisionState = String(renewal?.decision_state || 'CURRENT');
 
   if (decisionState === 'MOVE_OUT_IN_PROGRESS') return null;
 
-  let title: string | null = null;
-  let tone: 'critical' | 'action' | 'info' = 'info';
-
   if (draft && draft.status !== 'SIGNED') {
-    title = 'Sign your renewed agreement';
-    tone = 'action';
-  } else if (draft && draft.status === 'SIGNED') {
-    title = 'Your agreement has been renewed';
-    tone = 'info';
-  } else if (offer && (offer.status === 'SENT' || offer.status === 'DRAFT')) {
-    title = 'You have a new renewal offer to review';
-    tone = 'action';
-  } else if (decisionState !== 'CURRENT') {
-    const isCritical = decisionState === 'RENEWAL_OVERDUE_CRITICAL' || decisionState === 'EXPIRED_AND_RENT_OVERDUE';
-    title = isCritical ? 'Your agreement renewal is overdue' : 'Your agreement is expiring soon';
-    tone = isCritical ? 'critical' : 'action';
+    const startsOn = fmtDate(draft.agreement_start_date);
+    const newRent = Number(draft.contract?.rent ?? 0);
+    return {
+      kind: 'action',
+      tone: 'action',
+      title: 'Sign your renewed agreement',
+      body: [
+        newRent > 0 ? `Your new agreement is ready at ${fmt(newRent)}/month` : 'Your new agreement is ready',
+        startsOn ? ` and starts ${startsOn}.` : '.',
+        ' It only takes effect once you sign it.',
+      ].join(''),
+      cta: 'Review & Sign',
+    };
   }
 
-  if (!title) return null;
+  if (draft && draft.status === 'SIGNED') {
+    const startsOn = fmtDate(draft.agreement_start_date);
+    return {
+      kind: 'info',
+      tone: 'info',
+      title: 'Your agreement has been renewed',
+      body: startsOn ? `Your new term starts ${startsOn}.` : 'Your new term is confirmed.',
+      cta: 'View',
+    };
+  }
 
-  const toneClasses =
-    tone === 'critical'
-      ? 'border-rose-200 bg-rose-50 text-rose-900'
-      : tone === 'action'
-        ? 'border-amber-200 bg-amber-50 text-amber-900'
-        : 'border-emerald-200 bg-emerald-50 text-emerald-900';
+  if (offer && (offer.status === 'SENT' || offer.status === 'DRAFT')) {
+    const proposedRent = Number(offer.proposed_rent ?? 0);
+    const startsOn = fmtDate(offer.effective_from);
+    const respondBy = fmtDate(offer.offer_expires_at);
+    return {
+      kind: 'action',
+      tone: 'action',
+      title: 'You have a new renewal offer',
+      body: [
+        proposedRent > 0 ? `Your hostel proposed ${fmt(proposedRent)}/month` : 'Your hostel sent new terms',
+        startsOn ? ` from ${startsOn}.` : '.',
+        respondBy ? ` Respond by ${respondBy}.` : '',
+      ].join(''),
+      cta: 'Review Offer',
+    };
+  }
 
+  if (decisionState !== 'CURRENT') {
+    const isCritical = decisionState === 'RENEWAL_OVERDUE_CRITICAL' || decisionState === 'EXPIRED_AND_RENT_OVERDUE';
+    const daysUntilExpiry = renewal?.days_until_expiry != null ? Number(renewal.days_until_expiry) : null;
+    const daysOverdue = Number(renewal?.days_overdue || 0);
+    return {
+      kind: 'action',
+      tone: isCritical ? 'critical' : 'action',
+      title: isCritical ? 'Your agreement renewal is overdue' : 'Your agreement is expiring soon',
+      body: isCritical
+        ? `Your stay agreement has expired${daysOverdue ? ` ${daysOverdue} days ago` : ''}. Renew or plan your move-out to stay covered.`
+        : `Your stay agreement ends${daysUntilExpiry != null ? ` in ${daysUntilExpiry} days` : ' soon'}. Renew it to keep your room.`,
+      cta: isCritical ? 'Resolve Now' : 'View Details',
+    };
+  }
+
+  return null;
+}
+
+/**
+ * The prominent variant, for states the tenant has to act on. Deliberately
+ * heavier than the surrounding cards — a full-width tinted card with its own
+ * CTA button — because this is the one thing on the page that expires if it
+ * is ignored.
+ */
+function TenantRenewalActionCard({ prompt }: { prompt: RenewalPrompt }) {
+  const isCritical = prompt.tone === 'critical';
+  const shell = isCritical
+    ? 'border-rose-300 bg-gradient-to-br from-rose-50 to-card'
+    : 'border-accent/40 bg-gradient-to-br from-accent/10 to-card';
+  const badge = isCritical ? 'bg-rose-500/15 text-rose-700' : 'bg-accent/15 text-accent';
+  const dot = isCritical ? 'bg-rose-500' : 'bg-accent';
+  const button = isCritical
+    ? 'bg-rose-600 text-white'
+    : 'bg-accent text-accent-foreground';
+
+  return (
+    <div className={`rounded-2xl border-2 p-4 shadow-sm ${shell}`}>
+      <div className="flex items-start gap-3">
+        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${badge}`}>
+          {isCritical ? <AlertTriangle className="h-5 w-5" /> : <FileCheck2 className="h-5 w-5" />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${badge}`}>
+            <span className={`h-1.5 w-1.5 animate-pulse rounded-full ${dot}`} />
+            Action needed
+          </span>
+          <p className="mt-1.5 text-base font-bold leading-tight text-foreground">{prompt.title}</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{prompt.body}</p>
+        </div>
+      </div>
+      <Link
+        to="/tenant/renewal"
+        className={`mt-3.5 flex h-11 w-full items-center justify-center gap-2 rounded-xl text-sm font-bold shadow-sm transition-transform active:scale-[0.98] ${button}`}
+      >
+        {prompt.cta}
+        <ArrowRight className="h-4 w-4" />
+      </Link>
+    </div>
+  );
+}
+
+/** The slim variant, for states that are purely informational. */
+function TenantRenewalInfoBanner({ prompt }: { prompt: RenewalPrompt }) {
   return (
     <Link
       to="/tenant/renewal"
-      className={`flex items-center justify-between gap-3 rounded-2xl border p-4 shadow-sm transition-opacity hover:opacity-90 ${toneClasses}`}
+      className="flex items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-900 shadow-sm transition-opacity hover:opacity-90"
     >
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 items-center gap-3">
         <FileCheck2 className="h-5 w-5 shrink-0" />
-        <p className="text-sm font-bold">{title}</p>
+        <div className="min-w-0">
+          <p className="text-sm font-bold">{prompt.title}</p>
+          <p className="truncate text-xs text-emerald-800/80">{prompt.body}</p>
+        </div>
       </div>
       <ArrowRight className="h-4 w-4 shrink-0" />
     </Link>

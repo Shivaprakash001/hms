@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RenewalOfferService } from "@/src/services/tenants/renewal-offer-service";
+import { getMissingAgreementLifecycleFields } from "@/src/services/tenants/agreement-lifecycle-completeness";
 import { randomUUID } from "crypto";
 
 vi.mock("@/lib/services/notifications/whatsapp-renewal-handler", () => ({
@@ -75,8 +76,23 @@ const mockOfferFull = {
   proposed_end_date: new Date("2027-01-01"),
   effective_from: new Date("2026-07-01"),
   additional_deposit_required: 1000,
+  proposed_maintenance: 1000,
+  proposed_maintenance_type: "MONTHLY",
+  proposed_payment_frequency: "MONTHLY",
   status: "SENT",
-  agreement: { id: "agreement-1", template_id: "template-1", agreement_version: 1 },
+  // Full predecessor scalars — acceptOffer inherits any contract term the
+  // offer itself doesn't carry from this row, so a partial stub here would
+  // not represent what the service actually reads.
+  agreement: {
+    id: "agreement-1",
+    template_id: "template-1",
+    agreement_version: 1,
+    contract_rent: 8000,
+    contract_security_deposit: 5000,
+    contract_maintenance: 1000,
+    contract_maintenance_type: "MONTHLY",
+    contract_payment_frequency: "MONTHLY",
+  },
   tenant: { id: "tenant-1", profile_id: "profile-1" },
 };
 
@@ -215,6 +231,22 @@ describe("RenewalOfferService", () => {
       expect(offer.status).toBe("DRAFT");
     });
 
+    // A renewal does not silently change billing frequency or maintenance
+    // type, so an offer that omits them must carry the predecessor's values
+    // forward rather than storing NULL — see the acceptOffer regression below.
+    it("carries the predecessor's payment frequency and maintenance type onto an offer that does not propose new ones", async () => {
+      const { dbMock } = createDbMock();
+      const service = new RenewalOfferService(dbMock as any);
+
+      const offer = await service.generateOffer("agreement-1", "owner-1", {
+        proposed_rent: 8500,
+        proposed_duration_months: 6,
+      });
+
+      expect(offer.proposed_payment_frequency).toBe("MONTHLY");
+      expect(offer.proposed_maintenance_type).toBe("MONTHLY");
+    });
+
     it("raises error if agreement is not owned by requesting owner", async () => {
       const { dbMock } = createDbMock();
       const service = new RenewalOfferService(dbMock as any);
@@ -242,6 +274,17 @@ describe("RenewalOfferService", () => {
         proposed_rent: 9000,
         proposed_deposit: 6000,
       });
+
+      // Bulk offers have no per-offer terms input at all, so inheriting from
+      // each agreement is the only way they can be lifecycle-complete.
+      expect(txMock.renewalOffer.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            proposed_payment_frequency: "MONTHLY",
+            proposed_maintenance_type: "MONTHLY",
+          }),
+        })
+      );
 
       expect(result.offersGenerated).toBe(1);
       expect(txMock.bulkRenewalBatch.create).toHaveBeenCalledWith(
@@ -577,6 +620,64 @@ describe("RenewalOfferService", () => {
       ).rejects.toThrow("BAD_REQUEST: Cannot accept offer in status ACCEPTED");
 
       expect(txMock.agreement.create).not.toHaveBeenCalled();
+    });
+
+    // Regression: the successor was created straight from the offer's
+    // proposed_* columns, so any term the offer didn't carry landed on the
+    // new agreement as NULL. Accept succeeded, then signing re-validated the
+    // successor via renewal-readiness-engine → checkLifecycleComplete and
+    // returned an AGREEMENT_LIFECYCLE_INCOMPLETE 409 the tenant could not act
+    // on. The successor must be lifecycle-complete at creation time.
+    it("creates a successor that satisfies the signing-time lifecycle completeness check", async () => {
+      const { dbMock, txMock } = createDbMock();
+      const service = new RenewalOfferService(dbMock as any);
+
+      await service.acceptOffer("offer-1", "profile-1");
+
+      const created = txMock.agreement.create.mock.calls[0][0].data;
+      expect(getMissingAgreementLifecycleFields(created)).toEqual([]);
+    });
+
+    it("inherits payment frequency and maintenance type from the predecessor when the offer does not carry them", async () => {
+      const { dbMock, txMock } = createDbMock();
+      // Offers created before those terms were inherited at generation time
+      // (bulk offers hardcoded proposed_payment_frequency: null) still sit in
+      // the table as SENT — accepting one must not produce a NULL-term successor.
+      const legacyOffer = {
+        ...mockOfferFull,
+        proposed_payment_frequency: null,
+        proposed_maintenance_type: null,
+      };
+      dbMock.renewalOffer.findUnique = vi.fn().mockResolvedValue(legacyOffer);
+      txMock.renewalOffer.findUnique = vi.fn().mockResolvedValue(legacyOffer);
+      const service = new RenewalOfferService(dbMock as any);
+
+      await service.acceptOffer("offer-1", "profile-1");
+
+      const created = txMock.agreement.create.mock.calls[0][0].data;
+      expect(created.contract_payment_frequency).toBe("MONTHLY");
+      expect(created.contract_maintenance_type).toBe("MONTHLY");
+      expect(getMissingAgreementLifecycleFields(created)).toEqual([]);
+    });
+
+    it("refuses acceptance instead of creating a successor that could never be signed", async () => {
+      const { dbMock, txMock } = createDbMock();
+      // Neither the offer nor the predecessor can supply a payment frequency.
+      const unresolvableOffer = {
+        ...mockOfferFull,
+        proposed_payment_frequency: null,
+        agreement: { ...mockOfferFull.agreement, contract_payment_frequency: null },
+      };
+      dbMock.renewalOffer.findUnique = vi.fn().mockResolvedValue(unresolvableOffer);
+      txMock.renewalOffer.findUnique = vi.fn().mockResolvedValue(unresolvableOffer);
+      const service = new RenewalOfferService(dbMock as any);
+
+      await expect(service.acceptOffer("offer-1", "profile-1")).rejects.toThrow(
+        /CONFLICT: This renewal offer is missing agreement terms \(contract_payment_frequency\)/
+      );
+
+      expect(txMock.agreement.create).not.toHaveBeenCalled();
+      expect(txMock.renewalDecision.create).not.toHaveBeenCalled();
     });
   });
 

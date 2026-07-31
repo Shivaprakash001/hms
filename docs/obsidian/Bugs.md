@@ -28,6 +28,22 @@ Copy this block for each new entry:
 
 ## Fixed
 
+### Tenant got a 409 on every attempt to sign an accepted renewal (`AGREEMENT_LIFECYCLE_INCOMPLETE`)
+
+- **Status:** fixed
+- **Found:** 2026-07-31 (direct user report: "409 on the tenant side while accepting the renewal agreement")
+- **Area:** [[Backend]] — `renewal-offer-service.ts::acceptOffer` / `::generateOffer` / `::generateBulkOffers`
+- **Symptom:** The tenant could accept a renewal offer fine, but the next step — **Sign & Finalize Renewal** on `/tenant/renewal` — always failed with HTTP 409. The renewal was then permanently stuck: nothing in either the tenant or owner UI could clear it. Confirmed on live data (`Agreement 78e37b20`, predecessor `7c15aa18`).
+- **Root cause:** `acceptOffer` built the successor agreement by copying the offer's `proposed_*` columns straight onto the new row, and **no code path ever populated `proposed_payment_frequency`** — `generateOffer` defaulted it to `null` (no caller sends it; the owner UI has no such field) and `generateBulkOffers` hardcoded `proposed_payment_frequency: null`. The successor was therefore created with `contract_payment_frequency = NULL`. Nothing validated that at accept time, so acceptance succeeded. Signing then re-validated the successor through `renewal-readiness-engine.evaluateActivationReadiness` → `checkLifecycleComplete` → `assertAgreementLifecycleComplete`, which requires `contract_payment_frequency` — producing `AgreementRenewalSigningError("AGREEMENT_LIFECYCLE_INCOMPLETE")`, whose `status = 409`. Deterministic, not a race: **every** offer-accepted renewal hit it. The same NULL also silently blocked cron auto-activation, which logs `RENEWAL_ACTIVATION_BLOCKED` and skips (`agreement-lifecycle-service.ts`), so the renewal would not have self-healed on its effective date either.
+- **Why it only bit the offer path:** the parallel manual-draft path (`agreement-renewal-service.ts::createRenewalDraft`) resolves the same terms via `resolveContractSnapshot` — inheriting from the predecessor agreement and its `content_snapshot` — *and* validates completeness at creation time via `evaluateCreationReadiness`. The offer path did neither. See [[Business-Rules]] for the inheritance rule this establishes.
+- **Fix:** Three layers.
+  1. `getAgreementContract` now also returns `maintenance_type` / `payment_frequency` (with `content_snapshot` fallbacks, mirroring `resolveContractSnapshot`), and both `generateOffer` and `generateBulkOffers` inherit them from the predecessor when the owner doesn't propose new ones.
+  2. `acceptOffer` resolves the successor's terms from the offer *falling back to the predecessor*, then runs `getMissingAgreementLifecycleFields` **before** creating the row — so a lifecycle-incomplete successor can no longer be created at all. If a term genuinely can't be resolved, acceptance now fails with a `CONFLICT:` message naming the missing field, instead of deferring an unactionable 409 to the signing step. This layer also repairs already-issued offers still sitting in `SENT`.
+  3. `app/api/tenant/renewal-offer/[id]/accept/route.ts` maps `CONFLICT:` → 409 (it previously fell through to a 500, so the pre-existing "A renewal was already accepted for this agreement" guard was also reporting the wrong status).
+- **Data repair:** `migrations/062_backfill_renewal_successor_contract_terms.sql` backfills already-created **DRAFT** successors from their predecessor. Signed/active agreements are deliberately untouched. Verified read-only against live data: the stuck draft goes from `missing: [contract_payment_frequency]` → `[]`, i.e. 409 → signs OK.
+- **Regression tests:** `tests/renewal-offer-service.test.ts` — offer generation (single + bulk) inherits both terms; `acceptOffer` produces a successor that passes `getMissingAgreementLifecycleFields`; a legacy NULL-term offer still yields a complete successor; an unresolvable offer is refused rather than accepted. Confirmed all four fail against the pre-fix service.
+- **Related:** [[Business-Rules]], [[Changelog]], [[APIs]], [[Features]], [[Decisions]] ADR-028
+
 ### Repeated frequency switches crashed with a unique-constraint error, and (once fixed) could leave a mixed-cadence schedule live
 
 - **Status:** fixed

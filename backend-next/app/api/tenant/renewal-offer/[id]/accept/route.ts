@@ -13,7 +13,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   } catch (error: any) {
     const status = error.message?.startsWith("NOT_FOUND") ? 404
       : error.message?.startsWith("FORBIDDEN") ? 403
-      : error.message?.startsWith("BAD_REQUEST") ? 400 : 500;
+      : error.message?.startsWith("BAD_REQUEST") ? 400
+      : error.message?.startsWith("CONFLICT") ? 409 : 500;
     return NextResponse.json({ error: { message: error.message } }, { status });
   }
 }

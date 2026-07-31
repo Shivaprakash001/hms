@@ -4,6 +4,7 @@ import { getLogger } from "@/lib/logger";
 import { randomUUID } from "crypto";
 import { currentAgreementWhere } from "./agreement-status";
 import { renewalTimelineService } from "./renewal-timeline-service";
+import { getMissingAgreementLifecycleFields } from "./agreement-lifecycle-completeness";
 
 const logger = getLogger("renewal-offer");
 
@@ -175,11 +176,11 @@ export class RenewalOfferService {
           proposed_rent: proposedRent,
           proposed_security_deposit: proposedDeposit,
           proposed_maintenance: proposed.proposed_maintenance ?? Number(activeContract.maintenance || 0),
-          proposed_maintenance_type: proposed.proposed_maintenance_type || agreement.contract_maintenance_type || null,
+          proposed_maintenance_type: proposed.proposed_maintenance_type || activeContract.maintenance_type || null,
           proposed_duration_months: proposedDuration,
           proposed_start_date: proposedStartDate,
           proposed_end_date: proposedEndDate,
-          proposed_payment_frequency: proposed.proposed_payment_frequency || null,
+          proposed_payment_frequency: proposed.proposed_payment_frequency || activeContract.payment_frequency || null,
           effective_from: effectiveFrom,
           current_rent: Number(activeContract.rent || 0),
           current_security_deposit: Number(activeContract.security_deposit || 0),
@@ -350,11 +351,11 @@ export class RenewalOfferService {
             proposed_rent: proposedRent,
             proposed_security_deposit: proposedDeposit,
             proposed_maintenance: Number(activeContract.maintenance || 0),
-            proposed_maintenance_type: agreement.contract_maintenance_type || null,
+            proposed_maintenance_type: activeContract.maintenance_type || null,
             proposed_duration_months: proposedDuration,
             proposed_start_date: effectiveFrom,
             proposed_end_date: proposedEndDate,
-            proposed_payment_frequency: null,
+            proposed_payment_frequency: activeContract.payment_frequency || null,
             effective_from: effectiveFrom,
             current_rent: currentRent,
             current_security_deposit: Number(activeContract.security_deposit || 0),
@@ -489,6 +490,33 @@ export class RenewalOfferService {
       const templateId = activeTemplate?.id || offer.agreement.template_id;
       const nextVersion = Number(offer.agreement.agreement_version || 1) + 1;
 
+      // The successor has to be lifecycle-complete the moment it is created.
+      // Signing re-validates it (renewal-readiness-engine → checkLifecycleComplete)
+      // and any term the offer failed to carry surfaces there as an opaque 409
+      // the tenant can do nothing about, long after the accept succeeded.
+      // Terms the owner did not explicitly propose are inherited from the
+      // predecessor — a renewal does not silently change billing frequency or
+      // maintenance type. This also repairs offers created before those terms
+      // were inherited at offer-generation time.
+      const predecessorContract = getAgreementContract(offer.agreement);
+      const successorLifecycle = {
+        agreement_start_date: offer.effective_from,
+        agreement_end_date: offer.proposed_end_date,
+        agreement_duration_months: offer.proposed_duration_months,
+        contract_rent: offer.proposed_rent,
+        contract_security_deposit: offer.proposed_security_deposit,
+        contract_maintenance: offer.proposed_maintenance ?? predecessorContract.maintenance,
+        contract_maintenance_type: offer.proposed_maintenance_type || predecessorContract.maintenance_type,
+        contract_payment_frequency: offer.proposed_payment_frequency || predecessorContract.payment_frequency,
+      };
+
+      const missingFields = getMissingAgreementLifecycleFields(successorLifecycle);
+      if (missingFields.length > 0) {
+        throw new Error(
+          `CONFLICT: This renewal offer is missing agreement terms (${missingFields.join(", ")}). Ask your hostel to reissue the offer.`
+        );
+      }
+
       // Create new agreement from offer terms. Status DRAFT until effective_from.
       const newAgreement = await tx.agreement.create({
         data: {
@@ -497,20 +525,16 @@ export class RenewalOfferService {
           renewed_from_agreement_id: offer.agreement_id,
           status: "DRAFT",
           agreement_version: nextVersion,
-          agreement_start_date: offer.effective_from,
-          agreement_end_date: offer.proposed_end_date,
-          agreement_duration_months: offer.proposed_duration_months,
-          contract_rent: offer.proposed_rent,
-          contract_security_deposit: offer.proposed_security_deposit,
-          contract_maintenance: offer.proposed_maintenance,
-          contract_maintenance_type: offer.proposed_maintenance_type,
-          contract_payment_frequency: offer.proposed_payment_frequency as any,
+          ...successorLifecycle,
+          contract_payment_frequency: successorLifecycle.contract_payment_frequency as any,
           content_snapshot: {
             agreement_start_date: offer.effective_from.toISOString().slice(0, 10),
             agreement_end_date: offer.proposed_end_date.toISOString().slice(0, 10),
             agreement_duration_months: offer.proposed_duration_months,
             contract_rent: Number(offer.proposed_rent),
             contract_security_deposit: Number(offer.proposed_security_deposit),
+            maintenance_type: successorLifecycle.contract_maintenance_type,
+            payment_frequency: successorLifecycle.contract_payment_frequency,
             source: "renewal_offer", renewal_offer_id: offer.id,
           },
         },
@@ -994,6 +1018,13 @@ function getAgreementContract(agreement: any) {
     rent: numberValue(agreement?.contract_rent ?? snapshot.monthly_rent),
     security_deposit: numberValue(agreement?.contract_security_deposit ?? snapshot.advance_deposit),
     maintenance: numberValue(agreement?.contract_maintenance ?? snapshot.maintenance_charge),
+    // Renewal never silently changes these two unless the owner explicitly
+    // proposes a change, so they must be inherited from the predecessor —
+    // an offer that drops them produces a successor agreement that fails
+    // `assertAgreementLifecycleComplete` at signing time. Mirrors
+    // `resolveContractSnapshot` in agreement-renewal-service.ts.
+    maintenance_type: agreement?.contract_maintenance_type ?? snapshot.maintenance_type ?? null,
+    payment_frequency: agreement?.contract_payment_frequency ?? snapshot.payment_frequency ?? null,
   };
 }
 

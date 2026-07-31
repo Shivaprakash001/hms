@@ -80,7 +80,9 @@ This is an inventory of features **confirmed implemented** (live route + live UI
 | Activation / onboarding | `/activate(/:token)`, `/complete-profile` | `ActivateAccountPage`, `CompleteProfilePage` → `/api/tenants/activate*`, `/api/tenants/me/complete-profile` |
 | Payment return handling | `/payment-return` | `TenantPaymentReturnPage` |
 | Billing-frequency change requests | (within Financials/Profile) | `/api/tenants/me/billing-frequency` |
-| Agreement renewal decisions | (within tenant flows) | `/api/tenant/renewal-offer/*` |
+| Agreement renewal decisions | `/tenant/renewal` (+ dashboard prompt) | `TenantRenewalPage` → `/api/tenant/renewal-offer/*`, `/api/tenant/agreement-renewal`, `/api/agreements/[id]/sign-renewal` |
+
+- **Tenant dashboard renewal prompt** (`TenantDashboardPage.tsx` — `resolveRenewalPrompt`, `TenantRenewalActionCard`, `TenantRenewalInfoBanner`). One resolver maps the tenant's renewal state to at most one prompt, and its `kind` decides placement, not just styling. States needing a tenant response (offer to review, agreement awaiting signature, expiring soon, renewal overdue) render as a full call-to-action card — headline, the concrete terms (proposed rent, effective date, respond-by date, or days remaining), and its own CTA button — placed directly under `TenantPriorityStrip` at the top of the page. Purely informational states ("your agreement has been renewed") stay a slim strip further down, in the old banner position. Reworked 2026-07-31 after a report that the previous single-line strip, sitting sixth down the page below the onboarding tracker/reservation/documents cards, was being missed entirely. `MOVE_OUT_IN_PROGRESS` renders nothing, matching `TenantRenewalPage`'s own gate. Both variants link to `/tenant/renewal`, which owns the actual review/accept/decline/discuss/sign flow. See [[Frontend]], [[Changelog]].
 
 ## Public-facing (`frontend-v2` public routes)
 

@@ -23,6 +23,16 @@ Architecture Decision Records — each entry below was **inferred from code evid
 
 ---
 
+## ADR-028: A renewal successor must be lifecycle-complete at creation time — completeness is validated where the row is written, not only where it is signed
+
+- **Date:** 2026-07-31
+- **Status:** accepted
+- **Context:** `renewal-offer-service.acceptOffer` created the successor agreement straight from the offer's `proposed_*` columns and validated nothing. Because no code path ever set `proposed_payment_frequency` (see [[Bugs]]), every offer-accepted renewal produced a successor with `contract_payment_frequency = NULL`. The gap only surfaced two steps later, when `signRenewalAgreement` ran `evaluateActivationReadiness` → `checkLifecycleComplete` and returned a 409 the tenant could neither understand nor act on — and cron auto-activation, running the same check, silently logged `RENEWAL_ACTIVATION_BLOCKED` and skipped it forever. ADR-015 consolidated *where* readiness is evaluated, but both of its orchestrators run at activation/creation of the **draft**; nothing guarded the offer-acceptance write, which is a third way a successor row comes into existence.
+- **Decision:** Two rules. (1) **Inheritance:** contract terms the owner does not explicitly propose are inherited from the predecessor agreement (falling back to its `content_snapshot`) at both offer generation and offer acceptance — a renewal does not silently change billing frequency or maintenance type. This makes the offer path match what `createRenewalDraft` already did via `resolveContractSnapshot`. (2) **Validation at the write:** `acceptOffer` runs `getMissingAgreementLifecycleFields` on the successor payload *before* `agreement.create`, and refuses the acceptance with a field-naming `CONFLICT:` error rather than persisting a row that is guaranteed to fail signing later.
+- **Alternatives considered:** Having the signing path resolve missing terms from the predecessor on the fly (rejected — it would paper over creation-time bugs, and mutating inherited contract terms at signature time is exactly the kind of silent rewrite the readiness check exists to prevent). Relaxing `REQUIRED_AGREEMENT_LIFECYCLE_FIELDS` to drop `contract_payment_frequency` (rejected — the field is genuinely required downstream by rent-schedule generation; the bug was the NULL, not the check). Fixing only offer generation (rejected — it leaves every already-issued `SENT` offer still producing a broken successor).
+- **Consequences:** A lifecycle-incomplete successor can no longer be created by any of the three paths that write one. Failures move earlier and become actionable: the tenant is told at accept time which term is missing and to ask for a reissued offer, instead of hitting an opaque 409 at the signature step. Existing DRAFT successors still need the one-off data repair in `migrations/062_backfill_renewal_successor_contract_terms.sql` — code changes do not retroactively fix rows already written.
+- **Related:** [[Bugs]], [[Business-Rules]], [[Changelog]], [[APIs]], ADR-015 (the readiness engines this extends to a third write site), ADR-012
+
 ## ADR-027: Regeneration wipes ALL live UPCOMING rent, not just rows on/after the new effectiveFrom, and revives stale rows instead of colliding with them
 
 - **Date:** 2026-07-22
