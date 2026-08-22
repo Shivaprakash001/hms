@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ArrowRight, Edit3, Loader2, Send } from 'lucide-react';
+import { ArrowRight, Edit3, Loader2, Send, RefreshCw } from 'lucide-react';
 import { fmtDate, statusBadgeColor } from './utils';
 
 export function RenewalOffersList({
@@ -13,6 +13,8 @@ export function RenewalOffersList({
   onFilterChange,
   onSend,
   isSending,
+  onResend,
+  isResending,
   onRevise,
 }: {
   isLoading: boolean;
@@ -25,6 +27,8 @@ export function RenewalOffersList({
   onFilterChange: (v: string) => void;
   onSend: (offerId: string) => void;
   isSending: boolean;
+  onResend: (offerId: string) => void;
+  isResending: boolean;
   onRevise: (offer: any) => void;
 }) {
   return (
@@ -84,6 +88,13 @@ export function RenewalOffersList({
               const isDraft = offer.status === 'DRAFT';
               const isSent = offer.status === 'SENT';
               const isDeclined = offer.status === 'DECLINED';
+              // An offer past its window is dead to the tenant whether or not
+              // the lifecycle sweep has flipped it to EXPIRED yet — the owner
+              // gets the same Resend action in both cases.
+              const lapsedAt = offer.offer_expires_at ? new Date(offer.offer_expires_at) : null;
+              const isExpired =
+                offer.status === 'EXPIRED' ||
+                ((isDraft || isSent) && Boolean(lapsedAt) && (lapsedAt as Date).getTime() <= Date.now());
 
               return (
                 <article key={offer.id} className="p-4 transition-all hover:bg-muted/30 sm:p-5">
@@ -114,6 +125,14 @@ export function RenewalOffersList({
                       <div className="col-span-full font-medium text-muted-foreground">
                         Timeline: <span className="font-semibold text-foreground">{fmtDate(offer.proposed_start_date)} - {fmtDate(offer.proposed_end_date)} ({offer.proposed_duration_months}m)</span>
                       </div>
+                      {offer.offer_expires_at && (isSent || isExpired) && (
+                        <div className="col-span-full font-medium text-muted-foreground">
+                          {isExpired ? 'Expired on' : 'Responds by'}:{' '}
+                          <span className={`font-semibold ${isExpired ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'}`}>
+                            {fmtDate(offer.offer_expires_at)}
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex flex-wrap gap-2 text-xs font-semibold">
@@ -142,7 +161,7 @@ export function RenewalOffersList({
                   </div>
 
                   <div className="mt-3 flex items-center gap-2 sm:justify-end">
-                    {isDraft && (
+                    {isDraft && !isExpired && (
                       <button
                         onClick={() => onSend(offer.id)}
                         disabled={isSending}
@@ -152,7 +171,17 @@ export function RenewalOffersList({
                         Send Offer
                       </button>
                     )}
-                    {(isDraft || isSent || isDeclined) && (
+                    {isExpired && (
+                      <button
+                        onClick={() => onResend(offer.id)}
+                        disabled={isResending}
+                        className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-lg bg-accent px-4 text-xs font-bold text-accent-foreground shadow-sm transition-all hover:bg-accent/90 disabled:opacity-60 sm:h-9 sm:flex-none"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        Resend Offer
+                      </button>
+                    )}
+                    {(isDraft || isSent || isDeclined || isExpired) && (
                       <button
                         onClick={() => onRevise(offer)}
                         className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-4 text-xs font-bold text-foreground transition-all hover:bg-muted sm:h-9 sm:flex-none"

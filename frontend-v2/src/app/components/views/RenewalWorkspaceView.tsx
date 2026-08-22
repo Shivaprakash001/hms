@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, ArrowLeft, CheckCircle2, FileText, Loader2, XCircle } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, ArrowLeft, CheckCircle2, FileText, Loader2, RefreshCw, XCircle } from 'lucide-react';
 import { agreementService } from '@features/agreements/api';
+import { hmsToast } from '@lib/toast';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@shared/ui';
 import { fmtDate, initials, statusBadgeColor } from './renewal/utils';
 
@@ -18,12 +19,24 @@ const READINESS_LABELS: Record<string, string> = {
 export function RenewalWorkspaceView() {
   const { agreementId } = useParams<{ agreementId: string }>();
   const [tab, setTab] = useState('timeline');
+  const queryClient = useQueryClient();
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['agreements', 'renewal-workspace', agreementId],
     queryFn: () => agreementService.getRenewalWorkspace(agreementId as string),
     enabled: Boolean(agreementId),
     staleTime: 15_000,
+  });
+
+  const resendOfferMutation = useMutation({
+    mutationFn: (offerId: string) => agreementService.resendRenewalOffer(offerId),
+    onSuccess: () => {
+      hmsToast.success('Renewal offer resent to tenant');
+      queryClient.invalidateQueries({ queryKey: ['agreements', 'renewal-workspace', agreementId] });
+      queryClient.invalidateQueries({ queryKey: ['agreements', 'renewal-offers'] });
+      queryClient.invalidateQueries({ queryKey: ['agreements', 'renewal-queue'] });
+    },
+    onError: (err) => hmsToast.fromApiError(err, 'Failed to resend renewal offer'),
   });
 
   if (isLoading) {
@@ -178,18 +191,49 @@ export function RenewalWorkspaceView() {
             <p className="py-8 text-center text-xs text-muted-foreground">No offers generated for this agreement yet.</p>
           ) : (
             <div className="divide-y divide-border rounded-xl border border-border bg-card">
-              {offers.map((offer: any) => (
-                <div key={offer.id} className="flex items-center justify-between gap-3 p-4">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${statusBadgeColor(offer.status)}`}>{offer.status}</span>
-                      <span className="text-xs font-bold text-foreground">₹{Number(offer.proposed_rent).toLocaleString('en-IN')}/mo</span>
+              {offers.map((offer: any) => {
+                // Past its window counts as expired whether or not the
+                // lifecycle sweep has flipped the row to EXPIRED yet.
+                const lapsedAt = offer.offer_expires_at ? new Date(offer.offer_expires_at) : null;
+                const isExpired =
+                  offer.status === 'EXPIRED' ||
+                  (['DRAFT', 'SENT'].includes(offer.status) && Boolean(lapsedAt) && (lapsedAt as Date).getTime() <= Date.now());
+                const canResend = isExpired && !successor;
+
+                return (
+                  <div key={offer.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${statusBadgeColor(offer.status)}`}>{offer.status}</span>
+                        <span className="text-xs font-bold text-foreground">₹{Number(offer.proposed_rent).toLocaleString('en-IN')}/mo</span>
+                      </div>
+                      <p className="mt-1 text-[11px] text-muted-foreground">{fmtDate(offer.proposed_start_date)} – {fmtDate(offer.proposed_end_date)} ({offer.proposed_duration_months}m)</p>
+                      {offer.offer_expires_at && (
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                          {isExpired ? 'Expired on' : 'Responds by'}{' '}
+                          <span className={isExpired ? 'font-semibold text-amber-600 dark:text-amber-400' : 'font-semibold text-foreground'}>
+                            {fmtDate(offer.offer_expires_at)}
+                          </span>
+                        </p>
+                      )}
                     </div>
-                    <p className="mt-1 text-[11px] text-muted-foreground">{fmtDate(offer.proposed_start_date)} – {fmtDate(offer.proposed_end_date)} ({offer.proposed_duration_months}m)</p>
+                    <div className="flex items-center gap-3">
+                      <span className="text-[11px] text-muted-foreground">{fmtDate(offer.created_at)}</span>
+                      {canResend && (
+                        <button
+                          type="button"
+                          onClick={() => resendOfferMutation.mutate(offer.id)}
+                          disabled={resendOfferMutation.isPending}
+                          className="flex h-9 items-center gap-1.5 rounded-lg bg-accent px-3 text-xs font-bold text-accent-foreground shadow-sm transition-all hover:bg-accent/90 disabled:opacity-60"
+                        >
+                          <RefreshCw className={`h-3.5 w-3.5 ${resendOfferMutation.isPending ? 'animate-spin' : ''}`} />
+                          Resend
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <span className="text-[11px] text-muted-foreground">{fmtDate(offer.created_at)}</span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </TabsContent>

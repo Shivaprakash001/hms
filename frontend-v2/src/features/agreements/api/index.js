@@ -63,6 +63,14 @@ export const agreementService = {
     const response = await api.post(`/agreements/renewal-offers/${offerId}/send`);
     return unwrap(response);
   },
+  /** Re-send an offer whose response window lapsed — same terms, fresh expiry.
+   * @param {string} offerId
+   * @param {{ offer_expires_at?: string }} [data]
+   */
+  resendRenewalOffer: async (offerId, data = {}) => {
+    const response = await api.post(`/agreements/renewal-offers/${offerId}/resend`, data);
+    return unwrap(response);
+  },
   reviseRenewalOffer: async (offerId, data) => {
     const response = await api.patch(`/agreements/renewal-offers/${offerId}`, data);
     return unwrap(response);

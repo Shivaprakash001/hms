@@ -423,6 +423,133 @@ export class RenewalOfferService {
     return updated;
   }
 
+  /**
+   * Owner re-sends an offer whose response window lapsed.
+   *
+   * Deliberately reuses the same offer row rather than cloning it the way
+   * `reviseOffer` does: a resend carries the *same* terms, so a second row
+   * would duplicate the offer history without recording anything new. The
+   * "it lapsed and was sent again" fact lives in the timeline instead —
+   * `OFFER_EXPIRED` (written by `expireStaleOffers`) followed by an
+   * `OFFER_SENT` carrying `metadata.resend`.
+   */
+  async resendOffer(offerId: string, ownerId: string, opts: { offer_expires_at?: string | Date } = {}) {
+    const offer = await this.db.renewalOffer.findUnique({
+      where: { id: offerId },
+      include: {
+        agreement: {
+          select: {
+            id: true, status: true, renewed_to_agreement_id: true,
+            tenant: {
+              select: {
+                id: true, security_deposit: true,
+                tenant_financial_ledger: {
+                  where: { type: "CREDIT", reason: { in: ["SECURITY_DEPOSIT_COLLECTED", "SECURITY_DEPOSIT_TOPUP"] } },
+                  select: { amount: true },
+                },
+              },
+            },
+            renewal_offers_source: {
+              where: { status: { in: [...ACTIVE_OFFER_STATUSES] } },
+              select: { id: true, offer_expires_at: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!offer) throw new Error("NOT_FOUND: Offer not found");
+    if (offer.owner_id !== ownerId) throw new Error("FORBIDDEN: Not your offer");
+
+    const now = new Date();
+    // An offer past its window but not yet swept by `expireStaleOffers` (run
+    // from agreement-lifecycle-service) is dead to the tenant already —
+    // `acceptOffer` rejects it — so it is resendable on the same terms as a
+    // row the sweep has already flipped to EXPIRED.
+    const lapsedButUnswept =
+      ([...ACTIVE_OFFER_STATUSES] as string[]).includes(offer.status) &&
+      Boolean(offer.offer_expires_at) &&
+      (offer.offer_expires_at as Date) <= now;
+    if (offer.status !== "EXPIRED" && !lapsedButUnswept) {
+      throw new Error(`BAD_REQUEST: Only an expired offer can be resent — this one is ${offer.status}`);
+    }
+
+    const agreement = offer.agreement;
+    const currentStatuses = [...(currentAgreementWhere() as any).in];
+    if (!currentStatuses.includes(agreement.status)) {
+      throw new Error(`BAD_REQUEST: Agreement status ${agreement.status} is not eligible for renewal offers`);
+    }
+    if (agreement.renewed_to_agreement_id) {
+      throw new Error("CONFLICT: This agreement has already been renewed.");
+    }
+    // Mirrors generateOffer's rule: only one live offer per agreement. A
+    // *different* offer that is still within its window supersedes this one.
+    const liveOther = agreement.renewal_offers_source.find(
+      (o: { id: string; offer_expires_at: Date | null }) => o.id !== offerId && (!o.offer_expires_at || o.offer_expires_at > now),
+    );
+    if (liveOther) {
+      throw new Error("CONFLICT: A newer renewal offer is already active for this agreement.");
+    }
+
+    // The deposit position can have moved since the offer first went out, and
+    // these three figures drive both the AWAITING_PAYMENT pipeline stage and
+    // the top-up obligation acceptOffer raises — so recompute rather than
+    // resending a stale snapshot.
+    const proposedDeposit = Number(offer.proposed_security_deposit);
+    const depositHeld = this._computeDepositHeld(agreement.tenant);
+    const additionalDeposit = Math.max(0, proposedDeposit - depositHeld);
+    const depositRefund = Math.max(0, depositHeld - proposedDeposit);
+
+    const newExpiresAt = opts.offer_expires_at ? new Date(opts.offer_expires_at) : addDays(now, 15);
+    if (Number.isNaN(newExpiresAt.getTime())) throw new Error("BAD_REQUEST: Invalid offer_expires_at");
+    if (newExpiresAt <= now) throw new Error("BAD_REQUEST: offer_expires_at must be in the future");
+
+    const updated = await this.db.$transaction(async (tx: Prisma.TransactionClient) => {
+      const u = await tx.renewalOffer.update({
+        where: { id: offerId },
+        data: {
+          status: "SENT",
+          sent_at: now,
+          offer_expires_at: newExpiresAt,
+          deposit_held: depositHeld,
+          additional_deposit_required: additionalDeposit,
+          deposit_refund_eligible: depositRefund,
+          updated_at: now,
+        },
+      });
+      await renewalTimelineService.registerEvent(tx, {
+        hostelId: offer.hostel_id,
+        tenantId: offer.tenant_id,
+        agreementId: offer.agreement_id,
+        offerId,
+        eventType: "OFFER_SENT",
+        actorType: "OWNER",
+        actorId: ownerId,
+        metadata: {
+          resend: true,
+          previousStatus: offer.status,
+          previousExpiresAt: offer.offer_expires_at?.toISOString() || null,
+          newExpiresAt: newExpiresAt.toISOString(),
+          additionalDeposit,
+        },
+      });
+      return u;
+    });
+
+    try {
+      const { eventSystem } = await import("@/lib/events");
+      await eventSystem.trigger("renewal_offer_sent", {
+        offer_id: offerId, tenant_id: offer.tenant_id, hostel_id: offer.hostel_id, owner_id: ownerId,
+      });
+    } catch (err) { logger.error("renewal-offer.resend.event_failed", { offer_id: offerId, err }); }
+
+    logger.info("renewal-offer.resent", {
+      offer_id: offerId, tenant_id: offer.tenant_id,
+      previous_status: offer.status, new_expires_at: newExpiresAt.toISOString(),
+    });
+    return updated;
+  }
+
   /** Send all DRAFT offers in a batch. */
   async sendBulkOffers(batchId: string, ownerId: string) {
     const batch = await this.db.bulkRenewalBatch.findUnique({ where: { id: batchId } });
@@ -804,7 +931,13 @@ export class RenewalOfferService {
     const oldOffer = await this.db.renewalOffer.findUnique({ where: { id: offerId } });
     if (!oldOffer) throw new Error("NOT_FOUND: Offer not found");
     if (oldOffer.owner_id !== ownerId) throw new Error("FORBIDDEN: Not your offer");
-    if (!["DRAFT", "SENT"].includes(oldOffer.status)) throw new Error("BAD_REQUEST: Cannot revise offer in status " + oldOffer.status);
+    // DECLINED and EXPIRED are revisable too: revising one is how an owner
+    // makes a counter-offer after a decline, or re-offers on new terms after
+    // the response window lapsed. (The owner UI has always shown Revise on
+    // declined offers; this guard used to reject it — see [[Bugs]].)
+    if (!["DRAFT", "SENT", "DECLINED", "EXPIRED"].includes(oldOffer.status)) {
+      throw new Error("BAD_REQUEST: Cannot revise offer in status " + oldOffer.status);
+    }
 
     return this.db.$transaction(async (tx) => {
       await tx.renewalOffer.update({ where: { id: offerId }, data: { status: "SUPERSEDED", updated_at: new Date() } });

@@ -125,6 +125,7 @@ export function RenewalQueueView() {
         ['AWAITING_PAYMENT', `Awaiting Payment (${pipelineCounts.AWAITING_PAYMENT ?? 0})`],
         ['READY_FOR_SIGNATURE', `Ready for Sign (${pipelineCounts.READY_FOR_SIGNATURE ?? 0})`],
         ['DECLINED', `Declined (${pipelineCounts.DECLINED ?? 0})`],
+        ['EXPIRED', `Expired (${pipelineCounts.EXPIRED ?? 0})`],
       ] as [string, string][],
     [offerRows.length, pipelineCounts],
   );
@@ -179,6 +180,17 @@ export function RenewalQueueView() {
       queryClient.invalidateQueries({ queryKey: ['agreements', 'renewal-offers'] });
     },
     onError: (err) => hmsToast.fromApiError(err, 'Failed to send renewal offer'),
+  });
+
+  const resendOfferMutation = useMutation({
+    mutationFn: (offerId: string) => agreementService.resendRenewalOffer(offerId),
+    onSuccess: () => {
+      hmsToast.success('Renewal offer resent to tenant');
+      queryClient.invalidateQueries({ queryKey: ['agreements', 'renewal-offers'] });
+      queryClient.invalidateQueries({ queryKey: ['agreements', 'renewal-queue'] });
+      queryClient.invalidateQueries({ queryKey: ['agreements', 'renewal-workspace'] });
+    },
+    onError: (err) => hmsToast.fromApiError(err, 'Failed to resend renewal offer'),
   });
 
   const reviseOfferMutation = useMutation({
@@ -395,6 +407,8 @@ export function RenewalQueueView() {
           onFilterChange={setOffersFilter}
           onSend={(offerId) => sendOfferMutation.mutate(offerId)}
           isSending={sendOfferMutation.isPending}
+          onResend={(offerId) => resendOfferMutation.mutate(offerId)}
+          isResending={resendOfferMutation.isPending}
           onRevise={(offer) => setSelectedOffer(offer)}
         />
       )}

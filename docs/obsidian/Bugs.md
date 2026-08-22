@@ -28,6 +28,32 @@ Copy this block for each new entry:
 
 ## Fixed
 
+### Owner "Revise" button was dead on declined renewal offers, and expired offers had no action at all
+
+- **Status:** fixed
+- **Found:** 2026-08-22
+- **Area:** [[Backend]] / [[Frontend]]
+- **Symptom:** Two dead ends in the owner Renewal Pipeline's Offers tab. (1) An offer the tenant let expire rendered **no action buttons whatsoever** — once `expireStaleOffers` flipped it to `EXPIRED`, the owner's only way forward was generating a brand-new offer from the Expiring Stays tab. (2) `RenewalOffersList.tsx` had always rendered **Revise** on `DECLINED` offers, but clicking it failed with `BAD_REQUEST: Cannot revise offer in status DECLINED`.
+- **Root cause:** (1) The offer row's action block only handled `DRAFT` (Send), `DRAFT|SENT|DECLINED` (Revise) and the Workspace link — `EXPIRED` matched nothing, and no resend path existed in the service or API at all. (2) `reviseOffer`'s status guard allowed only `["DRAFT", "SENT"]`, which never matched the statuses the UI actually offered the button on. The two halves of the same feature were written against different status sets.
+- **Fix:** New `renewalOfferService.resendOffer` + `POST /api/agreements/renewal-offers/[id]/resend` — re-sends the same offer row on the same terms with a fresh window (see [[Business-Rules]] — *Agreement renewal — resending a lapsed offer*). `reviseOffer`'s guard widened to `["DRAFT", "SENT", "DECLINED", "EXPIRED"]`, which is what the UI has always assumed. Owner UI gained a **Resend Offer** button (Offers Pipeline list *and* the Renewal Workspace's Offer History tab), an explicit expiry/respond-by line on each offer row, and an `Expired` pipeline filter chip — `EXPIRED` was already flowing through `computePipelineStatus` into the counts, but had no chip to select it. 12 regression tests in `tests/renewal-offer-service.test.ts`.
+- **Note on scope:** the resend guard also treats an offer past `offer_expires_at` but still marked `DRAFT`/`SENT` as expired, because `expireStaleOffers` runs only on the daily lifecycle job — such an offer is already rejected by `acceptOffer`, so it was a third (time-window-dependent) way to reach the same dead end.
+- **Related:** [[Features]] (Resend Expired Renewal Offer) · [[APIs]] · [[Business-Rules]] · [[Changelog]]
+
+### Owner "Send Reminder" silently reached nobody for tenants with an older cancelled charge
+
+- **Status:** fixed
+- **Found:** 2026-08-05 (owner report: "not able to send reminders, neither are cron reminders reaching tenants and their guardians")
+- **Area:** [[Backend]] — `src/services/payments/reminder-service.ts::sendManualReminder`
+- **Symptom:** For certain tenants the owner's one-tap reminder reported success — the API returned `success: true`, an in-app `reminder_logs` row was written, and the dashboard toast said the reminder was sent — but **no WhatsApp message ever reached the tenant or their guardian**. Reproduced live on 7 of 57 tenants with outstanding dues (e.g. tenant `shiva`, ₹8,500 overdue since 2026-07-05, whose guardian had never been reachable).
+- **Root cause:** A filter mismatch between obligation *selection* and delivery *acceptance*. `sendManualReminder` picked the target with `status: { notIn: ["PAID","WAIVED"] }` ordered by `due_date asc`, and did not filter `is_superseded`. `PaymentStatus` also includes `CANCELLED` and `DRAFT`, so any older cancelled/draft/superseded charge won that ordering and became "the oldest unpaid obligation". `whatsappReminderDeliveryService.sendRentReminder` then re-checks the obligation against its own stop rule (`PAID`/`SETTLED`/`CANCELLED`/`WAIVED`/`is_superseded`) and correctly refuses, returning `skipped: true, reason: "SETTLED_OR_CANCELLED"`. Because the reminder's `sent` count is computed from `in_app.sent || email.sent || whatsapp.sent`, the in-app log alone made the whole call report success — the WhatsApp skip never surfaced to the owner. The condition is permanent, not transient: a stale ₹100 cancelled charge from 2026-07-01 shadowed the real dues on every attempt, so those tenants and their guardians could never be reminded.
+- **Why guardians were hit hardest:** guardian escalation lives *inside* the WhatsApp delivery path (`whatsapp-reminder-delivery.ts`, tenant + guardian on `daysOverdue >= 3`) and there is no guardian email or SMS channel. Any failure that stops the WhatsApp send therefore removes the guardian's only route entirely.
+- **Fix:** Selection now mirrors the delivery-side stop rule — `status: { notIn: ["PAID","WAIVED","CANCELLED","DRAFT"] }` plus `is_superseded: false` — with a comment tying the two together so they aren't allowed to drift again. Regression test in `tests/manual-reminder-service.test.ts` asserts the selection filter, so a future loosening fails the suite.
+- **Related:** [[Business-Rules]] (reminder escalation), [[Backend]], [[Changelog]]
+
+> [!note] Still open, found during the same investigation
+> - `renewal_offer_sent_v1` fails at Meta with error `132001` — *"Template name does not exist in the translation"* (3 failures on 2026-08-05). Renewal offers, not rent reminders. The template is referenced in code but appears not to be approved/published on the WhatsApp Business account. See [[TODO]].
+> - The `sent` count in `sendManualReminder` treats an in-app log as success, so a total WhatsApp failure can still surface to the owner as "reminder sent". The channel detail *is* returned in `channels`, but the summary figure masks it. Not changed here — it would alter the owner-facing success semantics of the endpoint.
+
 ### Tenant got a 409 on every attempt to sign an accepted renewal (`AGREEMENT_LIFECYCLE_INCOMPLETE`)
 
 - **Status:** fixed

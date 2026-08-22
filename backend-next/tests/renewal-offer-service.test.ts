@@ -717,6 +717,198 @@ describe("RenewalOfferService", () => {
     });
   });
 
+  describe("resendOffer", () => {
+    const PAST = new Date("2026-01-01T00:00:00.000Z");
+
+    /** An offer row as `resendOffer` reads it — expired, with its predecessor
+     * agreement and the tenant's deposit ledger joined in. */
+    function expiredOffer(overrides: Record<string, any> = {}) {
+      return {
+        id: "offer-1",
+        agreement_id: "agreement-1",
+        tenant_id: "tenant-1",
+        hostel_id: "hostel-1",
+        owner_id: "owner-1",
+        status: "EXPIRED",
+        offer_expires_at: PAST,
+        proposed_security_deposit: 7000,
+        agreement: {
+          id: "agreement-1",
+          status: "SIGNED",
+          renewed_to_agreement_id: null,
+          tenant: {
+            id: "tenant-1",
+            security_deposit: 5000,
+            tenant_financial_ledger: [{ amount: 5000 }],
+          },
+          renewal_offers_source: [],
+        },
+        ...overrides,
+      };
+    }
+
+    it("re-sends the same offer row with a fresh 15-day window instead of cloning it", async () => {
+      const { dbMock, txMock } = createDbMock();
+      dbMock.renewalOffer.findUnique = vi.fn().mockResolvedValue(expiredOffer());
+      const service = new RenewalOfferService(dbMock as any);
+
+      const before = Date.now();
+      const updated = await service.resendOffer("offer-1", "owner-1");
+
+      expect(txMock.renewalOffer.create).not.toHaveBeenCalled();
+      expect(updated.status).toBe("SENT");
+      const expiresAt = new Date(updated.offer_expires_at as any).getTime();
+      const days = (expiresAt - before) / (24 * 60 * 60 * 1000);
+      expect(days).toBeGreaterThan(14.9);
+      expect(days).toBeLessThan(15.1);
+    });
+
+    it("honours an explicit offer_expires_at", async () => {
+      const { dbMock } = createDbMock();
+      dbMock.renewalOffer.findUnique = vi.fn().mockResolvedValue(expiredOffer());
+      const service = new RenewalOfferService(dbMock as any);
+
+      const target = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+      const updated = await service.resendOffer("offer-1", "owner-1", { offer_expires_at: target });
+
+      expect(new Date(updated.offer_expires_at as any).toISOString()).toBe(target.toISOString());
+    });
+
+    it("records the resend on the timeline as OFFER_SENT with resend metadata", async () => {
+      const { dbMock, txMock } = createDbMock();
+      dbMock.renewalOffer.findUnique = vi.fn().mockResolvedValue(expiredOffer());
+      const service = new RenewalOfferService(dbMock as any);
+
+      await service.resendOffer("offer-1", "owner-1");
+
+      expect(txMock.renewalTimelineEvent.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            offer_id: "offer-1",
+            event_type: "OFFER_SENT",
+            actor_type: "OWNER",
+            metadata: expect.objectContaining({ resend: true, previousStatus: "EXPIRED" }),
+          }),
+        })
+      );
+    });
+
+    // The deposit position can move between the first send and the resend;
+    // a stale additional_deposit_required would over- or under-charge the
+    // tenant at acceptance time.
+    it("recomputes the deposit delta from the tenant's current ledger", async () => {
+      const { dbMock } = createDbMock();
+      dbMock.renewalOffer.findUnique = vi.fn().mockResolvedValue(
+        expiredOffer({
+          additional_deposit_required: 2000,
+          agreement: {
+            ...expiredOffer().agreement,
+            tenant: {
+              id: "tenant-1",
+              security_deposit: 5000,
+              // Tenant topped the deposit up to 7000 since the first send.
+              tenant_financial_ledger: [{ amount: 5000 }, { amount: 2000 }],
+            },
+          },
+        })
+      );
+      const service = new RenewalOfferService(dbMock as any);
+
+      const updated = await service.resendOffer("offer-1", "owner-1");
+
+      expect(updated.deposit_held).toBe(7000);
+      expect(updated.additional_deposit_required).toBe(0);
+      expect(updated.deposit_refund_eligible).toBe(0);
+    });
+
+    // expireStaleOffers only runs on the lifecycle job, so an offer can be
+    // past its window while still marked SENT. acceptOffer already rejects
+    // those, so the owner must be able to resend them too.
+    it("resends an offer that lapsed but has not been swept to EXPIRED yet", async () => {
+      const { dbMock } = createDbMock();
+      dbMock.renewalOffer.findUnique = vi.fn().mockResolvedValue(expiredOffer({ status: "SENT" }));
+      const service = new RenewalOfferService(dbMock as any);
+
+      const updated = await service.resendOffer("offer-1", "owner-1");
+      expect(updated.status).toBe("SENT");
+    });
+
+    it("refuses to resend an offer that is still within its window", async () => {
+      const { dbMock } = createDbMock();
+      dbMock.renewalOffer.findUnique = vi.fn().mockResolvedValue(
+        expiredOffer({ status: "SENT", offer_expires_at: new Date(Date.now() + 86_400_000) })
+      );
+      const service = new RenewalOfferService(dbMock as any);
+
+      await expect(service.resendOffer("offer-1", "owner-1")).rejects.toThrow("BAD_REQUEST");
+    });
+
+    it("refuses to resend an accepted offer", async () => {
+      const { dbMock } = createDbMock();
+      dbMock.renewalOffer.findUnique = vi.fn().mockResolvedValue(expiredOffer({ status: "ACCEPTED" }));
+      const service = new RenewalOfferService(dbMock as any);
+
+      await expect(service.resendOffer("offer-1", "owner-1")).rejects.toThrow("BAD_REQUEST");
+    });
+
+    it("rejects a resend by an owner who does not own the offer", async () => {
+      const { dbMock } = createDbMock();
+      dbMock.renewalOffer.findUnique = vi.fn().mockResolvedValue(expiredOffer());
+      const service = new RenewalOfferService(dbMock as any);
+
+      await expect(service.resendOffer("offer-1", "owner-other")).rejects.toThrow("FORBIDDEN: Not your offer");
+    });
+
+    it("refuses to resend once the agreement has already been renewed", async () => {
+      const { dbMock } = createDbMock();
+      dbMock.renewalOffer.findUnique = vi.fn().mockResolvedValue(
+        expiredOffer({
+          agreement: { ...expiredOffer().agreement, renewed_to_agreement_id: "agreement-2" },
+        })
+      );
+      const service = new RenewalOfferService(dbMock as any);
+
+      await expect(service.resendOffer("offer-1", "owner-1")).rejects.toThrow("CONFLICT");
+    });
+
+    it("refuses to resend when a newer live offer already covers the agreement", async () => {
+      const { dbMock } = createDbMock();
+      dbMock.renewalOffer.findUnique = vi.fn().mockResolvedValue(
+        expiredOffer({
+          agreement: {
+            ...expiredOffer().agreement,
+            renewal_offers_source: [
+              { id: "offer-2", offer_expires_at: new Date(Date.now() + 86_400_000) },
+            ],
+          },
+        })
+      );
+      const service = new RenewalOfferService(dbMock as any);
+
+      await expect(service.resendOffer("offer-1", "owner-1")).rejects.toThrow("CONFLICT");
+    });
+
+    it("refuses to resend when the predecessor agreement is no longer renewable", async () => {
+      const { dbMock } = createDbMock();
+      dbMock.renewalOffer.findUnique = vi.fn().mockResolvedValue(
+        expiredOffer({ agreement: { ...expiredOffer().agreement, status: "TERMINATED" } })
+      );
+      const service = new RenewalOfferService(dbMock as any);
+
+      await expect(service.resendOffer("offer-1", "owner-1")).rejects.toThrow("BAD_REQUEST");
+    });
+
+    it("refuses a new expiry that is already in the past", async () => {
+      const { dbMock } = createDbMock();
+      dbMock.renewalOffer.findUnique = vi.fn().mockResolvedValue(expiredOffer());
+      const service = new RenewalOfferService(dbMock as any);
+
+      await expect(
+        service.resendOffer("offer-1", "owner-1", { offer_expires_at: PAST })
+      ).rejects.toThrow("BAD_REQUEST: offer_expires_at must be in the future");
+    });
+  });
+
   describe("template effective date boundaries validation", () => {
     it("throws if no active template covers the effective date of the offer", async () => {
       const { dbMock } = createDbMock();
