@@ -16,6 +16,7 @@ export * from '@/app/components/ui/popover';
 export * from '@/app/components/ui/progress';
 export * from '@/app/components/ui/radio-group';
 export * from '@/app/components/ui/responsive-dialog';
+export * from '@/app/components/ui/responsive-sheet';
 export * from '@/app/components/ui/scroll-area';
 export * from '@/app/components/ui/select';
 export * from '@/app/components/ui/separator';

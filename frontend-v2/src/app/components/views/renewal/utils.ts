@@ -12,18 +12,6 @@ export function fmtDate(value: unknown) {
   return new Date(String(value)).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-export function stateLabel(state: string) {
-  switch (state) {
-    case 'EXPIRED_AND_RENT_OVERDUE': return 'Expired + Rent Overdue';
-    case 'RENEWAL_OVERDUE_CRITICAL': return 'Overdue Critical';
-    case 'RENEWAL_DECISION_PENDING': return 'Renewal Pending';
-    case 'MOVE_OUT_IN_PROGRESS': return 'Move-out Conflict';
-    case 'EXPIRING_SOON': return 'Expiring Soon';
-    case 'RENEWAL_AVAILABLE': return 'Renewal Available';
-    default: return state.replace(/_/g, ' ');
-  }
-}
-
 export function statusBadgeColor(status: string) {
   switch (status) {
     case 'DRAFT': return 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300';
@@ -34,10 +22,6 @@ export function statusBadgeColor(status: string) {
     case 'REVISED': return 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400';
     default: return 'bg-gray-100 text-gray-700 dark:bg-gray-800';
   }
-}
-
-export function isCriticalState(state: string) {
-  return state === 'EXPIRED_AND_RENT_OVERDUE' || state === 'RENEWAL_OVERDUE_CRITICAL';
 }
 
 export function initials(name: unknown) {
@@ -77,4 +61,102 @@ export function deriveRoomGroupings(rows: any[]) {
     floors: Array.from(floors),
     rooms: Array.from(rooms).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
   };
+}
+
+/** ---------------------------------------------------------------------------
+ * Unified renewal pipeline vocabulary
+ *
+ * `stage` is where a tenant sits in the renewal lifecycle; urgency (lapsed
+ * contract, overdue rent, move-out) is rendered separately. The old queue fused
+ * the two into one badge, which is why a tenant who had already been sent an
+ * offer still read as "Expired". Mirrors RENEWAL_STAGES in
+ * backend-next/src/services/tenants/renewal-pipeline-read-model.ts.
+ * ------------------------------------------------------------------------- */
+
+export type RenewalStage =
+  | 'NEEDS_OFFER'
+  | 'DRAFT'
+  | 'INVITED'
+  | 'NEGOTIATING'
+  | 'AWAITING_PAYMENT'
+  | 'READY_FOR_SIGNATURE'
+  | 'RENEWAL_DRAFTED'
+  | 'RENEWED'
+  | 'DECLINED'
+  | 'OFFER_EXPIRED'
+  | 'MOVE_OUT';
+
+/** Chip order — owner-actionable stages first, then waiting-on-tenant, then done. */
+export const STAGE_ORDER: RenewalStage[] = [
+  'NEEDS_OFFER',
+  'DRAFT',
+  'INVITED',
+  'NEGOTIATING',
+  'OFFER_EXPIRED',
+  'DECLINED',
+  'AWAITING_PAYMENT',
+  'READY_FOR_SIGNATURE',
+  'RENEWAL_DRAFTED',
+  'RENEWED',
+  'MOVE_OUT',
+];
+
+const STAGE_LABELS: Record<RenewalStage, string> = {
+  NEEDS_OFFER: 'Needs Offer',
+  DRAFT: 'Draft',
+  INVITED: 'Invited',
+  NEGOTIATING: 'Negotiating',
+  AWAITING_PAYMENT: 'Awaiting Payment',
+  READY_FOR_SIGNATURE: 'Ready to Sign',
+  RENEWAL_DRAFTED: 'Renewal Drafted',
+  RENEWED: 'Renewed',
+  DECLINED: 'Declined',
+  OFFER_EXPIRED: 'Offer Expired',
+  MOVE_OUT: 'Moving Out',
+};
+
+export function stageLabel(stage: string) {
+  return STAGE_LABELS[stage as RenewalStage] || String(stage).replace(/_/g, ' ');
+}
+
+const STAGE_COLORS: Record<RenewalStage, string> = {
+  NEEDS_OFFER: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+  DRAFT: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+  INVITED: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  NEGOTIATING: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
+  AWAITING_PAYMENT: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+  READY_FOR_SIGNATURE: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
+  RENEWAL_DRAFTED: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
+  RENEWED: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+  DECLINED: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400',
+  OFFER_EXPIRED: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+  MOVE_OUT: 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+};
+
+export function stageBadgeColor(stage: string) {
+  return STAGE_COLORS[stage as RenewalStage] || 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300';
+}
+
+/** Stages where the ball is in the owner's court. Drives the "Needs you" grouping. */
+const OWNER_ACTION_STAGES: RenewalStage[] = ['NEEDS_OFFER', 'DRAFT', 'OFFER_EXPIRED', 'DECLINED', 'AWAITING_PAYMENT', 'READY_FOR_SIGNATURE', 'RENEWAL_DRAFTED'];
+
+export function needsOwnerAction(stage: string) {
+  return OWNER_ACTION_STAGES.includes(stage as RenewalStage);
+}
+
+/** Human phrasing for how long ago the contract lapsed / how long until it does. */
+export function expiryPhrase(row: { urgency?: { days_overdue?: number; days_until_expiry?: number | null; contract_lapsed?: boolean } }) {
+  const days = Number(row?.urgency?.days_overdue || 0);
+  if (row?.urgency?.contract_lapsed && days > 0) return `Expired ${days}d ago`;
+  const until = row?.urgency?.days_until_expiry;
+  if (typeof until === 'number') return until === 0 ? 'Expires today' : `Expires in ${until}d`;
+  return null;
+}
+
+/** Days remaining on an offer's response window; negative once it has lapsed. */
+export function daysUntil(value: unknown): number | null {
+  if (!value) return null;
+  const target = new Date(String(value)).getTime();
+  if (Number.isNaN(target)) return null;
+  return Math.ceil((target - Date.now()) / (24 * 60 * 60 * 1000));
 }

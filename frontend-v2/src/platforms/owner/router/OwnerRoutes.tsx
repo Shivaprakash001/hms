@@ -9,8 +9,7 @@ const TenantsPortfolioView = lazy(() => import('@/app/components/views/TenantsPo
 const TenantProfileRoute = lazy(() => import('@/app/components/views/TenantProfileRoute').then((m) => ({ default: m.TenantProfileRoute })));
 const BulkInvitationImportView = lazy(() => import('@/app/components/views/BulkInvitationImportView').then((m) => ({ default: m.BulkInvitationImportView })));
 const MoveOutsView = lazy(() => import('@/app/components/views/MoveOutsView').then((m) => ({ default: m.MoveOutsView })));
-const RenewalQueueView = lazy(() => import('@/app/components/views/RenewalQueueView').then((m) => ({ default: m.RenewalQueueView })));
-const RenewalWorkspaceView = lazy(() => import('@/app/components/views/RenewalWorkspaceView').then((m) => ({ default: m.RenewalWorkspaceView })));
+const RenewalPipelineView = lazy(() => import('@/app/components/views/RenewalPipelineView').then((m) => ({ default: m.RenewalPipelineView })));
 const AgreementLifecycleRecoveryView = lazy(() => import('@/app/components/views/AgreementLifecycleRecoveryView').then((m) => ({ default: m.AgreementLifecycleRecoveryView })));
 const AlertsView = lazy(() => import('@/app/components/views/AlertsView').then((m) => ({ default: m.AlertsView })));
 const BillingView = lazy(() => import('@/app/components/views/BillingView').then((m) => ({ default: m.BillingView })));
@@ -59,8 +58,9 @@ export function OwnerRoutes() {
         <Route path="/hostels/:hostelId/tenants/:tenantId" element={<TenantProfileRoute />} />
         <Route path="/hostels/:hostelId/move-outs" element={<MoveOutsView />} />
         <Route path="/move-outs" element={<MoveOutsView />} />
-        <Route path="/agreements/renewals" element={<RenewalQueueView />} />
-        <Route path="/agreements/renewals/:agreementId" element={<RenewalWorkspaceView />} />
+        <Route path="/agreements/renewals" element={<RenewalPipelineView />} />
+        {/* Same screen; the id opens that row's detail sheet, preserving old deep links. */}
+        <Route path="/agreements/renewals/:agreementId" element={<RenewalPipelineView />} />
         <Route path="/agreements/lifecycle-recovery" element={<AgreementLifecycleRecoveryView />} />
         <Route path="/alerts" element={<AlertsView />} />
         <Route path="/billing" element={<BillingView />} />

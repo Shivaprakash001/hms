@@ -11,6 +11,14 @@ export const agreementService = {
     const response = await api.get('/agreements/renewals', { params: { hostelId, filter } });
     return unwrap(response);
   },
+  /** Unified owner renewal pipeline — one row per agreement with a single
+   * lifecycle stage. Replaces the separate queue + offers fetches.
+   * @param {{ hostelId?: string; stage?: string }} [params]
+   */
+  getRenewalPipeline: async ({ hostelId, stage } = {}) => {
+    const response = await api.get('/agreements/renewal-pipeline', { params: { hostelId, stage } });
+    return unwrap(response);
+  },
   getTenantRenewal: async () => {
     const response = await api.get('/tenant/agreement-renewal');
     return unwrap(response);

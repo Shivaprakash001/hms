@@ -28,6 +28,17 @@ Copy this block for each new entry:
 
 ## Fixed
 
+### A tenant who had already been sent a renewal offer still showed as "Expired + Rent Overdue", next to a Create Offer button that 409'd
+
+- **Status:** fixed
+- **Found:** 2026-08-22 (owner report, with a screenshot of `/agreements/renewals`)
+- **Area:** [[Backend]] / [[Frontend]]
+- **Symptom:** On the owner Renewal Pipeline's Expiring Stays tab, tenants who had already been invited to renew were indistinguishable from tenants who had never been contacted — both read `Expired + Rent Overdue` with a **Create Offer** button. Pressing it returned `409 CONFLICT: An active renewal offer already exists. Revise or supersede it instead.`, with no way forward from that screen. The same tenant simultaneously appeared on the Offers Pipeline tab as `SENT`.
+- **Root cause:** Two compounding gaps. (1) `agreementDecisionInclude()` in `renewal-decision-service.ts` never selected `renewal_offers_source`, so `evaluateAgreement` had no knowledge of offers whatsoever — only a *successor agreement* (`hasSuccessor`, i.e. the tenant had already **accepted**) could suppress `RENEWAL_DECISION_PENDING`. Everything between "offer sent" and "offer accepted" was invisible to the queue. (2) The state enum itself fused independent facts: `EXPIRED_AND_RENT_OVERDUE` encodes both "the contract lapsed" and "rent is unpaid", so even had the queue known about the offer, there was no state to move the row *to* — the label was structurally unable to express renewal progress.
+- **Fix:** Stage and urgency split into separate axes behind a new composed read model (`renewal-pipeline-read-model.ts`, `GET /api/agreements/renewal-pipeline`) — see [[Decisions]] ADR-029 and [[Business-Rules]]. The tenant in the report now reads **`Invited`**, with "Expired 22d ago" and "Overdue ₹32,400 (4 mo)" as separate urgency chips, and the row offers Revise rather than a Create Offer that cannot succeed. Action buttons are now rendered from server-computed `can.*` flags instead of being guessed client-side, which is the general fix for this whole class of dead button. 15 tests in `tests/renewal-pipeline-read-model.test.ts`.
+- **Note:** `evaluateAgreement` itself was deliberately **not** widened, because it also serves the tenant portal and the renewal-reminder cron through `getTenantRenewalDecision` — see the ADR's rejected alternatives.
+- **Related:** [[Features]] (Unified Renewal Pipeline) · [[Decisions]] ADR-029 · [[Business-Rules]] · [[APIs]] · [[Changelog]]
+
 ### Owner "Revise" button was dead on declined renewal offers, and expired offers had no action at all
 
 - **Status:** fixed
